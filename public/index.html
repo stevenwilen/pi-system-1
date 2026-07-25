@@ -47,23 +47,13 @@
         box-sizing: border-box;
       }
 
-      html {
+      html,
+      body {
         height: 100%;
         margin: 0;
-        overflow: hidden;
-        overscroll-behavior: none;
       }
 
       body {
-        margin: 0;
-        /* Taking the body out of the document flow is what actually stops the
-           whole page rubber-banding on iOS. Without this, dragging past the
-           top of a list drags the entire view down and springs it back. */
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        overflow: hidden;
         background: var(--bg);
         color: var(--text);
         font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -122,7 +112,6 @@
         flex: 1;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
-        overscroll-behavior: contain;
         padding: 16px;
         display: flex;
         flex-direction: column;
@@ -240,8 +229,6 @@
         flex: 1;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
-        /* stops a bounce at the end of the list from chaining to the page */
-        overscroll-behavior: contain;
         padding: 16px;
         display: flex;
         flex-direction: column;
@@ -291,6 +278,78 @@
         font-size: 15px;
         text-align: center;
         padding: 0 24px;
+      }
+
+      /* --- welcome, shown only on an empty chat --- */
+
+      #welcome {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        padding: 6px 2px 2px;
+        max-width: 560px;
+      }
+
+      #welcome p {
+        margin: 0;
+      }
+
+      .welcome-lead {
+        font-size: 17px;
+      }
+
+      .welcome-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 13px;
+      }
+
+      .welcome-list li {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+      }
+
+      .welcome-list .ico {
+        flex: none;
+        font-size: 18px;
+        line-height: 1.45;
+      }
+
+      .welcome-note {
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      .welcome-cta {
+        font-size: 15px;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding-top: 1px;
+      }
+
+      .chip {
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--text);
+        font: inherit;
+        font-size: 15px;
+        padding: 9px 15px;
+        border-radius: 999px;
+        cursor: pointer;
+      }
+
+      .chip:active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--accent-text);
       }
 
       /* thinking indicator */
@@ -395,7 +454,7 @@
       </button>
     </nav>
 
-    <div id="log"><div class="empty">Start a conversation.</div></div>
+    <div id="log"></div>
 
     <div id="noticed" class="hidden"></div>
 
@@ -443,7 +502,8 @@
       }
 
       function bubble(who, text) {
-        document.querySelector('.empty')?.remove();
+        document.getElementById('welcome')?.remove();
+        log.querySelector('.empty')?.remove();
         const stick = atBottom();
 
         const el = document.createElement('div');
@@ -507,6 +567,64 @@
           input.focus();
         }
       });
+
+      // --- welcome ----------------------------------------------------------
+
+      const CHIPS = [
+        'Plan my day for tomorrow',
+        'I want to add a project',
+        'I want to add a habit',
+      ];
+
+      function renderWelcome() {
+        if (document.getElementById('welcome')) return;
+
+        const el = document.createElement('div');
+        el.id = 'welcome';
+        el.innerHTML = `
+          <p class="welcome-lead">Hi — I'm your personal planning system. I help you with three things:</p>
+          <ul class="welcome-list">
+            <li>
+              <span class="ico">📅</span>
+              <div><b>Planning your day</b> — tell me what you want to get done and I'll build a schedule around your energy and calendar.</div>
+            </li>
+            <li>
+              <span class="ico">🔁</span>
+              <div><b>Building habits</b> — mention something you're doing regularly and I'll help you stay consistent.</div>
+            </li>
+            <li>
+              <span class="ico">🎯</span>
+              <div><b>Staying on your priorities</b> — tell me your projects and why they matter, and I'll keep you honest about them.</div>
+            </li>
+          </ul>
+          <p class="welcome-note">I'm not a general reminder or to-do app — I'm here to help you plan, build habits, and focus on what matters. The more you tell me about yourself, the smarter I get.</p>
+          <p class="welcome-cta">Tap one below to start, or just type.</p>
+        `;
+
+        const chips = document.createElement('div');
+        chips.className = 'chips';
+
+        for (const text of CHIPS) {
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'chip';
+          chip.textContent = text;
+          // Behaves exactly as if it had been typed.
+          chip.onclick = () => {
+            input.value = text;
+            autogrow();
+            form.requestSubmit();
+          };
+          chips.appendChild(chip);
+        }
+
+        el.appendChild(chips);
+        log.appendChild(el);
+      }
+
+      // Empty chat, so introduce yourself. bubble() tears this down as soon as
+      // the first message goes out.
+      if (history.length === 0) renderWelcome();
 
       // --- tabs -------------------------------------------------------------
 
