@@ -41,8 +41,8 @@ create trigger profile_touch_updated_at
 
 -- entries -------------------------------------------------------------------
 -- The notebook. Observations, habits, projects.
--- Deletion is soft: status = 'deleted' leaves a tombstone so the row can
--- never be re-learned.
+-- Deletion is soft: status = 'deleted' leaves a tombstone. Deleted rows are
+-- never returned by search_entries and can never be flipped back to active.
 
 create table if not exists entries (
   id          uuid primary key default gen_random_uuid(),

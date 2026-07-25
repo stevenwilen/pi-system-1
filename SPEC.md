@@ -106,20 +106,24 @@ prompt, no friction. The safeguard is not a gate, it's transparency:
   user said or did that produced it) and `confidence`.
 - Every observation can be deleted in one tap.
 
-### 2.5 A deleted observation must never be re-learned
+### 2.5 Deleting takes an observation off the list
 Deleting sets `status = 'deleted'`. The row is never physically removed — it is a
 tombstone.
 
-Enforcement is in the tool layer, not left to the model's good manners:
-- `create_entry` checks each new observation against the user's tombstones. A
-  close match is refused, and the brain is told it was refused because the user
-  previously deleted it.
-- `search_entries` returns only active rows by default, so deleted content never
+What that guarantees, in the tool layer:
+- `search_entries` returns only active rows, so a deleted observation never
   re-enters the brain's context as a fact.
-- `update_entry` cannot move a row from `'deleted'` back to `'active'`.
+- `update_entry` cannot move a row from `'deleted'` back to `'active'`. That
+  specific row stays gone.
 
-The user's delete is permanent and one-directional. The system may never re-derive
-what the user removed, no matter how much fresh evidence it accumulates.
+What it deliberately does **not** guarantee: delete is not a blocklist.
+`create_entry` does not check new observations against tombstones, and the brain
+cannot see deleted rows at all — so if the same thing surfaces again in
+conversation, it will be noticed and saved again as a new row.
+
+Delete means "take this off my list," not "never learn this about me." Wiping
+personal rows therefore returns the system to a genuine blank slate, with nothing
+suppressed and nothing remembered.
 
 ### 2.6 Wiping personal rows returns the system to factory state
 Delete every row with a given `user_id` across `profile`, `entries`, `plans`,
@@ -247,7 +251,7 @@ App ──message──▶ Brain
                    ├─ agent loop: search_entries / get_calendar /
                    │              create_entry / update_entry
                    │     └─ commitment writes → pending, need confirmation
-                   │     └─ observation writes → immediate, tombstone-checked
+                   │     └─ observation writes → immediate, visible, deletable
                    └─ final message ──▶ App   (also written to messages)
 
 Scheduler ──▶ Brain (same loop, no user turn) ──▶ Telegram (outbound only)
