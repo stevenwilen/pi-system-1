@@ -272,7 +272,7 @@ Keep it under 120 words. Write only the message itself, with no preamble and no 
 
 ${TELEGRAM_FORMAT}`;
 
-  const reply = await runBrain(profile.user_id, prompt, []);
+  const reply = await runBrain(profile.user_id, prompt, [], 'day-plan');
   return `${reply}\n\n${MISS_PROMPT}`;
 }
 
@@ -298,7 +298,7 @@ Keep it under 150 words. Write only the message itself, with no preamble.
 
 ${TELEGRAM_FORMAT}`;
 
-  return runBrain(profile.user_id, prompt, []);
+  return runBrain(profile.user_id, prompt, [], 'habits');
 }
 
 // JOB 3 — projects, Friday.
@@ -327,7 +327,7 @@ Keep it under 200 words. Write only the message itself, with no preamble.
 
 ${TELEGRAM_FORMAT}`;
 
-  return runBrain(profile.user_id, prompt, []);
+  return runBrain(profile.user_id, prompt, [], 'projects');
 }
 
 const JOBS = {

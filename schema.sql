@@ -141,6 +141,28 @@ create table if not exists messages (
 create index if not exists messages_user_created_idx on messages (user_id, created_at);
 
 
+-- api_usage -----------------------------------------------------------------
+-- One row per call to the model, so spend can be shown without an admin key.
+-- Anthropic exposes no balance endpoint; the balance shown in the app is a
+-- figure you set, counted down by these rows.
+
+create table if not exists api_usage (
+  id                    uuid primary key default gen_random_uuid(),
+  user_id               uuid not null,
+  source                text not null,   -- 'chat' | 'day-plan' | 'habits' | 'projects'
+  model                 text not null,
+  input_tokens          int not null default 0,
+  output_tokens         int not null default 0,
+  cache_read_tokens     int not null default 0,
+  cache_creation_tokens int not null default 0,
+  cost_usd              numeric(12, 6) not null default 0,
+  created_at            timestamptz not null default now()
+);
+
+create index if not exists api_usage_user_created_idx
+  on api_usage (user_id, created_at);
+
+
 -- sent_log ------------------------------------------------------------------
 -- Proof that a scheduled job already went out. A row's existence means this
 -- job fired for this user on this date, so the guard survives restarts and

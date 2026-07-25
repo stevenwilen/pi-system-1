@@ -8,6 +8,7 @@ const express = require('express');
 const supabase = require('./db');
 const { runBrain } = require('./brain');
 const { search_entries, update_entry } = require('./tools');
+const { summary } = require('./usage');
 
 // Until there is real auth, every request is this one person.
 const CURRENT_USER = '00000000-0000-0000-0000-000000000001';
@@ -104,6 +105,14 @@ app.post('/observations/:id/edit', async (req, res) => {
   if (error) return res.status(400).json({ error: error.message });
   if (!data) return res.status(404).json({ error: 'observation not found' });
   res.json({ observation: data });
+});
+
+// --- usage ------------------------------------------------------------------
+
+app.get('/usage', async (req, res) => {
+  const result = await summary(CURRENT_USER);
+  if (result.error) return res.status(500).json({ error: result.error });
+  res.json(result);
 });
 
 app.listen(PORT, HOST, () => {

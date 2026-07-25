@@ -9,6 +9,7 @@ require('dotenv').config();
 const util = require('util');
 const { Anthropic } = require('@anthropic-ai/sdk');
 const tools = require('./tools');
+const { recordUsage } = require('./usage');
 
 const MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS = 16000;
@@ -223,8 +224,11 @@ function toApiMessages(history) {
 /**
  * Run the agent loop once and return the final text.
  * Remembers nothing — every call starts from the arguments alone.
+ *
+ * `source` only labels the token metering, so the Usage tab can separate
+ * chat from the scheduled jobs. It has no effect on reasoning.
  */
-async function runBrain(user_id, userMessage, history = []) {
+async function runBrain(user_id, userMessage, history = [], source = 'chat') {
   if (!user_id) throw new Error('user_id is required');
 
   const messages = [
@@ -241,6 +245,9 @@ async function runBrain(user_id, userMessage, history = []) {
       tools: TOOL_SCHEMAS,
       messages,
     });
+
+    // Metering only. Never throws, never blocks the reply.
+    await recordUsage(user_id, source, MODEL, response.usage);
 
     if (response.stop_reason !== 'tool_use') {
       return textOf(response) || '(no reply)';

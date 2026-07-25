@@ -86,13 +86,15 @@
 
       .tab {
         flex: 1;
-        padding: 11px 8px;
+        padding: 10px 4px;
         border: 0;
         border-bottom: 2px solid transparent;
         background: none;
         color: var(--muted);
         font: inherit;
-        font-size: 15px;
+        /* three tabs on a phone, so the longest label has to fit */
+        font-size: 13.5px;
+        line-height: 1.25;
         font-weight: 600;
         cursor: pointer;
       }
@@ -223,6 +225,97 @@
       .removed {
         font-size: 14px;
         color: var(--muted);
+      }
+
+      /* --- usage --- */
+
+      #usage {
+        flex: 1;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .panel {
+        background: var(--surface);
+        border-radius: 14px;
+        padding: 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .headline {
+        font-size: 26px;
+        font-weight: 650;
+        letter-spacing: -0.01em;
+      }
+
+      .headline small {
+        font-size: 15px;
+        font-weight: 400;
+        color: var(--muted);
+      }
+
+      .meter {
+        height: 8px;
+        border-radius: 999px;
+        background: var(--line);
+        overflow: hidden;
+      }
+
+      .meter div {
+        height: 100%;
+        background: var(--accent);
+      }
+
+      .meter.low div {
+        background: var(--danger);
+      }
+
+      .rows {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 15px;
+      }
+
+      .row span:first-child {
+        color: var(--muted);
+      }
+
+      .row.total {
+        border-top: 1px solid var(--line);
+        padding-top: 8px;
+        font-weight: 600;
+      }
+
+      .row.total span:first-child {
+        color: var(--text);
+      }
+
+      .panel h3 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .footnote {
+        font-size: 13px;
+        color: var(--muted);
+        padding: 0 2px;
       }
 
       #log {
@@ -452,11 +545,16 @@
       <button class="tab" id="tab-noticed" role="tab" aria-selected="false">
         What I've Noticed
       </button>
+      <button class="tab" id="tab-usage" role="tab" aria-selected="false">
+        Usage
+      </button>
     </nav>
 
     <div id="log"></div>
 
     <div id="noticed" class="hidden"></div>
+
+    <div id="usage" class="hidden"></div>
 
     <form id="composer">
       <textarea
@@ -634,20 +732,169 @@
 
       const tabChat = document.getElementById('tab-chat');
       const tabNoticed = document.getElementById('tab-noticed');
+      const tabUsage = document.getElementById('tab-usage');
       const noticed = document.getElementById('noticed');
+      const usage = document.getElementById('usage');
 
       function showView(which) {
-        const isChat = which === 'chat';
-        tabChat.setAttribute('aria-selected', String(isChat));
-        tabNoticed.setAttribute('aria-selected', String(!isChat));
-        log.classList.toggle('hidden', !isChat);
-        form.classList.toggle('hidden', !isChat);
-        noticed.classList.toggle('hidden', isChat);
-        if (!isChat) loadObservations();
+        const views = {
+          chat: [tabChat, log],
+          noticed: [tabNoticed, noticed],
+          usage: [tabUsage, usage],
+        };
+
+        for (const [name, [tab, panel]] of Object.entries(views)) {
+          const on = name === which;
+          tab.setAttribute('aria-selected', String(on));
+          panel.classList.toggle('hidden', !on);
+        }
+
+        // The composer belongs to the chat only.
+        form.classList.toggle('hidden', which !== 'chat');
+
+        if (which === 'noticed') loadObservations();
+        if (which === 'usage') loadUsage();
       }
 
       tabChat.addEventListener('click', () => showView('chat'));
       tabNoticed.addEventListener('click', () => showView('noticed'));
+      tabUsage.addEventListener('click', () => showView('usage'));
+
+      // --- usage ------------------------------------------------------------
+
+      const SOURCE_LABELS = {
+        chat: 'Chat',
+        'day-plan': 'Day plan',
+        habits: 'Habits',
+        projects: 'Projects',
+      };
+
+      // Below a cent, "$0.00" reads as broken. Show what was actually spent.
+      function money(n) {
+        const v = Number(n) || 0;
+        if (v > 0 && v < 0.01) return '<$0.01';
+        return `$${v.toFixed(2)}`;
+      }
+
+      function panel(title) {
+        const el = document.createElement('div');
+        el.className = 'panel';
+        if (title) {
+          const h = document.createElement('h3');
+          h.textContent = title;
+          el.appendChild(h);
+        }
+        return el;
+      }
+
+      function row(label, value, extraClass) {
+        const el = document.createElement('div');
+        el.className = extraClass ? `row ${extraClass}` : 'row';
+        const l = document.createElement('span');
+        l.textContent = label;
+        const v = document.createElement('span');
+        v.textContent = value;
+        el.append(l, v);
+        return el;
+      }
+
+      async function loadUsage() {
+        usage.innerHTML = '<div class="empty">Loading…</div>';
+
+        let data;
+        try {
+          const res = await fetch('/usage');
+          data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || `server said ${res.status}`);
+        } catch (err) {
+          usage.innerHTML = '';
+          const e = document.createElement('div');
+          e.className = 'msg error';
+          e.textContent = err.message;
+          usage.appendChild(e);
+          return;
+        }
+
+        usage.innerHTML = '';
+
+        if (data.calls === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'empty';
+          empty.textContent = 'No usage recorded yet.';
+          usage.appendChild(empty);
+          return;
+        }
+
+        // Balance, only when one has been set.
+        if (data.balance != null) {
+          const p = panel(null);
+
+          const head = document.createElement('div');
+          head.className = 'headline';
+          head.textContent = money(data.remaining);
+          const of = document.createElement('small');
+          of.textContent = ` left of ${money(data.balance)}`;
+          head.appendChild(of);
+          p.appendChild(head);
+
+          const used = Math.min(1, data.spent_since_top_up / data.balance);
+          const meter = document.createElement('div');
+          meter.className = used > 0.85 ? 'meter low' : 'meter';
+          const fill = document.createElement('div');
+          fill.style.width = `${Math.max(2, used * 100)}%`;
+          meter.appendChild(fill);
+          p.appendChild(meter);
+
+          const pct = document.createElement('div');
+          pct.className = 'footnote';
+          pct.style.padding = '0';
+          pct.textContent = `${Math.round(used * 100)}% of this top-up spent`;
+          p.appendChild(pct);
+
+          usage.appendChild(p);
+        }
+
+        const spend = panel('Spend');
+        const rows = document.createElement('div');
+        rows.className = 'rows';
+        rows.append(
+          row('Today', money(data.today)),
+          row('This month', money(data.this_month)),
+          row('All time', money(data.all_time), 'total')
+        );
+        spend.appendChild(rows);
+        usage.appendChild(spend);
+
+        const sources = Object.entries(data.by_source).sort((a, b) => b[1] - a[1]);
+        if (sources.length) {
+          const p = panel('Where it went');
+          const list = document.createElement('div');
+          list.className = 'rows';
+          for (const [name, cost] of sources) {
+            list.appendChild(row(SOURCE_LABELS[name] || name, money(cost)));
+          }
+          p.appendChild(list);
+          usage.appendChild(p);
+        }
+
+        const detail = panel('Tokens');
+        const tk = document.createElement('div');
+        tk.className = 'rows';
+        tk.append(
+          row('In', data.input_tokens.toLocaleString()),
+          row('Out', data.output_tokens.toLocaleString()),
+          row('Model calls', String(data.calls))
+        );
+        detail.appendChild(tk);
+        usage.appendChild(detail);
+
+        const note = document.createElement('div');
+        note.className = 'footnote';
+        note.textContent = data.balance
+          ? 'Estimated from token counts at published rates. Anthropic has no balance endpoint, so this counts down from the figure you set.'
+          : 'Estimated from token counts at published rates. Set CREDIT_BALANCE_USD to see a remaining balance.';
+        usage.appendChild(note);
+      }
 
       // --- what I've noticed ------------------------------------------------
 
