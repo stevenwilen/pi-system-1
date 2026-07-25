@@ -61,6 +61,10 @@ create table if not exists entries (
 
   status      text not null default 'active' check (status in ('active', 'deleted')),
 
+  -- Set only by the app when the person edits an observation's wording. The
+  -- brain can read it but must never write it.
+  user_corrected boolean not null default false,
+
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
