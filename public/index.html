@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f1115" />
+    <title>Notebook</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --surface: #f1f3f5;
+        --text: #14171a;
+        --muted: #6b7280;
+        --accent: #2f6df6;
+        --accent-text: #ffffff;
+        --line: #e3e6ea;
+        --danger: #b42318;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f1115;
+          --surface: #1c2027;
+          --text: #e8eaed;
+          --muted: #949bA6;
+          --accent: #4f83ff;
+          --accent-text: #ffffff;
+          --line: #262b33;
+          --danger: #ff6b6b;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        /* dvh keeps the composer above the mobile keyboard */
+        height: 100dvh;
+        overscroll-behavior: none;
+      }
+
+      header {
+        flex: none;
+        padding: 14px 16px calc(14px);
+        padding-top: max(14px, env(safe-area-inset-top));
+        border-bottom: 1px solid var(--line);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        background: var(--bg);
+      }
+
+      #log {
+        flex: 1;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .msg {
+        max-width: 78%;
+        padding: 10px 13px;
+        border-radius: 16px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .msg.me {
+        align-self: flex-end;
+        background: var(--accent);
+        color: var(--accent-text);
+        border-bottom-right-radius: 5px;
+      }
+
+      .msg.brain {
+        align-self: flex-start;
+        background: var(--surface);
+        border-bottom-left-radius: 5px;
+      }
+
+      .msg.error {
+        align-self: flex-start;
+        background: transparent;
+        border: 1px solid var(--danger);
+        color: var(--danger);
+        font-size: 14px;
+      }
+
+      .msg code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.9em;
+        background: rgba(127, 127, 127, 0.18);
+        padding: 1px 5px;
+        border-radius: 5px;
+      }
+
+      .empty {
+        margin: auto;
+        color: var(--muted);
+        font-size: 15px;
+        text-align: center;
+        padding: 0 24px;
+      }
+
+      /* thinking indicator */
+      .dots {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+        height: 1.5em;
+      }
+
+      .dots i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--muted);
+        animation: blink 1.3s infinite ease-in-out both;
+      }
+
+      .dots i:nth-child(2) {
+        animation-delay: 0.18s;
+      }
+
+      .dots i:nth-child(3) {
+        animation-delay: 0.36s;
+      }
+
+      @keyframes blink {
+        0%,
+        70%,
+        100% {
+          opacity: 0.25;
+        }
+        35% {
+          opacity: 1;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .dots i {
+          animation: none;
+          opacity: 0.5;
+        }
+      }
+
+      form {
+        flex: none;
+        display: flex;
+        gap: 8px;
+        padding: 10px 12px;
+        padding-bottom: max(10px, env(safe-area-inset-bottom));
+        border-top: 1px solid var(--line);
+        background: var(--bg);
+      }
+
+      textarea {
+        flex: 1;
+        resize: none;
+        max-height: 140px;
+        padding: 11px 14px;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: var(--surface);
+        color: var(--text);
+        font: inherit;
+        /* 16px keeps iOS Safari from zooming on focus */
+        font-size: 16px;
+      }
+
+      textarea:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: -1px;
+      }
+
+      button {
+        flex: none;
+        padding: 0 20px;
+        border: 0;
+        border-radius: 22px;
+        background: var(--accent);
+        color: var(--accent-text);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+    </style>
+  </head>
+
+  <body>
+    <header>Notebook</header>
+    <div id="log"><div class="empty">Start a conversation.</div></div>
+
+    <form id="composer">
+      <textarea
+        id="input"
+        rows="1"
+        placeholder="Message"
+        autocomplete="off"
+      ></textarea>
+      <button id="send" type="submit">Send</button>
+    </form>
+
+    <script>
+      const USER_ID = '00000000-0000-0000-0000-000000000001';
+
+      const log = document.getElementById('log');
+      const form = document.getElementById('composer');
+      const input = document.getElementById('input');
+      const send = document.getElementById('send');
+
+      // Escape first, then apply a very small subset of markdown. The brain
+      // writes **bold**, *italic* and `code`, and raw asterisks read badly.
+      function render(text) {
+        return text
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/`([^`]+)`/g, '<code>$1</code>')
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+          .replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+      }
+
+      function atBottom() {
+        return log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+      }
+
+      function bubble(who, text) {
+        document.querySelector('.empty')?.remove();
+        const stick = atBottom();
+
+        const el = document.createElement('div');
+        el.className = `msg ${who}`;
+        if (text === null) {
+          el.innerHTML = '<span class="dots"><i></i><i></i><i></i></span>';
+        } else {
+          el.innerHTML = render(text);
+        }
+
+        log.appendChild(el);
+        if (stick || who === 'me') el.scrollIntoView({ block: 'end' });
+        return el;
+      }
+
+      function autogrow() {
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+      }
+
+      input.addEventListener('input', autogrow);
+
+      // Enter sends, Shift+Enter makes a new line.
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          form.requestSubmit();
+        }
+      });
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const message = input.value.trim();
+        if (!message || send.disabled) return;
+
+        bubble('me', message);
+        input.value = '';
+        autogrow();
+
+        send.disabled = true;
+        const pending = bubble('brain', null);
+
+        try {
+          const res = await fetch('/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: USER_ID, message }),
+          });
+
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || `server said ${res.status}`);
+
+          pending.innerHTML = render(data.reply || '(no reply)');
+        } catch (err) {
+          pending.className = 'msg error';
+          pending.textContent = err.message;
+        } finally {
+          send.disabled = false;
+          if (atBottom()) pending.scrollIntoView({ block: 'end' });
+          input.focus();
+        }
+      });
+    </script>
+  </body>
+</html>
