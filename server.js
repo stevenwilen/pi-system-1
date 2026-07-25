@@ -67,3 +67,7 @@ app.listen(PORT, HOST, () => {
   console.log(`listening on http://localhost:${PORT}`);
   console.log(`on your phone, use http://<this-machine's-lan-ip>:${PORT}`);
 });
+
+// Single user, single service: run the scheduled jobs in this same process.
+// Requiring scheduler.js starts its cron loop as a side effect.
+require('./scheduler');
