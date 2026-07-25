@@ -135,3 +135,20 @@ create table if not exists messages (
 );
 
 create index if not exists messages_user_created_idx on messages (user_id, created_at);
+
+
+-- sent_log ------------------------------------------------------------------
+-- Proof that a scheduled job already went out. A row's existence means this
+-- job fired for this user on this date, so the guard survives restarts and
+-- redeploys. The unique constraint is the lock; it also provides the only
+-- index this table needs.
+
+create table if not exists sent_log (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null,
+  job           text not null check (job in ('day-plan', 'habits', 'projects')),
+  sent_for_date date not null,
+  created_at    timestamptz not null default now(),
+
+  unique (user_id, job, sent_for_date)
+);

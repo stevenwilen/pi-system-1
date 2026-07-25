@@ -27,11 +27,6 @@ const MAX_MESSAGE = 4000;
 
 const MISS_PROMPT = "Didn't follow yesterday's plan? Tell me what happened.";
 
-// Fired-today guard, so a restart inside the same window doesn't send twice.
-// In memory only: restarting the process on a later day is fine, restarting
-// inside the same day can re-send. A sent_at column would make this durable.
-const alreadyFired = new Set();
-
 // ---------------------------------------------------------------------------
 // time
 // ---------------------------------------------------------------------------
@@ -172,6 +167,40 @@ async function historyText(user_id, today) {
     .join('\n');
 }
 
+// The fired-today guard. A row's existence proves this job already went out
+// for this user on this date, so it survives restarts and redeploys.
+
+async function alreadySent(user_id, job, date) {
+  const { data, error } = await supabase
+    .from('sent_log')
+    .select('id')
+    .eq('user_id', user_id)
+    .eq('job', job)
+    .eq('sent_for_date', date)
+    .maybeSingle();
+
+  if (error) {
+    // Can't tell, so don't send. If sent_log is unreadable the job's own
+    // queries are almost certainly failing too.
+    console.error(`[JOB] ${job}: could not read sent_log: ${error.message}`);
+    return true;
+  }
+
+  return Boolean(data);
+}
+
+async function markSent(user_id, job, date) {
+  const { error } = await supabase
+    .from('sent_log')
+    .insert({ user_id, job, sent_for_date: date });
+
+  // 23505 is unique_violation: something already claimed this slot. That is
+  // the constraint doing its job, not a failure.
+  if (error && error.code !== '23505') {
+    console.error(`[JOB] ${job}: could not write sent_log: ${error.message}`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // delivery
 // ---------------------------------------------------------------------------
@@ -284,7 +313,15 @@ const JOBS = {
   projects: jobProjects,
 };
 
-async function fire(name, profile, today) {
+// `guarded` is false for manual --run fires: they always send, and they never
+// write to sent_log, so a test can neither be silenced by nor silence the
+// real scheduled message.
+async function fire(name, profile, today, { guarded = true } = {}) {
+  if (guarded && (await alreadySent(profile.user_id, name, today))) {
+    console.log(`[JOB] ${name}: already sent for ${today}, skipping`);
+    return;
+  }
+
   console.log(`[JOB] ${name} for ${profile.user_id} (${profile.timezone})`);
 
   try {
@@ -296,6 +333,12 @@ async function fire(name, profile, today) {
 
     const result = await deliver(profile.user_id, text);
     console.log(`[JOB] ${name}: ${JSON.stringify(result)}`);
+
+    // Only a real send counts. A Telegram error leaves no row, so the next
+    // tick inside the window retries.
+    if (guarded && result.sent) {
+      await markSent(profile.user_id, name, today);
+    }
   } catch (err) {
     // One user's failure must not stop the others.
     console.error(`[JOB] ${name} failed for ${profile.user_id}: ${err.message}`);
@@ -339,9 +382,6 @@ async function tick() {
     if (now.weekday === 'Fri' && inWindow(nowMinutes, morning)) due.push('projects');
 
     for (const name of due) {
-      const key = `${name}:${profile.user_id}:${now.date}`;
-      if (alreadyFired.has(key)) continue;
-      alreadyFired.add(key);
       await fire(name, profile, now.date);
     }
   }
@@ -369,7 +409,7 @@ async function runOnce(name, userFilter) {
 
   for (const profile of profiles) {
     const today = localNow(profile.timezone).date;
-    await fire(name, profile, today);
+    await fire(name, profile, today, { guarded: false });
   }
 }
 
