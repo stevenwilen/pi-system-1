@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+    />
     <meta name="theme-color" content="#0f1115" />
     <title>Notebook</title>
 
@@ -60,6 +63,8 @@
         /* dvh keeps the composer above the mobile keyboard */
         height: 100dvh;
         overscroll-behavior: none;
+        /* kills the double-tap-to-zoom gesture and its 300ms tap delay */
+        touch-action: manipulation;
       }
 
       header {
@@ -393,6 +398,15 @@
 
     <script>
       const USER_ID = '00000000-0000-0000-0000-000000000001';
+
+      // Lock zoom. iOS Safari ignores user-scalable=no on ordinary pages, so
+      // the pinch gestures have to be cancelled directly. touch-action in the
+      // stylesheet handles double-tap.
+      for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+        document.addEventListener(type, (e) => e.preventDefault(), {
+          passive: false,
+        });
+      }
 
       const log = document.getElementById('log');
       const form = document.getElementById('composer');
