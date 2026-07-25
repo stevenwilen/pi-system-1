@@ -680,22 +680,22 @@
         const el = document.createElement('div');
         el.id = 'welcome';
         el.innerHTML = `
-          <p class="welcome-lead">Hi — I'm your personal planning system. I help you with three things:</p>
+          <p class="welcome-lead">Hi, I'm your personal planning system. I help you with three things:</p>
           <ul class="welcome-list">
             <li>
               <span class="ico">📅</span>
-              <div><b>Planning your day</b> — tell me what you want to get done and I'll build a schedule around your energy and calendar.</div>
+              <div><b>Planning your day.</b> Tell me what you want to get done and I'll build a schedule around your energy and calendar.</div>
             </li>
             <li>
               <span class="ico">🔁</span>
-              <div><b>Building habits</b> — mention something you're doing regularly and I'll help you stay consistent.</div>
+              <div><b>Building habits.</b> Mention something you're doing regularly and I'll help you stay consistent.</div>
             </li>
             <li>
               <span class="ico">🎯</span>
-              <div><b>Staying on your priorities</b> — tell me your projects and why they matter, and I'll keep you honest about them.</div>
+              <div><b>Staying on your priorities.</b> Tell me your projects and why they matter, and I'll keep you honest about them.</div>
             </li>
           </ul>
-          <p class="welcome-note">I'm not a general reminder or to-do app — I'm here to help you plan, build habits, and focus on what matters. The more you tell me about yourself, the smarter I get.</p>
+          <p class="welcome-note">I'm not a general reminder or to-do app. I'm here to help you plan, build habits, and focus on what matters. The more you tell me about yourself, the smarter I get.</p>
           <p class="welcome-cta">Tap one below to start, or just type.</p>
         `;
 
@@ -938,7 +938,7 @@
         if (list.length === 0) {
           const empty = document.createElement('div');
           empty.className = 'empty';
-          empty.textContent = "Nothing noticed yet — I'll fill this in as we talk.";
+          empty.textContent = "Nothing noticed yet. I'll fill this in as we talk.";
           noticed.appendChild(empty);
           return;
         }
