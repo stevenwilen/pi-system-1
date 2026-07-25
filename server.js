@@ -8,7 +8,9 @@ const express = require('express');
 const supabase = require('./db');
 const { runBrain } = require('./brain');
 
-const PORT = 3000;
+// Railway (and most hosts) assign the port at runtime and route only to it.
+// Falls back to 3000 when running locally.
+const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0'; // not just localhost, so the phone can reach it
 const HISTORY_LIMIT = 20;
 
