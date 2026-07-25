@@ -624,7 +624,11 @@
 
       // Empty chat, so introduce yourself. bubble() tears this down as soon as
       // the first message goes out.
-      if (history.length === 0) renderWelcome();
+      //
+      // The test is the log's own contents. There is no history array on this
+      // page — `history` here would resolve to window.history, whose length is
+      // never 0, so the welcome would never appear.
+      if (log.children.length === 0) renderWelcome();
 
       // --- tabs -------------------------------------------------------------
 
