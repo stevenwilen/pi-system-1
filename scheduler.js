@@ -27,6 +27,17 @@ const MAX_MESSAGE = 4000;
 
 const MISS_PROMPT = "Didn't follow yesterday's plan? Tell me what happened.";
 
+// Presentation guidance for the Telegram jobs only. The app chat is plain —
+// brain.js's system prompt says nothing about formatting.
+const TELEGRAM_FORMAT = `This message goes to Telegram. Format it for quick scanning on a phone:
+
+- Short. Lead with the substance, no preamble.
+- Use <b>bold</b> for section headers only. No other HTML — no <i>, no links, no code.
+- Put a blank line between sections so they separate clearly.
+- At most one leading emoji per section, and only where it helps tell sections apart. Sparingly. Never decorative.
+
+This is presentation only. It changes nothing about how you reason or what you are required to do.`;
+
 // ---------------------------------------------------------------------------
 // time
 // ---------------------------------------------------------------------------
@@ -205,6 +216,12 @@ async function markSent(user_id, job, date) {
 // delivery
 // ---------------------------------------------------------------------------
 
+// The same two tags telegram.js whitelists. Telegram keeps the formatting;
+// the app chat is plain text, so the stored copy drops them.
+function stripTags(text) {
+  return text.replace(/<\/?[bi]>/g, '');
+}
+
 // Outbound messages are written to `messages` too, so the app and the brain
 // see one continuous conversation across both surfaces.
 async function deliver(user_id, text) {
@@ -217,7 +234,7 @@ async function deliver(user_id, text) {
   if (result.sent) {
     await supabase
       .from('messages')
-      .insert({ user_id, role: 'assistant', content: body });
+      .insert({ user_id, role: 'assistant', content: stripTags(body) });
   }
 
   return result;
@@ -239,7 +256,7 @@ async function jobDayPlan(profile, today) {
     );
 
     return [
-      longDate(today, profile.timezone),
+      `📅 <b>${longDate(today, profile.timezone)}</b>`,
       '',
       ...lines,
       '',
@@ -251,7 +268,9 @@ async function jobDayPlan(profile, today) {
 
 Write the message this person will read when they wake up. Call search_entries to see their active projects and habits, then give an unstructured list of suggestions drawn from them — no times, no schedule, no time blocks, just a handful of things worth doing today. Let the highest-priority project be visible in the list.
 
-Keep it under 120 words. Write only the message itself, with no preamble and no sign-off.`;
+Keep it under 120 words. Write only the message itself, with no preamble and no sign-off.
+
+${TELEGRAM_FORMAT}`;
 
   const reply = await runBrain(profile.user_id, prompt, []);
   return `${reply}\n\n${MISS_PROMPT}`;
@@ -275,7 +294,9 @@ Compare what actually happened against each habit's stated frequency and tell th
 
 Then give exactly ONE recommendation. Not a list — one. If a habit is slipping, make it easier: shrink it, move it, or anchor it to something already sticking. If a habit is solid, grow it: extend it, add intensity, or build the next thing on top of it.
 
-Keep it under 150 words. Write only the message itself, with no preamble.`;
+Keep it under 150 words. Write only the message itself, with no preamble.
+
+${TELEGRAM_FORMAT}`;
 
   return runBrain(profile.user_id, prompt, []);
 }
@@ -302,7 +323,9 @@ Do three things:
 
 3. If a high-priority project was consistently avoided, ask them directly whether its why is still true. Re-ranking or dropping it is a legitimate answer.
 
-Keep it under 200 words. Write only the message itself, with no preamble.`;
+Keep it under 200 words. Write only the message itself, with no preamble.
+
+${TELEGRAM_FORMAT}`;
 
   return runBrain(profile.user_id, prompt, []);
 }

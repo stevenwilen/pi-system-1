@@ -11,6 +11,34 @@ const supabase = require('./db');
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
+// Telegram's HTML mode is used instead of MarkdownV2, which rejects
+// unescaped '.', '-', '(', ')' and '!' — characters every schedule is full of.
+//
+// Escape all three HTML-special characters first, then put back only the two
+// tags the brain is allowed to use. A stray '<' in ordinary prose therefore
+// renders literally instead of breaking the whole message.
+function toTelegramHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/&lt;(\/?)(b|i)&gt;/g, '<$1$2>');
+}
+
+async function post(chat_id, text, parse_mode) {
+  const payload = { chat_id, text };
+  if (parse_mode) payload.parse_mode = parse_mode;
+
+  const res = await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  const body = await res.json().catch(() => ({}));
+  return { ok: res.ok && body.ok, status: res.status, body };
+}
+
 /**
  * Deliver one message to a user's linked Telegram chat.
  * A user with no linked chat is not an error — nothing is sent.
@@ -33,30 +61,47 @@ async function sendTelegram(user_id, text) {
     return { skipped: 'no telegram_chat_id for this user' };
   }
 
-  let res;
+  const chat_id = data.telegram_chat_id;
+
+  let result;
   try {
-    res = await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: data.telegram_chat_id,
-        // Sent as plain text on purpose. Telegram's MarkdownV2 rejects
-        // unescaped '.', '-', '!' and friends, which ordinary prose is full
-        // of — a parse_mode here would turn normal sentences into 400s.
-        text,
-      }),
-    });
+    result = await post(chat_id, toTelegramHtml(text), 'HTML');
   } catch (err) {
     return { error: `could not reach telegram: ${err.message}` };
   }
 
-  const body = await res.json().catch(() => ({}));
-
-  if (!res.ok || !body.ok) {
-    return { error: body.description || `telegram returned ${res.status}` };
+  if (result.ok) {
+    return { sent: true, message_id: result.body.result.message_id };
   }
 
-  return { sent: true, message_id: body.result.message_id };
+  const description =
+    result.body.description || `telegram returned ${result.status}`;
+
+  // A formatting mistake must never cost the message. Show exactly what broke,
+  // then send the same text again with no parse_mode at all.
+  if (/parse|entit/i.test(description)) {
+    console.error(`[TELEGRAM] HTML parse error: ${description}`);
+    console.error(`[TELEGRAM] raw text was:\n${text}`);
+
+    try {
+      const retry = await post(chat_id, text, null);
+      if (retry.ok) {
+        console.error('[TELEGRAM] resent as plain text');
+        return {
+          sent: true,
+          message_id: retry.body.result.message_id,
+          degraded: 'html parse failed, sent as plain text',
+        };
+      }
+      return {
+        error: retry.body.description || `telegram returned ${retry.status}`,
+      };
+    } catch (err) {
+      return { error: `could not reach telegram: ${err.message}` };
+    }
+  }
+
+  return { error: description };
 }
 
 module.exports = { sendTelegram };
