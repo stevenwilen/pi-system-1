@@ -294,30 +294,14 @@
       }
 
       .card-text,
-      .card-detail,
       .card-evidence {
         overflow-wrap: anywhere;
-      }
-
-      .card-detail {
-        font-size: 13px;
-        color: var(--muted);
       }
 
       .card-evidence {
         font-size: 12px;
         color: var(--muted);
         line-height: 1.4;
-      }
-
-      .corrected {
-        align-self: flex-start;
-        font-size: 11px;
-        font-weight: 650;
-        color: var(--focus-ink);
-        background: var(--focus-soft);
-        padding: 2px 8px;
-        border-radius: 999px;
       }
 
       .dots {
@@ -382,19 +366,6 @@
 
       .linkbtn:disabled {
         opacity: 0.45;
-      }
-
-      .card textarea {
-        width: 100%;
-        resize: none;
-        min-height: 78px;
-        padding: 10px 12px;
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        background: var(--bg);
-        color: var(--text);
-        font: inherit;
-        font-size: 16px;
       }
 
       .removed {
@@ -1433,6 +1404,8 @@
         }
       }
 
+      // The observation itself, why it was made, and how sure. The body field
+      // is deliberately not shown: it is generated detail you cannot act on.
       function paintCard(el, o) {
         el.innerHTML = '';
 
@@ -1440,13 +1413,6 @@
         text.className = 'card-text';
         text.textContent = o.title || '';
         el.appendChild(text);
-
-        if (o.body) {
-          const detail = document.createElement('div');
-          detail.className = 'card-detail';
-          detail.textContent = o.body;
-          el.appendChild(detail);
-        }
 
         const meta = document.createElement('div');
         meta.className = 'card-evidence';
@@ -1458,76 +1424,16 @@
         }
         el.appendChild(meta);
 
-        if (o.user_corrected) {
-          const flag = document.createElement('div');
-          flag.className = 'corrected';
-          flag.textContent = 'Your wording';
-          el.appendChild(flag);
-        }
-
         const actions = document.createElement('div');
         actions.className = 'card-actions';
-
-        const editBtn = document.createElement('button');
-        editBtn.className = 'linkbtn';
-        editBtn.textContent = 'Edit';
-        editBtn.onclick = () => startEdit(el, o);
 
         const delBtn = document.createElement('button');
         delBtn.className = 'linkbtn danger';
         delBtn.textContent = 'Delete';
         delBtn.onclick = () => confirmDelete(el, o);
 
-        actions.append(editBtn, delBtn);
+        actions.appendChild(delBtn);
         el.appendChild(actions);
-      }
-
-      function startEdit(el, o) {
-        el.innerHTML = '';
-
-        const box = document.createElement('textarea');
-        box.value = o.title || '';
-        el.appendChild(box);
-
-        const problem = document.createElement('div');
-        problem.className = 'card-evidence';
-        problem.style.color = 'var(--danger)';
-
-        const actions = document.createElement('div');
-        actions.className = 'card-actions';
-
-        const cancel = document.createElement('button');
-        cancel.className = 'linkbtn quiet';
-        cancel.textContent = 'Cancel';
-        cancel.onclick = () => paintCard(el, o);
-
-        const save = document.createElement('button');
-        save.className = 'linkbtn';
-        save.textContent = 'Save';
-        save.onclick = async () => {
-          const text = box.value.trim();
-          if (!text) return;
-
-          save.disabled = true;
-          problem.textContent = '';
-          try {
-            const res = await fetch(`/observations/${o.id}/edit`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.error || `server said ${res.status}`);
-            loadObservations();
-          } catch (err) {
-            save.disabled = false;
-            problem.textContent = err.message;
-          }
-        };
-
-        actions.append(cancel, save);
-        el.append(problem, actions);
-        box.focus();
       }
 
       function confirmDelete(el, o) {
