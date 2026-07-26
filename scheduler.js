@@ -22,6 +22,9 @@ const WINDOW = 15;
 // How far back the weekly reviews look.
 const REVIEW_DAYS = 28;
 
+// Tasks older than this are collapsed into a single line instead of listed.
+const TASK_RECENT_DAYS = 21;
+
 // Telegram rejects anything over 4096 characters.
 const MAX_MESSAGE = 4000;
 
@@ -330,10 +333,60 @@ ${TELEGRAM_FORMAT}`;
   return runBrain(profile.user_id, prompt, [], 'projects');
 }
 
+// JOB 4, tasks, Monday.
+//
+// Rendered straight from the rows rather than through the brain. The lines
+// are the person's own task text, and there is nothing here to reason about,
+// so sending them through a model would only risk rewording them.
+async function jobTasks(profile, today) {
+  const { data, error } = await supabase
+    .from('entries')
+    .select('title, created_at')
+    .eq('user_id', profile.user_id)
+    .eq('type', 'task')
+    .eq('status', 'active')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error(`[JOB] tasks: could not read tasks: ${error.message}`);
+    return '';
+  }
+
+  // No open tasks means no message at all.
+  if (!data || data.length === 0) return '';
+
+  const cutoff = new Date(`${daysAgo(today, TASK_RECENT_DAYS)}T00:00:00Z`);
+  const recent = [];
+  let older = 0;
+
+  for (const t of data) {
+    if (new Date(t.created_at) >= cutoff) recent.push(t);
+    else older += 1;
+  }
+
+  const lines = ['📋 <b>Open tasks</b>', ''];
+
+  for (const t of recent) lines.push(`• ${t.title}`);
+
+  if (older > 0) {
+    const plural = older === 1 ? 'task' : 'tasks';
+    if (recent.length > 0) lines.push('');
+    lines.push(
+      // "plus" only makes sense when something was listed above it.
+      recent.length > 0
+        ? `plus ${older} older ${plural}. Say "show old" to see them.`
+        : `${older} older ${plural}. Say "show old" to see them.`
+    );
+  }
+
+  return lines.join('\n');
+}
+
 const JOBS = {
   'day-plan': jobDayPlan,
   habits: jobHabits,
   projects: jobProjects,
+  tasks: jobTasks,
 };
 
 // `guarded` is false for manual --run fires: they always send, and they never
@@ -401,6 +454,7 @@ async function tick() {
 
     // Jobs 2 and 3 at a fixed morning hour, on their weekday.
     const morning = toMinutes(MORNING_HOUR, 0);
+    if (now.weekday === 'Mon' && inWindow(nowMinutes, morning)) due.push('tasks');
     if (now.weekday === 'Wed' && inWindow(nowMinutes, morning)) due.push('habits');
     if (now.weekday === 'Fri' && inWindow(nowMinutes, morning)) due.push('projects');
 
@@ -451,6 +505,6 @@ if (runIndex !== -1) {
   // Every 15 minutes. Each user is then evaluated in their own timezone.
   cron.schedule(`*/${WINDOW} * * * *`, tick);
   console.log(`scheduler running, checking every ${WINDOW} minutes`);
-  console.log(`day plan at each user's wake time; habits Wed ${MORNING_HOUR}:00, projects Fri ${MORNING_HOUR}:00 local`);
+  console.log(`day plan at each user's wake time; tasks Mon, habits Wed, projects Fri, all ${MORNING_HOUR}:00 local`);
   tick();
 }

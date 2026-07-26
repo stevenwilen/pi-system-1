@@ -47,7 +47,7 @@ create trigger profile_touch_updated_at
 create table if not exists entries (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null,
-  type        text not null check (type in ('observation', 'habit', 'project')),
+  type        text not null check (type in ('observation', 'habit', 'project', 'task')),
 
   title       text not null,
   body        text,
@@ -59,7 +59,7 @@ create table if not exists entries (
   evidence    text,          -- observations: what the user said or did
   confidence  int check (confidence between 0 and 100),
 
-  status      text not null default 'active' check (status in ('active', 'deleted')),
+  status      text not null default 'active' check (status in ('active', 'deleted', 'done')),
 
   -- Set only by the app when the person edits an observation's wording. The
   -- brain can read it but must never write it.
@@ -172,7 +172,7 @@ create index if not exists api_usage_user_created_idx
 create table if not exists sent_log (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null,
-  job           text not null check (job in ('day-plan', 'habits', 'projects')),
+  job           text not null check (job in ('day-plan', 'habits', 'projects', 'tasks')),
   sent_for_date date not null,
   created_at    timestamptz not null default now(),
 
