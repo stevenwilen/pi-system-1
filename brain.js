@@ -63,85 +63,59 @@ Concise means fewer words, never fewer steps. Everything above still holds at fu
 const TOOL_SCHEMAS = [
   {
     name: 'search_entries',
-    description:
-      'Read the notebook. Returns active entries for this person. Deleted entries are never returned. Call this before saving an observation, and whenever you need to know what you already know.',
+    description: 'Read the notebook. Only active entries are returned.',
     input_schema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description:
-            'Text to match against entry titles and bodies. Omit to return everything.',
+          description: 'Match against title and body. Omit for all.',
         },
         type: {
           type: 'string',
-          enum: ['observation', 'habit', 'project'],
-          description: 'Restrict to one kind of entry. Omit for all kinds.',
+          enum: ['observation', 'habit', 'project', 'task'],
         },
-        limit: {
-          type: 'integer',
-          description: 'Maximum rows to return. Defaults to 50.',
-        },
+        limit: { type: 'integer', description: 'Default 50.' },
       },
     },
   },
   {
     name: 'get_calendar',
-    description:
-      'Read calendar events for a single day, to see what time is already committed.',
+    description: 'Time already committed on one day.',
     input_schema: {
       type: 'object',
-      properties: {
-        date: {
-          type: 'string',
-          description: 'The day to read, as YYYY-MM-DD.',
-        },
-      },
+      properties: { date: { type: 'string', description: 'YYYY-MM-DD.' } },
       required: ['date'],
     },
   },
   {
     name: 'create_entry',
-    description:
-      'Save one new entry. Observations may be saved once you have checked for duplicates. Habits and projects are commitments, so only save them after the person has clearly agreed.',
+    description: 'Save one new entry.',
     input_schema: {
       type: 'object',
       properties: {
         type: {
           type: 'string',
           enum: ['observation', 'habit', 'project', 'task'],
-          description: 'What kind of entry this is.',
         },
-        title: {
-          type: 'string',
-          description: 'Short name for the entry.',
-        },
-        body: {
-          type: 'string',
-          description: 'The detail behind the title.',
-        },
-        why: {
-          type: 'string',
-          description:
-            'Projects only. Why this matters to the person, in their own words where possible. Required for a project.',
-        },
+        title: { type: 'string' },
+        body: { type: 'string', description: 'Detail behind the title.' },
+        why: { type: 'string', description: 'Projects only. Required.' },
         priority: {
           type: 'integer',
-          description: 'Projects only. Rank in the list, 1 being highest.',
+          description: 'Projects only. 1 is highest.',
         },
         frequency: {
           type: 'string',
-          description:
-            "Habits only. How often, e.g. 'daily', 'weekdays', '3x/week'.",
+          description: "Habits only, e.g. 'daily', '3x/week'.",
         },
         evidence: {
           type: 'string',
-          description:
-            'Observations only. What the person said or did that produced this.',
+          description: 'Observations only. What caused it.',
         },
         confidence: {
           type: 'integer',
-          description: 'Observations only. How sure you are, 0 to 100.',
+          description: 'Observations only. 0 to 100.',
         },
       },
       required: ['type', 'title'],
@@ -150,30 +124,19 @@ const TOOL_SCHEMAS = [
   {
     name: 'update_entry',
     description:
-      "Change one existing entry. To delete an entry, set status to 'deleted'. That is the only way to remove something, and a deleted entry can never be brought back.",
+      "Change one entry. status 'deleted' removes it and cannot be undone.",
     input_schema: {
       type: 'object',
       properties: {
-        id: {
-          type: 'string',
-          description: 'The id of the entry to change.',
-        },
+        id: { type: 'string' },
         title: { type: 'string' },
         body: { type: 'string' },
         why: { type: 'string' },
         priority: { type: 'integer' },
         frequency: { type: 'string' },
         evidence: { type: 'string' },
-        confidence: {
-          type: 'integer',
-          description: 'How sure you are, 0 to 100.',
-        },
-        status: {
-          type: 'string',
-          enum: ['active', 'deleted', 'done'],
-          description:
-            "Set to 'deleted' to soft-delete the entry, or 'done' when a task is finished.",
-        },
+        confidence: { type: 'integer', description: '0 to 100.' },
+        status: { type: 'string', enum: ['active', 'deleted', 'done'] },
       },
       required: ['id'],
     },
@@ -255,7 +218,15 @@ async function runBrain(user_id, userMessage, history = [], source = 'chat') {
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
-      system: SYSTEM_PROMPT,
+      // Tools render before system, so this one marker caches both. They are
+      // byte-identical on every call and are most of each request.
+      system: [
+        {
+          type: 'text',
+          text: SYSTEM_PROMPT,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
       thinking: { type: 'adaptive' },
       tools: TOOL_SCHEMAS,
       messages,

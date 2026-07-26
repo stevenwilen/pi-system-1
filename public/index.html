@@ -101,6 +101,65 @@
         background: var(--bg);
       }
 
+      .header-actions {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .iconbtn {
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border: 0;
+        border-radius: 10px;
+        background: var(--sunk);
+        color: var(--text);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+      }
+
+      .iconbtn svg {
+        width: 17px;
+        height: 17px;
+      }
+
+      .iconbtn:active {
+        filter: brightness(0.95);
+      }
+
+      /* the inline confirm that replaces the button */
+      .confirm-clear {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12.5px;
+        font-weight: 650;
+        color: var(--muted);
+      }
+
+      .confirm-clear button {
+        border: 0;
+        font: inherit;
+        font-size: 12.5px;
+        font-weight: 650;
+        padding: 5px 10px;
+        border-radius: 999px;
+        cursor: pointer;
+      }
+
+      .confirm-clear .yes {
+        background: var(--coral);
+        color: var(--brand-text);
+      }
+
+      .confirm-clear .no {
+        background: none;
+        color: var(--muted);
+      }
+
       nav.tabs {
         flex: none;
         padding: 0 14px 9px;
@@ -638,19 +697,28 @@
 
       /* Scoped to the send button on purpose. A bare `button` rule would
          also hit the tabs, the chips and the card actions. */
+      /* A rounded square rather than a circle, so it sits with the squared
+         corners of the bubbles and cards instead of against them. */
       #send {
         flex: none;
-        padding: 0 18px;
+        align-self: flex-end;
+        width: 42px;
+        height: 42px;
+        padding: 0;
         border: 0;
-        border-radius: 20px;
+        border-radius: 13px;
         background: var(--coral);
         color: var(--brand-text);
-        font: inherit;
-        font-size: 14px;
-        font-weight: 700;
+        display: grid;
+        place-items: center;
         cursor: pointer;
         box-shadow: 0 2px 9px rgba(232, 91, 69, 0.3);
         transition: transform 0.12s ease, background 0.12s ease;
+      }
+
+      #send svg {
+        width: 20px;
+        height: 20px;
       }
 
       #send:active {
@@ -667,7 +735,22 @@
   </head>
 
   <body>
-    <header>Notebook</header>
+    <header>
+      Notebook
+      <div class="header-actions" id="header-actions">
+        <button class="iconbtn" id="clear" type="button" aria-label="Clear conversation">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 5v14M5 12h14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+      </div>
+    </header>
 
     <nav class="tabs" role="tablist">
       <div class="segmented">
@@ -696,7 +779,18 @@
         placeholder="Message"
         autocomplete="off"
       ></textarea>
-      <button id="send" type="submit">Send</button>
+      <button id="send" type="submit" aria-label="Send">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 20V6M12 6l-6.5 6.5M12 6l6.5 6.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
     </form>
 
     <script>
@@ -875,6 +969,68 @@
       // page — `history` here would resolve to window.history, whose length is
       // never 0, so the welcome would never appear.
       if (log.children.length === 0) renderWelcome();
+
+      // --- clearing ---------------------------------------------------------
+
+      const headerActions = document.getElementById('header-actions');
+
+      function clearButton() {
+        headerActions.innerHTML = '';
+        const b = document.createElement('button');
+        b.className = 'iconbtn';
+        b.id = 'clear';
+        b.type = 'button';
+        b.setAttribute('aria-label', 'Clear conversation');
+        b.innerHTML =
+          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
+        b.onclick = askToClear;
+        headerActions.appendChild(b);
+      }
+
+      function askToClear() {
+        // Nothing to clear on a fresh screen.
+        if (document.getElementById('welcome')) return;
+
+        headerActions.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.className = 'confirm-clear';
+
+        const label = document.createElement('span');
+        label.textContent = 'Clear chat?';
+
+        const no = document.createElement('button');
+        no.className = 'no';
+        no.type = 'button';
+        no.textContent = 'Cancel';
+        no.onclick = clearButton;
+
+        const yes = document.createElement('button');
+        yes.className = 'yes';
+        yes.type = 'button';
+        yes.textContent = 'Clear';
+        yes.onclick = async () => {
+          yes.disabled = true;
+          try {
+            const res = await fetch('/chat/clear', { method: 'POST' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `server said ${res.status}`);
+
+            log.innerHTML = '';
+            renderWelcome();
+            showView('chat');
+            clearButton();
+          } catch (err) {
+            // Leave the confirm up so the failure is readable.
+            label.textContent = err.message;
+            yes.disabled = false;
+          }
+        };
+
+        wrap.append(label, no, yes);
+        headerActions.appendChild(wrap);
+      }
+
+      document.getElementById('clear').onclick = askToClear;
 
       // --- tabs -------------------------------------------------------------
 
