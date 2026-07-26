@@ -496,29 +496,15 @@
         align-items: flex-start;
       }
 
-      /* Each emoji sits in its category's soft circle rather than floating
-         loose on the background. */
+      /* No badge behind the emoji. The fixed width still keeps the three
+         lines of copy aligned with each other. */
       .welcome-list .ico {
         flex: none;
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
+        width: 22px;
         display: grid;
         place-items: center;
-        font-size: 14px;
-        line-height: 1;
-      }
-
-      .ico.plan {
-        background: var(--plan-soft);
-      }
-
-      .ico.habit {
-        background: var(--habit-soft);
-      }
-
-      .ico.focus {
-        background: var(--focus-soft);
+        font-size: 16px;
+        line-height: 1.35;
       }
 
       .welcome-list .copy {
@@ -856,15 +842,15 @@
           <p class="welcome-lead">Hi, I'm your planning companion.</p>
           <ul class="welcome-list">
             <li class="plan">
-              <span class="ico plan">📅</span>
+              <span class="ico">📅</span>
               <div class="copy"><b>Planning your day</b>Tell me what you want to get done and I'll build a schedule around your energy and calendar.</div>
             </li>
             <li class="habit">
-              <span class="ico habit">🔁</span>
+              <span class="ico">🔁</span>
               <div class="copy"><b>Building habits</b>Mention something you're doing regularly and I'll help you stay consistent.</div>
             </li>
             <li class="focus">
-              <span class="ico focus">🎯</span>
+              <span class="ico">🎯</span>
               <div class="copy"><b>Staying on your priorities</b>Tell me your projects and why they matter, and I'll keep you honest about them.</div>
             </li>
           </ul>
