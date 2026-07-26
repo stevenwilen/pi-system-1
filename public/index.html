@@ -1009,11 +1009,12 @@
 
       const headerActions = document.getElementById('header-actions');
 
-      // A stack of lines: everything the system is holding.
       const OVERVIEW_ICON =
         '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" ' +
         'stroke="currentColor" stroke-width="2" stroke-linecap="round">' +
-        '<path d="M4 7h16M4 12h16M4 17h10"/>' +
+        '<circle cx="12" cy="12" r="9"/>' +
+        '<path d="M12 11.4v4.4"/>' +
+        '<path d="M12 7.9v.15"/>' +
         '</svg>';
 
       const overviewBtn = document.createElement('button');
