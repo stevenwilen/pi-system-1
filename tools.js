@@ -282,8 +282,17 @@ async function create_entry(user_id, fields) {
     .select()
     .single();
 
-  if (error) return { error: error.message };
+  if (error) return { error: describe(error) };
   return data;
+}
+
+// 23505 is a unique violation, and only one unique index applies to entries,
+// so the raw Postgres text can be turned into something actionable.
+function describe(error) {
+  if (error.code === '23505') {
+    return 'that priority is already taken by another project. Move the project currently in that place down first, then try again.';
+  }
+  return error.message;
 }
 
 /**
@@ -311,7 +320,7 @@ async function update_entry(user_id, id, fields) {
 
   const { data, error } = await q.select().maybeSingle();
 
-  if (error) return { error: error.message };
+  if (error) return { error: describe(error) };
   if (!data) return { error: 'entry not found for this user' };
   return data;
 }
