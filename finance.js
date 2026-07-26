@@ -74,6 +74,43 @@ function toObjects(rows) {
   });
 }
 
+// The sync script writes 'yyyy-MM-dd' as a string, but Sheets frequently
+// coerces that into a date cell, and a date cell exports in locale format.
+// Every comparison here is a string compare, so an unhandled 7/26/2026 would
+// not throw, it would silently filter to the wrong rows.
+function toIsoDate(value) {
+  const v = String(value || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+
+  // US locale, matching a US bank feed.
+  const us = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (us) {
+    return `${us[3]}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}`;
+  }
+
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+}
+
+// parseFloat writes a plain number, but currency or accounting formatting on
+// the column would export as $1,234.56 or (14.50). The second is the dangerous
+// one: Number('(14.50)') is NaN, which would become zero and understate spend.
+function toAmount(value) {
+  let v = String(value || '').trim();
+  if (!v) return 0;
+
+  let negative = false;
+  if (/^\(.*\)$/.test(v)) {
+    negative = true;
+    v = v.slice(1, -1);
+  }
+
+  v = v.replace(/[$,\s]/g, '');
+  const n = Number(v);
+  if (!isFinite(n)) return 0;
+  return negative ? -Math.abs(n) : n;
+}
+
 async function fetchCsv(url) {
   const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) throw new Error(`sheet returned ${res.status}`);
@@ -101,15 +138,18 @@ async function load() {
   const rows = tx
     .filter((t) => t.Date && t['Transaction ID'])
     .map((t) => ({
-      date: t.Date.trim(),
+      date: toIsoDate(t.Date),
       account: t.Account || '',
       merchant: (t.Merchant || '').trim(),
-      amount: Number(String(t.Amount || '0').replace(/[$,]/g, '')) || 0,
+      amount: toAmount(t.Amount),
       category: (t.Category || '').trim(),
       status: (t.Status || '').trim(),
       note: (t.Note || '').trim(),
       type: typeOf.get((t.Category || '').trim()) || '',
-    }));
+    }))
+    // A row whose date could not be read is dropped rather than counted into
+    // the wrong period.
+    .filter((r) => r.date);
 
   cache = { at: Date.now(), data: rows };
   return rows;
@@ -258,7 +298,21 @@ async function brief() {
     Math.round((new Date(now) - new Date(quarter[0] ? quarter[0].date : d90)) / 86400000)
   );
 
+  // The sync logs SimpleFIN connection errors and carries on, so a bank that
+  // needs re-authenticating shows up as nothing at all rather than a failure.
+  // The only visible symptom is transactions stopping, which is worth naming.
+  const latest = rows.reduce((a, r) => (r.date > a ? r.date : a), '');
+  const staleDays = latest
+    ? Math.round((new Date(now) - new Date(latest)) / 86400000)
+    : null;
+
   return {
+    sync: {
+      latest_transaction: latest || null,
+      days_since: staleDays,
+      // Chase posts most days; three clear days means something is wrong.
+      looks_stalled: staleDays !== null && staleDays >= 3,
+    },
     window: { from: d30, to: now },
     week: { spend: spend(week), income: income(week) },
     prev_week: { spend: spend(prevWeek), income: income(prevWeek) },
@@ -339,6 +393,15 @@ function render(b) {
       L.push(`  ${r.merchant}: about ${m(r.amount)} a month (${r.seen} seen)`);
     }
     L.push(`  These come to roughly ${m(total)} a month.`);
+  }
+
+  if (b.sync.looks_stalled) {
+    L.push('');
+    L.push(
+      `SYNC WARNING: the most recent transaction is ${b.sync.days_since} days old (${b.sync.latest_transaction}). ` +
+        `The bank feed has probably stopped, which usually means an institution needs re-authenticating in SimpleFIN. ` +
+        `Everything above is therefore incomplete.`
+    );
   }
 
   const q = b.data_quality;
