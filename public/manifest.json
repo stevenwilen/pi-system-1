@@ -1,7 +1,7 @@
 {
   "name": "Marlin",
   "short_name": "Marlin",
-  "description": "A personal planning companion.",
+  "description": "A personal intelligence system.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

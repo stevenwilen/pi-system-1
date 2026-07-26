@@ -101,6 +101,17 @@
         background: var(--bg);
       }
 
+      /* Says what it is, since the name alone does not. */
+      header .tagline {
+        font-size: 11.5px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        color: var(--muted);
+        /* sits on the baseline of the larger name beside it */
+        align-self: flex-end;
+        padding-bottom: 2px;
+      }
+
       .header-actions {
         margin-left: auto;
         display: flex;
@@ -790,7 +801,7 @@
 
   <body>
     <header>
-      Marlin
+      Marlin<span class="tagline">personal intelligence</span>
       <div class="header-actions" id="header-actions"></div>
     </header>
 
@@ -976,7 +987,7 @@
         el.id = 'welcome';
         el.innerHTML = `
           <img class="welcome-mascot" src="/mascot.svg" alt="" aria-hidden="true">
-          <p class="welcome-lead">Hi, I'm Marlin.</p>
+          <p class="welcome-lead">Hi, I'm Marlin, your personal intelligence system.</p>
           <ul class="welcome-list">
             <li class="plan">
               <span class="ico">📅</span>
