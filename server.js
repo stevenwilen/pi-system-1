@@ -136,6 +136,10 @@ app.get('/overview', async (req, res) => {
       { label: 'Ideas', when: `Tuesdays and Saturdays at ${morning}` },
       { label: 'Waiting on', when: `Thursdays at ${morning}` },
       { label: 'Week ahead', when: `Sundays at ${morning}` },
+      // Only shown to the owner, because only the owner receives it.
+      ...(process.env.FINANCE_OWNER_USER_ID === CURRENT_USER
+        ? [{ label: 'Finance check-in', when: 'Wednesdays and Sundays at 18:00' }]
+        : []),
     ],
   });
 });

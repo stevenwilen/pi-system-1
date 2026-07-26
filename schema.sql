@@ -172,7 +172,7 @@ create index if not exists api_usage_user_created_idx
 create table if not exists sent_log (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null,
-  job           text not null check (job in ('day-plan', 'habits', 'projects', 'tasks', 'ideas', 'week-brief', 'waiting')),
+  job           text not null check (job in ('day-plan', 'habits', 'projects', 'tasks', 'ideas', 'week-brief', 'waiting', 'finance')),
   sent_for_date date not null,
   created_at    timestamptz not null default now(),
 
