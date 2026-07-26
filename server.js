@@ -132,7 +132,7 @@ app.get('/overview', async (req, res) => {
       { label: 'Open tasks', when: `Mondays at ${morning}` },
       { label: 'Habit review', when: `Wednesdays at ${morning}` },
       { label: 'Project review', when: `Fridays at ${morning}` },
-      { label: 'Ideas', when: `Alternate Sundays at ${morning}` },
+      { label: 'Ideas', when: `Tuesdays and Saturdays at ${morning}` },
     ],
   });
 });

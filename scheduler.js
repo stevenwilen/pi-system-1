@@ -25,10 +25,8 @@ const REVIEW_DAYS = 28;
 // Tasks older than this are collapsed into a single line instead of listed.
 const TASK_RECENT_DAYS = 21;
 
-// Ideas go out every other Sunday. The gap is measured from the last one
-// actually sent rather than counted off a fixed week parity, so a missed
-// fortnight self-corrects instead of skipping a month.
-const IDEAS_EVERY_DAYS = 13;
+// Ideas go out twice a week, on the two weekdays nothing else uses.
+const IDEAS_DAYS = ['Tue', 'Sat'];
 
 // Telegram rejects anything over 4096 characters.
 const MAX_MESSAGE = 4000;
@@ -211,23 +209,6 @@ async function alreadySent(user_id, job, date) {
   }
 
   return Boolean(data);
-}
-
-async function daysSinceLastSend(user_id, job, today) {
-  const { data, error } = await supabase
-    .from('sent_log')
-    .select('sent_for_date')
-    .eq('user_id', user_id)
-    .eq('job', job)
-    .order('sent_for_date', { ascending: false })
-    .limit(1);
-
-  // Never sent is treated as long overdue.
-  if (error || !data || data.length === 0) return Infinity;
-
-  const then = new Date(`${data[0].sent_for_date}T00:00:00Z`);
-  const now = new Date(`${today}T00:00:00Z`);
-  return Math.round((now - then) / 86400000);
 }
 
 async function markSent(user_id, job, date) {
@@ -423,7 +404,7 @@ async function jobIdeas(profile, today) {
 
   if (!data || data.length === 0) return '';
 
-  const prompt = `It is ${today}. Write this person's fortnightly review of the ideas they have captured.
+  const prompt = `It is ${today}. Write this person's review of the ideas they have captured.
 
 Call search_entries with type "idea" to see them.
 
@@ -515,10 +496,8 @@ async function tick() {
     const morning = toMinutes(MORNING_HOUR, 0);
     if (now.weekday === 'Mon' && inWindow(nowMinutes, morning)) due.push('tasks');
 
-    // Sunday, but only every other one.
-    if (now.weekday === 'Sun' && inWindow(nowMinutes, morning)) {
-      const gap = await daysSinceLastSend(profile.user_id, 'ideas', now.date);
-      if (gap >= IDEAS_EVERY_DAYS) due.push('ideas');
+    if (IDEAS_DAYS.includes(now.weekday) && inWindow(nowMinutes, morning)) {
+      due.push('ideas');
     }
 
     if (now.weekday === 'Wed' && inWindow(nowMinutes, morning)) due.push('habits');
@@ -574,6 +553,6 @@ if (runIndex !== -1) {
   // Every 15 minutes. Each user is then evaluated in their own timezone.
   cron.schedule(`*/${WINDOW} * * * *`, tick);
   console.log(`scheduler running, checking every ${WINDOW} minutes`);
-  console.log(`day plan at each user's wake time; tasks Mon, habits Wed, projects Fri, ideas alternate Sun, all ${MORNING_HOUR}:00 local`);
+  console.log(`day plan at each user's wake time; tasks Mon, ideas Tue and Sat, habits Wed, projects Fri, all ${MORNING_HOUR}:00 local`);
   tick();
 }
