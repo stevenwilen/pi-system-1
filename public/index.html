@@ -205,23 +205,6 @@
         color: var(--focus-ink);
       }
 
-      .next {
-        font-size: 12.5px;
-        line-height: 1.42;
-        color: var(--muted);
-      }
-
-      .next-label {
-        display: block;
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--muted);
-        opacity: 0.75;
-        margin-bottom: 1px;
-      }
-
       .pill {
         align-self: flex-start;
         font-size: 11px;
@@ -1104,11 +1087,10 @@
         // Projects, in the order the brain ranks them.
         const gp = group(`Projects (${d.projects.length})`);
         if (!d.projects.length) gp.appendChild(nothing('None yet.'));
-        // The why is not shown. It exists for the brain's reasoning, and
-        // Friday's review quotes it back; here it only takes up room.
+        // Rank and title only. The why and the body both exist for the
+        // brain's reasoning, not for reading in a list.
         for (const p of d.projects) {
           const c = card();
-
           const t = document.createElement('div');
           t.className = 'card-text';
           const r = document.createElement('span');
@@ -1116,19 +1098,6 @@
           r.textContent = p.priority ? `${p.priority}.` : '·';
           t.append(r, document.createTextNode(' ' + p.title));
           c.appendChild(t);
-
-          if (p.body) {
-            const n = document.createElement('div');
-            n.className = 'next';
-            const lab = document.createElement('span');
-            lab.className = 'next-label';
-            lab.textContent = 'Next steps';
-            const val = document.createElement('div');
-            val.textContent = p.body;
-            n.append(lab, val);
-            c.appendChild(n);
-          }
-
           gp.appendChild(c);
         }
         sheetBody.appendChild(gp);
