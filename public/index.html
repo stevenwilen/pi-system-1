@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
     />
-    <meta name="theme-color" content="#0f1115" />
+    <meta name="theme-color" content="#fdf8f1" />
     <title>Notebook</title>
 
     <link rel="manifest" href="/manifest.json" />
@@ -15,32 +15,41 @@
          information again. apple-touch-icon is the home screen icon. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="PI" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <style>
       :root {
-        --bg: #ffffff;
-        --surface: #f1f3f5;
-        --text: #14171a;
-        --muted: #6b7280;
-        --accent: #2f6df6;
-        --accent-text: #ffffff;
-        --line: #e3e6ea;
-        --danger: #b42318;
-      }
+        /* warm cream, never stark white */
+        --bg: #fdf8f1;
+        --surface: #ffffff;
+        --sunk: #f2ebe0;
+        --text: #2b2521;
+        --muted: #8d8377;
+        --line: #ece3d6;
 
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #0f1115;
-          --surface: #1c2027;
-          --text: #e8eaed;
-          --muted: #949bA6;
-          --accent: #4f83ff;
-          --accent-text: #ffffff;
-          --line: #262b33;
-          --danger: #ff6b6b;
-        }
+        /* One colour per category. This is the app's colour language: the
+           same hue teaches planning, habits and priorities everywhere it
+           appears, including on the matching chip. */
+        --plan: #f0603f;
+        --plan-soft: #ffe7e0;
+        --habit: #0f9e91;
+        --habit-soft: #d5f1ee;
+        --focus: #7a5bd6;
+        --focus-soft: #e9e2fb;
+
+        /* darkened for text on the soft tints, so chips stay readable */
+        --plan-ink: #b23a22;
+        --habit-ink: #0a6f66;
+        --focus-ink: #57399f;
+
+        --brand: #f0603f;
+        --brand-text: #ffffff;
+        --danger: #cf4126;
+
+        --shadow-sm: 0 1px 2px rgba(70, 52, 38, 0.06);
+        --shadow: 0 1px 2px rgba(70, 52, 38, 0.05),
+          0 6px 16px rgba(70, 52, 38, 0.06);
       }
 
       * {
@@ -56,8 +65,12 @@
       body {
         background: var(--bg);
         color: var(--text);
-        font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Helvetica, Arial, sans-serif;
+        /* ui-rounded resolves to SF Pro Rounded on iPhone, which is where the
+           friendliness actually comes from. */
+        font: 15px/1.5 ui-rounded, "SF Pro Rounded", -apple-system,
+          BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Roboto,
+          system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
         display: flex;
         flex-direction: column;
         /* dvh keeps the composer above the mobile keyboard */
@@ -69,39 +82,57 @@
 
       header {
         flex: none;
-        padding: 14px 16px calc(14px);
-        padding-top: max(14px, env(safe-area-inset-top));
-        border-bottom: 1px solid var(--line);
-        font-weight: 600;
-        letter-spacing: 0.01em;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 12px 18px 9px;
+        padding-top: max(12px, env(safe-area-inset-top));
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
         background: var(--bg);
+      }
+
+      header .mark {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--brand);
+        box-shadow: 0 0 0 4px var(--plan-soft);
       }
 
       nav.tabs {
         flex: none;
-        display: flex;
-        border-bottom: 1px solid var(--line);
+        padding: 0 14px 9px;
         background: var(--bg);
+      }
+
+      .segmented {
+        display: flex;
+        gap: 3px;
+        padding: 3px;
+        background: var(--sunk);
+        border-radius: 999px;
       }
 
       .tab {
         flex: 1;
-        padding: 10px 4px;
+        padding: 8px 6px;
         border: 0;
-        border-bottom: 2px solid transparent;
+        border-radius: 999px;
         background: none;
         color: var(--muted);
         font: inherit;
-        /* three tabs on a phone, so the longest label has to fit */
-        font-size: 13.5px;
-        line-height: 1.25;
-        font-weight: 600;
+        font-size: 13px;
+        font-weight: 650;
         cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease;
       }
 
       .tab[aria-selected='true'] {
+        background: var(--surface);
         color: var(--text);
-        border-bottom-color: var(--accent);
+        box-shadow: var(--shadow-sm);
       }
 
       .hidden {
@@ -122,11 +153,18 @@
 
       .card {
         background: var(--surface);
-        border-radius: 14px;
+        border-radius: 18px;
         padding: 14px 15px;
         display: flex;
         flex-direction: column;
         gap: 7px;
+        box-shadow: var(--shadow);
+      }
+
+      .card-text {
+        font-size: 14.5px;
+        font-weight: 600;
+        letter-spacing: -0.005em;
       }
 
       .card-text,
@@ -136,19 +174,24 @@
       }
 
       .card-detail {
-        font-size: 14px;
-        color: var(--muted);
-      }
-
-      .card-evidence {
         font-size: 13px;
         color: var(--muted);
       }
 
-      .corrected {
+      .card-evidence {
         font-size: 12px;
-        font-weight: 600;
-        color: var(--accent);
+        color: var(--muted);
+        line-height: 1.4;
+      }
+
+      .corrected {
+        align-self: flex-start;
+        font-size: 11px;
+        font-weight: 650;
+        color: var(--focus-ink);
+        background: var(--focus-soft);
+        padding: 2px 8px;
+        border-radius: 999px;
       }
 
       .dots {
@@ -187,21 +230,27 @@
 
       .linkbtn {
         border: 0;
-        background: none;
-        color: var(--accent);
+        background: var(--sunk);
+        color: var(--text);
         font: inherit;
-        font-size: 14px;
-        font-weight: 600;
-        padding: 6px 10px;
-        border-radius: 8px;
+        font-size: 12.5px;
+        font-weight: 650;
+        padding: 6px 13px;
+        border-radius: 999px;
         cursor: pointer;
       }
 
+      .linkbtn:active {
+        filter: brightness(0.96);
+      }
+
       .linkbtn.quiet {
+        background: none;
         color: var(--muted);
       }
 
       .linkbtn.danger {
+        background: #fdeae5;
         color: var(--danger);
       }
 
@@ -241,17 +290,18 @@
 
       .panel {
         background: var(--surface);
-        border-radius: 14px;
+        border-radius: 18px;
         padding: 15px;
         display: flex;
         flex-direction: column;
         gap: 10px;
+        box-shadow: var(--shadow);
       }
 
       .headline {
-        font-size: 26px;
-        font-weight: 650;
-        letter-spacing: -0.01em;
+        font-size: 27px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
       }
 
       .headline small {
@@ -261,15 +311,16 @@
       }
 
       .meter {
-        height: 8px;
+        height: 9px;
         border-radius: 999px;
-        background: var(--line);
+        background: var(--sunk);
         overflow: hidden;
       }
 
       .meter div {
         height: 100%;
-        background: var(--accent);
+        border-radius: 999px;
+        background: var(--habit);
       }
 
       .meter.low div {
@@ -322,53 +373,59 @@
         flex: 1;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
-        padding: 16px;
+        padding: 4px 16px 16px;
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 9px;
       }
 
       .msg {
-        max-width: 78%;
-        padding: 10px 13px;
-        border-radius: 16px;
+        max-width: 80%;
+        padding: 10px 14px;
+        border-radius: 20px;
+        font-size: 14.5px;
         white-space: pre-wrap;
         overflow-wrap: anywhere;
       }
 
       .msg.me {
         align-self: flex-end;
-        background: var(--accent);
-        color: var(--accent-text);
-        border-bottom-right-radius: 5px;
+        background: var(--brand);
+        color: var(--brand-text);
+        border-bottom-right-radius: 7px;
       }
 
       .msg.brain {
         align-self: flex-start;
         background: var(--surface);
-        border-bottom-left-radius: 5px;
+        border-bottom-left-radius: 7px;
+        box-shadow: var(--shadow-sm);
       }
 
       .msg.error {
         align-self: flex-start;
-        background: transparent;
-        border: 1px solid var(--danger);
+        background: #fff2ee;
         color: var(--danger);
-        font-size: 14px;
+        border-bottom-left-radius: 7px;
+        font-size: 13.5px;
       }
 
       .msg code {
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 0.9em;
-        background: rgba(127, 127, 127, 0.18);
+        font-size: 0.88em;
+        background: rgba(70, 52, 38, 0.08);
         padding: 1px 5px;
-        border-radius: 5px;
+        border-radius: 6px;
+      }
+
+      .msg.me code {
+        background: rgba(255, 255, 255, 0.22);
       }
 
       .empty {
         margin: auto;
         color: var(--muted);
-        font-size: 15px;
+        font-size: 14px;
         text-align: center;
         padding: 0 24px;
       }
@@ -378,9 +435,9 @@
       #welcome {
         display: flex;
         flex-direction: column;
-        gap: 15px;
-        padding: 6px 2px 2px;
-        max-width: 560px;
+        gap: 11px;
+        padding: 2px 0;
+        max-width: 520px;
       }
 
       #welcome p {
@@ -388,16 +445,22 @@
       }
 
       .welcome-lead {
-        font-size: 17px;
+        font-size: 15px;
+        font-weight: 650;
+        letter-spacing: -0.01em;
+        padding: 0 2px;
       }
 
       .welcome-list {
         margin: 0;
-        padding: 0;
+        padding: 12px 13px;
         list-style: none;
         display: flex;
         flex-direction: column;
-        gap: 13px;
+        gap: 11px;
+        background: var(--surface);
+        border-radius: 18px;
+        box-shadow: var(--shadow);
       }
 
       .welcome-list li {
@@ -406,43 +469,130 @@
         align-items: flex-start;
       }
 
+      /* Each emoji sits in its category's badge rather than floating loose. */
       .welcome-list .ico {
         flex: none;
-        font-size: 18px;
-        line-height: 1.45;
+        width: 29px;
+        height: 29px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        font-size: 15px;
+        line-height: 1;
+      }
+
+      .ico.plan {
+        background: var(--plan-soft);
+      }
+
+      .ico.habit {
+        background: var(--habit-soft);
+      }
+
+      .ico.focus {
+        background: var(--focus-soft);
+      }
+
+      .welcome-list .copy {
+        font-size: 12.5px;
+        line-height: 1.42;
+        color: var(--muted);
+      }
+
+      .welcome-list .copy b {
+        display: block;
+        font-size: 13.5px;
+        font-weight: 650;
+        letter-spacing: -0.005em;
+      }
+
+      li.plan .copy b {
+        color: var(--plan-ink);
+      }
+
+      li.habit .copy b {
+        color: var(--habit-ink);
+      }
+
+      li.focus .copy b {
+        color: var(--focus-ink);
       }
 
       .welcome-note {
         color: var(--muted);
-        font-size: 15px;
+        font-size: 12px;
+        line-height: 1.45;
+        padding: 0 2px;
       }
 
       .welcome-cta {
-        font-size: 15px;
+        font-size: 12.5px;
+        font-weight: 650;
+        color: var(--muted);
+        padding: 0 2px;
       }
 
       .chips {
         display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        padding-top: 1px;
+        flex-direction: column;
+        gap: 7px;
       }
 
+      /* Each chip wears its category's colour, so tapping one is also the
+         first lesson in what the three colours mean. */
       .chip {
-        border: 1px solid var(--line);
-        background: var(--surface);
-        color: var(--text);
+        border: 0;
+        text-align: left;
         font: inherit;
-        font-size: 15px;
-        padding: 9px 15px;
-        border-radius: 999px;
+        font-size: 13.5px;
+        font-weight: 650;
+        padding: 11px 14px;
+        border-radius: 14px;
         cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        transition: transform 0.12s ease, filter 0.12s ease;
+      }
+
+      .chip::before {
+        content: '';
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex: none;
+      }
+
+      .chip.plan {
+        background: var(--plan-soft);
+        color: var(--plan-ink);
+      }
+
+      .chip.plan::before {
+        background: var(--plan);
+      }
+
+      .chip.habit {
+        background: var(--habit-soft);
+        color: var(--habit-ink);
+      }
+
+      .chip.habit::before {
+        background: var(--habit);
+      }
+
+      .chip.focus {
+        background: var(--focus-soft);
+        color: var(--focus-ink);
+      }
+
+      .chip.focus::before {
+        background: var(--focus);
       }
 
       .chip:active {
-        background: var(--accent);
-        border-color: var(--accent);
-        color: var(--accent-text);
+        transform: scale(0.985);
+        filter: brightness(0.97);
       }
 
       /* thinking indicator */
@@ -491,8 +641,8 @@
         flex: none;
         display: flex;
         gap: 8px;
-        padding: 10px 12px;
-        padding-bottom: max(10px, env(safe-area-inset-bottom));
+        padding: 9px 12px;
+        padding-bottom: max(9px, env(safe-area-inset-bottom));
         border-top: 1px solid var(--line);
         background: var(--bg);
       }
@@ -501,53 +651,70 @@
         flex: 1;
         resize: none;
         max-height: 140px;
-        padding: 11px 14px;
-        border: 1px solid var(--line);
-        border-radius: 22px;
+        padding: 11px 15px;
+        border: 0;
+        border-radius: 20px;
         background: var(--surface);
         color: var(--text);
         font: inherit;
         /* 16px keeps iOS Safari from zooming on focus */
         font-size: 16px;
+        box-shadow: var(--shadow-sm);
+      }
+
+      textarea::placeholder {
+        color: var(--muted);
       }
 
       textarea:focus {
-        outline: 2px solid var(--accent);
-        outline-offset: -1px;
+        outline: 2px solid var(--brand);
+        outline-offset: 0;
       }
 
-      button {
+      /* Scoped to the send button on purpose. A bare `button` rule would
+         also hit the tabs, the chips and the card actions. */
+      #send {
         flex: none;
-        padding: 0 20px;
+        padding: 0 18px;
         border: 0;
-        border-radius: 22px;
-        background: var(--accent);
-        color: var(--accent-text);
+        border-radius: 20px;
+        background: var(--brand);
+        color: var(--brand-text);
         font: inherit;
-        font-weight: 600;
+        font-size: 14px;
+        font-weight: 700;
         cursor: pointer;
+        box-shadow: 0 2px 9px rgba(240, 96, 63, 0.32);
+        transition: transform 0.12s ease;
       }
 
-      button:disabled {
+      #send:active {
+        transform: scale(0.97);
+      }
+
+      #send:disabled {
         opacity: 0.45;
         cursor: default;
+        box-shadow: none;
       }
     </style>
   </head>
 
   <body>
-    <header>Notebook</header>
+    <header><span class="mark"></span>Notebook</header>
 
     <nav class="tabs" role="tablist">
-      <button class="tab" id="tab-chat" role="tab" aria-selected="true">
-        Chat
-      </button>
-      <button class="tab" id="tab-noticed" role="tab" aria-selected="false">
-        What I've Noticed
-      </button>
-      <button class="tab" id="tab-usage" role="tab" aria-selected="false">
-        Usage
-      </button>
+      <div class="segmented">
+        <button class="tab" id="tab-chat" role="tab" aria-selected="true">
+          Chat
+        </button>
+        <button class="tab" id="tab-noticed" role="tab" aria-selected="false">
+          Noticed
+        </button>
+        <button class="tab" id="tab-usage" role="tab" aria-selected="false">
+          Usage
+        </button>
+      </div>
     </nav>
 
     <div id="log"></div>
@@ -668,10 +835,11 @@
 
       // --- welcome ----------------------------------------------------------
 
+      // Each chip carries its category's colour, matching the badge above it.
       const CHIPS = [
-        'Plan my day for tomorrow',
-        'I want to add a project',
-        'I want to add a habit',
+        { text: 'Plan my day for tomorrow', kind: 'plan' },
+        { text: 'I want to add a project', kind: 'focus' },
+        { text: 'I want to add a habit', kind: 'habit' },
       ];
 
       function renderWelcome() {
@@ -680,32 +848,32 @@
         const el = document.createElement('div');
         el.id = 'welcome';
         el.innerHTML = `
-          <p class="welcome-lead">Hi, I'm your personal planning system. I help you with three things:</p>
+          <p class="welcome-lead">Hi, I'm your planning companion. Three things I'm good at:</p>
           <ul class="welcome-list">
-            <li>
-              <span class="ico">📅</span>
-              <div><b>Planning your day.</b> Tell me what you want to get done and I'll build a schedule around your energy and calendar.</div>
+            <li class="plan">
+              <span class="ico plan">📅</span>
+              <div class="copy"><b>Planning your day</b>Tell me what you want to get done and I'll build a schedule around your energy and calendar.</div>
             </li>
-            <li>
-              <span class="ico">🔁</span>
-              <div><b>Building habits.</b> Mention something you're doing regularly and I'll help you stay consistent.</div>
+            <li class="habit">
+              <span class="ico habit">🔁</span>
+              <div class="copy"><b>Building habits</b>Mention something you're doing regularly and I'll help you stay consistent.</div>
             </li>
-            <li>
-              <span class="ico">🎯</span>
-              <div><b>Staying on your priorities.</b> Tell me your projects and why they matter, and I'll keep you honest about them.</div>
+            <li class="focus">
+              <span class="ico focus">🎯</span>
+              <div class="copy"><b>Staying on your priorities</b>Tell me your projects and why they matter, and I'll keep you honest about them.</div>
             </li>
           </ul>
-          <p class="welcome-note">I'm not a general reminder or to-do app. I'm here to help you plan, build habits, and focus on what matters. The more you tell me about yourself, the smarter I get.</p>
-          <p class="welcome-cta">Tap one below to start, or just type.</p>
+          <p class="welcome-note">Not a general to-do app. The more you tell me about yourself, the smarter I get.</p>
+          <p class="welcome-cta">Tap one to start, or just type.</p>
         `;
 
         const chips = document.createElement('div');
         chips.className = 'chips';
 
-        for (const text of CHIPS) {
+        for (const { text, kind } of CHIPS) {
           const chip = document.createElement('button');
           chip.type = 'button';
-          chip.className = 'chip';
+          chip.className = `chip ${kind}`;
           chip.textContent = text;
           // Behaves exactly as if it had been typed.
           chip.onclick = () => {
