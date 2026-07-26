@@ -20,36 +20,41 @@
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <style>
       :root {
-        /* warm cream, never stark white */
-        --bg: #fdf8f1;
+        /* Taken from the mascot. Coral is the brand; everything else is
+           built around it. */
+        --coral: #ff7a66;
+        --coral-deep: #e85b45;
+        --blush: #ffb4a3;
+        --bg: #fff3ec;
         --surface: #ffffff;
-        --sunk: #f2ebe0;
-        --text: #2b2521;
-        --muted: #8d8377;
-        --line: #ece3d6;
+        --sunk: #fce4da;
+        --line: #f7ded3;
 
-        /* One colour per category. This is the app's colour language: the
-           same hue teaches planning, habits and priorities everywhere it
-           appears, including on the matching chip. */
-        --plan: #f0603f;
-        --plan-soft: #ffe7e0;
-        --habit: #0f9e91;
-        --habit-soft: #d5f1ee;
-        --focus: #7a5bd6;
-        --focus-soft: #e9e2fb;
+        /* One warm near-black for every piece of text. The dim variant is
+           the same ink at lower opacity, so nothing turns grey. */
+        --text: #2b2118;
+        --muted: rgba(43, 33, 24, 0.55);
 
-        /* darkened for text on the soft tints, so chips stay readable */
-        --plan-ink: #b23a22;
-        --habit-ink: #0a6f66;
-        --focus-ink: #57399f;
+        --brand: var(--coral);
+        /* Ink, not white: white on coral is about 2.5:1 and unreadable. */
+        --brand-text: #2b2118;
+        --danger: #c4432c;
 
-        --brand: #f0603f;
-        --brand-text: #ffffff;
-        --danger: #cf4126;
+        /* Category accents. Used only on chips and badges, never as
+           general chrome, so they stay meaningful. */
+        --plan: #ffc145;
+        --plan-soft: #fff1d2;
+        --plan-ink: #7d5a05;
+        --habit: #2fb8a8;
+        --habit-soft: #d7f4f0;
+        --habit-ink: #12665c;
+        --focus: #9b7be8;
+        --focus-soft: #ede5fd;
+        --focus-ink: #55399b;
 
-        --shadow-sm: 0 1px 2px rgba(70, 52, 38, 0.06);
-        --shadow: 0 1px 2px rgba(70, 52, 38, 0.05),
-          0 6px 16px rgba(70, 52, 38, 0.06);
+        --shadow-sm: 0 1px 2px rgba(120, 63, 45, 0.07);
+        --shadow: 0 1px 2px rgba(120, 63, 45, 0.06),
+          0 6px 16px rgba(120, 63, 45, 0.08);
       }
 
       * {
@@ -93,12 +98,10 @@
         background: var(--bg);
       }
 
-      header .mark {
-        width: 9px;
-        height: 9px;
-        border-radius: 50%;
-        background: var(--brand);
-        box-shadow: 0 0 0 4px var(--plan-soft);
+      header .mascot {
+        width: 24px;
+        height: 22px;
+        flex: none;
       }
 
       nav.tabs {
@@ -130,9 +133,9 @@
       }
 
       .tab[aria-selected='true'] {
-        background: var(--surface);
+        background: var(--coral);
         color: var(--text);
-        box-shadow: var(--shadow-sm);
+        box-shadow: 0 1px 3px rgba(232, 91, 69, 0.35);
       }
 
       .hidden {
@@ -397,9 +400,31 @@
 
       .msg.brain {
         align-self: flex-start;
-        background: var(--surface);
+        background: var(--blush);
         border-bottom-left-radius: 7px;
-        box-shadow: var(--shadow-sm);
+      }
+
+      /* The waiting bubble is just the mascot, with no fill behind it. */
+      .msg.thinking {
+        background: none;
+        padding: 2px 0;
+      }
+
+      .msg.thinking img {
+        width: 32px;
+        height: 29px;
+        display: block;
+        animation: bob 1.7s ease-in-out infinite;
+      }
+
+      @keyframes bob {
+        0%,
+        100% {
+          transform: translateY(0) rotate(-1.5deg);
+        }
+        50% {
+          transform: translateY(-5px) rotate(1.5deg);
+        }
       }
 
       .msg.error {
@@ -435,9 +460,16 @@
       #welcome {
         display: flex;
         flex-direction: column;
-        gap: 11px;
+        gap: 10px;
         padding: 2px 0;
         max-width: 520px;
+      }
+
+      .welcome-mascot {
+        width: 80px;
+        height: 72px;
+        align-self: center;
+        margin-bottom: -2px;
       }
 
       #welcome p {
@@ -445,9 +477,10 @@
       }
 
       .welcome-lead {
-        font-size: 15px;
+        font-size: 14.5px;
         font-weight: 650;
         letter-spacing: -0.01em;
+        text-align: center;
         padding: 0 2px;
       }
 
@@ -469,15 +502,16 @@
         align-items: flex-start;
       }
 
-      /* Each emoji sits in its category's badge rather than floating loose. */
+      /* Each emoji sits in its category's soft circle rather than floating
+         loose on the background. */
       .welcome-list .ico {
         flex: none;
-        width: 29px;
-        height: 29px;
-        border-radius: 10px;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
         display: grid;
         place-items: center;
-        font-size: 15px;
+        font-size: 14px;
         line-height: 1;
       }
 
@@ -595,45 +629,14 @@
         filter: brightness(0.97);
       }
 
-      /* thinking indicator */
-      .dots {
-        display: inline-flex;
-        gap: 4px;
-        align-items: center;
-        height: 1.5em;
-      }
-
-      .dots i {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: var(--muted);
-        animation: blink 1.3s infinite ease-in-out both;
-      }
-
-      .dots i:nth-child(2) {
-        animation-delay: 0.18s;
-      }
-
-      .dots i:nth-child(3) {
-        animation-delay: 0.36s;
-      }
-
-      @keyframes blink {
-        0%,
-        70%,
-        100% {
-          opacity: 0.25;
-        }
-        35% {
-          opacity: 1;
-        }
-      }
-
       @media (prefers-reduced-motion: reduce) {
-        .dots i {
+        .msg.thinking img {
           animation: none;
-          opacity: 0.5;
+        }
+
+        .chip:active,
+        #send:active {
+          transform: none;
         }
       }
 
@@ -678,18 +681,19 @@
         padding: 0 18px;
         border: 0;
         border-radius: 20px;
-        background: var(--brand);
+        background: var(--coral);
         color: var(--brand-text);
         font: inherit;
         font-size: 14px;
         font-weight: 700;
         cursor: pointer;
-        box-shadow: 0 2px 9px rgba(240, 96, 63, 0.32);
-        transition: transform 0.12s ease;
+        box-shadow: 0 2px 9px rgba(232, 91, 69, 0.3);
+        transition: transform 0.12s ease, background 0.12s ease;
       }
 
       #send:active {
         transform: scale(0.97);
+        background: var(--coral-deep);
       }
 
       #send:disabled {
@@ -701,7 +705,10 @@
   </head>
 
   <body>
-    <header><span class="mark"></span>Notebook</header>
+    <header>
+      <img class="mascot" src="/mascot.svg" alt="" aria-hidden="true" />
+      Notebook
+    </header>
 
     <nav class="tabs" role="tablist">
       <div class="segmented">
@@ -774,7 +781,11 @@
         const el = document.createElement('div');
         el.className = `msg ${who}`;
         if (text === null) {
-          el.innerHTML = '<span class="dots"><i></i><i></i><i></i></span>';
+          // Waiting on /chat takes 10 to 20 seconds, so the mascot bobs
+          // rather than the page sitting still.
+          el.classList.add('thinking');
+          el.innerHTML =
+            '<img src="/mascot.svg" alt="Thinking" role="img">';
         } else {
           el.innerHTML = render(text);
         }
@@ -822,6 +833,8 @@
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data.error || `server said ${res.status}`);
 
+          // Drop the mascot styling before the bubble becomes a real reply.
+          pending.classList.remove('thinking');
           pending.innerHTML = render(data.reply || '(no reply)');
         } catch (err) {
           pending.className = 'msg error';
@@ -848,6 +861,7 @@
         const el = document.createElement('div');
         el.id = 'welcome';
         el.innerHTML = `
+          <img class="welcome-mascot" src="/mascot.svg" alt="" aria-hidden="true">
           <p class="welcome-lead">Hi, I'm your planning companion. Three things I'm good at:</p>
           <ul class="welcome-list">
             <li class="plan">
