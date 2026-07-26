@@ -370,9 +370,15 @@
         color: var(--muted);
       }
 
+      /* Plain text, no pill. The tint appears only while pressed, so there is
+         still feedback without a resting shape. */
       .linkbtn.danger {
-        background: #fdeae5;
+        background: none;
         color: var(--danger);
+      }
+
+      .linkbtn.danger:active {
+        background: #fdeae5;
       }
 
       .linkbtn:disabled {
