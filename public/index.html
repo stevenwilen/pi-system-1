@@ -108,26 +108,30 @@
         gap: 6px;
       }
 
+      /* Deliberately quiet: no fill, muted, and it only takes on weight
+         while pressed. */
       .iconbtn {
         width: 30px;
         height: 30px;
         padding: 0;
         border: 0;
         border-radius: 10px;
-        background: var(--sunk);
-        color: var(--text);
+        background: none;
+        color: var(--muted);
         display: grid;
         place-items: center;
         cursor: pointer;
+        transition: color 0.12s ease, background 0.12s ease;
       }
 
       .iconbtn svg {
-        width: 17px;
-        height: 17px;
+        width: 18px;
+        height: 18px;
       }
 
       .iconbtn:active {
-        filter: brightness(0.95);
+        background: var(--sunk);
+        color: var(--text);
       }
 
       /* the inline confirm that replaces the button */
@@ -737,19 +741,7 @@
   <body>
     <header>
       Notebook
-      <div class="header-actions" id="header-actions">
-        <button class="iconbtn" id="clear" type="button" aria-label="Clear conversation">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M12 5v14M5 12h14"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.4"
-              stroke-linecap="round"
-            />
-          </svg>
-        </button>
-      </div>
+      <div class="header-actions" id="header-actions"></div>
     </header>
 
     <nav class="tabs" role="tablist">
@@ -974,6 +966,15 @@
 
       const headerActions = document.getElementById('header-actions');
 
+      // A return arrow: go back to the start of the conversation.
+      const RETURN_ICON =
+        '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" ' +
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+        'stroke-linejoin="round">' +
+        '<path d="M4 10h10a4 4 0 0 1 0 8h-2"/>' +
+        '<path d="M7.5 6.5 4 10l3.5 3.5"/>' +
+        '</svg>';
+
       function clearButton() {
         headerActions.innerHTML = '';
         const b = document.createElement('button');
@@ -981,8 +982,7 @@
         b.id = 'clear';
         b.type = 'button';
         b.setAttribute('aria-label', 'Clear conversation');
-        b.innerHTML =
-          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
+        b.innerHTML = RETURN_ICON;
         b.onclick = askToClear;
         headerActions.appendChild(b);
       }
@@ -1030,7 +1030,7 @@
         headerActions.appendChild(wrap);
       }
 
-      document.getElementById('clear').onclick = askToClear;
+      clearButton();
 
       // --- tabs -------------------------------------------------------------
 
