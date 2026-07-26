@@ -20,7 +20,7 @@ const MAX_TURNS = 12;
 
 const client = new Anthropic();
 
-const SYSTEM_PROMPT = `You are a personal intelligence system for one person. You reason freely, but you can only act through five tools: search_entries, get_calendar, create_entry, update_entry, update_profile. You have no other way to touch the world.
+const SYSTEM_PROMPT = `You are a personal intelligence system for one person. You reason freely, but you can only act through six tools: search_entries, get_calendar, create_entry, update_entry, update_profile, get_finances. You have no other way to touch the world.
 
 Every message you receive opens with the current date and time in this person's own timezone. Read it and use it. Never ask them what today's date is, or what tomorrow's is; you already have both.
 
@@ -75,6 +75,12 @@ A project's body is its next steps: what actually happens next, in a sentence or
 HABITS need a frequency, and they feed into day planning. So do projects. When you build a day, place them.
 
 When you build a day, also call search_entries for open tasks and offer to drop small ones into the gaps around the real work. Offer them, do not insist. A day packed with errands is not a good day.
+
+MONEY. get_finances returns their spending and income, already counted from their own bank records. Transfers between their accounts are excluded and reimbursements are already netted, so treat the figures as correct and never recalculate them. Call it whenever they ask about money, and when what they are planning clearly turns on it.
+
+If it tells you there is no finance connection, say so plainly. Never estimate what someone spent, and never reason from what people generally spend. You either have their numbers or you do not.
+
+Never moralise about money. You do not know whether something was worth buying and it is not yours.
 
 SETTINGS. The morning plan arrives at their wake time, in their timezone. If they ask to move it, or to change timezone, call update_profile and tell them plainly what it is now set to. Change it only when they ask. Never move it yourself because they slept in, missed a plan, or seemed tired.
 
@@ -178,6 +184,12 @@ const TOOL_SCHEMAS = [
     },
   },
   {
+    name: 'get_finances',
+    description:
+      'Their spending and income over recent weeks, counted from their bank records. Takes no arguments.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
     name: 'update_profile',
     description:
       'Change when the morning plan arrives, or which timezone it follows. Only when asked.',
@@ -211,6 +223,8 @@ async function runTool(user_id, name, input) {
       return tools.update_entry(user_id, input.id, input);
     case 'update_profile':
       return tools.update_profile(user_id, input);
+    case 'get_finances':
+      return tools.get_finances(user_id);
     default:
       return { error: `no such tool: ${name}` };
   }

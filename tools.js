@@ -8,6 +8,7 @@ require('dotenv').config();
 const ical = require('node-ical');
 
 const supabase = require('./db');
+const finance = require('./finance');
 
 // Fields the caller may set. Anything else is dropped, so user_id, id,
 // created_at and updated_at can never be overwritten from outside.
@@ -63,6 +64,31 @@ async function search_entries(user_id, query, type, limit = 50) {
   const { data, error } = await q;
   if (error) return { error: error.message };
   return data;
+}
+
+// --- finances ---------------------------------------------------------------
+
+/**
+ * The same counted brief the scheduled check-in uses, on demand.
+ *
+ * The ownership check lives here rather than in the tool list on purpose.
+ * The sheet URLs belong to one person, so a second user reaching this tool
+ * would be reading someone else's bank records. user_id is supplied by the
+ * caller and never by the model, which is what makes the check trustworthy.
+ */
+async function get_finances(user_id) {
+  if (!user_id) return { error: 'user_id is required' };
+
+  if (process.env.FINANCE_OWNER_USER_ID !== user_id) {
+    return { error: 'no finance connection for this user' };
+  }
+
+  const data = await finance.brief();
+  if (!data) return { error: 'finances are not connected yet' };
+  if (data.error) return { error: `could not read the sheet: ${data.error}` };
+  if (data.empty) return { error: 'the transaction sheet has no rows yet' };
+
+  return { summary: finance.render(data) };
 }
 
 // --- profile ----------------------------------------------------------------
@@ -331,5 +357,6 @@ module.exports = {
   create_entry,
   update_entry,
   update_profile,
+  get_finances,
   timezoneFor,
 };
