@@ -54,6 +54,9 @@
         --task: #4a90d9;
         --task-soft: #dfecf9;
         --task-ink: #1f5b92;
+        --idea: #e8a33d;
+        --idea-soft: #fdeed6;
+        --idea-ink: #8a5a06;
 
         --shadow-sm: 0 1px 2px rgba(120, 63, 45, 0.07);
         --shadow: 0 1px 2px rgba(120, 63, 45, 0.06),
@@ -967,6 +970,7 @@
         { kind: 'focus', text: 'I want to add a project' },
         { kind: 'habit', text: 'I want to add a habit' },
         { kind: 'task', text: 'I want to add a task' },
+        { kind: 'idea', text: 'I have an idea' },
       ];
 
       function renderWelcome() {
@@ -1159,6 +1163,23 @@
           gt.appendChild(c);
         }
         sheetBody.appendChild(gt);
+
+        const gi = group(`Ideas (${d.ideas.length})`);
+        if (!d.ideas.length) gi.appendChild(nothing('Nothing captured yet.'));
+        if (d.ideas.length) {
+          const c = card();
+          const s = document.createElement('div');
+          s.className = 'stack';
+          for (const i of d.ideas) {
+            const row = document.createElement('div');
+            row.textContent = '• ' + i.title;
+            row.style.fontSize = '13.5px';
+            s.appendChild(row);
+          }
+          c.appendChild(s);
+          gi.appendChild(c);
+        }
+        sheetBody.appendChild(gi);
 
         const gs = group('When I message you');
         const sc = card();

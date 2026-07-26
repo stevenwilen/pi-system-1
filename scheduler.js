@@ -25,6 +25,11 @@ const REVIEW_DAYS = 28;
 // Tasks older than this are collapsed into a single line instead of listed.
 const TASK_RECENT_DAYS = 21;
 
+// Ideas go out every other Sunday. The gap is measured from the last one
+// actually sent rather than counted off a fixed week parity, so a missed
+// fortnight self-corrects instead of skipping a month.
+const IDEAS_EVERY_DAYS = 13;
+
 // Telegram rejects anything over 4096 characters.
 const MAX_MESSAGE = 4000;
 
@@ -208,6 +213,23 @@ async function alreadySent(user_id, job, date) {
   return Boolean(data);
 }
 
+async function daysSinceLastSend(user_id, job, today) {
+  const { data, error } = await supabase
+    .from('sent_log')
+    .select('sent_for_date')
+    .eq('user_id', user_id)
+    .eq('job', job)
+    .order('sent_for_date', { ascending: false })
+    .limit(1);
+
+  // Never sent is treated as long overdue.
+  if (error || !data || data.length === 0) return Infinity;
+
+  const then = new Date(`${data[0].sent_for_date}T00:00:00Z`);
+  const now = new Date(`${today}T00:00:00Z`);
+  return Math.round((now - then) / 86400000);
+}
+
 async function markSent(user_id, job, date) {
   const { error } = await supabase
     .from('sent_log')
@@ -387,11 +409,43 @@ async function jobTasks(profile, today) {
   return lines.join('\n');
 }
 
+// JOB 5, ideas, every other Sunday.
+async function jobIdeas(profile, today) {
+  // Checked directly so an empty list costs nothing rather than paying for a
+  // model call that returns nothing.
+  const { data } = await supabase
+    .from('entries')
+    .select('id')
+    .eq('user_id', profile.user_id)
+    .eq('type', 'idea')
+    .eq('status', 'active')
+    .limit(1);
+
+  if (!data || data.length === 0) return '';
+
+  const prompt = `It is ${today}. Write this person's fortnightly review of the ideas they have captured.
+
+Call search_entries with type "idea" to see them.
+
+List the ideas. Against each one, give the smallest concrete first step that would test it or begin it: a single action they could finish in an hour. Not a plan, not a list of steps, one move.
+
+Then close by asking directly which of these should become a real project and which should be dropped. A list of ideas that only ever grows is a graveyard, so make that question easy to answer.
+
+These are not commitments. Do not schedule them, do not rank them, and do not imply they owe work on any of them.
+
+Keep it under 180 words. Write only the message itself, with no preamble.
+
+${TELEGRAM_FORMAT}`;
+
+  return runBrain(profile.user_id, prompt, [], 'ideas');
+}
+
 const JOBS = {
   'day-plan': jobDayPlan,
   habits: jobHabits,
   projects: jobProjects,
   tasks: jobTasks,
+  ideas: jobIdeas,
 };
 
 // `guarded` is false for manual --run fires: they always send, and they never
@@ -460,6 +514,13 @@ async function tick() {
     // Jobs 2 and 3 at a fixed morning hour, on their weekday.
     const morning = toMinutes(MORNING_HOUR, 0);
     if (now.weekday === 'Mon' && inWindow(nowMinutes, morning)) due.push('tasks');
+
+    // Sunday, but only every other one.
+    if (now.weekday === 'Sun' && inWindow(nowMinutes, morning)) {
+      const gap = await daysSinceLastSend(profile.user_id, 'ideas', now.date);
+      if (gap >= IDEAS_EVERY_DAYS) due.push('ideas');
+    }
+
     if (now.weekday === 'Wed' && inWindow(nowMinutes, morning)) due.push('habits');
     if (now.weekday === 'Fri' && inWindow(nowMinutes, morning)) due.push('projects');
 
@@ -513,6 +574,6 @@ if (runIndex !== -1) {
   // Every 15 minutes. Each user is then evaluated in their own timezone.
   cron.schedule(`*/${WINDOW} * * * *`, tick);
   console.log(`scheduler running, checking every ${WINDOW} minutes`);
-  console.log(`day plan at each user's wake time; tasks Mon, habits Wed, projects Fri, all ${MORNING_HOUR}:00 local`);
+  console.log(`day plan at each user's wake time; tasks Mon, habits Wed, projects Fri, ideas alternate Sun, all ${MORNING_HOUR}:00 local`);
   tick();
 }

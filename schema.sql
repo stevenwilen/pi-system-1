@@ -47,7 +47,7 @@ create trigger profile_touch_updated_at
 create table if not exists entries (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null,
-  type        text not null check (type in ('observation', 'habit', 'project', 'task')),
+  type        text not null check (type in ('observation', 'habit', 'project', 'task', 'idea')),
 
   title       text not null,
   body        text,
@@ -172,7 +172,7 @@ create index if not exists api_usage_user_created_idx
 create table if not exists sent_log (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null,
-  job           text not null check (job in ('day-plan', 'habits', 'projects', 'tasks')),
+  job           text not null check (job in ('day-plan', 'habits', 'projects', 'tasks', 'ideas')),
   sent_for_date date not null,
   created_at    timestamptz not null default now(),
 

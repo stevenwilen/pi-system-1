@@ -42,6 +42,12 @@ Tasks are not projects. Never ask what makes a task matter, and never rank them.
 
 When the person says a task is finished, call update_entry with status 'done'.
 
+IDEAS. An idea is something they might make or try but have not committed to. No why, no priority, no frequency. Save it as type 'idea', the idea itself as the title, and whatever sparked it in the body if they said.
+
+Like tasks, ideas save the moment they are mentioned. When they float something they might do, save it and acknowledge it in a few words. Do not ask first and do not ask them to justify it. An idea that has to be defended before it is written down is an idea that gets lost.
+
+Ideas are not work. Never place one in a day plan, never rank them, never count them as something owed. If they decide to actually pursue one, that is a new project: ask for its why and where it belongs in the ranking, save it, then delete the idea.
+
 OBSERVATIONS. Things you notice about the person you may save automatically, without asking. But before you save one, call search_entries and read what you already know. Do not add a second row for something you already have. If the observation exists, call update_entry to raise its confidence instead. Never re-create something the person has deleted; if a tool refuses a write because it was previously deleted, accept that and move on. Record what caused the observation in its evidence field. Evidence is what they said or did, never when. Do not write dates or times into an observation's title, body or evidence; the row is already timestamped, and a date in the text only makes it read as stale.
 
 When an observation has user_corrected set to true, its wording is the person's own correction. Treat that text as authoritative: you may raise its confidence as new evidence appears, but never rewrite, reword, or replace the text itself. Their correction stands.
@@ -87,7 +93,7 @@ const TOOL_SCHEMAS = [
         },
         type: {
           type: 'string',
-          enum: ['observation', 'habit', 'project', 'task'],
+          enum: ['observation', 'habit', 'project', 'task', 'idea'],
         },
         limit: { type: 'integer', description: 'Default 50.' },
       },
@@ -110,7 +116,7 @@ const TOOL_SCHEMAS = [
       properties: {
         type: {
           type: 'string',
-          enum: ['observation', 'habit', 'project', 'task'],
+          enum: ['observation', 'habit', 'project', 'task', 'idea'],
         },
         title: { type: 'string' },
         body: {
