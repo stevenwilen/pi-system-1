@@ -51,6 +51,9 @@
         --focus: #9b7be8;
         --focus-soft: #ede5fd;
         --focus-ink: #55399b;
+        --task: #4a90d9;
+        --task-soft: #dfecf9;
+        --task-ink: #1f5b92;
 
         --shadow-sm: 0 1px 2px rgba(120, 63, 45, 0.07);
         --shadow: 0 1px 2px rgba(120, 63, 45, 0.06),
@@ -553,7 +556,10 @@
       }
 
       /* Each chip wears its category's colour, so tapping one is also the
-         first lesson in what the three colours mean. */
+         first lesson in what the colours mean.
+         The three values are set per chip in JS from the category name, so
+         adding a category needs a palette entry and one line in CATEGORIES,
+         never another rule here. */
       .chip {
         border: 0;
         text-align: left;
@@ -566,6 +572,8 @@
         display: flex;
         align-items: center;
         gap: 9px;
+        background: var(--chip-soft, var(--sunk));
+        color: var(--chip-ink, var(--text));
         transition: transform 0.12s ease, filter 0.12s ease;
       }
 
@@ -575,33 +583,7 @@
         height: 8px;
         border-radius: 50%;
         flex: none;
-      }
-
-      .chip.plan {
-        background: var(--plan-soft);
-        color: var(--plan-ink);
-      }
-
-      .chip.plan::before {
-        background: var(--plan);
-      }
-
-      .chip.habit {
-        background: var(--habit-soft);
-        color: var(--habit-ink);
-      }
-
-      .chip.habit::before {
-        background: var(--habit);
-      }
-
-      .chip.focus {
-        background: var(--focus-soft);
-        color: var(--focus-ink);
-      }
-
-      .chip.focus::before {
-        background: var(--focus);
+        background: var(--chip, var(--muted));
       }
 
       .chip:active {
@@ -825,11 +807,15 @@
 
       // --- welcome ----------------------------------------------------------
 
-      // Each chip carries its category's colour, matching the badge above it.
-      const CHIPS = [
-        { text: 'Plan my day for tomorrow', kind: 'plan' },
-        { text: 'I want to add a project', kind: 'focus' },
-        { text: 'I want to add a habit', kind: 'habit' },
+      // The categories, in the order they appear as chips. `kind` must match
+      // a palette trio in the stylesheet: --<kind>, --<kind>-soft and
+      // --<kind>-ink. Adding a category is one line here plus those three
+      // values; no new CSS rule is needed.
+      const CATEGORIES = [
+        { kind: 'plan', text: 'Plan my day for tomorrow' },
+        { kind: 'focus', text: 'I want to add a project' },
+        { kind: 'habit', text: 'I want to add a habit' },
+        { kind: 'task', text: 'I want to add a task' },
       ];
 
       function renderWelcome() {
@@ -850,7 +836,7 @@
               <div class="copy"><b>Building habits</b>Mention something you're doing regularly and I'll help you stay consistent.</div>
             </li>
             <li class="focus">
-              <span class="ico">📊</span>
+              <span class="ico">🏁</span>
               <div class="copy"><b>Staying on your priorities</b>Tell me your projects and why they matter, and I'll keep you honest about them.</div>
             </li>
           </ul>
@@ -861,10 +847,13 @@
         const chips = document.createElement('div');
         chips.className = 'chips';
 
-        for (const { text, kind } of CHIPS) {
+        for (const { text, kind } of CATEGORIES) {
           const chip = document.createElement('button');
           chip.type = 'button';
-          chip.className = `chip ${kind}`;
+          chip.className = 'chip';
+          chip.style.setProperty('--chip', `var(--${kind})`);
+          chip.style.setProperty('--chip-soft', `var(--${kind}-soft)`);
+          chip.style.setProperty('--chip-ink', `var(--${kind}-ink)`);
           chip.textContent = text;
           // Behaves exactly as if it had been typed.
           chip.onclick = () => {
