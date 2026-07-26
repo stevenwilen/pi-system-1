@@ -98,12 +98,6 @@
         background: var(--bg);
       }
 
-      header .mascot {
-        width: 24px;
-        height: 22px;
-        flex: none;
-      }
-
       nav.tabs {
         flex: none;
         padding: 0 14px 9px;
@@ -705,10 +699,7 @@
   </head>
 
   <body>
-    <header>
-      <img class="mascot" src="/mascot.svg" alt="" aria-hidden="true" />
-      Notebook
-    </header>
+    <header>Notebook</header>
 
     <nav class="tabs" role="tablist">
       <div class="segmented">
@@ -862,7 +853,7 @@
         el.id = 'welcome';
         el.innerHTML = `
           <img class="welcome-mascot" src="/mascot.svg" alt="" aria-hidden="true">
-          <p class="welcome-lead">Hi, I'm your planning companion. Three things I'm good at:</p>
+          <p class="welcome-lead">Hi, I'm your planning companion.</p>
           <ul class="welcome-list">
             <li class="plan">
               <span class="ico plan">📅</span>
@@ -877,7 +868,7 @@
               <div class="copy"><b>Staying on your priorities</b>Tell me your projects and why they matter, and I'll keep you honest about them.</div>
             </li>
           </ul>
-          <p class="welcome-note">Not a general to-do app. The more you tell me about yourself, the smarter I get.</p>
+          <p class="welcome-note">The more you tell me about yourself, the smarter I get.</p>
           <p class="welcome-cta">Tap one to start, or just type.</p>
         `;
 
