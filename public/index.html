@@ -1137,13 +1137,6 @@
         }
         sheetBody.appendChild(gt);
 
-        // Observations have their own tab, so this is a count and nothing more.
-        const go = group('Observations');
-        const oc = card();
-        oc.appendChild(line(`${d.observation_count} held`, ''));
-        go.appendChild(oc);
-        sheetBody.appendChild(go);
-
         const gs = group('When I message you');
         const sc = card();
         const stack = document.createElement('div');

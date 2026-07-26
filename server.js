@@ -126,7 +126,6 @@ app.get('/overview', async (req, res) => {
     ),
     habits: of('habit'),
     tasks: of('task'),
-    observation_count: of('observation').length,
     schedule: [
       { label: 'Day plan', when: `Every day at ${wake}` },
       { label: 'Open tasks', when: `Mondays at ${morning}` },
