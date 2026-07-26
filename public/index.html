@@ -317,6 +317,23 @@
         opacity: 0.9;
       }
 
+      .meta-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+
+      .meta-row .card-evidence {
+        flex: 1;
+        /* lets long evidence wrap instead of pushing the button off */
+        min-width: 0;
+      }
+
+      .meta-row .linkbtn {
+        flex: none;
+        margin-top: -3px;
+      }
+
       .card-actions,
       .confirm {
         display: flex;
@@ -1393,6 +1410,11 @@
         text.textContent = o.title || '';
         el.appendChild(text);
 
+        // Evidence and Delete share a row, the evidence taking whatever width
+        // is left and the button pinned to the right.
+        const row = document.createElement('div');
+        row.className = 'meta-row';
+
         const meta = document.createElement('div');
         meta.className = 'card-evidence';
         meta.appendChild(dots(o.confidence));
@@ -1401,22 +1423,19 @@
           ev.textContent = `Because: ${o.evidence}`;
           meta.appendChild(ev);
         }
-        el.appendChild(meta);
-
-        const actions = document.createElement('div');
-        actions.className = 'card-actions';
 
         const delBtn = document.createElement('button');
         delBtn.className = 'linkbtn danger';
         delBtn.textContent = 'Delete';
         delBtn.onclick = () => confirmDelete(el, o);
 
-        actions.appendChild(delBtn);
-        el.appendChild(actions);
+        row.append(meta, delBtn);
+        el.appendChild(row);
       }
 
       function confirmDelete(el, o) {
-        const actions = el.querySelector('.card-actions');
+        // The whole row becomes the question, so it gets the full width.
+        const actions = el.querySelector('.meta-row');
         actions.className = 'confirm';
         actions.innerHTML = '';
 
