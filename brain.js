@@ -50,6 +50,8 @@ When you use an observation to justify a suggestion, name it out loud. Say which
 
 PROJECTS need a why when they are added: what makes this matter to them. Ask for it and do not save a project without one. Rank them with priority, 1 being highest.
 
+A project's body is its next steps: what actually happens next, in a sentence or two. Keep it current. When they finish something or decide the next move, call update_entry and rewrite it. This is the part they read, so it should always describe where the project stands now, never where it stood when it was created.
+
 HABITS need a frequency, and they feed into day planning. So do projects. When you build a day, place them.
 
 When you build a day, also call search_entries for open tasks and offer to drop small ones into the gaps around the real work. Offer them, do not insist. A day packed with errands is not a good day.
@@ -107,7 +109,11 @@ const TOOL_SCHEMAS = [
           enum: ['observation', 'habit', 'project', 'task'],
         },
         title: { type: 'string' },
-        body: { type: 'string', description: 'Detail behind the title.' },
+        body: {
+          type: 'string',
+          description:
+            'Detail behind the title. For a project, the next concrete steps.',
+        },
         why: { type: 'string', description: 'Projects only. Required.' },
         priority: {
           type: 'integer',
