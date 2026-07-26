@@ -322,4 +322,5 @@ module.exports = {
   create_entry,
   update_entry,
   update_profile,
+  timezoneFor,
 };
