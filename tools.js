@@ -65,6 +65,55 @@ async function search_entries(user_id, query, type, limit = 50) {
   return data;
 }
 
+// --- profile ----------------------------------------------------------------
+
+const PROFILE_UPDATABLE = ['timezone', 'default_wake_time'];
+
+/**
+ * Change when the day plan arrives, or which timezone it follows.
+ *
+ * Both values are validated here rather than trusted. A malformed time or an
+ * unknown timezone would not fail loudly: the scheduler would throw while
+ * working out the local hour, skip this user, and silently stop sending them
+ * anything at all.
+ */
+async function update_profile(user_id, fields) {
+  if (!user_id) return { error: 'user_id is required' };
+
+  const patch = pick(fields, PROFILE_UPDATABLE);
+  if (Object.keys(patch).length === 0) return { error: 'no fields to update' };
+
+  if (
+    patch.default_wake_time &&
+    !/^([01]\d|2[0-3]):[0-5]\d$/.test(patch.default_wake_time)
+  ) {
+    return {
+      error: `not a valid time: ${patch.default_wake_time}. Use HH:MM on a 24 hour clock.`,
+    };
+  }
+
+  if (patch.timezone) {
+    try {
+      new Intl.DateTimeFormat('en', { timeZone: patch.timezone });
+    } catch {
+      return {
+        error: `not a valid timezone: ${patch.timezone}. Use an IANA name such as America/New_York.`,
+      };
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('profile')
+    .update(patch)
+    .eq('user_id', user_id)
+    .select('timezone, default_wake_time')
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  if (!data) return { error: 'no profile for this user' };
+  return data;
+}
+
 // --- calendar ---------------------------------------------------------------
 
 // The ICS feed is refetched at most this often. One brain turn can call
@@ -272,4 +321,5 @@ module.exports = {
   get_calendar,
   create_entry,
   update_entry,
+  update_profile,
 };

@@ -70,15 +70,20 @@ directive to the brain.
 The test: adversarial rows can change what the brain *knows*, never what the brain
 *is*.
 
-### 2.3 Four tools, no more
-The brain reasons freely but can only touch the world through four tools:
+### 2.3 A fixed, small tool set
+The brain reasons freely but can only touch the world through five tools:
 
 | Tool | Purpose |
 |---|---|
-| `search_entries` | Read entries (observations, habits, projects). Filter by type, text, status. Returns active rows by default. |
-| `get_calendar` | Read plans and their blocks over a date range, including `completed` and `miss_reason`. |
-| `create_entry` | Create an entry, a plan, or blocks. |
-| `update_entry` | Update an entry, plan, or block — including soft-deleting an entry by setting `status = 'deleted'`, and marking a block missed. |
+| `search_entries` | Read entries (observations, habits, projects, tasks). Filter by type, text, status. Returns active rows only. |
+| `get_calendar` | Read calendar events for a day, in the user's timezone. |
+| `create_entry` | Create an entry. |
+| `update_entry` | Update an entry, including soft-deleting it by setting `status = 'deleted'` and completing a task with `'done'`. |
+| `update_profile` | Change the wake time or timezone, so the user can move their morning message by asking rather than editing the database. |
+
+This started as four. `update_profile` was added so settings could be changed
+from the conversation; the point of the rule is that the set is small, fixed,
+and identical for every user, not that the number never moves.
 
 There is no delete tool: deletion is `update_entry` setting `status = 'deleted'`.
 There is no send-Telegram tool: the messenger is fired by the scheduler with the
