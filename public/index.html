@@ -1147,15 +1147,10 @@
         }
         sheetBody.appendChild(gt);
 
-        // Observations live in their own tab, so just point at them.
+        // Observations have their own tab, so this is a count and nothing more.
         const go = group('Observations');
         const oc = card();
-        oc.appendChild(
-          line(
-            `${d.observation_count} held`,
-            d.observation_count ? 'see Noticed tab' : ''
-          )
-        );
+        oc.appendChild(line(`${d.observation_count} held`, ''));
         go.appendChild(oc);
         sheetBody.appendChild(go);
 
