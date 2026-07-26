@@ -28,7 +28,10 @@ const TASK_RECENT_DAYS = 21;
 // Telegram rejects anything over 4096 characters.
 const MAX_MESSAGE = 4000;
 
-const MISS_PROMPT = "Didn't follow yesterday's plan? Tell me what happened.";
+// Telegram is outbound only, so anything that asks for a response has to
+// point at the app. A reply to the bot goes nowhere.
+const MISS_PROMPT =
+  "Didn't follow yesterday's plan? Open the app and tell me what happened.";
 
 // Presentation guidance for the Telegram jobs only. The app chat is plain —
 // brain.js's system prompt says nothing about formatting.
@@ -38,6 +41,8 @@ const TELEGRAM_FORMAT = `This message goes to Telegram. Format it for quick scan
 - Use <b>bold</b> for section headers only. No other HTML. No <i>, no links, no code.
 - Put a blank line between sections so they separate clearly.
 - At most one leading emoji per section, and only where it helps tell sections apart. Sparingly. Never decorative.
+
+Telegram is one way. The person cannot reply to this message, and anything they send to the bot is discarded. If you want an answer from them, tell them to open the app. Never ask them to reply here, and never phrase a question as though you will see their response.
 
 This is presentation only. It changes nothing about how you reason or what you are required to do.`;
 
@@ -374,8 +379,8 @@ async function jobTasks(profile, today) {
     lines.push(
       // "plus" only makes sense when something was listed above it.
       recent.length > 0
-        ? `plus ${older} older ${plural}. Say "show old" to see them.`
-        : `${older} older ${plural}. Say "show old" to see them.`
+        ? `plus ${older} older ${plural}. Say "show old" in the app to see them.`
+        : `${older} older ${plural}. Say "show old" in the app to see them.`
     );
   }
 
