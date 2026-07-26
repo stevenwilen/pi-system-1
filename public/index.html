@@ -1123,6 +1123,23 @@
         }
         sheetBody.appendChild(gt);
 
+        const gw = group(`Waiting on (${d.waiting.length})`);
+        if (!d.waiting.length) gw.appendChild(nothing('Not blocked on anything.'));
+        if (d.waiting.length) {
+          const c = card();
+          const s = document.createElement('div');
+          s.className = 'stack';
+          for (const w of d.waiting) {
+            const row = document.createElement('div');
+            row.textContent = '• ' + w.title + (w.body ? ` — ${w.body}` : '');
+            row.style.fontSize = '13.5px';
+            s.appendChild(row);
+          }
+          c.appendChild(s);
+          gw.appendChild(c);
+        }
+        sheetBody.appendChild(gw);
+
         const gi = group(`Ideas (${d.ideas.length})`);
         if (!d.ideas.length) gi.appendChild(nothing('Nothing captured yet.'));
         if (d.ideas.length) {

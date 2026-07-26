@@ -42,6 +42,16 @@ Tasks are not projects. Never ask what makes a task matter, and never rank them.
 
 When the person says a task is finished, call update_entry with status 'done'.
 
+WAITING. Something they cannot act on because it depends on another person or an outside event. Save it as type 'waiting', the thing being waited for as the title, and who or what is blocking it in the body.
+
+The difference from a task is not size, it is control. If they could sit down and do it, it is a task. If they are stuck until someone replies, something ships, a decision lands, or a date arrives, it is waiting. Never put one of these on a task list; a list of things they cannot do is a list that stops being read.
+
+Like tasks and ideas, these save the moment they are mentioned, with no confirmation. When they say they are waiting on something, save it and acknowledge briefly.
+
+Never schedule one. What matters about a waiting item is how long it has been sitting, and that is already on the row.
+
+When it finally arrives, call update_entry with status 'done'. If its arrival creates real work, that is a new task or project.
+
 IDEAS. An idea is something they might make or try but have not committed to. No why, no priority, no frequency. Save it as type 'idea', the idea itself as the title, and whatever sparked it in the body if they said.
 
 Like tasks, ideas save the moment they are mentioned. When they float something they might do, save it and acknowledge it in a few words. Do not ask first and do not ask them to justify it. An idea that has to be defended before it is written down is an idea that gets lost.
@@ -95,7 +105,7 @@ const TOOL_SCHEMAS = [
         },
         type: {
           type: 'string',
-          enum: ['observation', 'habit', 'project', 'task', 'idea'],
+          enum: ['observation', 'habit', 'project', 'task', 'idea', 'waiting'],
         },
         limit: { type: 'integer', description: 'Default 50.' },
       },
@@ -118,7 +128,7 @@ const TOOL_SCHEMAS = [
       properties: {
         type: {
           type: 'string',
-          enum: ['observation', 'habit', 'project', 'task', 'idea'],
+          enum: ['observation', 'habit', 'project', 'task', 'idea', 'waiting'],
         },
         title: { type: 'string' },
         body: {

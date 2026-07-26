@@ -127,12 +127,14 @@ app.get('/overview', async (req, res) => {
     habits: of('habit'),
     tasks: of('task'),
     ideas: of('idea'),
+    waiting: of('waiting'),
     schedule: [
       { label: 'Day plan', when: `Every day at ${wake}` },
       { label: 'Open tasks', when: `Mondays at ${morning}` },
       { label: 'Habit review', when: `Wednesdays at ${morning}` },
       { label: 'Project review', when: `Fridays at ${morning}` },
       { label: 'Ideas', when: `Tuesdays and Saturdays at ${morning}` },
+      { label: 'Waiting on', when: `Thursdays at ${morning}` },
       { label: 'Week ahead', when: `Sundays at ${morning}` },
     ],
   });
