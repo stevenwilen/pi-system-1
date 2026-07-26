@@ -495,6 +495,9 @@ async function runOnce(name, userFilter) {
   }
 }
 
+// Exported so the app can describe the schedule without restating the hour.
+module.exports = { MORNING_HOUR };
+
 const args = process.argv.slice(2);
 const runIndex = args.indexOf('--run');
 const userIndex = args.indexOf('--user');

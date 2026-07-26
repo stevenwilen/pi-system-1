@@ -10,6 +10,11 @@ const { runBrain } = require('./brain');
 const { search_entries, update_entry } = require('./tools');
 const { summary } = require('./usage');
 
+// Requiring the scheduler starts its cron loop as a side effect, which is how
+// the jobs run in this one process. It also gives us the morning hour, so the
+// overview can describe the schedule without hardcoding it a second time.
+const { MORNING_HOUR } = require('./scheduler');
+
 // Until there is real auth, every request is this one person.
 const CURRENT_USER = '00000000-0000-0000-0000-000000000001';
 
@@ -120,6 +125,53 @@ app.post('/observations/:id/edit', async (req, res) => {
   res.json({ observation: data });
 });
 
+// --- everything the system currently holds ---------------------------------
+
+const hhmm = (t) => String(t || '').slice(0, 5);
+
+app.get('/overview', async (req, res) => {
+  const { data: profile } = await supabase
+    .from('profile')
+    .select('timezone, default_wake_time, telegram_chat_id')
+    .eq('user_id', CURRENT_USER)
+    .maybeSingle();
+
+  const { data: entries, error } = await supabase
+    .from('entries')
+    .select('id, type, title, body, why, priority, frequency, created_at')
+    .eq('user_id', CURRENT_USER)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const of = (t) => (entries || []).filter((e) => e.type === t);
+
+  const wake = hhmm(profile && profile.default_wake_time) || '07:00';
+  const morning = `${String(MORNING_HOUR).padStart(2, '0')}:00`;
+
+  res.json({
+    profile: {
+      timezone: (profile && profile.timezone) || 'UTC',
+      wake_time: wake,
+      telegram_linked: Boolean(profile && profile.telegram_chat_id),
+    },
+    // Ranked as the brain sees them: priority first, then newest.
+    projects: of('project').sort(
+      (a, b) => (a.priority || 99) - (b.priority || 99)
+    ),
+    habits: of('habit'),
+    tasks: of('task'),
+    observation_count: of('observation').length,
+    schedule: [
+      { label: 'Day plan', when: `Every day at ${wake}` },
+      { label: 'Open tasks', when: `Mondays at ${morning}` },
+      { label: 'Habit review', when: `Wednesdays at ${morning}` },
+      { label: 'Project review', when: `Fridays at ${morning}` },
+    ],
+  });
+});
+
 // --- usage ------------------------------------------------------------------
 
 app.get('/usage', async (req, res) => {
@@ -132,7 +184,3 @@ app.listen(PORT, HOST, () => {
   console.log(`listening on http://localhost:${PORT}`);
   console.log(`on your phone, use http://<this-machine's-lan-ip>:${PORT}`);
 });
-
-// Single user, single service: run the scheduled jobs in this same process.
-// Requiring scheduler.js starts its cron loop as a side effect.
-require('./scheduler');

@@ -164,6 +164,91 @@
         color: var(--muted);
       }
 
+      /* --- the overview sheet --- */
+
+      #sheet {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: var(--bg);
+        display: flex;
+        flex-direction: column;
+      }
+
+      #sheet header {
+        border-bottom: 1px solid var(--line);
+      }
+
+      #sheet-body {
+        flex: 1;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 14px 16px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .group h4 {
+        margin: 0 0 7px;
+        font-size: 11.5px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding-left: 2px;
+      }
+
+      .group .card {
+        gap: 5px;
+      }
+
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .kv {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 13.5px;
+      }
+
+      .kv span:first-child {
+        color: var(--muted);
+      }
+
+      .rank {
+        display: inline-block;
+        min-width: 18px;
+        font-weight: 700;
+        color: var(--focus-ink);
+      }
+
+      .why {
+        font-size: 12.5px;
+        color: var(--muted);
+        line-height: 1.42;
+      }
+
+      .pill {
+        align-self: flex-start;
+        font-size: 11px;
+        font-weight: 650;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: var(--habit-soft);
+        color: var(--habit-ink);
+      }
+
+      .none {
+        font-size: 13px;
+        color: var(--muted);
+        padding-left: 2px;
+      }
+
       nav.tabs {
         flex: none;
         padding: 0 14px 9px;
@@ -764,6 +849,21 @@
 
     <div id="usage" class="hidden"></div>
 
+    <div id="sheet" class="hidden">
+      <header>
+        Everything I know
+        <div class="header-actions">
+          <button class="iconbtn" id="sheet-close" type="button" aria-label="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </div>
+      </header>
+      <div id="sheet-body"></div>
+    </div>
+
     <form id="composer">
       <textarea
         id="input"
@@ -975,8 +1075,23 @@
         '<path d="M7.5 6.5 4 10l3.5 3.5"/>' +
         '</svg>';
 
+      // A stack of lines: everything the system is holding.
+      const OVERVIEW_ICON =
+        '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" ' +
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round">' +
+        '<path d="M4 7h16M4 12h16M4 17h10"/>' +
+        '</svg>';
+
       function clearButton() {
         headerActions.innerHTML = '';
+
+        const o = document.createElement('button');
+        o.className = 'iconbtn';
+        o.type = 'button';
+        o.setAttribute('aria-label', 'Everything I know');
+        o.innerHTML = OVERVIEW_ICON;
+        o.onclick = openOverview;
+        headerActions.appendChild(o);
         const b = document.createElement('button');
         b.className = 'iconbtn';
         b.id = 'clear';
@@ -1031,6 +1146,158 @@
       }
 
       clearButton();
+
+      // --- everything I know ------------------------------------------------
+
+      const sheet = document.getElementById('sheet');
+      const sheetBody = document.getElementById('sheet-body');
+      document.getElementById('sheet-close').onclick = () =>
+        sheet.classList.add('hidden');
+
+      function group(title) {
+        const g = document.createElement('div');
+        g.className = 'group';
+        const h = document.createElement('h4');
+        h.textContent = title;
+        g.appendChild(h);
+        return g;
+      }
+
+      function card() {
+        const c = document.createElement('div');
+        c.className = 'card';
+        return c;
+      }
+
+      function line(label, value) {
+        const el = document.createElement('div');
+        el.className = 'kv';
+        const a = document.createElement('span');
+        a.textContent = label;
+        const b = document.createElement('span');
+        b.textContent = value;
+        el.append(a, b);
+        return el;
+      }
+
+      function nothing(text) {
+        const el = document.createElement('div');
+        el.className = 'none';
+        el.textContent = text;
+        return el;
+      }
+
+      async function openOverview() {
+        sheet.classList.remove('hidden');
+        sheetBody.innerHTML = '<div class="empty">Loading…</div>';
+
+        let d;
+        try {
+          const res = await fetch('/overview');
+          d = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(d.error || `server said ${res.status}`);
+        } catch (err) {
+          sheetBody.innerHTML = '';
+          const e = document.createElement('div');
+          e.className = 'msg error';
+          e.textContent = err.message;
+          sheetBody.appendChild(e);
+          return;
+        }
+
+        sheetBody.innerHTML = '';
+
+        // Projects, in the order the brain ranks them.
+        const gp = group(`Projects (${d.projects.length})`);
+        if (!d.projects.length) gp.appendChild(nothing('None yet.'));
+        for (const p of d.projects) {
+          const c = card();
+          const t = document.createElement('div');
+          t.className = 'card-text';
+          const r = document.createElement('span');
+          r.className = 'rank';
+          r.textContent = p.priority ? `${p.priority}.` : '·';
+          t.append(r, document.createTextNode(' ' + p.title));
+          c.appendChild(t);
+          if (p.why) {
+            const w = document.createElement('div');
+            w.className = 'why';
+            w.textContent = p.why;
+            c.appendChild(w);
+          }
+          gp.appendChild(c);
+        }
+        sheetBody.appendChild(gp);
+
+        const gh = group(`Habits (${d.habits.length})`);
+        if (!d.habits.length) gh.appendChild(nothing('None yet.'));
+        for (const h of d.habits) {
+          const c = card();
+          const t = document.createElement('div');
+          t.className = 'card-text';
+          t.textContent = h.title;
+          c.appendChild(t);
+          if (h.frequency) {
+            const f = document.createElement('span');
+            f.className = 'pill';
+            f.textContent = h.frequency;
+            c.appendChild(f);
+          }
+          gh.appendChild(c);
+        }
+        sheetBody.appendChild(gh);
+
+        const gt = group(`Open tasks (${d.tasks.length})`);
+        if (!d.tasks.length) gt.appendChild(nothing('Nothing outstanding.'));
+        if (d.tasks.length) {
+          const c = card();
+          const s = document.createElement('div');
+          s.className = 'stack';
+          for (const t of d.tasks) {
+            const row = document.createElement('div');
+            row.textContent = '• ' + t.title;
+            row.style.fontSize = '13.5px';
+            s.appendChild(row);
+          }
+          c.appendChild(s);
+          gt.appendChild(c);
+        }
+        sheetBody.appendChild(gt);
+
+        // Observations live in their own tab, so just point at them.
+        const go = group('Observations');
+        const oc = card();
+        oc.appendChild(
+          line(
+            `${d.observation_count} held`,
+            d.observation_count ? 'see Noticed tab' : ''
+          )
+        );
+        go.appendChild(oc);
+        sheetBody.appendChild(go);
+
+        const gs = group('When I message you');
+        const sc = card();
+        const stack = document.createElement('div');
+        stack.className = 'stack';
+        for (const s of d.schedule) stack.appendChild(line(s.label, s.when));
+        sc.appendChild(stack);
+        gs.appendChild(sc);
+        sheetBody.appendChild(gs);
+
+        const gset = group('Settings');
+        const setc = card();
+        const st = document.createElement('div');
+        st.className = 'stack';
+        st.append(
+          line('Timezone', d.profile.timezone),
+          line('Wake time', d.profile.wake_time),
+          line('Telegram', d.profile.telegram_linked ? 'linked' : 'not linked')
+        );
+        setc.appendChild(st);
+        gset.appendChild(setc);
+        sheetBody.appendChild(gset);
+      }
 
       // --- tabs -------------------------------------------------------------
 
