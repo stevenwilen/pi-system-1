@@ -1,7 +1,7 @@
 {
-  "name": "Personal Intelligence",
-  "short_name": "PI",
-  "description": "A personal intelligence system.",
+  "name": "Marlin",
+  "short_name": "Marlin",
+  "description": "A personal planning companion.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
