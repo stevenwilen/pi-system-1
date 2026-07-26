@@ -57,6 +57,12 @@
         --idea: #e8a33d;
         --idea-soft: #fdeed6;
         --idea-ink: #8a5a06;
+        --primary: #ff7a66;
+        --primary-soft: #ffe4dc;
+        --primary-ink: #a83a26;
+        --quiet: #c3b3a1;
+        --quiet-soft: #f4ece2;
+        --quiet-ink: #6b5f52;
 
         --shadow-sm: 0 1px 2px rgba(120, 63, 45, 0.07);
         --shadow: 0 1px 2px rgba(120, 63, 45, 0.06),
@@ -597,65 +603,28 @@
         padding: 0 2px;
       }
 
-      .welcome-list {
-        margin: 0;
-        padding: 12px 13px;
-        list-style: none;
+      .welcome-card {
+        padding: 14px 15px;
         display: flex;
         flex-direction: column;
-        gap: 11px;
+        gap: 9px;
         background: var(--surface);
         border-radius: 18px;
         box-shadow: var(--shadow);
       }
 
-      .welcome-list li {
-        display: flex;
-        gap: 10px;
-        align-items: flex-start;
+      .welcome-card p {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.48;
       }
 
-      /* No badge behind the emoji. The fixed width still keeps the three
-         lines of copy aligned with each other. */
-      .welcome-list .ico {
-        flex: none;
-        width: 22px;
-        display: grid;
-        place-items: center;
-        font-size: 16px;
-        line-height: 1.35;
-      }
-
-      .welcome-list .copy {
-        font-size: 12.5px;
-        line-height: 1.42;
-        color: var(--muted);
-      }
-
-      .welcome-list .copy b {
-        display: block;
-        font-size: 13.5px;
-        font-weight: 650;
-        letter-spacing: -0.005em;
-      }
-
-      li.plan .copy b {
-        color: var(--plan-ink);
-      }
-
-      li.habit .copy b {
-        color: var(--habit-ink);
-      }
-
-      li.focus .copy b {
-        color: var(--focus-ink);
-      }
-
-      .welcome-note {
-        color: var(--muted);
+      .welcome-card .quiet-line {
         font-size: 12px;
-        line-height: 1.45;
-        padding: 0 2px;
+        color: var(--muted);
+        padding-top: 2px;
+        border-top: 1px solid var(--line);
+        margin-top: 2px;
       }
 
       .welcome-cta {
@@ -965,12 +934,12 @@
       // a palette trio in the stylesheet: --<kind>, --<kind>-soft and
       // --<kind>-ink. Adding a category is one line here plus those three
       // values; no new CSS rule is needed.
+      // Openers, not commands. The old list named one category per chip,
+      // which framed the system as five forms to fill in.
       const CATEGORIES = [
-        { kind: 'plan', text: 'Plan my day for tomorrow' },
-        { kind: 'focus', text: 'I want to add a project' },
-        { kind: 'habit', text: 'I want to add a habit' },
-        { kind: 'task', text: 'I want to add a task' },
-        { kind: 'idea', text: 'I have an idea' },
+        { kind: 'primary', text: 'Get to know me' },
+        { kind: 'plan', text: 'Help me plan tomorrow' },
+        { kind: 'quiet', text: 'What do you know about me?' },
       ];
 
       function renderWelcome() {
@@ -981,22 +950,12 @@
         el.innerHTML = `
           <img class="welcome-mascot" src="/mascot.svg" alt="" aria-hidden="true">
           <p class="welcome-lead">I'm your personal intelligence system.</p>
-          <ul class="welcome-list">
-            <li class="plan">
-              <span class="ico">📅</span>
-              <div class="copy"><b>Planning your day</b>Tell me what you want to get done and I'll build a schedule around your energy and calendar.</div>
-            </li>
-            <li class="habit">
-              <span class="ico">🔁</span>
-              <div class="copy"><b>Building habits</b>Mention something you're doing regularly and I'll help you stay consistent.</div>
-            </li>
-            <li class="focus">
-              <span class="ico">🏁</span>
-              <div class="copy"><b>Staying on your priorities</b>Tell me your projects and why they matter, and I'll keep you honest about them.</div>
-            </li>
-          </ul>
-          <p class="welcome-note">The more you tell me about yourself, the smarter I get.</p>
-          <p class="welcome-cta">Tap one to start, or just type.</p>
+          <div class="welcome-card">
+            <p>Tell me what you're working on, what you're trying to build, and how your days actually go. I remember all of it.</p>
+            <p>Then I plan your days around it, and come back to you during the week without being asked.</p>
+            <p class="quiet-line">Projects, habits, tasks and ideas all live in here together. You never have to file anything.</p>
+          </div>
+          <p class="welcome-cta">Just talk to me. Start anywhere.</p>
         `;
 
         const chips = document.createElement('div');
