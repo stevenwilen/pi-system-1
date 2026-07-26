@@ -159,8 +159,16 @@
         gap: 14px;
       }
 
+      /* A group holds a heading and any number of cards, so it needs its own
+         gap. Without it, two projects sit flush against each other. */
+      .group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
       .group h4 {
-        margin: 0 0 7px;
+        margin: 0;
         font-size: 11.5px;
         font-weight: 700;
         letter-spacing: 0.05em;
