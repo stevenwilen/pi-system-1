@@ -134,36 +134,6 @@
         color: var(--text);
       }
 
-      /* the inline confirm that replaces the button */
-      .confirm-clear {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 12.5px;
-        font-weight: 650;
-        color: var(--muted);
-      }
-
-      .confirm-clear button {
-        border: 0;
-        font: inherit;
-        font-size: 12.5px;
-        font-weight: 650;
-        padding: 5px 10px;
-        border-radius: 999px;
-        cursor: pointer;
-      }
-
-      .confirm-clear .yes {
-        background: var(--coral);
-        color: var(--brand-text);
-      }
-
-      .confirm-clear .no {
-        background: none;
-        color: var(--muted);
-      }
-
       /* --- the overview sheet --- */
 
       #sheet {
@@ -1062,18 +1032,9 @@
       // never 0, so the welcome would never appear.
       if (log.children.length === 0) renderWelcome();
 
-      // --- clearing ---------------------------------------------------------
+      // --- header buttons ---------------------------------------------------
 
       const headerActions = document.getElementById('header-actions');
-
-      // A return arrow: go back to the start of the conversation.
-      const RETURN_ICON =
-        '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" ' +
-        'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-        'stroke-linejoin="round">' +
-        '<path d="M4 10h10a4 4 0 0 1 0 8h-2"/>' +
-        '<path d="M7.5 6.5 4 10l3.5 3.5"/>' +
-        '</svg>';
 
       // A stack of lines: everything the system is holding.
       const OVERVIEW_ICON =
@@ -1082,70 +1043,13 @@
         '<path d="M4 7h16M4 12h16M4 17h10"/>' +
         '</svg>';
 
-      function clearButton() {
-        headerActions.innerHTML = '';
-
-        const o = document.createElement('button');
-        o.className = 'iconbtn';
-        o.type = 'button';
-        o.setAttribute('aria-label', 'Everything I know');
-        o.innerHTML = OVERVIEW_ICON;
-        o.onclick = openOverview;
-        headerActions.appendChild(o);
-        const b = document.createElement('button');
-        b.className = 'iconbtn';
-        b.id = 'clear';
-        b.type = 'button';
-        b.setAttribute('aria-label', 'Clear conversation');
-        b.innerHTML = RETURN_ICON;
-        b.onclick = askToClear;
-        headerActions.appendChild(b);
-      }
-
-      function askToClear() {
-        // Nothing to clear on a fresh screen.
-        if (document.getElementById('welcome')) return;
-
-        headerActions.innerHTML = '';
-        const wrap = document.createElement('div');
-        wrap.className = 'confirm-clear';
-
-        const label = document.createElement('span');
-        label.textContent = 'Clear chat?';
-
-        const no = document.createElement('button');
-        no.className = 'no';
-        no.type = 'button';
-        no.textContent = 'Cancel';
-        no.onclick = clearButton;
-
-        const yes = document.createElement('button');
-        yes.className = 'yes';
-        yes.type = 'button';
-        yes.textContent = 'Clear';
-        yes.onclick = async () => {
-          yes.disabled = true;
-          try {
-            const res = await fetch('/chat/clear', { method: 'POST' });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.error || `server said ${res.status}`);
-
-            log.innerHTML = '';
-            renderWelcome();
-            showView('chat');
-            clearButton();
-          } catch (err) {
-            // Leave the confirm up so the failure is readable.
-            label.textContent = err.message;
-            yes.disabled = false;
-          }
-        };
-
-        wrap.append(label, no, yes);
-        headerActions.appendChild(wrap);
-      }
-
-      clearButton();
+      const overviewBtn = document.createElement('button');
+      overviewBtn.className = 'iconbtn';
+      overviewBtn.type = 'button';
+      overviewBtn.setAttribute('aria-label', 'Everything I know');
+      overviewBtn.innerHTML = OVERVIEW_ICON;
+      overviewBtn.onclick = openOverview;
+      headerActions.appendChild(overviewBtn);
 
       // --- everything I know ------------------------------------------------
 

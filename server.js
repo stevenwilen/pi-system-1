@@ -73,19 +73,6 @@ app.post('/chat', async (req, res) => {
   }
 });
 
-// Clearing is destructive on purpose: the brain reads its history from this
-// table, so leaving the rows would mean a blank screen and a brain that still
-// remembers everything.
-app.post('/chat/clear', async (req, res) => {
-  const { error } = await supabase
-    .from('messages')
-    .delete()
-    .eq('user_id', CURRENT_USER);
-
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ cleared: true });
-});
-
 // --- what I've noticed -----------------------------------------------------
 
 app.get('/observations', async (req, res) => {
