@@ -133,6 +133,27 @@ Each item has two actions:
 Paused items are listed separately, out of the way but not hidden, so unpausing
 is always one tap and nothing disappears silently.
 
+Editing and pausing happen from the item's own row. Delete is soft, per 2.5.
+
+### Adding something
+An **+ Add** control at the top of the stale panel opens a small form:
+
+- **type**: habit | project | task, as a segmented control
+- **title**: text
+- **habit only, frequency**: daily / few times a week / weekly / monthly. This is
+  the user's *intended* cadence, and it is what makes staleness mean anything:
+  eleven days matters for a daily habit and not for a monthly one.
+- **project only, why**: text, required. A project without a stated reason cannot
+  be argued for later.
+- **project only, priority**: int
+- **task**: title only
+
+Save writes one row to `entries`. No reasoning, no model call.
+
+Creating an entry needs no judgment. Chat was only ever there to pull structure
+out of a sentence, and there is nothing to pull when the person picks a type and
+types a title. That makes this arithmetic, so it lives in the app.
+
 ### 3.3 BUILDER — tomorrow
 - Every block has a **start time** and a **duration**.
 - Duration adjusts with `-` / `+` steppers in **30-minute increments only**. No

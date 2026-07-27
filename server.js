@@ -1,4 +1,7 @@
-// Web layer. Carries messages, does no thinking.
+// Web layer. Carries data, does no thinking.
+//
+// Everything here is arithmetic: reading rows, counting days, writing what the
+// person typed. Nothing in this file calls the model.
 
 require('dotenv').config();
 
@@ -6,6 +9,7 @@ const path = require('path');
 const express = require('express');
 
 const supabase = require('./db');
+const { create_entry, update_entry } = require('./tools');
 
 // Requiring the scheduler starts its cron loop as a side effect, which is how
 // delivery runs in this one process. Nothing is imported from it.
@@ -19,6 +23,9 @@ const CURRENT_USER = '00000000-0000-0000-0000-000000000001';
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0'; // not just localhost, so the phone can reach it
 
+const TYPES = ['habit', 'project', 'task'];
+const FREQUENCIES = ['daily', 'few times a week', 'weekly', 'monthly'];
+
 const app = express();
 
 app.use(express.json());
@@ -28,48 +35,215 @@ app.use(express.static(path.join(__dirname, 'public')));
 // in place with its rows: dropping a table is the one move that cannot be
 // undone, and an unread table costs nothing.
 
-// --- everything the system currently holds ---------------------------------
+// --- staleness --------------------------------------------------------------
 
-const hhmm = (t) => String(t || '').slice(0, 5);
+// Today where this person lives. Counting days against the server's date would
+// be off by one for most of their evening, which is exactly when they open it.
+function todayIn(timeZone) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
 
-app.get('/overview', async (req, res) => {
-  const { data: profile } = await supabase
-    .from('profile')
-    .select('timezone, default_wake_time, telegram_chat_id')
-    .eq('user_id', CURRENT_USER)
-    .maybeSingle();
+const daysBetween = (from, to) =>
+  Math.round((new Date(`${to}T12:00:00Z`) - new Date(`${from}T12:00:00Z`)) / 86400000);
 
-  const { data: entries, error } = await supabase
+/**
+ * When was each entry last put in a plan?
+ *
+ * Joined here rather than with a PostgREST embed: the date lives on `plans`
+ * and the tag lives on `blocks`, and two plain reads are easier to reason
+ * about than an embed whose name depends on how the foreign key is exposed.
+ */
+async function lastScheduled(user_id) {
+  const { data: blocks, error: blockErr } = await supabase
+    .from('blocks')
+    .select('entry_id, plan_id')
+    .eq('user_id', user_id)
+    .not('entry_id', 'is', null);
+
+  if (blockErr) throw new Error(`could not read blocks: ${blockErr.message}`);
+  if (!blocks || !blocks.length) return new Map();
+
+  const { data: plans, error: planErr } = await supabase
+    .from('plans')
+    .select('id, date')
+    .eq('user_id', user_id);
+
+  if (planErr) throw new Error(`could not read plans: ${planErr.message}`);
+
+  const dateOf = new Map((plans || []).map((p) => [p.id, p.date]));
+  const latest = new Map();
+
+  for (const b of blocks) {
+    const date = dateOf.get(b.plan_id);
+    if (!date) continue;
+    const seen = latest.get(b.entry_id);
+    if (!seen || date > seen) latest.set(b.entry_id, date);
+  }
+
+  return latest;
+}
+
+/**
+ * Habits, projects and tasks in one list, coldest first.
+ *
+ * A task left three weeks is the same problem as a project left three weeks,
+ * so they share a list rather than being filed apart. Anything never scheduled
+ * counts from the day it was added, which is the honest answer to "how long has
+ * this been sitting there".
+ */
+app.get('/entries', async (req, res) => {
+  try {
+    const { data: profile } = await supabase
+      .from('profile')
+      .select('timezone, default_wake_time')
+      .eq('user_id', CURRENT_USER)
+      .maybeSingle();
+
+    const timeZone = (profile && profile.timezone) || 'UTC';
+    const today = todayIn(timeZone);
+
+    const { data: rows, error } = await supabase
+      .from('entries')
+      .select('id, type, title, why, priority, frequency, paused_at, created_at')
+      .eq('user_id', CURRENT_USER)
+      .eq('status', 'active')
+      .in('type', TYPES);
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const latest = await lastScheduled(CURRENT_USER);
+
+    const items = (rows || []).map((r) => {
+      const seen = latest.get(r.id) || null;
+      const since = seen || String(r.created_at).slice(0, 10);
+      return {
+        id: r.id,
+        type: r.type,
+        title: r.title,
+        why: r.why,
+        priority: r.priority,
+        frequency: r.frequency,
+        paused: Boolean(r.paused_at),
+        last_scheduled: seen,
+        days: Math.max(0, daysBetween(since, today)),
+      };
+    });
+
+    const coldestFirst = (a, b) => b.days - a.days || a.title.localeCompare(b.title);
+
+    res.json({
+      today,
+      timezone: timeZone,
+      wake_time: String((profile && profile.default_wake_time) || '07:00').slice(0, 5),
+      // Paused items are kept out of the main list but returned, so unpausing
+      // is one tap. Hiding them would turn a pause into an accidental delete.
+      items: items.filter((i) => !i.paused).sort(coldestFirst),
+      paused: items.filter((i) => i.paused).sort(coldestFirst),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- writing ----------------------------------------------------------------
+
+// What the form is allowed to leave out, and what it is not. Checked here
+// rather than in the database so the message can name the field.
+function validate({ type, title, why, frequency }) {
+  if (!TYPES.includes(type)) return `type must be one of ${TYPES.join(', ')}`;
+  if (!String(title || '').trim()) return 'a title is required';
+
+  if (type === 'habit') {
+    if (!FREQUENCIES.includes(frequency)) {
+      return `a habit needs a frequency: ${FREQUENCIES.join(', ')}`;
+    }
+  }
+  if (type === 'project' && !String(why || '').trim()) {
+    return 'a project needs a why. Without one it cannot be argued for later.';
+  }
+  return null;
+}
+
+app.post('/entries', async (req, res) => {
+  const body = req.body || {};
+  const problem = validate(body);
+  if (problem) return res.status(400).json({ error: problem });
+
+  // Only the fields that belong to this type. A habit carrying a priority or a
+  // task carrying a why would be noise nothing reads.
+  const fields = { type: body.type, title: String(body.title).trim() };
+  if (body.type === 'habit') fields.frequency = body.frequency;
+  if (body.type === 'project') {
+    fields.why = String(body.why).trim();
+    if (body.priority != null && body.priority !== '') {
+      fields.priority = Number(body.priority);
+    }
+  }
+
+  const row = await create_entry(CURRENT_USER, fields);
+  if (row.error) return res.status(400).json({ error: row.error });
+  res.json({ entry: row });
+});
+
+app.post('/entries/:id/update', async (req, res) => {
+  const body = req.body || {};
+  const fields = {};
+
+  for (const key of ['title', 'why', 'frequency']) {
+    if (body[key] !== undefined) fields[key] = String(body[key]).trim();
+  }
+  if (body.priority !== undefined) {
+    fields.priority = body.priority === '' ? null : Number(body.priority);
+  }
+
+  if (fields.title !== undefined && !fields.title) {
+    return res.status(400).json({ error: 'a title is required' });
+  }
+  if (fields.frequency !== undefined && !FREQUENCIES.includes(fields.frequency)) {
+    return res.status(400).json({ error: `frequency must be one of ${FREQUENCIES.join(', ')}` });
+  }
+
+  const row = await update_entry(CURRENT_USER, req.params.id, fields);
+  if (row.error) return res.status(400).json({ error: row.error });
+  res.json({ entry: row });
+});
+
+/**
+ * Pause and unpause.
+ *
+ * Written straight to the column rather than through update_entry, and
+ * `paused_at` is deliberately absent from the tools whitelist. Pausing is the
+ * person declaring that a gap is on purpose, and SPEC 2.7 says intent is
+ * declared and never inferred. Leaving it out of the whitelist is what makes
+ * that structural rather than a rule in a prompt: the brain has no way to
+ * decide on someone's behalf that they meant to set something down.
+ */
+app.post('/entries/:id/pause', async (req, res) => {
+  const paused = req.body && req.body.paused === false ? null : new Date().toISOString();
+
+  const { data, error } = await supabase
     .from('entries')
-    .select('id, type, title, body, why, priority, frequency, created_at')
+    .update({ paused_at: paused })
+    .eq('id', req.params.id)
     .eq('user_id', CURRENT_USER)
     .eq('status', 'active')
-    .order('created_at', { ascending: false });
+    .select('id, paused_at')
+    .maybeSingle();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(400).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'entry not found' });
+  res.json({ id: data.id, paused: Boolean(data.paused_at) });
+});
 
-  const of = (t) => (entries || []).filter((e) => e.type === t);
-
-  const wake = hhmm(profile && profile.default_wake_time) || '07:00';
-
-  res.json({
-    profile: {
-      timezone: (profile && profile.timezone) || 'UTC',
-      wake_time: wake,
-      telegram_linked: Boolean(profile && profile.telegram_chat_id),
-    },
-    // Projects keep their rank: it is the person's own stack, top to bottom.
-    projects: of('project').sort(
-      (a, b) => (a.priority || 99) - (b.priority || 99)
-    ),
-    habits: of('habit'),
-    // Tasks are no longer ranked. They belong in the stale list beside habits
-    // and projects, ordered by how long since they were last scheduled, which
-    // needs blocks and so arrives with the stale panel. Newest-first until then.
-    tasks: of('task'),
-    // `ideas`, `waiting` and `schedule` are gone. Their rows still exist and
-    // are untouched; nothing surfaces them any more.
-  });
+app.post('/entries/:id/delete', async (req, res) => {
+  const row = await update_entry(CURRENT_USER, req.params.id, { status: 'deleted' });
+  if (row.error) return res.status(400).json({ error: row.error });
+  res.json({ deleted: row.id });
 });
 
 // Token spend is still recorded on every model call, and usage.summary() still
