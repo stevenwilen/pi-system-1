@@ -12,7 +12,6 @@ const supabase = require('./db');
 const { runBrain } = require('./brain');
 const { sendTelegram } = require('./telegram');
 const { get_calendar } = require('./tools');
-const finance = require('./finance');
 
 // Jobs 2 and 3 fire at this local hour on their weekday.
 const MORNING_HOUR = 8;
@@ -34,12 +33,6 @@ const IDEAS_DAYS = ['Tue', 'Sat'];
 // A waiting item older than this is worth chasing rather than just noting.
 const WAITING_STALE_DAYS = 7;
 
-// Finance is owner only. Gating on an environment variable rather than a
-// profile column means it cannot be switched on by anyone who merely has an
-// account, only by whoever deploys the service.
-const FINANCE_DAYS = ['Wed', 'Sun'];
-const FINANCE_HOUR = 18;
-
 // Telegram rejects anything over 4096 characters.
 const MAX_MESSAGE = 4000;
 
@@ -48,7 +41,7 @@ const MAX_MESSAGE = 4000;
 const MISS_PROMPT =
   "Didn't follow yesterday's plan? Open the app and tell me what happened.";
 
-// Presentation guidance for the Telegram jobs only. The app chat is plain —
+// Presentation guidance for the Telegram jobs only. The app chat is plain â€”
 // brain.js's system prompt says nothing about formatting.
 const TELEGRAM_FORMAT = `This message goes to Telegram. Format it for quick scanning on a phone:
 
@@ -178,8 +171,8 @@ async function confirmedPlan(user_id, date) {
 
 // Plan and block history as flat text, for the weekly reviews.
 //
-// The brain cannot fetch this itself — its four tools reach entries and the
-// calendar, not plans and blocks — so the scheduler reads it and hands it over
+// The brain cannot fetch this itself â€” its four tools reach entries and the
+// calendar, not plans and blocks â€” so the scheduler reads it and hands it over
 // as data inside the prompt. See the note in the summary: the clean fix is a
 // tool, which would mean touching tools.js.
 async function historyText(user_id, today) {
@@ -274,7 +267,7 @@ function stripTags(text) {
 // see one continuous conversation across both surfaces.
 async function deliver(user_id, text) {
   const body = text.length > MAX_MESSAGE
-    ? `${text.slice(0, MAX_MESSAGE)}\n…(truncated)`
+    ? `${text.slice(0, MAX_MESSAGE)}\nâ€¦(truncated)`
     : text;
 
   const result = await sendTelegram(user_id, body);
@@ -292,7 +285,7 @@ async function deliver(user_id, text) {
 // jobs
 // ---------------------------------------------------------------------------
 
-// JOB 1 — the day, at wake time.
+// JOB 1 â€” the day, at wake time.
 async function jobDayPlan(profile, today) {
   const plan = await confirmedPlan(profile.user_id, today);
 
@@ -304,7 +297,7 @@ async function jobDayPlan(profile, today) {
     );
 
     return [
-      `📅 <b>${longDate(today, profile.timezone)}</b>`,
+      `ðŸ“… <b>${longDate(today, profile.timezone)}</b>`,
       '',
       ...lines,
       '',
@@ -324,7 +317,7 @@ ${TELEGRAM_FORMAT}`;
   return `${reply}\n\n${MISS_PROMPT}`;
 }
 
-// JOB 2 — habits, Wednesday.
+// JOB 2 â€” habits, Wednesday.
 async function jobHabits(profile, today) {
   const history = await historyText(profile.user_id, today);
 
@@ -349,7 +342,7 @@ ${TELEGRAM_FORMAT}`;
   return runBrain(profile.user_id, prompt, [], 'habits');
 }
 
-// JOB 3 — projects, Friday.
+// JOB 3 â€” projects, Friday.
 async function jobProjects(profile, today) {
   const history = await historyText(profile.user_id, today);
 
@@ -412,9 +405,9 @@ async function jobTasks(profile, today) {
   const dated = new Set([...overdue, ...soon]);
   const rest = byRank.filter((t) => !dated.has(t));
 
-  const label = (t) => `${t.priority ? `${t.priority}.` : '•'} ${t.title}`;
+  const label = (t) => `${t.priority ? `${t.priority}.` : 'â€¢'} ${t.title}`;
 
-  const lines = ['📋 <b>Open tasks</b>', ''];
+  const lines = ['ðŸ“‹ <b>Open tasks</b>', ''];
 
   if (overdue.length) {
     lines.push('<b>Overdue</b>');
@@ -465,56 +458,6 @@ async function weekAhead(user_id, startDate, timeZone) {
   return days.join('\n');
 }
 
-// JOB 8, money, twice a week in the evening. Owner only.
-//
-// Every figure is counted in finance.js before the model sees it. Signed
-// amounts, transfer exclusion and reimbursement netting are rules the sheet
-// documents, and a coach that gets them wrong is worse than none.
-async function jobFinance(profile, today) {
-  const data = await finance.brief();
-
-  if (!data) return ''; // sheet not configured
-  if (data.error) {
-    console.error(`[JOB] finance: ${data.error}`);
-    return '';
-  }
-  if (data.empty) return '';
-
-  const prompt = `It is ${today}. Write this person's finance check-in.
-
-Their transactions have already been counted for you and are below, between the markers. The figures come from their own bank records. Transfers between their own accounts are excluded, and reimbursements are already netted against the category they offset. Treat every number as correct and do not recompute anything.
-
---- BEGIN FINANCES ---
-${finance.render(data)}
---- END FINANCES ---
-
-Call search_entries with type "project" so you know what they are building and why. Money is not a separate subject from that. If one of their projects is about income or independence, what they spend and keep is part of whether it happens.
-
-You are a coach, not a report. They can already see totals in their own spreadsheet. Your job is to notice the thing they would not.
-
-Write three things:
-
-1. One sentence on where they actually stand this month. Direct, no wind-up.
-
-2. The one or two things that genuinely changed or stand out, and what you think they mean. A category that doubled, a recurring charge that is quietly large against their income, a week that broke pattern. Reason about it. Do not just restate the figure.
-
-3. One real question. Something the data cannot answer and they can: what a particular charge was for, whether a subscription still earns its place, whether a change was deliberate.
-
-Hold to these:
-- If there is no income in the window, do not talk about savings rate, and never frame spending as a share of earnings. Someone between jobs or before a start date is spending down, which is a normal situation and not a failure. What matters then is burn: what is going out, what of it is fixed, and what would actually change if they wanted it to. Say nothing that reads as alarm.
-- If the brief carries a SYNC WARNING, lead with it before anything else. It means their bank feed has stopped and every figure below it is incomplete. Tell them to re-link the institution in SimpleFIN, and do not coach on numbers you have just told them are wrong.
-- Never moralise. You do not know whether something was worth buying, and it is not your money.
-- Do not read categories back to them. They have the sheet for that.
-- If a meaningful amount of spending is still uncategorised, say so plainly, because it means your own figures understate what they spent. Skip this if the amount is trivial.
-- No advice that could be given to anybody. Spend less on food is worthless. Tie everything either to their actual numbers or to their actual projects.
-
-Keep it under 200 words. Write only the message itself, with no preamble.
-
-${TELEGRAM_FORMAT}`;
-
-  return runBrain(profile.user_id, prompt, [], 'finance');
-}
-
 // JOB 7, things they are stuck on, Thursday.
 //
 // Age is the whole point, so it is computed here and handed over rather than
@@ -539,7 +482,7 @@ async function jobWaiting(profile, today) {
     const days = Math.round((now - new Date(w.created_at)) / 86400000);
     const blocker = w.body ? ` (blocked on: ${w.body})` : '';
     const flag = days >= WAITING_STALE_DAYS ? '  STALE' : '';
-    return `${w.title}${blocker} — waiting ${days} day${days === 1 ? '' : 's'}${flag}`;
+    return `${w.title}${blocker} â€” waiting ${days} day${days === 1 ? '' : 's'}${flag}`;
   });
 
   const stale = data.filter(
@@ -645,7 +588,6 @@ const JOBS = {
   ideas: jobIdeas,
   'week-brief': jobWeekBrief,
   waiting: jobWaiting,
-  finance: jobFinance,
 };
 
 // `guarded` is false for manual --run fires: they always send, and they never
@@ -724,15 +666,6 @@ async function tick() {
     if (now.weekday === 'Thu' && inWindow(nowMinutes, morning)) due.push('waiting');
     if (now.weekday === 'Sun' && inWindow(nowMinutes, morning)) due.push('week-brief');
 
-    // Owner only, and in the evening so it does not join the morning queue.
-    if (
-      process.env.FINANCE_OWNER_USER_ID === profile.user_id &&
-      FINANCE_DAYS.includes(now.weekday) &&
-      inWindow(nowMinutes, toMinutes(FINANCE_HOUR, 0))
-    ) {
-      due.push('finance');
-    }
-
     for (const name of due) {
       await fire(name, profile, now.date);
     }
@@ -784,8 +717,5 @@ if (runIndex !== -1) {
   cron.schedule(`*/${WINDOW} * * * *`, tick);
   console.log(`scheduler running, checking every ${WINDOW} minutes`);
   console.log(`day plan at each user's wake time; tasks Mon, ideas Tue and Sat, habits Wed, waiting Thu, projects Fri, week brief Sun, all ${MORNING_HOUR}:00 local`);
-  if (process.env.FINANCE_OWNER_USER_ID) {
-    console.log(`finance check-in Wed and Sun at ${FINANCE_HOUR}:00 local, owner only`);
-  }
   tick();
 }
