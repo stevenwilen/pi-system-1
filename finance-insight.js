@@ -12,6 +12,7 @@ require('dotenv').config();
 
 const supabase = require('./db');
 const { runBrain } = require('./brain');
+const { fence } = require('./untrusted');
 const { readTransactions } = require('./sheet');
 const { summarise, findTransfers, repeatCharges } = require('./money');
 
@@ -125,7 +126,12 @@ function render({ today, counted, repeats, intent, said }) {
   if (intent.length) {
     L.push('WHAT THEY HAVE TOLD YOU. Their own words, and the only source of anything about their situation.');
     for (const row of intent) {
-      L.push(`  ${row.title}${row.body ? ` — ${row.body}` : ''}`);
+      // The body goes on its own line rather than after an em dash. The engine
+      // prompt says never to use one, and a briefing that demonstrates the
+      // character in every row is arguing the opposite at the same time. The
+      // model followed the example.
+      L.push(`  ${row.title}`);
+      if (row.body) L.push(`      ${row.body}`);
     }
   } else {
     L.push('WHAT THEY HAVE TOLD YOU: nothing yet. You know their spending and nothing else about their circumstances.');
@@ -205,7 +211,14 @@ async function generateDaily(user_id, today) {
     const briefing = await buildBriefing(user_id, today);
     if (!briefing) return { skipped: 'no transactions to reason about' };
 
-    const reply = await runBrain(user_id, `${render(briefing)}\n\n${TASK}`, 'finance');
+    // Three kinds of untrusted text in one briefing: what the person typed
+    // into their intent rows, merchant names a bank feed wrote, and sentences
+    // this system itself produced on earlier days. All fenced together.
+    const reply = await runBrain(
+      user_id,
+      `${fence(render(briefing))}\n\n${TASK}`,
+      'finance'
+    );
     const text = parseLine(reply);
 
     if (!text) {

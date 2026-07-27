@@ -1131,7 +1131,7 @@
         <button class="group-head collapse" id="intent-head" type="button" aria-expanded="false">
           <h2>What I've told it</h2>
           <span class="count" id="intent-count"></span>
-          <span class="chevron" id="intent-chevron">&#8250;</span>
+          <span class="chevron">&#8250;</span>
         </button>
 
         <div class="hidden" id="intent-body">
@@ -1307,13 +1307,6 @@
           if (pointerY > box.top + box.height / 2) index += 1;
         }
         return index;
-      }
-
-      function moveInList(list, from, to) {
-        const next = list.slice();
-        const [item] = next.splice(from, 1);
-        next.splice(to, 0, item);
-        return next;
       }
 
       /**

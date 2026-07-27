@@ -11,6 +11,7 @@ require('dotenv').config();
 const cron = require('node-cron');
 
 const supabase = require('./db');
+const { toMinutes } = require('./clock');
 const { sendTelegram } = require('./telegram');
 const { composeMessage } = require('./messages');
 const { generateDaily } = require('./finance-insight');
@@ -76,7 +77,10 @@ function localNow(timezone) {
   };
 }
 
-function toMinutes(hour, minute) {
+// An hour and a minute as minutes past midnight. Named apart from clock.js's
+// toMinutes, which takes a stored time string, because two functions with the
+// same name and different arguments in one file is a trap.
+function minutesOf(hour, minute) {
   return hour * 60 + minute;
 }
 
@@ -162,11 +166,6 @@ async function deliver(user_id, text) {
 // tick
 // ---------------------------------------------------------------------------
 
-const toMinutesOfDay = (time) => {
-  const [h, m] = String(time).split(':').map(Number);
-  return h * 60 + m;
-};
-
 /**
  * Blocks of today's confirmed plan that have started and not been sent.
  *
@@ -213,11 +212,11 @@ async function markBlockSent(id) {
  * overlapping one cannot send it twice.
  */
 async function deliverDue(profile, now) {
-  const nowMinutes = toMinutes(now.hour, now.minute);
+  const nowMinutes = minutesOf(now.hour, now.minute);
   const blocks = await dueBlocks(profile.user_id, now.date);
 
   for (const block of blocks) {
-    const start = toMinutesOfDay(block.start_time);
+    const start = toMinutes(block.start_time);
     const late = nowMinutes - start;
 
     if (late < 0) continue; // not started yet
@@ -265,8 +264,8 @@ async function deliverDue(profile, now) {
  * tick retries.
  */
 async function deliverFinance(profile, now) {
-  const nowMinutes = toMinutes(now.hour, now.minute);
-  if (!inWindow(nowMinutes, toMinutes(FINANCE_HOUR, 0))) return;
+  const nowMinutes = minutesOf(now.hour, now.minute);
+  if (!inWindow(nowMinutes, minutesOf(FINANCE_HOUR, 0))) return;
 
   if (await alreadySent(profile.user_id, 'finance', now.date)) return;
 
@@ -297,8 +296,8 @@ async function deliverFinance(profile, now) {
  * when it is opened, which is what keeps the model off the read path.
  */
 async function judgeColdness(profile, now) {
-  const nowMinutes = toMinutes(now.hour, now.minute);
-  if (!inWindow(nowMinutes, toMinutes(COLD_HOUR, 0))) return;
+  const nowMinutes = minutesOf(now.hour, now.minute);
+  if (!inWindow(nowMinutes, minutesOf(COLD_HOUR, 0))) return;
 
   if (await alreadySent(profile.user_id, 'coldness', now.date)) return;
 
@@ -352,26 +351,20 @@ async function tick() {
   }
 }
 
+// Test surface, and nothing else.
+//
+// No production code imports this module: server.js requires it for the side
+// effect of starting cron and takes nothing from it. So everything below is
+// here for one reason, which is to let a suite drive one real user through one
+// real delivery without waiting fifteen minutes for the timer.
+//
+// It was seventeen names. The rest were exported on the assumption something
+// would want them, and nothing ever did. Add one back when a test needs it.
 module.exports = {
-  localNow,
-  toMinutes,
-  inWindow,
-  hhmm,
-  allProfiles,
-  alreadySent,
-  markSent,
-  deliver,
-  // Exported so a test can drive one user through one tick without waiting
-  // fifteen minutes for cron.
-  deliverDue,
-  deliverFinance,
-  judgeColdness,
-  dueBlocks,
-  tick,
-  GRACE_MINUTES,
-  GENERATION_GRACE_MS,
-  FINANCE_HOUR,
-  COLD_HOUR,
+  allProfiles, // pick the profile to drive
+  localNow, //    build the 'now' to drive it at
+  deliverDue, //  the tick itself, for one user
+  hhmm, //        so a test can spell the time the same way the message does
 };
 
 // Starting the loop on require is deliberate: server.js requires this module

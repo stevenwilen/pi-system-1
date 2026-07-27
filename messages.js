@@ -13,7 +13,9 @@ require('dotenv').config();
 
 const supabase = require('./db');
 const { runBrain } = require('./brain');
+const { fence } = require('./untrusted');
 const { get_calendar } = require('./tools');
+const { toMinutes } = require('./clock');
 const { lastScheduled, daysBetween } = require('./staleness');
 
 // A line is one sentence. Anything longer has stopped being a nudge.
@@ -21,11 +23,6 @@ const MAX_LINE = 180;
 
 const clock = (mins) =>
   `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
-
-const toMinutes = (time) => {
-  const [h, m] = String(time).split(':').map(Number);
-  return h * 60 + m;
-};
 
 function span(mins) {
   const h = Math.floor(mins / 60);
@@ -222,7 +219,9 @@ function parseLines(reply, count) {
 async function generateForPlan(user_id, planId) {
   try {
     const briefing = await buildBriefing(user_id, planId);
-    const task = `${renderBriefing(briefing)}\n\n${TASK}`;
+    // Block titles, project whys and calendar event names are all written by
+    // someone other than the engine, so the whole briefing is fenced.
+    const task = `${fence(renderBriefing(briefing))}\n\n${TASK}`;
 
     const reply = await runBrain(user_id, task, 'block-messages');
     const lines = parseLines(reply, briefing.blocks.length);

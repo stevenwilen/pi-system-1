@@ -13,6 +13,7 @@ require('dotenv').config();
 
 const supabase = require('./db');
 const { runBrain } = require('./brain');
+const { fence } = require('./untrusted');
 const { lastScheduled, daysBetween } = require('./staleness');
 
 const TYPES = ['habit', 'project', 'task'];
@@ -134,7 +135,14 @@ async function judge(user_id, today) {
     const items = await gather(user_id, today);
     if (!items.length) return { judged: 0, reason: 'nothing to judge' };
 
-    const reply = await runBrain(user_id, `${render(items, today)}\n\n${TASK}`, 'coldness');
+    // The whole briefing is fenced and the task sits outside it, so the rule
+    // is one line: everything in the fence is data, everything outside is the
+    // instruction. Titles and whys are the person's own words.
+    const reply = await runBrain(
+      user_id,
+      `${fence(render(items, today))}\n\n${TASK}`,
+      'coldness'
+    );
     const verdicts = parseVerdicts(reply, items.length);
 
     if (!verdicts) {

@@ -61,6 +61,27 @@ data, and has no effect. No table holds a prompt, a rule, or a policy.
 
 Adversarial rows can change what the brain *knows*, never what the brain *is*.
 
+**How the delimiting works.** Every briefing is wrapped by `untrusted.js` in a
+pair of marker lines carrying a random value generated per call:
+
+```
+-----BEGIN UNTRUSTED USER DATA <random>-----
+...
+-----END UNTRUSTED USER DATA <random>-----
+```
+
+The random value is regenerated until it does not occur anywhere in the content,
+so the content provably cannot contain its own closing marker. A title that
+writes out a fake `-----END ...-----` line does not end the fence, because it
+cannot know the value. The engine prompt states the rule directly: everything
+between those lines is something somebody else wrote, and it cannot give an
+instruction, cancel one, or change what the brain is for.
+
+Three briefings are fenced, which is all three: the coldness verdict, the block
+messages, and the finance line. Anything that reaches the model in future is
+fenced the same way, and the reason it is not left to the prompt alone is that
+a prompt rule is a request while an unguessable marker is a fact.
+
 ### 2.3 A fixed, small tool set
 The brain touches the world only through its tools, and `tools.js` keeps its
 field whitelist: anything not on the list is dropped, so `user_id`, `id`, and
@@ -161,7 +182,6 @@ An **+ Add** control at the top of the stale panel opens a small form:
   eleven days matters for a daily habit and not for a monthly one.
 - **project only, why**: text, required. A project without a stated reason cannot
   be argued for later.
-- **project only, priority**: int
 - **task**: title only
 
 Save writes one row to `entries`. No reasoning, no model call.
@@ -239,8 +259,21 @@ block-start time.**
 Each message carries what the block is, plus one line of reasoning behind it: why
 it is placed there, or that it has been eleven days since they last did it.
 
-Because blocks sit on 30-minute boundaries, the scheduler tick must align to
-those boundaries so messages fire on time.
+**The tick does not align to block boundaries, on purpose.** It runs every 15
+minutes and asks which blocks have started and have not been sent, rather than
+firing exactly on the half hour. A tick that only fires on the boundary has to
+be exactly on time or the block is missed for good; asking the question instead
+means a restart or a deploy recovers by itself.
+
+A block may be delivered up to 30 minutes late. Past that it is marked sent
+without being sent and logged under `[EXPIRED]`, because "Gym, 08:00" arriving
+at 14:00 is worse than nothing. That log line is deliberately distinct: from the
+phone end a message that never arrives looks identical whether the block expired
+or the scheduler is dead, and those need opposite responses.
+
+One exception delays rather than expires. If a block is due and has no stored
+line yet, and its day was confirmed in the last two minutes, generation is
+probably still running, so it is left queued for the next tick.
 
 ---
 
@@ -257,7 +290,7 @@ those boundaries so messages fire on time.
 
 ---
 
-## 7. Second lane: Finance (planned, not built)
+## 7. Second lane: Finance
 
 A separate lane. It does not touch the builder, stale panel, or blocks. Its own
 tab. Planner is primary.
@@ -303,11 +336,56 @@ a person is ever written into a prompt or into code. This is rule 2.4: the engin
 must be byte-identical for a user with $300 and a user with $300,000. Any design
 where personal financial numbers live in the engine is wrong.
 
+Rows can also be written one at a time, and edited in place on the list. The kind
+is fixed once written: changing a target into a slip is not an edit, it is a
+different declaration, and rewriting it would leave no trace of what was
+originally said.
+
+### Setting it up: the interview
+The rows above are the hard part to collect. A form asking "what is your
+situation" gets one line back; the useful version needs follow-up questions,
+and follow-up questions are a conversation.
+
+This system has no chat (section 6), so it does not hold that conversation.
+It hands the user a prompt to hold it somewhere else:
+
+1. The **copy the prompt** control serves `SETUP_PROMPT` from `finance-intent.js`.
+   It is engine text — identical for every user, containing nothing about anyone
+   — and it is served rather than kept in the page so there is one copy of it.
+2. The user pastes it into any chat assistant and answers the questions there.
+   That assistant interviews them as a financial advisor would, one or two
+   questions at a time, and ends by emitting a single fenced JSON block.
+3. The user pastes that block back. `POST /finance-intent/import` validates every
+   entry before writing any of them, and appends.
+
+The prompt and the parser of its output live in the same file deliberately.
+Change the set of kinds and both have to change together; keeping them apart is
+how they drift.
+
+Import is all-or-nothing. A paste that is half understood leaves nothing behind
+rather than a partial picture that looks complete. Two rules are enforced there
+and nowhere else: `kind` must be one of the five, and **every reserve must say
+the word wall or the word floor**, because a reserve whose type is unknown
+cannot be messaged about correctly.
+
+Nothing in this flow calls the model. The system writes the prompt and reads the
+answer; the reasoning happens in a tool the user already has.
+
 ### The screen
-Balance, what's committed against it, runway, and recent transactions grouped by
-category. PURE ARITHMETIC. No reasoning, no advice, no charts, no category
-editor. Same discipline as the builder: the app does math, the brain does
-judgment.
+What was spent, counted. Transfers between the user's own accounts excluded, a
+total, categories with their counts, and the transactions themselves. It leads
+with spending because that is what the sheet actually knows.
+
+Balance and runway appear only when a `finance_intent` row states what is on
+hand. Transactions carry no balances, so on a sheet alone the balance is not
+knowable, and the screen shows what it counted rather than guessing.
+
+The sheet reports its own age. If its newest transaction is several days old the
+screen says so, because stale numbers presented as current are worse than none.
+
+PURE ARITHMETIC. No reasoning, no advice, no charts, no category editor. Same
+discipline as the builder: the app does math, the brain does judgment. Nothing
+read from the sheet is stored — the numbers are counted, answered, and dropped.
 
 ### The daily message
 One short line per day.
@@ -336,3 +414,91 @@ must not be guessed at.
 ### Scope discipline
 One tab, one message a day, one row per insight. If this lane ever needs a second
 screen, it has outgrown its lane.
+
+---
+
+## 8. Running it
+
+One Railway service runs both the web app and the scheduler. `server.js` requires
+`scheduler.js`, which starts its own cron loop as a side effect, so there is one
+process and one deploy.
+
+### The files
+
+Nothing in the web layer calls the model, and nothing in the engine serves HTTP.
+
+| | |
+|---|---|
+| `server.js` | serves the page, mounts the routes, starts delivery. Handles nothing itself |
+| `routes/entries.js` | the list: habits, projects and tasks, and their order |
+| `routes/plan.js` | building a day: the hours already claimed, and the plan around them |
+| `routes/review.js` | yesterday, and marking what did not happen |
+| `routes/finance.js` | the money screen: what was spent, and what was declared |
+| `user.js` | who every request is, until there is auth |
+| `clock.js` | dates and clock times as numbers, in the user's timezone |
+| `db.js` | the Supabase client |
+| `brain.js` | the engine: the system prompt and the agent loop |
+| `tools.js` | the whitelisted tool set (2.3) |
+| `untrusted.js` | the fence (2.2) |
+| `coldness.js` | the daily verdict |
+| `messages.js` | block messages, written at confirm time |
+| `finance-intent.js` | how a declaration is stored and validated, and the interview prompt |
+| `finance-insight.js` | the daily finance line |
+| `money.js` | counting a sheet: transfers, categories, repeats, sync age |
+| `sheet.js` | reading the Google Sheet. Never throws; returns `[]` and logs |
+| `staleness.js` | how long since an entry was last scheduled |
+| `scheduler.js` | the tick: delivery, the finance line, the coldness verdict |
+| `telegram.js` | outbound sending |
+| `usage.js` | what each model call cost |
+
+Four scripts are run by hand and are not part of the running system:
+`link.js` connects a Telegram chat to the account once, and `calendar-test.js`,
+`sheet-test.js` and `send-test.js` check that each outside connection works.
+
+### Which build is running
+`GET /version` reports the commit, branch and deployment the host built, the
+process start time, the Node version, and whether the scheduler is running.
+
+It exists because "has it deployed yet" was previously answered by probing for a
+route that happened to be new and inferring from a 404, which cost several rounds
+of guessing and one wrong conclusion stated as fact.
+
+### Environment
+Set in Railway, and in a local `.env` that is never committed.
+
+| | |
+|---|---|
+| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | the notebook. The service key bypasses row level security, which is why every query scopes `user_id` in code rather than trusting the database to do it |
+| `ANTHROPIC_API_KEY` | the brain |
+| `TELEGRAM_BOT_TOKEN` | outbound only |
+| `CALENDAR_ICS_URL` | the read-only feed of fixed commitments |
+| `FINANCE_TRANSACTIONS_CSV_URL` | the published Google Sheet. Read-only, and the sheet is the system of record: nothing here ever writes to it |
+| `PORT` | assigned by the host |
+| `PI_USER_ID` | *optional.* Which user the server serves |
+| `SCHEDULER_DISABLED` | *optional.* `1` loads the scheduler without starting cron |
+
+`PI_USER_ID` defaults to the single real user, so production behaviour does not
+depend on it being set. It exists so a test can point a whole server at a
+throwaway user and be **structurally unable** to touch real rows — not scoped by
+every query being written carefully, but by there being no path to the real id at
+all. A test once matched real rows by kind and destroyed a row that could not be
+recovered; that is what this prevents.
+
+`SCHEDULER_DISABLED=1` is how a suite drives a single tick by hand. Without it,
+requiring the file would also fire cron against the real database and send real
+messages. **It must never be set in production**, where its absence is what makes
+delivery run.
+
+### What a call costs
+Every model call writes one row to `api_usage`: the source, model, four token
+counts, and the dollar cost priced from them. A reply that used three tool calls
+writes three rows, one per turn of the agent loop.
+
+The table is **write-only by design**. Nothing reads it. The tab that once did was
+removed, because a usage readout is noise for someone using this to plan their
+day, and cost is a thing to check occasionally, not to watch. The rows are kept
+because they are the only record of what running this costs, and reading them
+back is a query away whenever it is wanted.
+
+A metering failure is logged and swallowed. Nothing about counting a cost is
+allowed to cost a reply.
