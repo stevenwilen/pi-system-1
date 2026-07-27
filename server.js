@@ -224,6 +224,151 @@ app.get('/calendar/:date', async (req, res) => {
   res.json({ date, events: timed, all_day: allDay });
 });
 
+// --- the plan ---------------------------------------------------------------
+
+const hhmmss = (mins) =>
+  `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}:00`;
+
+const toMinutes = (time) => {
+  const [h, m] = String(time).split(':').map(Number);
+  return h * 60 + m;
+};
+
+/**
+ * A saved plan, if there is one, in the shape the builder holds in memory.
+ *
+ * Without this a confirmed plan would vanish on the next page load and the
+ * person would rebuild it from scratch, which is a good way to stop trusting
+ * the button.
+ */
+app.get('/plan/:date', async (req, res) => {
+  const date = String(req.params.date);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+  }
+
+  const { data: plan, error } = await supabase
+    .from('plans')
+    .select('id, date, status')
+    .eq('user_id', CURRENT_USER)
+    .eq('date', date)
+    .maybeSingle();
+
+  if (error) return res.status(500).json({ error: error.message });
+  if (!plan) return res.json({ plan: null, blocks: [] });
+
+  const { data: rows, error: blockErr } = await supabase
+    .from('blocks')
+    .select('id, title, entry_id, start_time, duration_minutes, pinned, sort_order')
+    .eq('plan_id', plan.id)
+    .order('sort_order');
+
+  if (blockErr) return res.status(500).json({ error: blockErr.message });
+
+  res.json({
+    plan: { date: plan.date, status: plan.status },
+    blocks: (rows || []).map((b) => ({
+      title: b.title,
+      entryId: b.entry_id,
+      start_minutes: toMinutes(b.start_time),
+      duration_minutes: b.duration_minutes,
+      pinned: b.pinned,
+    })),
+  });
+});
+
+function validatePlan(date, blocks) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return 'date must be YYYY-MM-DD';
+  if (!Array.isArray(blocks) || !blocks.length) return 'a plan needs at least one block';
+
+  for (const b of blocks) {
+    if (!String(b.title || '').trim()) return 'every block needs a title';
+
+    const start = Number(b.start_minutes);
+    const duration = Number(b.duration_minutes);
+
+    if (!Number.isInteger(start) || start < 0 || start > 1439) {
+      return `${b.title}: start must be inside the day`;
+    }
+    if (!Number.isInteger(duration) || duration < 15) {
+      return `${b.title}: duration must be at least 15 minutes`;
+    }
+    // Pinned blocks are calendar events and are whatever length the calendar
+    // says. Only what the person built with steppers has to land on the step.
+    if (!b.pinned && duration % 30 !== 0) {
+      return `${b.title}: duration must be a multiple of 30 minutes`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Confirm tomorrow.
+ *
+ * Re-confirming replaces the day rather than appending to it: the builder
+ * holds the whole plan, so what it sends is the plan, and merging two
+ * versions of the same day would only invent a third nobody asked for.
+ */
+app.post('/plan', async (req, res) => {
+  const { date, blocks } = req.body || {};
+
+  const problem = validatePlan(date, blocks);
+  if (problem) return res.status(400).json({ error: problem });
+
+  const wake = hhmmss(Math.min(...blocks.map((b) => Number(b.start_minutes))));
+
+  try {
+    const { data: existing } = await supabase
+      .from('plans')
+      .select('id')
+      .eq('user_id', CURRENT_USER)
+      .eq('date', date)
+      .maybeSingle();
+
+    let planId;
+
+    if (existing) {
+      planId = existing.id;
+      // Clear first. If the insert below fails the day is left empty rather
+      // than holding a mix of two plans, which is the safer wrong answer.
+      const { error: delErr } = await supabase.from('blocks').delete().eq('plan_id', planId);
+      if (delErr) throw new Error(delErr.message);
+
+      const { error: upErr } = await supabase
+        .from('plans')
+        .update({ status: 'confirmed', wake_time: wake })
+        .eq('id', planId);
+      if (upErr) throw new Error(upErr.message);
+    } else {
+      const { data: made, error: insErr } = await supabase
+        .from('plans')
+        .insert({ user_id: CURRENT_USER, date, wake_time: wake, status: 'confirmed' })
+        .select('id')
+        .single();
+      if (insErr) throw new Error(insErr.message);
+      planId = made.id;
+    }
+
+    const rows = blocks.map((b, i) => ({
+      user_id: CURRENT_USER,
+      plan_id: planId,
+      title: String(b.title).trim(),
+      entry_id: b.entryId || null,
+      start_time: hhmmss(Number(b.start_minutes)),
+      duration_minutes: Number(b.duration_minutes),
+      pinned: Boolean(b.pinned),
+      sort_order: i,
+    }));
+
+    const { error: blockErr } = await supabase.from('blocks').insert(rows);
+    if (blockErr) throw new Error(blockErr.message);
+
+    res.json({ date, blocks: rows.length, status: 'confirmed' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- writing ----------------------------------------------------------------
 
 // What the form is allowed to leave out, and what it is not. Checked here

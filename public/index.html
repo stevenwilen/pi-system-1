@@ -738,7 +738,7 @@
           planDate = nextDay(data.today);
           $('plan-date').textContent = new Date(`${planDate}T12:00:00Z`)
             .toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'short' });
-          await loadCalendar(planDate);
+          await openDay(planDate);
         } else {
           renderBuilder();
         }
@@ -818,6 +818,27 @@
       let blocks = [];
       let wakeMinutes = 7 * 60;
       let planDate = null;
+      // Whether what is on screen matches what is saved. Any edit clears it,
+      // so the button always says whether there is unsaved work.
+      let saved = false;
+
+      function refreshConfirm() {
+        const button = $('confirm');
+        button.textContent = saved ? 'Confirmed' : 'Confirm';
+        button.disabled = saved || !blocks.length;
+      }
+
+      function setSaved(next) {
+        saved = next;
+        refreshConfirm();
+      }
+
+      // Every edit goes through here, so there is one place that knows the
+      // day on screen no longer matches the day in the database.
+      function changed() {
+        saved = false;
+        renderBuilder();
+      }
 
       const clock = (mins) => {
         const m = ((Math.round(mins) % 1440) + 1440) % 1440;
@@ -847,7 +868,10 @@
         for (const b of blocks) {
           if (b.pinned) {
             b.clash = Math.max(0, cursor - b.start);
-            cursor = b.start + b.duration;
+            // max, not the pinned end alone. When the flow has already run
+            // past this block the cursor must not travel backwards, or the
+            // next block would be placed inside the one that overran.
+            cursor = Math.max(cursor, b.start + b.duration);
           } else {
             b.clash = 0;
             b.start = cursor;
@@ -855,6 +879,34 @@
           }
         }
         return cursor;
+      }
+
+      /**
+       * Where a new block of this length should go.
+       *
+       * The first gap it fits in, in clock order, otherwise the end. A gap is
+       * the free time between where the flow has reached and the start of the
+       * next pinned block, so filling one moves nothing: everything before it
+       * is untouched, the pinned block keeps its time, and everything after
+       * still flows from that pinned block's end.
+       *
+       * This is arithmetic, not judgment. It asks whether a duration fits in a
+       * window, never whether something deserves the morning. Appending after
+       * an early appointment would be wrong on nearly every day that has one.
+       */
+      function insertIndexFor(duration) {
+        let cursor = wakeMinutes;
+
+        for (let i = 0; i < blocks.length; i++) {
+          const b = blocks[i];
+          if (!b.pinned) {
+            cursor += b.duration;
+            continue;
+          }
+          if (b.start - cursor >= duration) return i;
+          cursor = Math.max(cursor, b.start + b.duration);
+        }
+        return blocks.length;
       }
 
       function blockRow(b, index) {
@@ -882,7 +934,7 @@
           minus.disabled = b.duration <= MIN_DURATION;
           minus.onclick = () => {
             b.duration = Math.max(MIN_DURATION, b.duration - STEP);
-            renderBuilder();
+            changed();
           };
 
           const plus = el('button', null, '+');
@@ -890,7 +942,7 @@
           plus.disabled = b.duration >= MAX_DURATION;
           plus.onclick = () => {
             b.duration = Math.min(MAX_DURATION, b.duration + STEP);
-            renderBuilder();
+            changed();
           };
 
           stepper.append(minus, el('span', null, span(b.duration)), plus);
@@ -900,7 +952,7 @@
           remove.type = 'button';
           remove.onclick = () => {
             blocks.splice(index, 1);
-            renderBuilder();
+            changed();
           };
           row.append(remove);
         }
@@ -930,6 +982,7 @@
           }
         });
 
+        refreshConfirm();
         $('end-time').textContent = blocks.length ? clock(end) : 'not yet';
         // Past midnight is the one case the clock cannot show on its own:
         // 00:30 looks earlier than 23:00 rather than later.
@@ -940,8 +993,9 @@
       }
 
       function addBlock({ title, entryId = null, duration = 60 }) {
-        blocks.push({ title, entryId, duration, start: 0, pinned: false, clash: 0 });
-        renderBuilder();
+        const block = { title, entryId, duration, start: 0, pinned: false, clash: 0 };
+        blocks.splice(insertIndexFor(duration), 0, block);
+        changed();
       }
 
       // --- drag to reorder ---
@@ -981,12 +1035,13 @@
           row.removeEventListener('pointerup', end);
           row.removeEventListener('pointercancel', end);
 
-          if (drag && drag.to !== drag.from) {
-            const [moved] = blocks.splice(drag.from, 1);
-            blocks.splice(drag.to, 0, moved);
+          const moved = drag && drag.to !== drag.from;
+          if (moved) {
+            const [block] = blocks.splice(drag.from, 1);
+            blocks.splice(drag.to, 0, block);
           }
           drag = null;
-          renderBuilder();
+          moved ? changed() : renderBuilder();
         };
 
         row.addEventListener('pointermove', move);
@@ -1002,26 +1057,33 @@
         return d.toISOString().slice(0, 10);
       }
 
-      async function loadCalendar(date) {
-        let events = [];
-        let allDay = [];
+      // A calendar that cannot be read must never stop planning, so a failure
+      // here is an empty day rather than an error.
+      async function fetchCalendar(date) {
         try {
           const data = await api(`/calendar/${date}`);
-          events = data.events || [];
-          allDay = data.all_day || [];
+          return { events: data.events || [], allDay: data.all_day || [] };
         } catch {
-          // A calendar that cannot be read must never stop planning.
+          return { events: [], allDay: [] };
         }
+      }
 
-        // All-day entries are reminders. They are worth seeing while planning
-        // and they claim no hours, so they sit above the blocks rather than
-        // inside them.
+      // All-day entries are reminders. They are worth seeing while planning and
+      // they claim no hours, so they sit above the blocks rather than inside
+      // them. An earlier version made each one a 24 hour pinned block, which
+      // swallowed the whole day.
+      function showAllDay(allDay) {
         const note = $('all-day');
         note.replaceChildren();
         note.classList.toggle('hidden', !allDay.length);
         if (allDay.length) {
           note.append(el('span', 'none', 'All day: ' + allDay.map((a) => a.title).join(', ')));
         }
+      }
+
+      async function loadCalendar(date) {
+        const { events, allDay } = await fetchCalendar(date);
+        showAllDay(allDay);
 
         // The server returns them already in clock order, so they only need
         // appending. An earlier version sorted the whole list with a
@@ -1042,6 +1104,46 @@
         renderBuilder();
       }
 
+      /**
+       * Open the day.
+       *
+       * A confirmed plan wins over the calendar: it already contains whatever
+       * pinned blocks existed when it was built, and reseeding from the feed
+       * would duplicate them.
+       */
+      async function openDay(date) {
+        // Named `existing`, not `saved`: `saved` is the module-level flag for
+        // whether the screen matches the database, and shadowing it here would
+        // make every assignment inside this function silently local.
+        let existing = { plan: null, blocks: [] };
+        try {
+          existing = await api(`/plan/${date}`);
+        } catch {
+          // No saved plan is the normal case, and a failure here should still
+          // leave a usable builder.
+        }
+
+        if (existing.plan && existing.blocks.length) {
+          blocks = existing.blocks.map((b) => ({
+            title: b.title,
+            entryId: b.entryId,
+            duration: b.duration_minutes,
+            start: b.start_minutes,
+            pinned: b.pinned,
+            clash: 0,
+          }));
+          // The note still comes from the feed: it is not part of the plan
+          // because it never occupied any of it.
+          showAllDay((await fetchCalendar(date)).allDay);
+          renderBuilder();
+          setSaved(existing.plan.status === 'confirmed');
+          return;
+        }
+
+        setSaved(false);
+        await loadCalendar(date);
+      }
+
       $('block-toggle').onclick = () => {
         const card = $('block-card');
         const opening = card.classList.contains('hidden');
@@ -1060,6 +1162,34 @@
         if (!title) return;
         addBlock({ title });
         $('block-card').classList.add('hidden');
+      };
+
+      $('confirm').onclick = async () => {
+        const button = $('confirm');
+        button.disabled = true;
+        try {
+          await api('/plan', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              date: planDate,
+              blocks: blocks.map((b) => ({
+                title: b.title,
+                entryId: b.entryId,
+                start_minutes: b.start,
+                duration_minutes: b.duration,
+                pinned: b.pinned,
+              })),
+            }),
+          });
+          setSaved(true);
+          // Scheduling something resets its clock, so the panel it came from
+          // has to be reread rather than left showing yesterday's numbers.
+          await load();
+        } catch (err) {
+          alert(err.message);
+          setSaved(false);
+        }
       };
 
       setType('task');
