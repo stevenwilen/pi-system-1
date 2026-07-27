@@ -33,7 +33,20 @@ const FREQUENCIES = ['daily', 'few times a week', 'weekly', 'monthly'];
 const app = express();
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+// The page is revalidated on every load, the assets are not.
+//
+// index.html is the whole app: markup, styles and script in one file. Letting
+// a browser reuse it without asking means a fixed bug keeps rendering, which
+// has already happened twice. `no-cache` is not "do not store", it is "ask
+// first", so an unchanged page still costs one 304 rather than a download.
+// Icons carry hashes in name only, but they change rarely and are cheap.
+app.use(
+  express.static(path.join(__dirname, 'public'), {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+    },
+  })
+);
 
 // The `messages` table is no longer read or written. It is deliberately left
 // in place with its rows: dropping a table is the one move that cannot be
