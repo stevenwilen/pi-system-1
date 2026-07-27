@@ -619,6 +619,22 @@
         line-height: 1.48;
       }
 
+      /* Three steps, each an icon in its own fixed column so the sentences
+         line up down the left edge however wide the emoji renders. */
+      .step {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+      }
+
+      .step-icon {
+        flex: none;
+        width: 21px;
+        font-size: 16px;
+        line-height: 1.2;
+        text-align: center;
+      }
+
       .welcome-card .quiet-line {
         font-size: 12px;
         color: var(--muted);
@@ -949,11 +965,20 @@
         el.id = 'welcome';
         el.innerHTML = `
           <img class="welcome-mascot" src="/mascot.svg" alt="" aria-hidden="true">
-          <p class="welcome-lead">I plan your week, then I check in on it.</p>
+          <p class="welcome-lead">I'm your personal intelligence system.</p>
           <div class="welcome-card">
-            <p>Talk to me like a person. I learn your projects, habits and how your days really go, and I remember all of it.</p>
-            <p>I read your calendar, so a day I plan fits around what's already there.</p>
-            <p>I message you on Telegram without being asked: your plan each morning, and a different review each day of the week.</p>
+            <div class="step">
+              <span class="step-icon" aria-hidden="true">&#128172;</span>
+              <p><strong>Tell me anything.</strong> Projects, habits, tasks, ideas, people you're waiting on. Just talk, there's nothing to file.</p>
+            </div>
+            <div class="step">
+              <span class="step-icon" aria-hidden="true">&#129504;</span>
+              <p><strong>I learn, you confirm.</strong> I notice how your life actually runs, and check with you before I save anything.</p>
+            </div>
+            <div class="step">
+              <span class="step-icon" aria-hidden="true">&#128276;</span>
+              <p><strong>I come back to you.</strong> Your day each morning on Telegram, then a different check-in through the week.</p>
+            </div>
             <p class="quiet-line">Nothing is hidden. Tap &#9432; to see everything I hold, and delete what you like.</p>
           </div>
           <p class="welcome-cta">Just talk to me. Start anywhere.</p>
