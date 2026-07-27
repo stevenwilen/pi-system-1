@@ -93,6 +93,20 @@ app.post('/observations/:id/delete', async (req, res) => {
 
 const hhmm = (t) => String(t || '').slice(0, 5);
 
+// "08:00" -> "8am", "07:30" -> "7:30am". The schedule sits in a narrow column
+// on a phone, where "Tuesdays and Saturdays at 08:00" wraps onto three lines.
+function shortTime(t) {
+  const raw = String(t || '');
+  // Shape-checked rather than parsed loosely: Number('') is 0, so an empty
+  // or malformed time would otherwise render as a confident "12am".
+  if (!/^\d{1,2}:\d{2}$/.test(raw)) return raw;
+
+  const [h, m] = raw.split(':').map(Number);
+  const suffix = h < 12 ? 'am' : 'pm';
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return m ? `${hour}:${String(m).padStart(2, '0')}${suffix}` : `${hour}${suffix}`;
+}
+
 app.get('/overview', async (req, res) => {
   const { data: profile } = await supabase
     .from('profile')
@@ -129,16 +143,16 @@ app.get('/overview', async (req, res) => {
     ideas: of('idea'),
     waiting: of('waiting'),
     schedule: [
-      { label: 'Day plan', when: `Every day at ${wake}` },
-      { label: 'Open tasks', when: `Mondays at ${morning}` },
-      { label: 'Habit review', when: `Wednesdays at ${morning}` },
-      { label: 'Project review', when: `Fridays at ${morning}` },
-      { label: 'Ideas', when: `Tuesdays and Saturdays at ${morning}` },
-      { label: 'Waiting on', when: `Thursdays at ${morning}` },
-      { label: 'Week ahead', when: `Sundays at ${morning}` },
+      { label: 'Day plan', when: `Daily ${shortTime(wake)}` },
+      { label: 'Open tasks', when: `Mon ${shortTime(morning)}` },
+      { label: 'Habit review', when: `Wed ${shortTime(morning)}` },
+      { label: 'Project review', when: `Fri ${shortTime(morning)}` },
+      { label: 'Ideas', when: `Tue, Sat ${shortTime(morning)}` },
+      { label: 'Waiting on', when: `Thu ${shortTime(morning)}` },
+      { label: 'Week ahead', when: `Sun ${shortTime(morning)}` },
       // Only shown to the owner, because only the owner receives it.
       ...(process.env.FINANCE_OWNER_USER_ID === CURRENT_USER
-        ? [{ label: 'Finances', when: 'Wednesdays and Sundays at 18:00' }]
+        ? [{ label: 'Finances', when: 'Wed, Sun 6pm' }]
         : []),
     ],
   });
