@@ -398,9 +398,13 @@ async function brief() {
       note: r.note,
     }));
 
+  // The earliest date present, not the first row. Row order follows whatever
+  // the sheet is sorted by, so reading the span off quarter[0] would divide by
+  // the wrong number of days the moment the sheet is sorted newest-first.
+  const earliest = quarter.reduce((a, r) => (r.date < a ? r.date : a), now);
   const days = Math.max(
     1,
-    Math.round((new Date(now) - new Date(quarter[0] ? quarter[0].date : d90)) / 86400000)
+    Math.round((new Date(now) - new Date(earliest)) / 86400000)
   );
 
   // Reported as a date so the reader can judge it themselves. This was once a
