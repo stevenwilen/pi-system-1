@@ -24,8 +24,9 @@ const WINDOW = 15;
 // How far back the weekly reviews look.
 const REVIEW_DAYS = 28;
 
-// Tasks older than this are collapsed into a single line instead of listed.
-const TASK_RECENT_DAYS = 21;
+// Beyond what is overdue or due this week, only this many are listed by rank.
+// The rest become a count, so the message stays scannable on a phone.
+const TASK_LIST_LIMIT = 5;
 
 // Ideas go out twice a week, on the two weekdays nothing else uses.
 const IDEAS_DAYS = ['Tue', 'Sat'];
@@ -385,11 +386,10 @@ ${TELEGRAM_FORMAT}`;
 async function jobTasks(profile, today) {
   const { data, error } = await supabase
     .from('entries')
-    .select('title, created_at')
+    .select('title, created_at, priority, due')
     .eq('user_id', profile.user_id)
     .eq('type', 'task')
-    .eq('status', 'active')
-    .order('created_at', { ascending: false });
+    .eq('status', 'active');
 
   if (error) {
     console.error(`[JOB] tasks: could not read tasks: ${error.message}`);
@@ -399,31 +399,45 @@ async function jobTasks(profile, today) {
   // No open tasks means no message at all.
   if (!data || data.length === 0) return '';
 
-  const cutoff = new Date(`${daysAgo(today, TASK_RECENT_DAYS)}T00:00:00Z`);
-  const recent = [];
-  let older = 0;
+  // An unranked task sorts last. Postgres orders nulls first by default, so
+  // this is done here rather than in the query.
+  const rank = (t) => (t.priority === null || t.priority === undefined ? 9999 : t.priority);
+  const byRank = [...data].sort(
+    (a, b) => rank(a) - rank(b) || a.created_at.localeCompare(b.created_at)
+  );
 
-  for (const t of data) {
-    if (new Date(t.created_at) >= cutoff) recent.push(t);
-    else older += 1;
-  }
+  const weekEnd = addDays(today, 7);
+  const overdue = byRank.filter((t) => t.due && t.due < today);
+  const soon = byRank.filter((t) => t.due && t.due >= today && t.due < weekEnd);
+  const dated = new Set([...overdue, ...soon]);
+  const rest = byRank.filter((t) => !dated.has(t));
+
+  const label = (t) => `${t.priority ? `${t.priority}.` : '•'} ${t.title}`;
 
   const lines = ['📋 <b>Open tasks</b>', ''];
 
-  for (const t of recent) lines.push(`• ${t.title}`);
-
-  if (older > 0) {
-    const plural = older === 1 ? 'task' : 'tasks';
-    if (recent.length > 0) lines.push('');
-    lines.push(
-      // "plus" only makes sense when something was listed above it.
-      recent.length > 0
-        ? `plus ${older} older ${plural}. Say "show old" in the app to see them.`
-        : `${older} older ${plural}. Say "show old" in the app to see them.`
-    );
+  if (overdue.length) {
+    lines.push('<b>Overdue</b>');
+    for (const t of overdue) lines.push(`${label(t)} (was due ${t.due})`);
+    lines.push('');
   }
 
-  return lines.join('\n');
+  if (soon.length) {
+    lines.push('<b>Due this week</b>');
+    for (const t of soon) lines.push(`${label(t)} (due ${t.due})`);
+    lines.push('');
+  }
+
+  if (rest.length) {
+    // Only worth a heading when something appeared above it.
+    if (overdue.length || soon.length) lines.push('<b>The rest, by rank</b>');
+    for (const t of rest.slice(0, TASK_LIST_LIMIT)) lines.push(label(t));
+
+    const hidden = rest.length - TASK_LIST_LIMIT;
+    if (hidden > 0) lines.push(`plus ${hidden} more.`);
+  }
+
+  return lines.join('\n').trim();
 }
 
 // The next seven days of calendar, gathered here rather than by the brain.

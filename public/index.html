@@ -224,6 +224,22 @@
         color: var(--habit-ink);
       }
 
+      /* Sits inline after a task title rather than on its own line. */
+      .pill.due {
+        align-self: auto;
+        margin-left: 6px;
+        background: var(--task-soft);
+        color: var(--task-ink);
+        white-space: nowrap;
+      }
+
+      /* Overdue is the one state worth looking different, so it borrows the
+         deep coral rather than a category colour. */
+      .pill.due.late {
+        background: var(--coral-deep);
+        color: #fff;
+      }
+
       .none {
         font-size: 13px;
         color: var(--muted);
@@ -1138,10 +1154,43 @@
           const c = card();
           const s = document.createElement('div');
           s.className = 'stack';
+          // Dates are compared in the person's own timezone. Comparing
+          // against the browser's idea of today would mark a task overdue
+          // several hours early, or late, depending where they are.
+          const today = new Intl.DateTimeFormat('en-CA', {
+            timeZone: d.profile.timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(new Date());
+
+          const dueLabel = (due) => {
+            if (due < today) return 'overdue';
+            if (due === today) return 'today';
+            const then = new Date(due + 'T12:00:00Z');
+            const now = new Date(today + 'T12:00:00Z');
+            if (Math.round((then - now) / 86400000) === 1) return 'tomorrow';
+            return new Intl.DateTimeFormat('en-GB', {
+              timeZone: 'UTC',
+              weekday: 'short',
+              day: 'numeric',
+              month: 'short',
+            }).format(then);
+          };
+
           for (const t of d.tasks) {
             const row = document.createElement('div');
-            row.textContent = '• ' + t.title;
             row.style.fontSize = '13.5px';
+            // An unranked task shows a bullet, so a gap in the numbering is
+            // visible rather than being papered over with a made-up rank.
+            row.textContent = (t.priority ? t.priority + '. ' : '• ') + t.title;
+
+            if (t.due) {
+              const pill = document.createElement('span');
+              pill.className = 'pill due' + (t.due < today ? ' late' : '');
+              pill.textContent = dueLabel(t.due);
+              row.appendChild(pill);
+            }
             s.appendChild(row);
           }
           c.appendChild(s);

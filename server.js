@@ -116,7 +116,7 @@ app.get('/overview', async (req, res) => {
 
   const { data: entries, error } = await supabase
     .from('entries')
-    .select('id, type, title, body, why, priority, frequency, created_at')
+    .select('id, type, title, body, why, priority, due, frequency, created_at')
     .eq('user_id', CURRENT_USER)
     .eq('status', 'active')
     .order('created_at', { ascending: false });
@@ -139,7 +139,9 @@ app.get('/overview', async (req, res) => {
       (a, b) => (a.priority || 99) - (b.priority || 99)
     ),
     habits: of('habit'),
-    tasks: of('task'),
+    // Ranked as the brain sees them. Unranked tasks sort last rather than
+    // first, which is what an absent priority means.
+    tasks: of('task').sort((a, b) => (a.priority || 99) - (b.priority || 99)),
     ideas: of('idea'),
     waiting: of('waiting'),
     schedule: [

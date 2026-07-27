@@ -53,7 +53,8 @@ create table if not exists entries (
   body        text,
 
   why         text,          -- projects: why this matters, captured when added
-  priority    int,           -- projects: rank, 1 = highest
+  priority    int,           -- projects and tasks: rank, 1 = highest, no ties
+  due         date,          -- tasks: the day it should be done by
   frequency   text,          -- habits: 'daily', 'weekdays', '3x/week', ...
 
   evidence    text,          -- observations: what the user said or did
@@ -72,9 +73,20 @@ create table if not exists entries (
 create index if not exists entries_user_type_status_idx
   on entries (user_id, type, status);
 
-create index if not exists entries_user_priority_idx
+-- Projects and tasks each hold a strict rank with no ties, enforced here
+-- rather than in the prompt, so two things cannot both be number one.
+-- Partial, so a done or deleted row frees its place in the ranking.
+create unique index if not exists entries_user_priority_idx
   on entries (user_id, priority)
-  where type = 'project' and status = 'active';
+  where type = 'project' and status = 'active' and priority is not null;
+
+create unique index if not exists entries_task_priority_idx
+  on entries (user_id, priority)
+  where type = 'task' and status = 'active' and priority is not null;
+
+create index if not exists entries_user_due_idx
+  on entries (user_id, due)
+  where status = 'active' and due is not null;
 
 drop trigger if exists entries_touch_updated_at on entries;
 create trigger entries_touch_updated_at
