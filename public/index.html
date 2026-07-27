@@ -102,8 +102,10 @@
         color: var(--text);
       }
 
-      #plan-view,
-      #money-view {
+      /* A class, not the two ids. An id selector outranks .hidden whatever the
+         source order, so styling these by id meant hiding them did nothing and
+         both lanes rendered at once, stacked. */
+      .view {
         display: flex;
         flex-direction: column;
         gap: 22px;
@@ -840,8 +842,11 @@
         line-height: 1.4;
       }
 
+      /* !important because this is an absolute, and because it losing a
+         specificity contest is silent: the element simply stays on screen and
+         nothing reports it. That already happened once, to the two lanes. */
       .hidden {
-        display: none;
+        display: none !important;
       }
     </style>
   </head>
@@ -856,7 +861,7 @@
     </nav>
 
     <main>
-     <div id="plan-view">
+     <div id="plan-view" class="view">
       <div class="group">
         <div class="group-head">
           <h2>Review</h2>
@@ -950,7 +955,7 @@
       </div>
      </div>
 
-     <div id="money-view" class="hidden">
+     <div id="money-view" class="view hidden">
       <div class="group">
         <div class="group-head">
           <h2>What I've told it</h2>
