@@ -207,11 +207,47 @@
         color: var(--muted);
       }
 
+      /* A row whose rank badge stays put while the title wraps beside it. */
+      .rank-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
       .rank {
-        display: inline-block;
-        min-width: 18px;
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        margin-top: 1px;
+        border-radius: 7px;
+        font-size: 11.5px;
         font-weight: 700;
+        /* Keeps 1 and 10 the same width, so the titles stay aligned. */
+        font-variant-numeric: tabular-nums;
+        background: var(--focus-soft);
         color: var(--focus-ink);
+      }
+
+      .rank.task {
+        background: var(--task-soft);
+        color: var(--task-ink);
+      }
+
+      /* Nothing has been decided yet, so it must not read as a rank. */
+      .rank.none {
+        background: transparent;
+        color: var(--muted);
+        box-shadow: inset 0 0 0 1.5px var(--line);
+      }
+
+      /* Declared last on purpose: for the top task both .task and .top match
+         with equal specificity, so this has to be the one that wins. */
+      .rank.top {
+        background: var(--coral-deep);
+        color: #fff;
       }
 
       .pill {
@@ -1120,11 +1156,8 @@
         for (const p of d.projects) {
           const c = card();
           const t = document.createElement('div');
-          t.className = 'card-text';
-          const r = document.createElement('span');
-          r.className = 'rank';
-          r.textContent = p.priority ? `${p.priority}.` : '·';
-          t.append(r, document.createTextNode(' ' + p.title));
+          t.className = 'card-text rank-row';
+          t.append(rankBadge(p.priority), document.createTextNode(p.title));
           c.appendChild(t);
           gp.appendChild(c);
         }
@@ -1180,17 +1213,23 @@
 
           for (const t of d.tasks) {
             const row = document.createElement('div');
+            row.className = 'rank-row';
             row.style.fontSize = '13.5px';
-            // An unranked task shows a bullet, so a gap in the numbering is
-            // visible rather than being papered over with a made-up rank.
-            row.textContent = (t.priority ? t.priority + '. ' : '• ') + t.title;
+
+            // The due pill sits inside the title span rather than the row, so
+            // it follows the end of the text instead of being pushed to a
+            // column of its own when the title wraps.
+            const title = document.createElement('span');
+            title.textContent = t.title;
 
             if (t.due) {
               const pill = document.createElement('span');
               pill.className = 'pill due' + (t.due < today ? ' late' : '');
               pill.textContent = dueLabel(t.due);
-              row.appendChild(pill);
+              title.appendChild(pill);
             }
+
+            row.append(rankBadge(t.priority, 'task'), title);
             s.appendChild(row);
           }
           c.appendChild(s);
@@ -1424,6 +1463,27 @@
       }
 
       // --- what I've noticed ------------------------------------------------
+
+      // The rank badge for projects and tasks. Number one is the loud one,
+      // since knowing what is top matters more at a glance than knowing what
+      // is fourth. An unranked row shows an outlined dot: it has to be
+      // obviously not a number, or an empty ranking reads as a decided one.
+      function rankBadge(priority, kind) {
+        const el = document.createElement('span');
+        el.className = 'rank';
+        if (kind) el.classList.add(kind);
+
+        if (priority) {
+          el.textContent = priority;
+          if (priority === 1) el.classList.add('top');
+          el.title = priority === 1 ? 'Top priority' : `Priority ${priority}`;
+        } else {
+          el.classList.add('none');
+          el.textContent = '·';
+          el.title = 'Not ranked yet';
+        }
+        return el;
+      }
 
       // At or above this, the person said it themselves. Below it, the system
       // worked it out. Kept next to dots() so both readings of confidence
