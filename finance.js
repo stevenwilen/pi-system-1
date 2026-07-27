@@ -111,10 +111,52 @@ function toAmount(value) {
   return negative ? -Math.abs(n) : n;
 }
 
-async function fetchCsv(url) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-  if (!res.ok) throw new Error(`sheet returned ${res.status}`);
-  return toObjects(parseCsv(await res.text()));
+// Publishing a sheet is fiddly and every way of getting it wrong returns
+// something that looks like success, so each failure is named specifically
+// rather than reported as a generic fetch error.
+async function fetchCsv(url, label) {
+  if (/\/edit/.test(url) || /[?&]usp=/.test(url)) {
+    throw new Error(
+      `the ${label} link is the normal sheet address from the browser bar, not a published one. Use File, then Share, then Publish to web, pick the ${label} tab, and choose comma-separated values.`
+    );
+  }
+
+  if (!/output=csv/.test(url)) {
+    throw new Error(
+      `the ${label} link is not a CSV link. When publishing, change the format dropdown from Web page to comma-separated values.`
+    );
+  }
+
+  let res;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  } catch (err) {
+    throw new Error(`could not reach the ${label} sheet: ${err.message}`);
+  }
+
+  if (res.status === 404) {
+    throw new Error(
+      `the ${label} link returned 404, which usually means publishing was stopped or the tab was deleted.`
+    );
+  }
+  if (!res.ok) throw new Error(`the ${label} sheet returned ${res.status}`);
+
+  const text = await res.text();
+
+  // A published web page, a permissions interstitial and a sign-in redirect
+  // all arrive as HTML with a 200.
+  if (/^\s*</.test(text)) {
+    throw new Error(
+      `the ${label} link returned a web page instead of CSV. Either it was published as a web page rather than comma-separated values, or the sheet is not actually published and Google is returning a sign-in page.`
+    );
+  }
+
+  const rows = toObjects(parseCsv(text));
+  if (!rows.length) {
+    throw new Error(`the ${label} sheet came back empty.`);
+  }
+
+  return rows;
 }
 
 // --- loading -----------------------------------------------------------------
@@ -126,7 +168,22 @@ async function load() {
 
   if (cache.data && Date.now() - cache.at < CACHE_TTL_MS) return cache.data;
 
-  const [tx, cats] = await Promise.all([fetchCsv(txUrl), fetchCsv(catUrl)]);
+  // Fetched separately so the error can say which of the two is wrong.
+  const tx = await fetchCsv(txUrl, 'Transactions');
+  const cats = await fetchCsv(catUrl, 'Categories');
+
+  // A published Transactions tab that is missing its headers means the wrong
+  // tab was published, which would otherwise look like an empty month.
+  if (tx.length && !('Transaction ID' in tx[0])) {
+    throw new Error(
+      `the Transactions link does not have the expected columns. Its headers are: ${Object.keys(tx[0]).join(', ')}. Check that the Transactions tab was selected when publishing, not a different one.`
+    );
+  }
+  if (cats.length && !('Type' in cats[0])) {
+    throw new Error(
+      `the Categories link does not have a Type column. Its headers are: ${Object.keys(cats[0]).join(', ')}. Check that the Categories tab was selected when publishing.`
+    );
+  }
 
   // Category -> Expense | Income | Transfer. This join is what makes the
   // database self-describing, and without it none of the sums are meaningful.
