@@ -1862,7 +1862,14 @@
       // does not interpret it: no advice, no judgment, nothing coloured to
       // suggest a figure is good or bad.
 
-      const amount = (n) => (n < 0 ? '+' : '') + Math.abs(n).toFixed(2);
+      // Spending reads as a plain figure. A negative here means more came back
+      // than went out, which is unusual enough to deserve the plus.
+      const amount = (n) => (n < 0 ? '+$' : '$') + Math.abs(n).toFixed(2);
+
+      // Transfers carry their real direction. Both halves of a card payment
+      // appear, and one leaving while the other arrives is the whole point, so
+      // the sign is always shown rather than inferred.
+      const signed = (n) => (n < 0 ? '-$' : '+$') + Math.abs(n).toFixed(2);
 
       function syncLine(sync) {
         if (!sync.newest) return 'No transactions in this window.';
@@ -1931,13 +1938,14 @@
           head.append(
             el('span', null, `Moved between accounts, ${data.transfers.count} rows, in neither total`)
           );
-          head.append(el('strong', null, amount(-data.transfers.moved)));
+          // Direction-neutral: this is how much moved, not money gained.
+          head.append(el('strong', null, '$' + data.transfers.moved.toFixed(2)));
           moved.append(head);
 
           for (const t of data.transfers.rows) {
             const row = el('div', 'moved-row');
             row.append(el('span', null, `${t.date}  ${t.description}`));
-            row.append(el('span', null, amount(-t.amount)));
+            row.append(el('span', null, signed(t.amount)));
             moved.append(row);
           }
           box.append(moved);
