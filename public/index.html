@@ -617,13 +617,16 @@
 
       /* The only thing that starts a drag. Tapping the title schedules the
          item, so the two gestures must not share a target. */
+      /* Sized to match the builder's handle, so the same gesture looks the
+         same in both lists. */
       .grip {
         flex: none;
-        width: 16px;
+        width: 18px;
         margin-left: -2px;
+        text-align: center;
         color: var(--dim);
-        font-size: 13px;
-        line-height: 1.5;
+        font-size: 15px;
+        line-height: 1.35;
         cursor: grab;
         touch-action: none;
         user-select: none;
@@ -1195,7 +1198,9 @@
         // The grip is the only thing that starts a drag, so tapping the title
         // to schedule it and dragging to reorder never compete for a gesture.
         if (!item.paused && index !== undefined) {
-          const grip = el('div', 'grip', '⠢');
+          // The six dot grip, the same one the builder uses. It is the shape
+          // people already read as "drag me".
+          const grip = el('div', 'grip', '⠿');
           grip.onpointerdown = (e) => startItemDrag(e, index);
           top.append(grip);
         }
