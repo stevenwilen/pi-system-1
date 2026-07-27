@@ -26,6 +26,7 @@
         --bg: #16130f;        /* warm near-black, never blue-black */
         --surface: #211d18;   /* cards and rows */
         --recessed: #1c1913;  /* set into the page, not raised off it */
+        --raised: #2a2620;    /* held above it, while being dragged */
         --line: #2c2721;      /* hairlines */
 
         --text: #ede7de;
@@ -628,8 +629,22 @@
         user-select: none;
       }
 
+      /* Lifted, not faded. The old version dropped it to 35% opacity, which
+         made the thing you were holding the hardest thing on screen to see.
+         It rises off the surface instead: a lighter tone, a shadow with some
+         depth, and barely any scale. */
       .item.dragging {
-        opacity: 0.35;
+        background: var(--raised);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+        transform-origin: center left;
+        scale: 1.015;
+        position: relative;
+        z-index: 5;
+        cursor: grabbing;
+      }
+
+      .item.dragging .grip {
+        color: var(--muted);
       }
 
       /* --- the builder --- */
@@ -1249,21 +1264,104 @@
       let itemDrag = null;
       let staleItems = [];
 
+      const FLIP_MS = 170;
+
+      /**
+       * Where the dragged row should sit, as an index into the list WITHOUT it.
+       *
+       * Counting how many of the other rows the pointer has passed is symmetric
+       * by construction: it gives 0 above everything and n at the bottom, and
+       * every value between. The previous version only assigned a target when
+       * the pointer was below a midpoint, so upward drags past the first row
+       * had nothing to match and never moved.
+       *
+       * `boxes` excludes the dragged row, which is why the result can be used
+       * directly as a splice index after removing it. Computing against the
+       * full list and splicing afterwards is the off-by-one that made downward
+       * drops land one short.
+       */
+      function dropIndex(boxes, pointerY) {
+        let index = 0;
+        for (const box of boxes) {
+          if (pointerY > box.top + box.height / 2) index += 1;
+        }
+        return index;
+      }
+
+      function moveInList(list, from, to) {
+        const next = list.slice();
+        const [item] = next.splice(from, 1);
+        next.splice(to, 0, item);
+        return next;
+      }
+
+      /**
+       * FLIP. Measure where everything was, let the DOM change, measure again,
+       * put each row back with a transform, then release it.
+       *
+       * The dragged row is skipped: it is already following the pointer, and
+       * animating it as well would fight the finger.
+       */
+      function flip(before, skip) {
+        for (const [row, top] of before) {
+          if (row === skip || !row.isConnected) continue;
+          const delta = top - row.getBoundingClientRect().top;
+          if (!delta) continue;
+
+          row.style.transition = 'none';
+          row.style.transform = `translateY(${delta}px)`;
+        }
+
+        requestAnimationFrame(() => {
+          for (const [row] of before) {
+            if (row === skip || !row.isConnected) continue;
+            row.style.transition = `transform ${FLIP_MS}ms ease-out`;
+            row.style.transform = '';
+          }
+        });
+      }
+
       function startItemDrag(event, index) {
         event.preventDefault();
-        itemDrag = { from: index, to: index };
 
+        const list = $('stale');
         const row = event.currentTarget.closest('.item');
+        const rows = () => [...list.querySelectorAll('.item')];
+
+        // Where in the row the finger landed, so it stays under the same point
+        // rather than snapping the row's top to the pointer.
+        const grabOffset = event.clientY - row.getBoundingClientRect().top;
+
+        itemDrag = { id: staleItems[index].id, moved: false };
         row.classList.add('dragging');
         row.setPointerCapture(event.pointerId);
 
+        // The row is transformed to follow the pointer, so its own rect is not
+        // where it would rest. Measuring with the transform cleared gives the
+        // resting position, which is what the offset must be relative to.
+        const follow = (pointerY) => {
+          row.style.transition = 'none';
+          row.style.transform = '';
+          const rest = row.getBoundingClientRect().top;
+          row.style.transform = `translateY(${pointerY - grabOffset - rest}px)`;
+        };
+
         const move = (e) => {
-          let to = itemDrag.from;
-          for (const r of $('stale').querySelectorAll('.item')) {
-            const box = r.getBoundingClientRect();
-            if (e.clientY > box.top + box.height / 2) to = Number(r.dataset.index);
+          const others = rows().filter((r) => r !== row);
+          const to = dropIndex(others.map((r) => r.getBoundingClientRect()), e.clientY);
+
+          const currentIndex = rows().indexOf(row);
+          if (to !== currentIndex) {
+            // The nodes are moved rather than re-rendered. Re-rendering would
+            // destroy the element under the finger and with it the pointer
+            // capture, ending the drag mid-gesture.
+            const before = new Map(rows().map((r) => [r, r.getBoundingClientRect().top]));
+            list.insertBefore(row, others[to] || null);
+            flip(before, row);
+            itemDrag.moved = true;
           }
-          itemDrag.to = to;
+
+          follow(e.clientY);
         };
 
         const end = async () => {
@@ -1271,27 +1369,29 @@
           row.removeEventListener('pointermove', move);
           row.removeEventListener('pointerup', end);
           row.removeEventListener('pointercancel', end);
-          row.classList.remove('dragging');
 
-          const moved = itemDrag && itemDrag.to !== itemDrag.from;
-          const { from, to } = itemDrag || {};
+          // Settle into place rather than snapping back to zero.
+          row.style.transition = `transform ${FLIP_MS}ms ease-out`;
+          row.style.transform = '';
+          setTimeout(() => {
+            row.style.transition = '';
+            row.classList.remove('dragging');
+          }, FLIP_MS);
+
+          const moved = itemDrag && itemDrag.moved;
           itemDrag = null;
           if (!moved) return;
 
-          const next = staleItems.slice();
-          const [item] = next.splice(from, 1);
-          next.splice(to, 0, item);
-          staleItems = next;
-
-          // Redrawn from the local order first, so the row stays where it was
-          // dropped rather than jumping back until the server answers.
-          paintStale();
+          // The DOM is the truth now: it is what the person watched settle.
+          const order = rows().map((r) => r.dataset.id);
+          staleItems = order.map((id) => staleItems.find((i) => i.id === id)).filter(Boolean);
+          rows().forEach((r, i) => (r.dataset.index = String(i)));
 
           try {
             await api('/entries/reorder', {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ ids: next.map((i) => i.id) }),
+              body: JSON.stringify({ ids: order }),
             });
           } catch (err) {
             alert(err.message);
