@@ -175,6 +175,18 @@
         overflow-wrap: anywhere;
       }
 
+      /* Editing happens where the row is, so the row grows rather than the
+         list being replaced by a form. */
+      .intent.editing {
+        gap: 9px;
+        outline: 1px solid var(--pinned-line);
+        outline-offset: -1px;
+      }
+
+      .intent.editing textarea {
+        min-height: 62px;
+      }
+
       /* --- the setup interview --- */
 
       .setup-step {
@@ -1042,47 +1054,7 @@
       <div class="group">
         <div class="group-head">
           <h2>What I've told it</h2>
-          <button class="addbtn" id="intent-toggle" type="button">+ Add</button>
-        </div>
-
-        <div class="card hidden" id="intent-card">
-          <form id="intent-form">
-            <label id="i-kind-wrap">
-              Kind
-              <select id="i-kind">
-                <option value="situation">Situation, income and timing</option>
-                <option value="reserve">Reserve, money that is off limits</option>
-                <option value="target">Target, something I am building toward</option>
-                <option value="declared">Declared, spending I have chosen</option>
-                <option value="slip">Slip, something I already know I struggle with</option>
-              </select>
-            </label>
-
-            <label class="hidden" id="i-mode-wrap">
-              Reaching it
-              <select id="i-mode">
-                <option value="wall">Wall, I would have to move it on purpose</option>
-                <option value="floor">Floor, it can be reached by doing nothing</option>
-              </select>
-            </label>
-
-            <label>
-              Label
-              <input id="i-label" type="text" autocomplete="off" />
-            </label>
-
-            <label>
-              Detail
-              <textarea id="i-body"></textarea>
-            </label>
-
-            <div class="err hidden" id="i-error"></div>
-
-            <div class="row">
-              <button class="primary grow" type="submit" id="i-save">Save</button>
-              <button class="linkbtn" type="button" id="i-cancel">Cancel</button>
-            </div>
-          </form>
+          <button class="addbtn" id="intent-toggle" type="button">+ Add row</button>
         </div>
 
         <div class="card hidden" id="setup-card">
@@ -2089,24 +2061,153 @@
         slip: 'Known slips',
       };
 
-      let editing = null;
+      const KIND_HINTS = {
+        situation: 'Income and timing',
+        reserve: 'Money that is off limits',
+        target: 'Something you are building toward',
+        declared: 'Spending you have chosen. Never flagged.',
+        slip: 'Something you already know about. Only growth is raised.',
+      };
+
+      // Which row is open for editing, by id, or 'new' for the one being added.
+      let editingIntent = null;
+      let intentItems = [];
+
+      /**
+       * A row in edit mode, in place.
+       *
+       * The kind is only offered when adding. Changing what an existing row
+       * means is not an edit: declared is never flagged and slip only reports
+       * growth, so turning one into the other changes what the system will say
+       * about it, and that should not be a stray tap. Delete and re-add is the
+       * deliberate path.
+       */
+      function intentEditor(item) {
+        const row = el('div', 'intent editing');
+        const isNew = !item.id;
+
+        if (isNew) {
+          const kindWrap = el('label', null, 'Kind');
+          const kind = document.createElement('select');
+          for (const k of KINDS) {
+            const option = document.createElement('option');
+            option.value = k;
+            option.textContent = `${KIND_LABELS[k]}: ${KIND_HINTS[k]}`;
+            kind.append(option);
+          }
+          kind.value = item.kind || 'situation';
+          kindWrap.append(kind);
+          row.append(kindWrap);
+
+          const modeWrap = el('label', 'hidden', 'Reaching it');
+          const mode = document.createElement('select');
+          for (const [value, text] of [
+            ['wall', 'Wall, it would take a deliberate transfer'],
+            ['floor', 'Floor, ordinary spending can reach it'],
+          ]) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = text;
+            mode.append(option);
+          }
+          modeWrap.append(mode);
+          row.append(modeWrap);
+
+          kind.onchange = () => modeWrap.classList.toggle('hidden', kind.value !== 'reserve');
+          modeWrap.classList.toggle('hidden', kind.value !== 'reserve');
+
+          row.kindEl = kind;
+          row.modeEl = mode;
+        } else if (item.mode) {
+          // Fixed, but shown, so it is clear which kind of reserve this is.
+          row.append(el('div', 'mode', `${item.kind} ${item.mode}, fixed`));
+        } else {
+          row.append(el('div', 'mode', `${item.kind}, fixed`));
+        }
+
+        const labelWrap = el('label', null, 'Label');
+        const label = document.createElement('input');
+        label.type = 'text';
+        label.value = item.label || '';
+        labelWrap.append(label);
+        row.append(labelWrap);
+
+        const bodyWrap = el('label', null, 'Detail');
+        const body = document.createElement('textarea');
+        body.value = item.body || '';
+        bodyWrap.append(body);
+        row.append(bodyWrap);
+
+        const error = el('div', 'err hidden');
+        row.append(error);
+
+        const actions = el('div', 'row');
+        const save = el('button', 'primary grow', isNew ? 'Add' : 'Save');
+        save.type = 'button';
+        const cancel = el('button', 'linkbtn', 'Cancel');
+        cancel.type = 'button';
+        actions.append(save, cancel);
+        row.append(actions);
+
+        cancel.onclick = () => {
+          editingIntent = null;
+          paintIntent();
+        };
+
+        save.onclick = async () => {
+          error.classList.add('hidden');
+          save.disabled = true;
+
+          const payload = isNew
+            ? {
+                kind: row.kindEl.value,
+                mode: row.modeEl.value,
+                label: label.value,
+                body: body.value,
+              }
+            : { label: label.value, body: body.value };
+
+          try {
+            await api(
+              isNew ? '/finance-intent' : `/finance-intent/${item.id}/update`,
+              {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(payload),
+              }
+            );
+            editingIntent = null;
+            await loadIntent();
+          } catch (err) {
+            error.textContent = err.message;
+            error.classList.remove('hidden');
+            save.disabled = false;
+          }
+        };
+
+        setTimeout(() => label.focus(), 0);
+        return row;
+      }
 
       function intentRow(item) {
+        if (editingIntent === item.id) return intentEditor(item);
+
         const row = el('div', 'intent');
 
         const top = el('div', 'intent-top');
-        top.append(el('div', 'intent-label', item.label));
+        const labelEl = el('div', 'intent-label pullable', item.label);
+        // The row itself is the edit affordance. There is no separate screen.
+        labelEl.onclick = () => {
+          editingIntent = item.id;
+          paintIntent();
+        };
+        top.append(labelEl);
         if (item.mode) top.append(el('div', 'mode', item.mode));
         row.append(top);
 
         if (item.body) row.append(el('div', 'intent-body', item.body));
 
         const actions = el('div', 'actions');
-
-        const edit = el('button', 'linkbtn', 'Edit');
-        edit.type = 'button';
-        edit.onclick = () => openIntent(item);
-        actions.append(edit);
 
         const del = el('button', 'linkbtn danger', 'Delete');
         del.type = 'button';
@@ -2129,6 +2230,25 @@
         return row;
       }
 
+      function paintIntent() {
+        const list = $('intent-list');
+        list.replaceChildren();
+
+        // A new row sits at the top, above the groups, because it has no kind
+        // to be grouped under until it is saved.
+        if (editingIntent === 'new') list.append(intentEditor({}));
+
+        for (const kind of KINDS) {
+          const items = intentItems.filter((i) => i.kind === kind);
+          if (!items.length) continue;
+
+          const group = el('div', 'kind-group');
+          group.append(el('div', 'kind-head', KIND_LABELS[kind] || kind));
+          for (const item of items) group.append(intentRow(item));
+          list.append(group);
+        }
+      }
+
       async function loadIntent() {
         const list = $('intent-list');
         let data;
@@ -2139,35 +2259,23 @@
           return;
         }
 
-        list.replaceChildren();
+        intentItems = data.items;
 
         // The setup card stands in for the empty state. Nothing is known yet,
-        // and the interview is how that changes.
-        const nothingYet = !data.items.length;
+        // and the interview is how that changes. Adding a row by hand stays
+        // available either way, so one wrong answer does not mean redoing the
+        // whole interview.
+        const nothingYet = !intentItems.length && editingIntent !== 'new';
         $('setup-card').classList.toggle('hidden', !nothingYet);
-        $('intent-toggle').classList.toggle('hidden', nothingYet);
 
-        if (nothingYet) {
-          if (!setupPrompt) {
-            try {
-              setupPrompt = (await api('/finance-intent/setup-prompt')).prompt;
-            } catch {
-              // Held empty; the copy button falls back to the textarea.
-            }
+        paintIntent();
+
+        if (nothingYet && !setupPrompt) {
+          try {
+            setupPrompt = (await api('/finance-intent/setup-prompt')).prompt;
+          } catch {
+            // Held empty; the copy button falls back to the textarea.
           }
-          return;
-        }
-
-        // Grouped in the order the kinds are declared, not alphabetically, so
-        // the list reads the same way every time.
-        for (const kind of data.kinds) {
-          const items = data.items.filter((i) => i.kind === kind);
-          if (!items.length) continue;
-
-          const group = el('div', 'kind-group');
-          group.append(el('div', 'kind-head', KIND_LABELS[kind] || kind));
-          for (const item of items) group.append(intentRow(item));
-          list.append(group);
         }
       }
 
@@ -2326,77 +2434,12 @@
         }
       };
 
-      function setIntentKind(kind) {
-        $('i-mode-wrap').classList.toggle('hidden', kind !== 'reserve');
-      }
-
-      $('i-kind').onchange = () => setIntentKind($('i-kind').value);
-
-      function openIntent(item) {
-        editing = item || null;
-        const card = $('intent-card');
-
-        $('i-kind').value = item ? item.kind : 'situation';
-        $('i-mode').value = (item && item.mode) || 'wall';
-        $('i-label').value = item ? item.label : '';
-        $('i-body').value = item ? item.body : '';
-        $('i-error').classList.add('hidden');
-
-        // The kind is fixed once written: changing a target into a slip is a
-        // different declaration, not an edit.
-        $('i-kind-wrap').classList.toggle('hidden', Boolean(item));
-        setIntentKind($('i-kind').value);
-        $('i-save').textContent = item ? 'Save changes' : 'Save';
-
-        card.classList.remove('hidden');
-        $('i-label').focus();
-      }
-
+      // A row can be added by hand without redoing the interview. It opens an
+      // editor in the list rather than a form somewhere else.
       $('intent-toggle').onclick = () => {
-        const card = $('intent-card');
-        if (!card.classList.contains('hidden') && !editing) {
-          card.classList.add('hidden');
-          return;
-        }
-        openIntent(null);
-      };
-
-      $('i-cancel').onclick = () => {
-        editing = null;
-        $('intent-card').classList.add('hidden');
-      };
-
-      $('intent-form').onsubmit = async (event) => {
-        event.preventDefault();
-        const error = $('i-error');
-        error.classList.add('hidden');
-        $('i-save').disabled = true;
-
-        const payload = {
-          kind: $('i-kind').value,
-          mode: $('i-mode').value,
-          label: $('i-label').value,
-          body: $('i-body').value,
-        };
-
-        try {
-          await api(
-            editing ? `/finance-intent/${editing.id}/update` : '/finance-intent',
-            {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify(payload),
-            }
-          );
-          editing = null;
-          $('intent-card').classList.add('hidden');
-          await loadIntent();
-        } catch (err) {
-          error.textContent = err.message;
-          error.classList.remove('hidden');
-        } finally {
-          $('i-save').disabled = false;
-        }
+        editingIntent = editingIntent === 'new' ? null : 'new';
+        $('setup-card').classList.add('hidden');
+        paintIntent();
       };
 
       setType('task');
