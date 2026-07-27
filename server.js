@@ -39,6 +39,30 @@ app.use(express.static(path.join(__dirname, 'public')));
 // in place with its rows: dropping a table is the one move that cannot be
 // undone, and an unread table costs nothing.
 
+// --- which build is this ----------------------------------------------------
+
+const STARTED_AT = new Date().toISOString();
+
+/**
+ * What is actually running.
+ *
+ * "Has it deployed yet" has cost several rounds of guessing, answered only by
+ * probing for a route that happens to be new and inferring from a 404. The
+ * host sets the commit it built, so this reports it directly.
+ */
+app.get('/version', (req, res) => {
+  res.json({
+    commit: process.env.RAILWAY_GIT_COMMIT_SHA || null,
+    branch: process.env.RAILWAY_GIT_BRANCH || null,
+    deployed: process.env.RAILWAY_DEPLOYMENT_ID || null,
+    started_at: STARTED_AT,
+    node: process.version,
+    // Named so a stale build is obvious without knowing any commit hash.
+    lanes: ['planner', 'money'],
+    scheduler: process.env.SCHEDULER_DISABLED === '1' ? 'DISABLED' : 'running',
+  });
+});
+
 // --- staleness --------------------------------------------------------------
 
 // Today where this person lives. Counting days against the server's date would
