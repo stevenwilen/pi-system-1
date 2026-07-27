@@ -406,6 +406,41 @@
         line-height: 1.4;
       }
 
+      /* --- review --- */
+
+      #review {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      /* Yesterday is spent. It reads dimmer than tomorrow so the eye does not
+         stop here on the way down the screen. */
+      .block.review .block-title {
+        color: var(--dim);
+        font-weight: 400;
+      }
+
+      /* A miss is the only thing on this list worth noticing, so it is the
+         only thing that holds its colour. */
+      .block.missed .block-title {
+        color: var(--text);
+        font-weight: 500;
+      }
+
+      .block.missed {
+        border-left: 2px solid var(--warn);
+        border-radius: 0 var(--radius) var(--radius) 0;
+      }
+
+      .miss-reason {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.4;
+        padding-top: 3px;
+        overflow-wrap: anywhere;
+      }
+
       /* --- the end of the day --- */
 
       #ends {
@@ -562,10 +597,11 @@
 
     <main>
       <div class="group">
-        <div class="group-head"><h2>Review</h2></div>
-        <div class="card">
-          <span class="none">Yesterday's blocks, each with a one-tap "didn't happen". Not built.</span>
+        <div class="group-head">
+          <h2>Review</h2>
+          <span class="none" id="review-date"></span>
         </div>
+        <div id="review"></div>
       </div>
 
       <div class="group">
@@ -880,6 +916,103 @@
           $('f-save').disabled = false;
         }
       };
+
+      // --- review -----------------------------------------------------------
+      //
+      // Yesterday, assumed done. Nothing here confirms the ordinary case; the
+      // only action is correcting it. A block already marked shows its reason
+      // and can be put back, because a mis-tap at the end of a long day should
+      // not be permanent.
+
+      function reviewRow(block) {
+        const row = el('div', 'block review' + (block.completed ? '' : ' missed'));
+
+        const body = el('div', 'block-body');
+        body.append(el('div', 'block-title', block.title));
+        body.append(
+          el(
+            'div',
+            'block-when',
+            `${clock(block.start_minutes)} to ${clock(block.start_minutes + block.duration_minutes)}`
+          )
+        );
+        if (!block.completed && block.miss_reason) {
+          body.append(el('div', 'miss-reason', block.miss_reason));
+        }
+        row.append(body);
+
+        const action = el('button', 'linkbtn' + (block.completed ? '' : ' danger'));
+        action.type = 'button';
+        action.textContent = block.completed ? "Didn't happen" : 'Undo';
+        action.onclick = () =>
+          block.completed ? askReason(block) : setMissed(block, false, '');
+        row.append(action);
+
+        return row;
+      }
+
+      // The reason is optional, and the prompt says so. Demanding one is how a
+      // review stops getting done.
+      function askReason(block) {
+        const reason = prompt(`"${block.title}" didn't happen.\n\nWhy? (optional)`, '');
+        if (reason === null) return; // cancelled, so nothing is marked
+        setMissed(block, true, reason);
+      }
+
+      async function setMissed(block, missed, reason) {
+        try {
+          await api(`/blocks/${block.id}/miss`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ missed, reason }),
+          });
+          await loadReview();
+        } catch (err) {
+          alert(err.message);
+        }
+      }
+
+      async function loadReview() {
+        const list = $('review');
+        let data;
+        try {
+          data = await api('/review');
+        } catch (err) {
+          list.replaceChildren(el('div', 'card', err.message));
+          return;
+        }
+
+        $('review-date').textContent = data.blocks.length
+          ? new Date(`${data.date}T12:00:00Z`).toLocaleDateString('en-GB', {
+              timeZone: 'UTC',
+              weekday: 'long',
+              day: 'numeric',
+              month: 'short',
+            })
+          : '';
+
+        list.replaceChildren();
+
+        if (!data.blocks.length) {
+          const empty = el('div', 'card');
+          empty.append(el('span', 'none', 'Nothing planned yesterday.'));
+          list.append(empty);
+          return;
+        }
+
+        for (const block of data.blocks) list.append(reviewRow(block));
+
+        const missed = data.blocks.filter((b) => !b.completed).length;
+        if (missed) {
+          list.append(
+            el(
+              'div',
+              'clash',
+              `${missed} of ${data.blocks.length} didn't happen.`
+            )
+          );
+        }
+      }
 
       // --- the builder ------------------------------------------------------
 
@@ -1266,6 +1399,7 @@
 
       setType('task');
       load();
+      loadReview();
     </script>
   </body>
 </html>
