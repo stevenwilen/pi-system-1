@@ -205,21 +205,68 @@ those boundaries so messages fire on time.
 
 ## 7. Second lane: Finance (planned, not built)
 
-A separate lane. It does not touch the builder, stale panel, or blocks.
+A separate lane. It does not touch the builder, stale panel, or blocks. Its own
+tab. Planner is primary.
 
-- The Google Sheet is the source of truth. Transactions are **never** stored in
-  the notebook. Read a bounded window (~60 days) at reasoning time, reason,
-  discard the raw data. Store only the insight as a row.
-- A finance screen in the app shows spend by category, month vs previous month,
-  totals, trend. Pure arithmetic: no reasoning, no advice, no charts, no category
-  editor. Same discipline as the builder, the app does math, the brain does
-  judgment.
-- One short Telegram line per day. A pattern when there is one; something steady
-  and true when there isn't ("groceries have held under $400 for three months").
-  Never manufactured alarm.
-- Before writing, the brain reads its own insights from the last ~14 days and
-  must not repeat itself.
-- Placement: a second tab alongside the planner. Planner is primary. Future lanes
-  follow this pattern, their own tab, their own cadence, no coupling to the
-  planner.
-- If this lane ever needs more than one screen, it has outgrown its lane.
+### Source of truth
+A Google Sheet connected to the user's bank. Transactions are NEVER stored in
+the notebook. Read a bounded window (~60 days) at reasoning time, reason,
+discard the raw data. Store only the resulting insight as a row.
+
+### Primary metric: runway, not categories
+The metric is liquid balance and burn against it: how much cash is on hand, what
+is committed against it, and how long it lasts.
+
+Month-over-month category comparison is explicitly REJECTED as the frame. It is
+a tool for someone with steady income asking "am I drifting." It produces noise
+for anyone with variable or zero income, and it flags normal monthly variability
+as behaviour change.
+
+Where category-level comparison IS used, it must be against a rolling 3-6 month
+median, and only flag a shift sustained 2+ weeks. Never last-month-vs-this-month.
+
+### Recurring vs chosen
+Recurring charges are the priority signal. They hit automatically and erode a
+balance without any decision being made. One-off deliberate spending is a choice
+the user already made; recurring spending is the thing that happens to them.
+Surface the latter.
+
+### Intent rows (type='finance_intent')
+Whatever the user has declared about their situation and goals:
+  - situation: income, timing, receivables
+  - reserve: an account or amount they consider off-limits, and whether reaching
+    it requires a deliberate transfer (a wall) or can happen passively (a floor).
+    These are different and the message treats them differently.
+  - targets: what they're building toward
+  - declared: spending they have consciously chosen. NEVER flagged. This is the
+    finance equivalent of pausing.
+  - known slips: categories they've already told the system they struggle with.
+    Do not "discover" these, the user already knows. Flag recurrence or growth,
+    not the existence.
+
+These are rows, and only rows. No amount, threshold, account or goal belonging to
+a person is ever written into a prompt or into code. This is rule 2.4: the engine
+must be byte-identical for a user with $300 and a user with $300,000. Any design
+where personal financial numbers live in the engine is wrong.
+
+### The screen
+Balance, what's committed against it, runway, and recent transactions grouped by
+category. PURE ARITHMETIC. No reasoning, no advice, no charts, no category
+editor. Same discipline as the builder: the app does math, the brain does
+judgment.
+
+### The daily message
+One short line per day.
+  - Leads with runway/balance when cash is tight. Nothing outranks it.
+  - Names recurring charges specifically.
+  - Flags committed spending that exceeds available cash BEFORE it happens, not
+    after.
+  - On quiet days: something true and steady, not manufactured alarm.
+    Silence-adjacent, not invented urgency.
+  - Never flags declared items.
+  - Before writing, the brain reads its own finance insights from the last ~14
+    days and must not repeat itself.
+
+### Scope discipline
+One tab, one message a day, one row per insight. If this lane ever needs a second
+screen, it has outgrown its lane.
