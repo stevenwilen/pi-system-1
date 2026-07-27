@@ -17,10 +17,7 @@ const CREATABLE = [
   'body',
   'why',
   'priority',
-  'due',
   'frequency',
-  'evidence',
-  'confidence',
 ];
 
 const UPDATABLE = [...CREATABLE, 'status'];
@@ -277,43 +274,24 @@ async function create_entry(user_id, fields) {
   if (!row.type) return { error: 'type is required' };
   if (!row.title) return { error: 'title is required' };
 
-  const dateProblem = badDate(row.due);
-  if (dateProblem) return { error: dateProblem };
-
   const { data, error } = await supabase
     .from('entries')
     .insert(row)
     .select()
     .single();
 
-  if (error) return { error: describe(error, row.type) };
+  if (error) return { error: describe(error) };
   return data;
 }
 
-// 23505 is a unique violation, and the only unique indexes on entries are the
-// two priority rankings, so the raw Postgres text can be turned into something
-// actionable. The type is passed in because the message has to name which
-// ranking is full, and the error itself does not say.
-function describe(error, type) {
+// 23505 is a unique violation. Only project priority is unique now, the task
+// ranking index having gone with task ranking itself, so the message no longer
+// needs to work out which list is full.
+function describe(error) {
   if (error.code === '23505') {
-    const noun = type === 'task' ? 'task' : 'project';
-    return `that priority is already taken by another ${noun}. Move the ${noun} currently in that place down first, then try again.`;
+    return 'that priority is already taken by another project. Move the project currently in that place down first, then try again.';
   }
   return error.message;
-}
-
-// A date Postgres would reject arrives as a generic error naming the column,
-// which reads as a bug in the system rather than a malformed date.
-function badDate(value) {
-  if (value === null || value === undefined) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
-    return `not a valid date: ${value}. Use YYYY-MM-DD.`;
-  }
-  const d = new Date(`${value}T12:00:00Z`);
-  if (isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== String(value)) {
-    return `not a real date: ${value}.`;
-  }
-  return null;
 }
 
 /**
@@ -326,9 +304,6 @@ async function update_entry(user_id, id, fields) {
 
   const patch = pick(fields, UPDATABLE);
   if (Object.keys(patch).length === 0) return { error: 'no fields to update' };
-
-  const dateProblem = badDate(patch.due);
-  if (dateProblem) return { error: dateProblem };
 
   // updated_at is set by a database trigger, not from here — the client
   // clock and the database clock do not agree.
@@ -344,22 +319,7 @@ async function update_entry(user_id, id, fields) {
 
   const { data, error } = await q.select().maybeSingle();
 
-  if (error) {
-    // The row's own type, not the patch's: a rank collision is usually raised
-    // by an update that never mentions type, and the message has to say
-    // whether it is a project or a task that already holds that place.
-    let type = patch.type;
-    if (error.code === '23505' && !type) {
-      const { data: existing } = await supabase
-        .from('entries')
-        .select('type')
-        .eq('id', id)
-        .eq('user_id', user_id)
-        .maybeSingle();
-      type = existing && existing.type;
-    }
-    return { error: describe(error, type) };
-  }
+  if (error) return { error: describe(error) };
   if (!data) return { error: 'entry not found for this user' };
   return data;
 }

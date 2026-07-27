@@ -6,7 +6,6 @@ const path = require('path');
 const express = require('express');
 
 const supabase = require('./db');
-const { search_entries, update_entry } = require('./tools');
 const { summary } = require('./usage');
 
 // Requiring the scheduler starts its cron loop as a side effect, which is how
@@ -30,22 +29,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 // in place with its rows: dropping a table is the one move that cannot be
 // undone, and an unread table costs nothing.
 
-// --- what I've noticed -----------------------------------------------------
-
-app.get('/observations', async (req, res) => {
-  const rows = await search_entries(CURRENT_USER, null, 'observation', 100);
-  if (rows.error) return res.status(500).json({ error: rows.error });
-  res.json({ observations: rows });
-});
-
-app.post('/observations/:id/delete', async (req, res) => {
-  const row = await update_entry(CURRENT_USER, req.params.id, {
-    status: 'deleted',
-  });
-  if (row.error) return res.status(400).json({ error: row.error });
-  res.json({ deleted: row.id });
-});
-
 // --- everything the system currently holds ---------------------------------
 
 const hhmm = (t) => String(t || '').slice(0, 5);
@@ -59,7 +42,7 @@ app.get('/overview', async (req, res) => {
 
   const { data: entries, error } = await supabase
     .from('entries')
-    .select('id, type, title, body, why, priority, due, frequency, created_at')
+    .select('id, type, title, body, why, priority, frequency, created_at')
     .eq('user_id', CURRENT_USER)
     .eq('status', 'active')
     .order('created_at', { ascending: false });
@@ -76,19 +59,17 @@ app.get('/overview', async (req, res) => {
       wake_time: wake,
       telegram_linked: Boolean(profile && profile.telegram_chat_id),
     },
-    // Ranked as the brain sees them: priority first, then newest.
+    // Projects keep their rank: it is the person's own stack, top to bottom.
     projects: of('project').sort(
       (a, b) => (a.priority || 99) - (b.priority || 99)
     ),
     habits: of('habit'),
-    // Ranked as the brain sees them. Unranked tasks sort last rather than
-    // first, which is what an absent priority means.
-    tasks: of('task').sort((a, b) => (a.priority || 99) - (b.priority || 99)),
-    ideas: of('idea'),
-    waiting: of('waiting'),
-    // `schedule` is gone with the eight digest jobs. Nothing is delivered on a
-    // timer until per-block sending is built, and reporting a schedule that no
-    // longer runs is worse than reporting none.
+    // Tasks are no longer ranked. They belong in the stale list beside habits
+    // and projects, ordered by how long since they were last scheduled, which
+    // needs blocks and so arrives with the stale panel. Newest-first until then.
+    tasks: of('task'),
+    // `ideas`, `waiting` and `schedule` are gone. Their rows still exist and
+    // are untouched; nothing surfaces them any more.
   });
 });
 

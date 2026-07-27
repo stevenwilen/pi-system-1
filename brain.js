@@ -89,24 +89,11 @@ const TOOL_SCHEMAS = [
         why: { type: 'string', description: 'Projects only. Required.' },
         priority: {
           type: 'integer',
-          description: 'Projects and tasks. 1 is highest. No two may share one.',
-        },
-        due: {
-          type: 'string',
-          description: 'Tasks only. The day it should be done by, YYYY-MM-DD.',
+          description: 'Projects only. 1 is highest. No two may share one.',
         },
         frequency: {
           type: 'string',
           description: "Habits only, e.g. 'daily', '3x/week'.",
-        },
-        evidence: {
-          type: 'string',
-          description: 'Observations only. What caused it.',
-        },
-        confidence: {
-          type: 'integer',
-          description:
-            'Observations only. 0 to 100. 90 or above means they said it outright.',
         },
       },
       required: ['type', 'title'],
@@ -124,10 +111,7 @@ const TOOL_SCHEMAS = [
         body: { type: 'string' },
         why: { type: 'string' },
         priority: { type: 'integer' },
-        due: { type: 'string', description: 'YYYY-MM-DD.' },
         frequency: { type: 'string' },
-        evidence: { type: 'string' },
-        confidence: { type: 'integer', description: '0 to 100.' },
         status: { type: 'string', enum: ['active', 'deleted', 'done'] },
       },
       required: ['id'],
