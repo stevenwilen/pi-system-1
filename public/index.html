@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
     />
-    <meta name="theme-color" content="#fdf8f1" />
+    <meta name="theme-color" content="#16130F" />
     <title>Personal Planning System</title>
 
     <link rel="manifest" href="/manifest.json" />
@@ -19,42 +19,26 @@
     <meta name="apple-mobile-web-app-title" content="Planner" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <style>
+      /* Dusk. Built for a phone in a dark room at the end of the day, so the
+         whole surface sits close together in value and only the two things
+         you can act on carry any saturation. */
       :root {
-        /* Taken from the mascot. Coral is the brand; everything else is
-           built around it. */
-        --coral: #ff7a66;
-        --coral-deep: #e85b45;
-        --blush: #ffb4a3;
-        --bg: #fff3ec;
-        --surface: #ffffff;
-        --sunk: #fce4da;
-        --line: #f7ded3;
+        --bg: #16130f;        /* warm near-black, never blue-black */
+        --surface: #211d18;   /* cards and rows */
+        --recessed: #1c1913;  /* set into the page, not raised off it */
+        --line: #2c2721;      /* hairlines */
 
-        /* One warm near-black for every piece of text. The dim variant is
-           the same ink at lower opacity, so nothing turns grey. */
-        --text: #2b2118;
-        --muted: rgba(43, 33, 24, 0.55);
+        --text: #ede7de;
+        --muted: #8b8177;
+        --dim: #6b6459;       /* disabled, completed, spent */
 
-        --brand: var(--coral);
-        /* Ink, not white: white on coral is about 2.5:1 and unreadable. */
-        --brand-text: #2b2118;
-        --danger: #c4432c;
+        /* Amber means actionable. It appears on the steppers and on Confirm
+           and nowhere else, so anything glowing is a thing you can press. */
+        --amber: #e0a458;
+        --warn: #c4694a;      /* a miss, or a collision */
 
-        /* Category accents. Used only on chips and badges, never as
-           general chrome, so they stay meaningful. */
-        --habit: #2fb8a8;
-        --habit-soft: #d7f4f0;
-        --habit-ink: #12665c;
-        --project: #9b7be8;
-        --project-soft: #ede5fd;
-        --project-ink: #55399b;
-        --task: #4a90d9;
-        --task-soft: #dfecf9;
-        --task-ink: #1f5b92;
-
-        --shadow-sm: 0 1px 2px rgba(120, 63, 45, 0.07);
-        --shadow: 0 1px 2px rgba(120, 63, 45, 0.06),
-          0 6px 16px rgba(120, 63, 45, 0.08);
+        --pinned-line: #3a332a;
+        --radius: 10px;
       }
 
       * {
@@ -70,8 +54,6 @@
       body {
         background: var(--bg);
         color: var(--text);
-        /* ui-rounded resolves to SF Pro Rounded on iPhone, which is where the
-           friendliness actually comes from. */
         font: 15px/1.5 ui-rounded, "SF Pro Rounded", -apple-system,
           BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Roboto,
           system-ui, sans-serif;
@@ -80,73 +62,68 @@
         flex-direction: column;
         height: 100dvh;
         overscroll-behavior: none;
-        /* kills the double-tap-to-zoom gesture and its 300ms tap delay */
         touch-action: manipulation;
       }
 
       header {
         flex: none;
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        padding: 12px 18px 9px;
-        padding-top: max(12px, env(safe-area-inset-top));
-        font-size: 17px;
-        font-weight: 700;
-        letter-spacing: -0.01em;
-        background: var(--bg);
-      }
-
-      header img {
-        width: 26px;
-        height: 24px;
+        padding: 14px 18px 10px;
+        padding-top: max(14px, env(safe-area-inset-top));
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: var(--muted);
       }
 
       main {
         flex: 1;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
-        padding: 4px 16px 28px;
+        padding: 2px 14px 32px;
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: 22px;
       }
 
+      /* --- sections --- */
+
       .group {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+
+      .group-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 2px 2px;
+      }
+
+      .group-head h2 {
+        margin: 0;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      /* Tight horizontally, generous vertically: the eye runs down a list at
+         night, and side padding only narrows the text. */
+      .card {
+        background: var(--surface);
+        border-radius: var(--radius);
+        padding: 14px 13px;
         display: flex;
         flex-direction: column;
         gap: 8px;
       }
 
-      .group-head {
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
-        padding-left: 2px;
-      }
-
-      .group-head h2 {
-        margin: 0;
-        font-size: 11.5px;
-        font-weight: 700;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }
-
-      .card {
-        background: var(--surface);
-        border-radius: 18px;
-        padding: 14px 15px;
-        display: flex;
-        flex-direction: column;
-        gap: 7px;
-        box-shadow: var(--shadow);
-      }
-
       .none {
         font-size: 13px;
         color: var(--muted);
+        line-height: 1.45;
       }
 
       /* --- buttons --- */
@@ -157,7 +134,7 @@
         padding: 0;
         font: inherit;
         font-size: 12.5px;
-        font-weight: 650;
+        font-weight: 600;
         color: var(--muted);
         cursor: pointer;
       }
@@ -167,86 +144,98 @@
       }
 
       .linkbtn.danger {
-        color: var(--danger);
+        color: var(--warn);
       }
 
+      /* Quiet by design. Adding something is not the point of the screen. */
       .addbtn {
         margin-left: auto;
-        border: 0;
+        border: 1px solid var(--line);
         border-radius: 999px;
-        background: var(--coral);
-        color: var(--brand-text);
+        background: none;
+        color: var(--muted);
         font: inherit;
-        font-size: 12.5px;
-        font-weight: 700;
-        padding: 3px 12px;
+        font-size: 11.5px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        padding: 3px 11px;
         cursor: pointer;
       }
 
       .addbtn:active {
-        background: var(--coral-deep);
-        color: #fff;
+        background: var(--surface);
+        color: var(--text);
       }
 
+      /* Used inside forms. Not amber: saving a row is not the commitment the
+         amber is reserved for. */
       .primary {
-        border: 0;
-        border-radius: 12px;
-        background: var(--coral);
-        color: var(--brand-text);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--recessed);
+        color: var(--text);
         font: inherit;
-        font-weight: 700;
-        padding: 9px 16px;
+        font-weight: 600;
+        padding: 10px 16px;
         cursor: pointer;
       }
 
       .primary:active {
-        background: var(--coral-deep);
-        color: #fff;
+        background: var(--surface);
       }
 
       .primary:disabled {
-        opacity: 0.5;
+        color: var(--dim);
+        cursor: default;
       }
 
-      /* --- an item in the stale list --- */
+      /* --- stale rows --- */
 
+      /* Square. A single-sided border against a rounded corner leaves a wedge
+         of background showing where the two curves fail to meet. */
       .item {
+        background: var(--surface);
+        border-radius: 0;
+        border-left: 3px solid var(--line);
+        padding: 13px 13px 12px 12px;
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 7px;
+      }
+
+      #stale,
+      #paused {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
       }
 
       .item-top {
         display: flex;
         align-items: flex-start;
-        gap: 10px;
+        gap: 12px;
       }
 
       .item-title {
         flex: 1;
         min-width: 0;
         font-size: 14.5px;
-        font-weight: 600;
-        letter-spacing: -0.005em;
+        font-weight: 500;
+        line-height: 1.35;
         overflow-wrap: anywhere;
       }
 
-      /* Tappable, and it has to look it. Underlined on press rather than
-         always, so the list still reads as a list and not a page of links. */
       .item-title.pullable {
         cursor: pointer;
       }
 
       .item-title.pullable:active {
-        color: var(--coral-deep);
+        color: var(--amber);
       }
 
-      /* Days sit right and never wrap, so the column of numbers stays
-         readable no matter how long the titles are. */
       .days {
         flex: none;
-        font-size: 12px;
-        font-weight: 700;
+        font-size: 11.5px;
         font-variant-numeric: tabular-nums;
         color: var(--muted);
         white-space: nowrap;
@@ -256,89 +245,259 @@
       .item-meta {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 9px;
         flex-wrap: wrap;
-      }
-
-      .tag {
-        font-size: 11px;
-        font-weight: 650;
-        padding: 2px 8px;
-        border-radius: 999px;
-      }
-
-      .tag.habit {
-        background: var(--habit-soft);
-        color: var(--habit-ink);
-      }
-      .tag.project {
-        background: var(--project-soft);
-        color: var(--project-ink);
-      }
-      .tag.task {
-        background: var(--task-soft);
-        color: var(--task-ink);
       }
 
       .why {
         font-size: 12.5px;
         color: var(--muted);
+        line-height: 1.45;
         overflow-wrap: anywhere;
+      }
+
+      /* The type is a label, not a badge. No fill, no colour of its own. */
+      .tag {
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--dim);
       }
 
       .actions {
         margin-left: auto;
         display: flex;
-        gap: 12px;
+        gap: 14px;
       }
 
-      .card.paused {
-        background: transparent;
-        box-shadow: none;
-        border: 1px dashed var(--line);
+      .item.paused {
+        background: none;
+        border-left-color: var(--line);
       }
 
-      /* --- the add form --- */
+      .item.paused .item-title {
+        color: var(--dim);
+      }
+
+      /* --- the builder --- */
+
+      #builder {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      .block {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        background: var(--surface);
+        border-radius: var(--radius);
+        padding: 11px 12px;
+      }
+
+      /* Recessed, and outlined rather than filled. A calendar event is a wall
+         the day has to fit around, not a feature of the plan. */
+      .block.pinned {
+        background: var(--recessed);
+        border: 1px solid var(--pinned-line);
+        padding: 10px 11px;
+      }
+
+      .block.pinned .block-title {
+        color: var(--muted);
+      }
+
+      .handle {
+        flex: none;
+        width: 18px;
+        text-align: center;
+        color: var(--dim);
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
+        font-size: 14px;
+      }
+
+      .block.pinned .handle {
+        cursor: default;
+      }
+
+      .block-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+
+      .block-title {
+        font-size: 14px;
+        font-weight: 500;
+        overflow-wrap: anywhere;
+      }
+
+      .block-when {
+        font-size: 11.5px;
+        color: var(--dim);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.01em;
+      }
+
+      /* --- steppers: actionable, so amber --- */
+
+      .stepper {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 3px;
+      }
+
+      .stepper button {
+        width: 30px;
+        height: 30px;
+        border: 1px solid rgba(224, 164, 88, 0.28);
+        border-radius: 8px;
+        background: none;
+        color: var(--amber);
+        font: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .stepper button:active {
+        background: rgba(224, 164, 88, 0.12);
+      }
+
+      .stepper button:disabled {
+        border-color: var(--line);
+        color: var(--dim);
+        cursor: default;
+      }
+
+      .stepper span {
+        min-width: 50px;
+        text-align: center;
+        font-size: 11.5px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+      }
+
+      .drop {
+        border: 1px dashed var(--pinned-line);
+        border-radius: var(--radius);
+        height: 44px;
+      }
+
+      .block.dragging {
+        opacity: 0.35;
+      }
+
+      /* Shown, never resolved. */
+      .clash {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--warn);
+        padding: 3px 13px 5px;
+        line-height: 1.4;
+      }
+
+      /* --- the end of the day --- */
+
+      #ends {
+        gap: 0;
+        padding: 0;
+      }
+
+      .ends-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        font-size: 12.5px;
+        color: var(--muted);
+        padding: 14px 14px 13px;
+      }
+
+      .ends-row strong {
+        font-size: 19px;
+        font-weight: 600;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.01em;
+      }
+
+      .ends-row.late strong {
+        color: var(--warn);
+      }
+
+      /* The hairline is the whole separation. The time is a readout, Confirm
+         is a commitment, and they should not read as one control. */
+      #ends .primary {
+        border: 0;
+        border-top: 1px solid var(--line);
+        border-radius: 0 0 var(--radius) var(--radius);
+        background: none;
+        color: var(--amber);
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        padding: 14px;
+      }
+
+      #ends .primary:active {
+        background: rgba(224, 164, 88, 0.1);
+      }
+
+      #ends .primary:disabled {
+        color: var(--dim);
+        background: none;
+      }
+
+      /* --- forms --- */
 
       form {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 11px;
       }
 
       .seg {
         display: flex;
-        gap: 4px;
-        background: var(--sunk);
-        border-radius: 12px;
+        gap: 3px;
+        background: var(--recessed);
+        border-radius: 9px;
         padding: 3px;
       }
 
       .seg button {
         flex: 1;
         border: 0;
-        border-radius: 9px;
+        border-radius: 7px;
         background: none;
         font: inherit;
-        font-size: 13px;
-        font-weight: 650;
+        font-size: 12.5px;
+        font-weight: 600;
         color: var(--muted);
-        padding: 6px 0;
+        padding: 7px 0;
         cursor: pointer;
       }
 
       .seg button[aria-pressed="true"] {
         background: var(--surface);
         color: var(--text);
-        box-shadow: var(--shadow-sm);
       }
 
       label {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        font-size: 12px;
-        font-weight: 650;
+        gap: 5px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
         color: var(--muted);
       }
 
@@ -347,30 +506,38 @@
       textarea {
         font: inherit;
         font-size: 15px;
+        font-weight: 400;
+        letter-spacing: normal;
+        text-transform: none;
         color: var(--text);
-        background: var(--bg);
+        background: var(--recessed);
         border: 1px solid var(--line);
-        border-radius: 11px;
-        padding: 9px 11px;
+        border-radius: 9px;
+        padding: 10px 11px;
         width: 100%;
       }
 
       textarea {
         resize: vertical;
-        min-height: 60px;
+        min-height: 62px;
+        line-height: 1.45;
       }
 
       input:focus,
       select:focus,
       textarea:focus {
-        outline: 2px solid var(--blush);
+        outline: 1px solid var(--amber);
         outline-offset: -1px;
+      }
+
+      input::placeholder {
+        color: var(--dim);
       }
 
       .row {
         display: flex;
-        gap: 10px;
-        align-items: flex-end;
+        gap: 11px;
+        align-items: center;
       }
 
       .row .grow {
@@ -379,142 +546,17 @@
 
       .err {
         font-size: 12.5px;
-        color: var(--danger);
+        color: var(--warn);
+        line-height: 1.4;
       }
 
       .hidden {
         display: none;
       }
-
-      /* --- the builder --- */
-
-      #builder {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .block {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        background: var(--surface);
-        border-radius: 16px;
-        padding: 10px 12px;
-        box-shadow: var(--shadow);
-      }
-
-      /* touch-action: none is what makes a drag a drag on a phone. Without it
-         the browser claims the gesture for scrolling and the handle never
-         receives a move event. */
-      .handle {
-        flex: none;
-        width: 22px;
-        text-align: center;
-        color: var(--muted);
-        cursor: grab;
-        touch-action: none;
-        user-select: none;
-        font-size: 15px;
-      }
-
-      .block.pinned .handle {
-        cursor: default;
-        color: var(--blush);
-      }
-
-      .block-body {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-
-      .block-title {
-        font-size: 14px;
-        font-weight: 600;
-        overflow-wrap: anywhere;
-      }
-
-      .block-when {
-        font-size: 12px;
-        color: var(--muted);
-        font-variant-numeric: tabular-nums;
-      }
-
-      .stepper {
-        flex: none;
-        display: flex;
-        align-items: center;
-        gap: 2px;
-      }
-
-      .stepper button {
-        width: 28px;
-        height: 28px;
-        border: 0;
-        border-radius: 9px;
-        background: var(--sunk);
-        color: var(--text);
-        font: inherit;
-        font-size: 16px;
-        font-weight: 700;
-        line-height: 1;
-        cursor: pointer;
-      }
-
-      .stepper button:disabled {
-        opacity: 0.35;
-      }
-
-      .stepper span {
-        min-width: 52px;
-        text-align: center;
-        font-size: 12px;
-        font-weight: 650;
-        font-variant-numeric: tabular-nums;
-      }
-
-      .drop {
-        border: 1px dashed var(--coral);
-        border-radius: 16px;
-        height: 44px;
-      }
-
-      .block.dragging {
-        opacity: 0.4;
-      }
-
-      /* A collision is shown and never resolved. The builder will not move a
-         pinned block or silently shrink anything to make room. */
-      .clash {
-        font-size: 12px;
-        font-weight: 650;
-        color: var(--danger);
-        padding: 2px 12px;
-      }
-
-      .ends-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        font-size: 14px;
-      }
-
-      .ends-row strong {
-        font-size: 18px;
-        font-variant-numeric: tabular-nums;
-      }
-
-      .ends-row.late strong {
-        color: var(--danger);
-      }
     </style>
   </head>
   <body>
     <header>
-      <img src="/mascot.svg" alt="" aria-hidden="true" />
       Planner
     </header>
 
@@ -645,8 +687,36 @@
         return node;
       }
 
-      function itemCard(item) {
+      // Staleness as temperature. The edge of each row is coloured by where it
+      // sits in the range currently on screen, so the list reads as a gradient
+      // from warm at the bottom to cold at the top rather than as a set of
+      // categories. Relative, not absolute: eleven days means something
+      // different on a list where the worst is twelve than on one where the
+      // worst is ninety.
+      const FRESH = [0x7d, 0x8b, 0x6a];
+      const MIDDLE = [0x8a, 0x9a, 0x9e];
+      const COLDEST = [0x6b, 0x93, 0xb8];
+
+      const hex = (rgb) =>
+        '#' + rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+
+      const mix = (from, to, t) => from.map((v, i) => v + (to[i] - v) * t);
+
+      function temperature(days, min, max) {
+        if (!(max > min)) return hex(MIDDLE);
+        const t = (days - min) / (max - min);
+        return t < 0.5
+          ? hex(mix(FRESH, MIDDLE, t * 2))
+          : hex(mix(MIDDLE, COLDEST, (t - 0.5) * 2));
+      }
+
+      function itemCard(item, range) {
         const card = el('div', 'card item' + (item.paused ? ' paused' : ''));
+
+        // Paused rows keep the neutral hairline. A pause is not a temperature.
+        if (range && !item.paused) {
+          card.style.borderLeftColor = temperature(item.days, range.min, range.max);
+        }
 
         const top = el('div', 'item-top');
         const title = el('div', 'item-title', item.title);
@@ -722,7 +792,9 @@
           empty.append(el('span', 'none', 'Nothing here yet. Add a habit, project or task.'));
           stale.append(empty);
         } else {
-          for (const item of data.items) stale.append(itemCard(item));
+          const ages = data.items.map((i) => i.days);
+          const range = { min: Math.min(...ages), max: Math.max(...ages) };
+          for (const item of data.items) stale.append(itemCard(item, range));
         }
 
         paused.replaceChildren();
