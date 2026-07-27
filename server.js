@@ -12,6 +12,8 @@ const supabase = require('./db');
 const { create_entry, update_entry, get_calendar } = require('./tools');
 const { lastScheduled, daysBetween } = require('./staleness');
 const { generateForPlan } = require('./messages');
+const { readTransactions } = require('./sheet');
+const { summarise } = require('./money');
 
 // Requiring the scheduler starts its cron loop as a side effect, which is how
 // delivery runs in this one process. Nothing is imported from it.
@@ -430,6 +432,42 @@ app.post('/blocks/:id/miss', async (req, res) => {
   if (!data) return res.status(404).json({ error: 'block not found' });
 
   res.json({ id: data.id, completed: data.completed, miss_reason: data.miss_reason });
+});
+
+// --- finance numbers --------------------------------------------------------
+
+/**
+ * The finance screen, counted.
+ *
+ * Reads the sheet, counts, answers, and keeps nothing. No transaction reaches
+ * the database and none is cached. Pure arithmetic: no model call, and no
+ * judgment about what any of it means.
+ */
+app.get('/finance-summary', async (req, res) => {
+  const days = Number(req.query.days) || 60;
+
+  const { data: profile } = await supabase
+    .from('profile')
+    .select('timezone')
+    .eq('user_id', CURRENT_USER)
+    .maybeSingle();
+
+  const today = todayIn((profile && profile.timezone) || 'UTC');
+
+  // readTransactions never throws and returns [] on any failure, so a sheet
+  // that cannot be read costs the numbers and never the request.
+  const rows = await readTransactions(days);
+
+  if (!rows.length) {
+    return res.json({
+      days,
+      today,
+      connected: false,
+      ...summarise([], today),
+    });
+  }
+
+  res.json({ days, today, connected: true, ...summarise(rows, today) });
 });
 
 // --- finance intent ---------------------------------------------------------

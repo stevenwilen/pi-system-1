@@ -173,6 +173,131 @@
         overflow-wrap: anywhere;
       }
 
+      /* --- the money numbers --- */
+
+      #money-numbers {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      /* The sync line is always present, whether or not the sheet is stale. A
+         screen that only mentions the date when something is wrong teaches you
+         to read its silence as freshness. */
+      .sync {
+        font-size: 12px;
+        color: var(--muted);
+        padding: 10px 13px;
+        background: var(--surface);
+        border-radius: var(--radius) var(--radius) 0 0;
+      }
+
+      .sync.stale {
+        color: var(--warn);
+        border-left: 2px solid var(--warn);
+        border-radius: 0 var(--radius) 0 0;
+      }
+
+      .total {
+        background: var(--surface);
+        padding: 16px 13px;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+
+      .total .figure {
+        font-size: 26px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+      }
+
+      .total .label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .cat {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        background: var(--surface);
+        padding: 9px 13px;
+      }
+
+      .cat:last-of-type {
+        border-radius: 0 0 var(--radius) var(--radius);
+      }
+
+      .cat-name {
+        flex: 1;
+        min-width: 0;
+        font-size: 13.5px;
+        overflow-wrap: anywhere;
+      }
+
+      .cat-count {
+        flex: none;
+        font-size: 11px;
+        color: var(--dim);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .cat-amount {
+        flex: none;
+        font-size: 13.5px;
+        font-variant-numeric: tabular-nums;
+        min-width: 74px;
+        text-align: right;
+      }
+
+      /* More came back than went out. Not an error, and not spending. */
+      .cat.inflow .cat-amount {
+        color: var(--dim);
+      }
+
+      /* Internal movement. Visible, in its own block, in neither total. */
+      .moved {
+        margin-top: 14px;
+        background: var(--recessed);
+        border: 1px solid var(--pinned-line);
+        border-radius: var(--radius);
+        padding: 12px 13px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .moved-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+
+      .moved-head strong {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .moved-row {
+        display: flex;
+        gap: 10px;
+        font-size: 11.5px;
+        color: var(--dim);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .moved-row span:first-child {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
       main {
         flex: 1;
         overflow-y: auto;
@@ -849,10 +974,11 @@
       </div>
 
       <div class="group">
-        <div class="group-head"><h2>Numbers</h2></div>
-        <div class="card">
-          <span class="none">Balance, what is committed against it, and runway. Not built. Nothing here reads the sheet yet.</span>
+        <div class="group-head">
+          <h2>Spending</h2>
+          <span class="none" id="money-window"></span>
         </div>
+        <div id="money-numbers"></div>
       </div>
      </div>
     </main>
@@ -1577,7 +1703,96 @@
       $('tab-money').onclick = () => {
         showTab('money');
         loadIntent();
+        loadMoney();
       };
+
+      // --- the numbers ------------------------------------------------------
+      //
+      // Arithmetic that already happened on the server. This renders it and
+      // does not interpret it: no advice, no judgment, nothing coloured to
+      // suggest a figure is good or bad.
+
+      const amount = (n) => (n < 0 ? '+' : '') + Math.abs(n).toFixed(2);
+
+      function syncLine(sync) {
+        if (!sync.newest) return 'No transactions in this window.';
+        if (sync.days_ago <= 0) return 'Last transaction today.';
+        if (sync.days_ago === 1) return 'Last transaction yesterday.';
+        if (!sync.stale) return `Last transaction ${sync.days_ago} days ago.`;
+        // Named as a sync, not as spending. A balance that looks current and
+        // is not is worse than no balance at all.
+        return `Last synced ${sync.days_ago} days ago, on ${sync.newest}. Anything since then is missing.`;
+      }
+
+      async function loadMoney() {
+        const box = $('money-numbers');
+        let data;
+        try {
+          data = await api('/finance-summary?days=60');
+        } catch (err) {
+          box.replaceChildren(el('div', 'card', err.message));
+          return;
+        }
+
+        box.replaceChildren();
+        $('money-window').textContent = data.connected
+          ? `${data.window.from} to ${data.window.to}`
+          : '';
+
+        if (!data.connected) {
+          const empty = el('div', 'card');
+          empty.append(
+            el('span', 'none', 'The sheet returned nothing. The reason is in the server log; the numbers stay blank rather than guessing.')
+          );
+          box.append(empty);
+          return;
+        }
+
+        const sync = el('div', 'sync' + (data.sync.stale ? ' stale' : ''), syncLine(data.sync));
+        box.append(sync);
+
+        const total = el('div', 'total');
+        total.append(el('div', 'label', `Spent over ${data.days} days, transfers excluded`));
+        total.append(el('div', 'figure', amount(data.total_spend)));
+        box.append(total);
+
+        for (const c of data.categories) {
+          // A category can net negative when a refund landed inside the window
+          // and the charge it offsets did not.
+          const row = el('div', 'cat' + (c.amount < 0 ? ' inflow' : ''));
+          row.append(el('div', 'cat-name', c.category));
+          row.append(el('div', 'cat-count', String(c.count)));
+          row.append(el('div', 'cat-amount', amount(c.amount)));
+          box.append(row);
+        }
+
+        if (data.uncategorised.count) {
+          const row = el('div', 'cat');
+          row.append(el('div', 'cat-name', 'Not yet categorised'));
+          row.append(el('div', 'cat-count', String(data.uncategorised.count)));
+          row.append(el('div', 'cat-amount', amount(data.uncategorised.amount)));
+          box.append(row);
+        }
+
+        if (data.transfers.count) {
+          const moved = el('div', 'moved');
+
+          const head = el('div', 'moved-head');
+          head.append(
+            el('span', null, `Moved between accounts, ${data.transfers.count} rows, in neither total`)
+          );
+          head.append(el('strong', null, amount(-data.transfers.moved)));
+          moved.append(head);
+
+          for (const t of data.transfers.rows) {
+            const row = el('div', 'moved-row');
+            row.append(el('span', null, `${t.date}  ${t.description}`));
+            row.append(el('span', null, amount(-t.amount)));
+            moved.append(row);
+          }
+          box.append(moved);
+        }
+      }
 
       // --- what the person has declared about their money -------------------
       //
