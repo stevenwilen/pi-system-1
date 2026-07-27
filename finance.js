@@ -12,15 +12,19 @@ require('dotenv').config();
 const TIMEOUT_MS = 15000;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
-// The 12 categories and their types, held here rather than read from the
-// hidden Categories tab, which the database description says exists for the
-// automation and must not be relied on.
+// Spec section 4, as of 2026-07-27. The spec is explicit that this is a
+// snapshot and that the Categories tab wins at runtime, so this is a fallback
+// for when that tab is not reachable, not the source of truth.
 //
-// A value outside this list is not assumed to be spending. The expensive
-// mistake is a renamed or retired Transfer category being counted, which both
-// inflates spending and invents income that was never earned, so anything
-// unrecognised is excluded from the totals and reported instead.
-const CATEGORY_TYPE = new Map([
+// The tab is hidden, and Google's publish-to-web dropdown does not offer
+// hidden sheets, so over published CSV this fallback is usually what runs.
+// It is kept exact rather than approximate for that reason.
+//
+// A value outside whichever map is in force is never assumed to be spending.
+// Counting a mistyped Transfer both inflates spending and invents income, and
+// the spec records a misspelling that quietly drained every total for weeks,
+// so unrecognised values are excluded and reported instead.
+const CATEGORY_TYPE_FALLBACK = new Map([
   ['Food', 'Expense'],
   ['Groceries', 'Expense'],
   ['Gas', 'Expense'],
@@ -31,9 +35,13 @@ const CATEGORY_TYPE = new Map([
   ['School', 'Expense'],
   ['Fees', 'Expense'],
   ['Other', 'Expense'],
+  ['Gift', 'Expense'],
+  ['Shopping', 'Expense'],
   ['Income', 'Income'],
   ['Transfer', 'Transfer'],
 ]);
+
+const VALID_TYPES = new Set(['Expense', 'Income', 'Transfer']);
 
 let cache = { at: 0, data: null };
 
@@ -213,6 +221,47 @@ async function fetchCsv(rawUrl, label) {
 
 // --- loading -----------------------------------------------------------------
 
+/**
+ * Category -> Type, preferring the Categories tab as the spec requires and
+ * falling back to the snapshot when it is not published.
+ *
+ * A configured tab that fails to load does not throw. Losing the category map
+ * entirely would zero every total, which is a far worse outcome than running
+ * on a snapshot that is very likely still correct, so the fallback is used and
+ * the substitution is reported rather than hidden.
+ */
+async function categoryTypes() {
+  const url = process.env.FINANCE_CATEGORIES_CSV_URL;
+  if (!url) return { map: CATEGORY_TYPE_FALLBACK, source: 'built-in', note: null };
+
+  try {
+    const rows = await fetchCsv(url, 'Categories');
+    if (!rows.length || !('Type' in rows[0])) {
+      throw new Error(
+        `it has no Type column, its headers are: ${Object.keys(rows[0] || {}).join(', ')}`
+      );
+    }
+
+    const map = new Map();
+    for (const r of rows) {
+      const name = (r.Category || '').trim();
+      const type = (r.Type || '').trim();
+      // A row with a type outside the three is itself a data error, and
+      // trusting it would misclassify every transaction using that category.
+      if (name && VALID_TYPES.has(type)) map.set(name, type);
+    }
+    if (!map.size) throw new Error('it produced no usable rows');
+
+    return { map, source: 'Categories tab', note: null };
+  } catch (err) {
+    return {
+      map: CATEGORY_TYPE_FALLBACK,
+      source: 'built-in',
+      note: `the Categories tab could not be read (${err.message}), so the built-in category list was used instead.`,
+    };
+  }
+}
+
 async function load() {
   const txUrl = process.env.FINANCE_TRANSACTIONS_CSV_URL;
   if (!txUrl) return null;
@@ -220,6 +269,7 @@ async function load() {
   if (cache.data && Date.now() - cache.at < CACHE_TTL_MS) return cache.data;
 
   const tx = await fetchCsv(txUrl, 'Transactions');
+  const categories = await categoryTypes();
 
   // A published tab missing these headers means a different tab was published,
   // which would otherwise look like an empty month rather than a mistake.
@@ -241,17 +291,18 @@ async function load() {
         category,
         status: (t.Status || '').trim(),
         note: (t.Note || '').trim(),
-        // '' means not yet reviewed. 'Unknown' means a category outside the
-        // 12, which is a different problem and is counted separately.
-        type: category ? CATEGORY_TYPE.get(category) || 'Unknown' : '',
+        // '' means not yet reviewed. 'Unknown' means a category with no entry
+        // in the map, which is a different problem and is counted separately.
+        type: category ? categories.map.get(category) || 'Unknown' : '',
       };
     })
     // A row whose date could not be read is dropped rather than counted into
     // the wrong period.
     .filter((r) => r.date);
 
-  cache = { at: Date.now(), data: rows };
-  return rows;
+  const data = { rows, categories };
+  cache = { at: Date.now(), data };
+  return data;
 }
 
 // --- helpers -----------------------------------------------------------------
@@ -338,13 +389,15 @@ function likelyRecurring(rows) {
  * not configured, so the caller can stay silent rather than guess.
  */
 async function brief() {
-  let rows;
+  let loaded;
   try {
-    rows = await load();
+    loaded = await load();
   } catch (err) {
     return { error: err.message };
   }
-  if (!rows) return null;
+  if (!loaded) return null;
+
+  const { rows, categories } = loaded;
   if (!rows.length) return { empty: true };
 
   const now = iso(new Date());
@@ -407,14 +460,34 @@ async function brief() {
     Math.round((new Date(now) - new Date(earliest)) / 86400000)
   );
 
-  // Reported as a date so the reader can judge it themselves. This was once a
-  // staleness warning, but a gap looks the same whether the feed broke or
-  // nothing was bought, and the system cannot tell those apart from the sheet.
+  // Reported as dates so the reader can judge them. The gap at the recent end
+  // looks the same whether the feed broke or nothing was bought, and the gap
+  // at the far end is a hard retention limit: the provider supplies about 30
+  // days and nothing older exists anywhere, so any request for a longer trend
+  // has to be answered against this range rather than assumed.
   const latest = rows.reduce((a, r) => (r.date > a ? r.date : a), '');
+  const oldest = rows.reduce((a, r) => (r.date < a ? r.date : a), latest);
+
+  // Status is derived from Category, so the two disagreeing means something
+  // upstream is wrong. The spec asks for it to be reported rather than fixed.
+  const inconsistent = rows.filter(
+    (r) =>
+      (r.status === 'Needs Review' && r.category) ||
+      (r.status !== 'Needs Review' && r.status && !r.category)
+  ).length;
 
   return {
     sync: {
       latest_transaction: latest || null,
+      earliest_transaction: oldest || null,
+      days_of_history: oldest
+        ? Math.round((new Date(latest) - new Date(oldest)) / 86400000) + 1
+        : 0,
+    },
+    categories: {
+      source: categories.source,
+      note: categories.note,
+      count: categories.map.size,
     },
     window: { from: d30, to: now },
     week: { spend: spend(week), income: income(week) },
@@ -428,8 +501,16 @@ async function brief() {
           ? Math.round(((monthIncome - monthSpend) / monthIncome) * 100)
           : null,
     },
-    daily_average_90d: spend(quarter) / days,
+    daily_average: spend(quarter) / days,
+    daily_average_days: days,
     categories_month: top(byCategory(month), 8),
+    // Categories where more came back than went out, which the spec requires
+    // be reported rather than dropped for looking odd. It happens when a
+    // refund lands inside the window but the charge it offsets does not.
+    categories_net_positive: Object.entries(byCategory(month))
+      .filter(([, v]) => v < 0)
+      .map(([c, v]) => [c, -v])
+      .sort((a, b) => b[1] - a[1]),
     merchants_month: top(byMerchant(month), 8),
     week_changes: moved.slice(0, 6),
     biggest_this_week: biggest,
@@ -443,6 +524,7 @@ async function brief() {
       reviewed: month.filter((r) => r.status === 'Reviewed').length,
       auto: month.filter((r) => r.status === 'Auto').length,
       total_rows_30d: month.length,
+      status_mismatches: inconsistent,
     },
   };
 }
@@ -454,11 +536,12 @@ function render(b) {
   const L = [];
 
   L.push(`Window: last 30 days, ending ${b.window.to}`);
-  // Stated as a plain fact, not a warning. A gap here reads as a broken feed
-  // but is just as often a quiet week, and guessing between the two out loud
-  // raises a false alarm more often than it catches anything.
+  // Stated as plain facts, not warnings. A gap at the recent end reads as a
+  // broken feed but is just as often a quiet week. The far end is a hard
+  // limit: nothing older than this exists anywhere, so it bounds what can
+  // honestly be said about trends.
   L.push(
-    `Most recent transaction: ${b.sync.latest_transaction || 'none in the sheet'}`
+    `Data available: ${b.sync.earliest_transaction || 'none'} to ${b.sync.latest_transaction || 'none'} (${b.sync.days_of_history} days). Nothing older is recoverable.`
   );
   L.push('');
   L.push(`Last 7 days:      spent ${m(b.week.spend)}, income ${m(b.week.income)}`);
@@ -469,7 +552,12 @@ function render(b) {
   if (b.month.savings_rate !== null) {
     L.push(`Savings rate:     ${b.month.savings_rate}% of income kept`);
   }
-  L.push(`90-day average:   ${m(b.daily_average_90d)} per day`);
+  // Named for the span that actually exists. Calling this a 90-day average
+  // when only a few weeks are in the sheet invites exactly the long-range
+  // conclusion the data cannot support.
+  L.push(
+    `Daily average:    ${m(b.daily_average)} per day, across the ${b.daily_average_days} days since the first transaction`
+  );
 
   if (b.week_changes.length) {
     L.push('');
@@ -483,6 +571,16 @@ function render(b) {
   L.push('');
   L.push('Biggest categories, 30 days:');
   for (const [cat, amt] of b.categories_month) L.push(`  ${cat}: ${m(amt)}`);
+
+  if (b.categories_net_positive.length) {
+    L.push('');
+    L.push('Categories where money came back, 30 days:');
+    for (const [cat, amt] of b.categories_net_positive) {
+      L.push(
+        `  ${cat}: +${m(amt)} net, a refund landed in this window while the charge it offsets did not`
+      );
+    }
+  }
 
   L.push('');
   L.push('Biggest merchants, 30 days:');
@@ -523,6 +621,16 @@ function render(b) {
         `covering ${m(q.unknown_spend)} left out of every total above.`
     );
   }
+
+  if (q.status_mismatches) {
+    L.push(
+      `${q.status_mismatches} ${q.status_mismatches === 1 ? 'row has' : 'rows have'} a Status that disagrees with whether the Category is filled in, which should not happen.`
+    );
+  }
+
+  // Only surfaced when a configured source failed. A silent fall back to the
+  // snapshot would be indistinguishable from it having worked.
+  if (b.categories.note) L.push(b.categories.note);
 
   // Stated without a conclusion attached. Zero income means a payroll account
   // is not connected about as often as it means nothing was earned, and only
