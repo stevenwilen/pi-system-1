@@ -94,8 +94,13 @@ app.get('/entries', async (req, res) => {
         paused: Boolean(r.paused_at),
         // A paused item is never cold, whatever the last verdict said. The
         // person declared it set down, and 2.7 means that is not reopened.
+        //
+        // The reason is still returned. The judge is asked to say plainly that
+        // a paused item is paused, so it is the explanation for the false
+        // rather than a stale argument for a true, and dropping it would throw
+        // away the only thing that says why the row is quiet.
         cold: Boolean(r.cold) && !r.paused_at,
-        cold_reason: r.paused_at ? null : r.cold_reason,
+        cold_reason: r.cold_reason,
         last_scheduled: seen,
         days: Math.max(0, daysBetween(since, today)),
         sort_order: r.sort_order,

@@ -85,8 +85,17 @@ The number is the item's number above. The middle field is yes or no, nothing el
 
 /**
  * Returns index -> { cold, reason }, or null if the reply does not cleanly
- * cover every item. Partial output is refused: a verdict list with holes in it
- * would silently leave yesterday's answer on some rows and today's on others.
+ * cover every item.
+ *
+ * Structural problems are refused outright: a missing item, a repeated one, or
+ * anything other than yes or no. A verdict list with holes would leave
+ * yesterday's answer on some rows and today's on others, which is worse than
+ * leaving the whole set alone.
+ *
+ * Length is not a structural problem. An over-long reason is trimmed rather
+ * than thrown away, because discarding an entire day's judgment over one
+ * verbose sentence is a bad trade, and the reason is displayed as a single
+ * small line regardless.
  */
 function parseVerdicts(reply, count) {
   const found = new Map();
@@ -96,11 +105,15 @@ function parseVerdicts(reply, count) {
     if (!m) continue;
 
     const index = Number(m[1]);
-    const reason = m[3].trim();
+    let reason = m[3].trim();
 
     if (index < 1 || index > count) return null;
-    if (!reason || reason.length > MAX_REASON) return null;
+    if (!reason) return null;
     if (found.has(index)) return null;
+
+    if (reason.length > MAX_REASON) {
+      reason = reason.slice(0, MAX_REASON - 1).replace(/\s+\S*$/, '') + '…';
+    }
 
     found.set(index, { cold: m[2].toLowerCase() === 'yes', reason });
   }
@@ -125,8 +138,10 @@ async function judge(user_id, today) {
     const verdicts = parseVerdicts(reply, items.length);
 
     if (!verdicts) {
+      // The reply itself, not just the fact of failure. Without it, diagnosing
+      // a malformed answer means guessing at what the model actually said.
       console.error(
-        `[COLD] reply did not cover all ${items.length} items, leaving yesterday's verdicts in place`
+        `[COLD] reply did not cover all ${items.length} items, leaving yesterday's verdicts in place. Reply was:\n${String(reply).slice(0, 800)}`
       );
       return { judged: 0, reason: 'malformed' };
     }
