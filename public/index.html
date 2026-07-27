@@ -949,11 +949,12 @@
         el.id = 'welcome';
         el.innerHTML = `
           <img class="welcome-mascot" src="/mascot.svg" alt="" aria-hidden="true">
-          <p class="welcome-lead">I'm your personal intelligence system.</p>
+          <p class="welcome-lead">I plan your week, then I check in on it.</p>
           <div class="welcome-card">
-            <p>Tell me what you're working on, what you're trying to build, and how your days actually go. I remember all of it.</p>
-            <p>Then I plan your days around it, and come back to you during the week without being asked.</p>
-            <p class="quiet-line">Projects, habits, tasks and ideas all live in here together. You never have to file anything.</p>
+            <p>Talk to me like a person. I learn your projects, habits and how your days really go, and I remember all of it.</p>
+            <p>I read your calendar, so a day I plan fits around what's already there.</p>
+            <p>I message you on Telegram without being asked: your plan each morning, and a different review each day of the week.</p>
+            <p class="quiet-line">Nothing is hidden. Tap &#9432; to see everything I hold, and delete what you like.</p>
           </div>
           <p class="welcome-cta">Just talk to me. Start anywhere.</p>
         `;
@@ -1131,7 +1132,7 @@
           s.className = 'stack';
           for (const w of d.waiting) {
             const row = document.createElement('div');
-            row.textContent = '• ' + w.title + (w.body ? ` — ${w.body}` : '');
+            row.textContent = '• ' + w.title + (w.body ? `: ${w.body}` : '');
             row.style.fontSize = '13.5px';
             s.appendChild(row);
           }
