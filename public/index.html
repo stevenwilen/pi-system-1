@@ -75,6 +75,104 @@
         color: var(--muted);
       }
 
+      /* Two lanes, and the planner is the primary one. Quiet enough that the
+         tab bar does not compete with the day underneath it. */
+      .tabs {
+        flex: none;
+        display: flex;
+        gap: 4px;
+        padding: 0 14px 8px;
+      }
+
+      .tabs button {
+        border: 0;
+        border-radius: 8px;
+        background: none;
+        font: inherit;
+        font-size: 12.5px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--dim);
+        padding: 5px 12px;
+        cursor: pointer;
+      }
+
+      .tabs button[aria-selected="true"] {
+        background: var(--surface);
+        color: var(--text);
+      }
+
+      #plan-view,
+      #money-view {
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+      }
+
+      #intent-list {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      /* A kind is a heading inside the list, not a card of its own. */
+      .kind-head {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--dim);
+        padding: 0 2px 5px;
+      }
+
+      .kind-group {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      .intent {
+        background: var(--surface);
+        border-radius: var(--radius);
+        padding: 12px 13px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .intent-top {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+
+      .intent-label {
+        flex: 1;
+        min-width: 0;
+        font-size: 14px;
+        font-weight: 500;
+        overflow-wrap: anywhere;
+      }
+
+      /* Wall and floor behave differently and are read differently, so the
+         distinction is on the row rather than buried in the detail. */
+      .mode {
+        flex: none;
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--dim);
+        padding-top: 3px;
+      }
+
+      .intent-body {
+        font-size: 12.5px;
+        color: var(--muted);
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+      }
+
       main {
         flex: 1;
         overflow-y: auto;
@@ -595,7 +693,13 @@
       Planner
     </header>
 
+    <nav class="tabs" role="tablist">
+      <button type="button" id="tab-plan" role="tab" aria-selected="true">Plan</button>
+      <button type="button" id="tab-money" role="tab" aria-selected="false">Money</button>
+    </nav>
+
     <main>
+     <div id="plan-view">
       <div class="group">
         <div class="group-head">
           <h2>Review</h2>
@@ -692,6 +796,65 @@
           <button class="primary" id="confirm" type="button" disabled>Confirm</button>
         </div>
       </div>
+     </div>
+
+     <div id="money-view" class="hidden">
+      <div class="group">
+        <div class="group-head">
+          <h2>What I've told it</h2>
+          <button class="addbtn" id="intent-toggle" type="button">+ Add</button>
+        </div>
+
+        <div class="card hidden" id="intent-card">
+          <form id="intent-form">
+            <label id="i-kind-wrap">
+              Kind
+              <select id="i-kind">
+                <option value="situation">Situation, income and timing</option>
+                <option value="reserve">Reserve, money that is off limits</option>
+                <option value="target">Target, something I am building toward</option>
+                <option value="declared">Declared, spending I have chosen</option>
+                <option value="slip">Slip, something I already know I struggle with</option>
+              </select>
+            </label>
+
+            <label class="hidden" id="i-mode-wrap">
+              Reaching it
+              <select id="i-mode">
+                <option value="wall">Wall, I would have to move it on purpose</option>
+                <option value="floor">Floor, it can be reached by doing nothing</option>
+              </select>
+            </label>
+
+            <label>
+              Label
+              <input id="i-label" type="text" autocomplete="off" />
+            </label>
+
+            <label>
+              Detail
+              <textarea id="i-body"></textarea>
+            </label>
+
+            <div class="err hidden" id="i-error"></div>
+
+            <div class="row">
+              <button class="primary grow" type="submit" id="i-save">Save</button>
+              <button class="linkbtn" type="button" id="i-cancel">Cancel</button>
+            </div>
+          </form>
+        </div>
+
+        <div id="intent-list"></div>
+      </div>
+
+      <div class="group">
+        <div class="group-head"><h2>Numbers</h2></div>
+        <div class="card">
+          <span class="none">Balance, what is committed against it, and runway. Not built. Nothing here reads the sheet yet.</span>
+        </div>
+      </div>
+     </div>
     </main>
 
     <script>
@@ -1397,7 +1560,188 @@
         }
       };
 
+      // --- tabs -------------------------------------------------------------
+
+      function showTab(name) {
+        for (const [tab, view] of [
+          ['tab-plan', 'plan-view'],
+          ['tab-money', 'money-view'],
+        ]) {
+          const on = tab === `tab-${name}`;
+          $(tab).setAttribute('aria-selected', String(on));
+          $(view).classList.toggle('hidden', !on);
+        }
+      }
+
+      $('tab-plan').onclick = () => showTab('plan');
+      $('tab-money').onclick = () => {
+        showTab('money');
+        loadIntent();
+      };
+
+      // --- what the person has declared about their money -------------------
+      //
+      // Rows, and only rows. Nothing on this tab reaches a prompt, and no
+      // amount is written into the page. The labels below describe shapes of
+      // declaration, never quantities.
+
+      const KIND_LABELS = {
+        situation: 'Situation',
+        reserve: 'Reserve',
+        target: 'Targets',
+        declared: 'Declared, never flagged',
+        slip: 'Known slips',
+      };
+
+      let editing = null;
+
+      function intentRow(item) {
+        const row = el('div', 'intent');
+
+        const top = el('div', 'intent-top');
+        top.append(el('div', 'intent-label', item.label));
+        if (item.mode) top.append(el('div', 'mode', item.mode));
+        row.append(top);
+
+        if (item.body) row.append(el('div', 'intent-body', item.body));
+
+        const actions = el('div', 'actions');
+
+        const edit = el('button', 'linkbtn', 'Edit');
+        edit.type = 'button';
+        edit.onclick = () => openIntent(item);
+        actions.append(edit);
+
+        const del = el('button', 'linkbtn danger', 'Delete');
+        del.type = 'button';
+        del.onclick = async () => {
+          if (!confirm(`Delete "${item.label}"?`)) return;
+          try {
+            await api(`/finance-intent/${item.id}/delete`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: '{}',
+            });
+            await loadIntent();
+          } catch (err) {
+            alert(err.message);
+          }
+        };
+        actions.append(del);
+
+        row.append(actions);
+        return row;
+      }
+
+      async function loadIntent() {
+        const list = $('intent-list');
+        let data;
+        try {
+          data = await api('/finance-intent');
+        } catch (err) {
+          list.replaceChildren(el('div', 'card', err.message));
+          return;
+        }
+
+        list.replaceChildren();
+
+        if (!data.items.length) {
+          const empty = el('div', 'card');
+          empty.append(
+            el('span', 'none', 'Nothing yet. Tell it what it should already know, so it never has to guess.')
+          );
+          list.append(empty);
+          return;
+        }
+
+        // Grouped in the order the kinds are declared, not alphabetically, so
+        // the list reads the same way every time.
+        for (const kind of data.kinds) {
+          const items = data.items.filter((i) => i.kind === kind);
+          if (!items.length) continue;
+
+          const group = el('div', 'kind-group');
+          group.append(el('div', 'kind-head', KIND_LABELS[kind] || kind));
+          for (const item of items) group.append(intentRow(item));
+          list.append(group);
+        }
+      }
+
+      function setIntentKind(kind) {
+        $('i-mode-wrap').classList.toggle('hidden', kind !== 'reserve');
+      }
+
+      $('i-kind').onchange = () => setIntentKind($('i-kind').value);
+
+      function openIntent(item) {
+        editing = item || null;
+        const card = $('intent-card');
+
+        $('i-kind').value = item ? item.kind : 'situation';
+        $('i-mode').value = (item && item.mode) || 'wall';
+        $('i-label').value = item ? item.label : '';
+        $('i-body').value = item ? item.body : '';
+        $('i-error').classList.add('hidden');
+
+        // The kind is fixed once written: changing a target into a slip is a
+        // different declaration, not an edit.
+        $('i-kind-wrap').classList.toggle('hidden', Boolean(item));
+        setIntentKind($('i-kind').value);
+        $('i-save').textContent = item ? 'Save changes' : 'Save';
+
+        card.classList.remove('hidden');
+        $('i-label').focus();
+      }
+
+      $('intent-toggle').onclick = () => {
+        const card = $('intent-card');
+        if (!card.classList.contains('hidden') && !editing) {
+          card.classList.add('hidden');
+          return;
+        }
+        openIntent(null);
+      };
+
+      $('i-cancel').onclick = () => {
+        editing = null;
+        $('intent-card').classList.add('hidden');
+      };
+
+      $('intent-form').onsubmit = async (event) => {
+        event.preventDefault();
+        const error = $('i-error');
+        error.classList.add('hidden');
+        $('i-save').disabled = true;
+
+        const payload = {
+          kind: $('i-kind').value,
+          mode: $('i-mode').value,
+          label: $('i-label').value,
+          body: $('i-body').value,
+        };
+
+        try {
+          await api(
+            editing ? `/finance-intent/${editing.id}/update` : '/finance-intent',
+            {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(payload),
+            }
+          );
+          editing = null;
+          $('intent-card').classList.add('hidden');
+          await loadIntent();
+        } catch (err) {
+          error.textContent = err.message;
+          error.classList.remove('hidden');
+        } finally {
+          $('i-save').disabled = false;
+        }
+      };
+
       setType('task');
+      showTab('plan');
       load();
       loadReview();
     </script>

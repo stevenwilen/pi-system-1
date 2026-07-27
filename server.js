@@ -432,6 +432,126 @@ app.post('/blocks/:id/miss', async (req, res) => {
   res.json({ id: data.id, completed: data.completed, miss_reason: data.miss_reason });
 });
 
+// --- finance intent ---------------------------------------------------------
+//
+// What the person has declared about their own situation, held as ordinary
+// entries. Nothing here reaches a prompt or the model, and no amount, account
+// or threshold appears anywhere in this file. That is rule 2.4: the engine is
+// byte-identical for someone with three hundred dollars and someone with three
+// hundred thousand, and the only thing that differs is their rows.
+//
+// The kind lives in the title, encoded as `kind: label`, or `reserve/wall:` and
+// `reserve/floor:` where the distinction matters. A wall has to be crossed
+// deliberately; a floor can be reached by doing nothing, and the two are worth
+// different messages. Encoding it here rather than adding a column keeps the
+// lane inside the existing schema.
+
+const INTENT_KINDS = ['situation', 'reserve', 'target', 'declared', 'slip'];
+const RESERVE_MODES = ['wall', 'floor'];
+
+const encodeIntent = (kind, mode, label) =>
+  kind === 'reserve' ? `${kind}/${mode}: ${label}` : `${kind}: ${label}`;
+
+function decodeIntent(title) {
+  const m = String(title || '').match(/^([a-z]+)(?:\/(wall|floor))?:\s*([\s\S]+)$/);
+  if (!m || !INTENT_KINDS.includes(m[1])) return null;
+  return { kind: m[1], mode: m[2] || null, label: m[3].trim() };
+}
+
+function validateIntent({ kind, mode, label }) {
+  if (!INTENT_KINDS.includes(kind)) {
+    return `kind must be one of ${INTENT_KINDS.join(', ')}`;
+  }
+  if (!String(label || '').trim()) return 'a label is required';
+  if (kind === 'reserve' && !RESERVE_MODES.includes(mode)) {
+    return 'a reserve is either a wall, crossed on purpose, or a floor, reached by doing nothing. Say which.';
+  }
+  return null;
+}
+
+app.get('/finance-intent', async (req, res) => {
+  const { data, error } = await supabase
+    .from('entries')
+    .select('id, title, body, created_at')
+    .eq('user_id', CURRENT_USER)
+    .eq('type', 'finance_intent')
+    .eq('status', 'active')
+    .order('created_at');
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const items = [];
+  for (const row of data || []) {
+    const parsed = decodeIntent(row.title);
+    // A row whose title does not parse is skipped rather than guessed at. It
+    // would have to have been written by something other than this endpoint.
+    if (!parsed) continue;
+    items.push({ id: row.id, ...parsed, body: row.body || '' });
+  }
+
+  res.json({ kinds: INTENT_KINDS, modes: RESERVE_MODES, items });
+});
+
+app.post('/finance-intent', async (req, res) => {
+  const body = req.body || {};
+  const problem = validateIntent(body);
+  if (problem) return res.status(400).json({ error: problem });
+
+  const row = await create_entry(CURRENT_USER, {
+    type: 'finance_intent',
+    title: encodeIntent(body.kind, body.mode, String(body.label).trim()),
+    body: String(body.body || '').trim() || null,
+  });
+
+  if (row.error) return res.status(400).json({ error: row.error });
+  res.json({ entry: { id: row.id, ...decodeIntent(row.title), body: row.body || '' } });
+});
+
+app.post('/finance-intent/:id/update', async (req, res) => {
+  const body = req.body || {};
+
+  // The kind is fixed once written. Changing a target into a slip is not an
+  // edit, it is a different declaration, and silently rewriting it would leave
+  // no trace of what was originally said.
+  const { data: current, error: readErr } = await supabase
+    .from('entries')
+    .select('title')
+    .eq('id', req.params.id)
+    .eq('user_id', CURRENT_USER)
+    .eq('type', 'finance_intent')
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (readErr) return res.status(500).json({ error: readErr.message });
+  if (!current) return res.status(404).json({ error: 'not found' });
+
+  const existing = decodeIntent(current.title);
+  if (!existing) return res.status(400).json({ error: 'this row cannot be read' });
+
+  const next = {
+    kind: existing.kind,
+    mode: body.mode !== undefined ? body.mode : existing.mode,
+    label: body.label !== undefined ? String(body.label).trim() : existing.label,
+  };
+
+  const problem = validateIntent(next);
+  if (problem) return res.status(400).json({ error: problem });
+
+  const fields = { title: encodeIntent(next.kind, next.mode, next.label) };
+  if (body.body !== undefined) fields.body = String(body.body).trim() || null;
+
+  const row = await update_entry(CURRENT_USER, req.params.id, fields);
+  if (row.error) return res.status(400).json({ error: row.error });
+
+  res.json({ entry: { id: row.id, ...decodeIntent(row.title), body: row.body || '' } });
+});
+
+app.post('/finance-intent/:id/delete', async (req, res) => {
+  const row = await update_entry(CURRENT_USER, req.params.id, { status: 'deleted' });
+  if (row.error) return res.status(400).json({ error: row.error });
+  res.json({ deleted: row.id });
+});
+
 // --- writing ----------------------------------------------------------------
 
 // What the form is allowed to leave out, and what it is not. Checked here

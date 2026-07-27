@@ -53,7 +53,11 @@ create trigger profile_touch_updated_at
 create table if not exists entries (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null,
-  type        text not null check (type in ('observation', 'habit', 'project', 'task', 'idea', 'waiting')),
+  type        text not null check (type in (
+                -- live
+                'habit', 'project', 'task', 'finance_intent',
+                -- retired, kept so existing tombstones remain valid
+                'observation', 'idea', 'waiting')),
 
   title       text not null,
   body        text,
