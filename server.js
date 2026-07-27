@@ -20,7 +20,12 @@ const { summarise } = require('./money');
 require('./scheduler');
 
 // Until there is real auth, every request is this one person.
-const CURRENT_USER = '00000000-0000-0000-0000-000000000001';
+//
+// Overridable only so a test can point a whole server at a throwaway user and
+// be structurally unable to touch real rows. It defaults to the real id, so
+// production behaviour is unchanged by its existence.
+const CURRENT_USER =
+  process.env.PI_USER_ID || '00000000-0000-0000-0000-000000000001';
 
 // Railway (and most hosts) assign the port at runtime and route only to it.
 // Falls back to 3000 when running locally.
