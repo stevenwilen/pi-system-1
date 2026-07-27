@@ -384,20 +384,14 @@ async function brief() {
     Math.round((new Date(now) - new Date(quarter[0] ? quarter[0].date : d90)) / 86400000)
   );
 
-  // The sync logs SimpleFIN connection errors and carries on, so a bank that
-  // needs re-authenticating shows up as nothing at all rather than a failure.
-  // The only visible symptom is transactions stopping, which is worth naming.
+  // Reported as a date so the reader can judge it themselves. This was once a
+  // staleness warning, but a gap looks the same whether the feed broke or
+  // nothing was bought, and the system cannot tell those apart from the sheet.
   const latest = rows.reduce((a, r) => (r.date > a ? r.date : a), '');
-  const staleDays = latest
-    ? Math.round((new Date(now) - new Date(latest)) / 86400000)
-    : null;
 
   return {
     sync: {
       latest_transaction: latest || null,
-      days_since: staleDays,
-      // Chase posts most days; three clear days means something is wrong.
-      looks_stalled: staleDays !== null && staleDays >= 3,
     },
     window: { from: d30, to: now },
     week: { spend: spend(week), income: income(week) },
@@ -434,6 +428,12 @@ function render(b) {
   const L = [];
 
   L.push(`Window: last 30 days, ending ${b.window.to}`);
+  // Stated as a plain fact, not a warning. A gap here reads as a broken feed
+  // but is just as often a quiet week, and guessing between the two out loud
+  // raises a false alarm more often than it catches anything.
+  L.push(
+    `Most recent transaction: ${b.sync.latest_transaction || 'none in the sheet'}`
+  );
   L.push('');
   L.push(`Last 7 days:      spent ${m(b.week.spend)}, income ${m(b.week.income)}`);
   L.push(`Previous 7 days:  spent ${m(b.prev_week.spend)}, income ${m(b.prev_week.income)}`);
@@ -479,15 +479,6 @@ function render(b) {
       L.push(`  ${r.merchant}: about ${m(r.amount)} a month (${r.seen} seen)`);
     }
     L.push(`  These come to roughly ${m(total)} a month.`);
-  }
-
-  if (b.sync.looks_stalled) {
-    L.push('');
-    L.push(
-      `SYNC WARNING: the most recent transaction is ${b.sync.days_since} days old (${b.sync.latest_transaction}). ` +
-        `The bank feed has probably stopped, which usually means an institution needs re-authenticating in SimpleFIN. ` +
-        `Everything above is therefore incomplete.`
-    );
   }
 
   const q = b.data_quality;
