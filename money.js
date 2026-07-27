@@ -126,4 +126,67 @@ function summarise(rows, today) {
   };
 }
 
-module.exports = { summarise, findTransfers, STALE_AFTER_DAYS, PAIR_WINDOW_DAYS };
+/**
+ * Merchants charged more than once in the window.
+ *
+ * Recurring spending is the priority signal because it happens without a
+ * decision being made, so it has to be found rather than waited for. This is
+ * counting only: it reports how often a name appeared, what it came to, and
+ * whether the amounts held steady. It does not decide that anything is a
+ * subscription, and it never guesses at a cadence the window is too short to
+ * show.
+ */
+function repeatCharges(rows, transferIdx) {
+  const byMerchant = new Map();
+
+  rows.forEach((r, i) => {
+    if (transferIdx.has(i)) return;
+    if (r.amount >= 0) return; // refunds are not charges
+    const key = r.description.trim();
+    if (!key) return;
+    if (!byMerchant.has(key)) byMerchant.set(key, []);
+    byMerchant.get(key).push(r);
+  });
+
+  const out = [];
+
+  for (const [merchant, list] of byMerchant) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => a.date.localeCompare(b.date));
+
+    const amounts = list.map((r) => Math.abs(r.amount));
+    const average = amounts.reduce((n, a) => n + a, 0) / amounts.length;
+    // Within a fifth of the average each time. Enough to tell a fixed monthly
+    // charge from a shop visited repeatedly for different amounts.
+    const steady = amounts.every((a) => Math.abs(a - average) <= average * 0.2);
+
+    const gaps = [];
+    for (let i = 1; i < list.length; i++) {
+      gaps.push(Math.abs(daysBetween(list[i - 1].date, list[i].date)));
+    }
+    const typicalGap = gaps.length
+      ? gaps.slice().sort((a, b) => a - b)[Math.floor(gaps.length / 2)]
+      : null;
+
+    out.push({
+      merchant,
+      times: list.length,
+      total: round(amounts.reduce((n, a) => n + a, 0)),
+      average: round(average),
+      steady,
+      typical_gap_days: typicalGap,
+      first: list[0].date,
+      last: list[list.length - 1].date,
+    });
+  }
+
+  return out.sort((a, b) => b.total - a.total);
+}
+
+module.exports = {
+  summarise,
+  findTransfers,
+  repeatCharges,
+  STALE_AFTER_DAYS,
+  PAIR_WINDOW_DAYS,
+};

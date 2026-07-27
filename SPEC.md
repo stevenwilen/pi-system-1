@@ -114,26 +114,42 @@ Yesterday's blocks, listed. Each has a one-tap **didn't happen**.
 Blocks are **assumed done** unless tapped. The posture is trust. An optional
 short reason can be attached to a miss.
 
-### 3.2 STALE — what has gone cold
+### 3.2 STALE — one list, in the user's own order
 Everything the user cares about, in **one list**: habits, projects, and tasks
-together. Sorted by **how long since it was last scheduled**, longest first.
+together. A task left three weeks is the same problem as a project left three
+weeks, so they share a list rather than being filed apart.
 
-A task left undone for three weeks is the same problem as a project untouched
-for three weeks, so they share a list rather than being filed apart. For anything
-never scheduled, the clock runs from when it was added.
+**The order is entirely the user's.** Drag anywhere to reorder. Nothing sorts
+itself, and nothing reorders in response to age, coldness or anything else. The
+list *is* the ranking, so a position only ever changes because the user moved it.
 
-Last-scheduled is computed, not reasoned: it is the most recent block tagged to
-that entry. The *ordering* is arithmetic. What counts as *too long* is reasoning
-(section 4).
+New items are added at the **top**: something being added is something being
+thought about now.
 
-Each item has two actions:
+There is no priority field. The list position replaced it.
+
+**Two things inform, and neither moves anything.** Every row shows how long
+since it was last scheduled, and a temperature bar coloured across the range on
+screen. Last-scheduled is the most recent block tagged to that entry, and for
+anything never scheduled the clock runs from when it was added. Both are read
+and neither acts.
+
+**Cold is a verdict, not a sort.** A cold item gets a red outline and shows one
+line saying why, in place. It does not move. What counts as too long differs per
+item, so the judgment is the brain's (section 4), made once a day and stored.
+The panel only ever reads the stored verdict; it never calls the model.
+
+Each item has these actions:
 - Tap the item to **pull it into tomorrow's plan**.
-- Tap **not now** to **pause** it. It leaves the list until unpaused.
+- Tap **not now** to **pause** it. It leaves the list until unpaused, and a
+  paused item is never marked cold.
+- **Edit** it: the title always, and the why or the frequency where the type
+  requires one. The same rules apply as at creation, so editing cannot empty a
+  field that was required to create it.
+- **Delete** it, softly, per 2.5.
 
 Paused items are listed separately, out of the way but not hidden, so unpausing
 is always one tap and nothing disappears silently.
-
-Editing and pausing happen from the item's own row. Delete is soft, per 2.5.
 
 ### Adding something
 An **+ Add** control at the top of the stale panel opens a small form:
@@ -174,11 +190,28 @@ types a title. That makes this arithmetic, so it lives in the app.
 
 ## 4. Where Reasoning Is Used
 
-Exactly two places. Nowhere else.
+The count is **per lane**, not global. Each lane carries its own, and a lane
+that grows one does not spend the planner's. The planner has two. The finance
+lane has one (section 7).
 
-**1. Staleness thresholds.** How long is too long differs per item. Three days
-without reading is fine; three weeks is not. The threshold is judged per item,
-not set globally.
+Within the planner, exactly two places. Nowhere else.
+
+**1. The coldness verdict, once a day.** How long is too long differs per item.
+Three days without a daily habit is not three days without a monthly one, and a
+project deliberately set down is not neglected at all. So it is judged per item
+rather than by a threshold.
+
+One call per user per day, before their evening. It receives every active entry
+with its type, title, frequency or why, how long since it was last scheduled,
+and whether it is paused. It returns, for each, cold or not and one line saying
+why. The verdict is stored on the row and the panel reads only that, so opening
+the app never calls the model.
+
+A paused item is never cold. The user has already said it was set down on
+purpose, and 2.7 means that is not something to second-guess.
+
+Failure leaves the previous verdict standing. Blanking the flags because a call
+failed would turn an outage into a screen that says everything is fine.
 
 **2. Block message generation, at confirm time.** See section 5.
 
@@ -287,6 +320,18 @@ One short line per day.
   - Never flags declared items.
   - Before writing, the brain reads its own finance insights from the last ~14
     days and must not repeat itself.
+
+### Where reasoning is used in this lane
+Exactly one place: writing the daily line. Everything countable is counted
+first. Transfers are found by pairing offsetting amounts and by the sheet's own
+category, categories are netted, repeated charges are found by matching
+merchants, and the sync age is subtracted. None of that reaches the model as a
+question. What reaches it is the counted figures, the person's own intent rows,
+and its own recent lines, and what it decides is the one sentence worth sending.
+
+Runway is conditional. Transactions carry no balances, so unless a
+`finance_intent` row states what is on hand, the balance is not knowable and
+must not be guessed at.
 
 ### Scope discipline
 One tab, one message a day, one row per insight. If this lane ever needs a second

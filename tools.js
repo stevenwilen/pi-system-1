@@ -11,14 +11,12 @@ const supabase = require('./db');
 
 // Fields the caller may set. Anything else is dropped, so user_id, id,
 // created_at and updated_at can never be overwritten from outside.
-const CREATABLE = [
-  'type',
-  'title',
-  'body',
-  'why',
-  'priority',
-  'frequency',
-];
+// `priority` is deliberately absent. The list position replaced it, the column
+// is retired, and leaving it off the whitelist means nothing can write it back
+// by accident. `sort_order`, `cold` and `cold_reason` are absent for a
+// different reason: the first is the person's own ordering and the other two
+// are a daily verdict, and neither is a field a caller sets in passing.
+const CREATABLE = ['type', 'title', 'body', 'why', 'frequency'];
 
 const UPDATABLE = [...CREATABLE, 'status'];
 
@@ -284,13 +282,10 @@ async function create_entry(user_id, fields) {
   return data;
 }
 
-// 23505 is a unique violation. Only project priority is unique now, the task
-// ranking index having gone with task ranking itself, so the message no longer
-// needs to work out which list is full.
+// No unique index applies to entries any more: the project ranking went with
+// priority itself. A 23505 here would be something unforeseen, so the raw
+// message is more useful than a guess at which rule was broken.
 function describe(error) {
-  if (error.code === '23505') {
-    return 'that priority is already taken by another project. Move the project currently in that place down first, then try again.';
-  }
   return error.message;
 }
 

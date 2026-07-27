@@ -80,7 +80,7 @@ async function buildBriefing(user_id, planId) {
   if (ids.length) {
     const { data: rows, error: entryErr } = await supabase
       .from('entries')
-      .select('id, type, title, why, frequency, priority')
+      .select('id, type, title, why, frequency')
       .in('id', ids);
     if (entryErr) throw new Error(entryErr.message);
     entries = new Map((rows || []).map((r) => [r.id, r]));
@@ -135,7 +135,6 @@ function renderBriefing({ plan, blocks, entries, latest, allDay }) {
     if (entry) {
       facts.push(entry.type);
       if (entry.frequency) facts.push(`meant to happen ${entry.frequency}`);
-      if (entry.priority) facts.push(`priority ${entry.priority}`);
 
       const seen = latest.get(entry.id);
       facts.push(

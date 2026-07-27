@@ -87,10 +87,6 @@ const TOOL_SCHEMAS = [
             'Detail behind the title. For a project, the next concrete steps.',
         },
         why: { type: 'string', description: 'Projects only. Required.' },
-        priority: {
-          type: 'integer',
-          description: 'Projects only. 1 is highest. No two may share one.',
-        },
         frequency: {
           type: 'string',
           description: "Habits only, e.g. 'daily', '3x/week'.",
@@ -110,7 +106,6 @@ const TOOL_SCHEMAS = [
         title: { type: 'string' },
         body: { type: 'string' },
         why: { type: 'string' },
-        priority: { type: 'integer' },
         frequency: { type: 'string' },
         status: { type: 'string', enum: ['active', 'deleted', 'done'] },
       },

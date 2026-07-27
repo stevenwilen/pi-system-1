@@ -17,13 +17,13 @@ function show(step, result) {
 async function main() {
   console.log(`user_id: ${USER_ID}`);
 
-  // 1. A project, with a why and a priority.
+  // 1. A project, with its why. There is no priority any more: the position
+  // in the stale list is the ranking.
   const project = await create_entry(USER_ID, {
     type: 'project',
     title: 'Web services business',
     body: 'Build and sell web services to small businesses.',
     why: 'I want income that does not depend on having a job.',
-    priority: 1,
   });
   show('1. create_entry — project', project);
 

@@ -55,7 +55,7 @@ create table if not exists entries (
   user_id     uuid not null,
   type        text not null check (type in (
                 -- live
-                'habit', 'project', 'task', 'finance_intent',
+                'habit', 'project', 'task', 'finance_intent', 'finance_insight',
                 -- retired, kept so existing tombstones remain valid
                 'observation', 'idea', 'waiting')),
 
@@ -63,8 +63,20 @@ create table if not exists entries (
   body        text,
 
   why         text,          -- projects: why this matters, captured when added
-  priority    int,           -- projects: rank, 1 = highest, no ties
   frequency   text,          -- habits: 'daily', 'weekdays', '3x/week', ...
+
+  -- Retired. Nothing reads or writes it, and no index enforces it. Kept
+  -- because dropping a column destroys whatever it still holds.
+  priority    int,
+
+  -- Position in the stale panel, lower is higher up. This list is the person's
+  -- own ranking, so nothing sorts it but a drag.
+  sort_order  int,
+
+  -- The daily verdict. Written by one scheduled call, read by the panel, which
+  -- never calls the model itself.
+  cold        boolean not null default false,
+  cold_reason text,
 
   status      text not null default 'active' check (status in ('active', 'deleted', 'done')),
 
@@ -80,13 +92,10 @@ create table if not exists entries (
 create index if not exists entries_user_type_status_idx
   on entries (user_id, type, status);
 
--- Projects hold a strict rank with no ties, enforced here rather than in the
--- prompt, so two things cannot both be number one. Partial, so a done or
--- deleted project frees its place. Tasks are not ranked: they sort by how long
--- since they were last scheduled, alongside habits and projects.
-create unique index if not exists entries_user_priority_idx
-  on entries (user_id, priority)
-  where type = 'project' and status = 'active' and priority is not null;
+-- One list, in the order the person put it in.
+create index if not exists entries_user_sort_idx
+  on entries (user_id, sort_order)
+  where status = 'active';
 
 drop trigger if exists entries_touch_updated_at on entries;
 create trigger entries_touch_updated_at

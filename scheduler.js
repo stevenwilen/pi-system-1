@@ -13,6 +13,8 @@ const cron = require('node-cron');
 const supabase = require('./db');
 const { sendTelegram } = require('./telegram');
 const { composeMessage } = require('./messages');
+const { generateDaily } = require('./finance-insight');
+const { judge } = require('./coldness');
 
 // The tick interval, in minutes.
 //
@@ -34,6 +36,15 @@ const GRACE_MINUTES = 30;
 // tick have it: a message fifteen minutes late beats one permanently stripped
 // back to its header.
 const GENERATION_GRACE_MS = 2 * 60 * 1000;
+
+// The hour the finance line goes out, in the person's own time. Evening: the
+// day's spending has mostly happened, and there is still time to act on it.
+const FINANCE_HOUR = 18;
+
+// The coldness verdict runs before the evening, so the panel is already judged
+// by the time anyone opens it to plan tomorrow. Nothing is sent; it only
+// writes to rows.
+const COLD_HOUR = 16;
 
 // Telegram rejects anything over 4096 characters.
 const MAX_MESSAGE = 4000;
@@ -245,6 +256,62 @@ async function deliverDue(profile, now) {
   }
 }
 
+/**
+ * The one finance line for today.
+ *
+ * A separate lane on its own cadence: once a day, at a fixed hour, regardless
+ * of whether a plan exists. sent_log is the guard, so a restart inside the
+ * window cannot send a second one, and a failed send leaves no row so the next
+ * tick retries.
+ */
+async function deliverFinance(profile, now) {
+  const nowMinutes = toMinutes(now.hour, now.minute);
+  if (!inWindow(nowMinutes, toMinutes(FINANCE_HOUR, 0))) return;
+
+  if (await alreadySent(profile.user_id, 'finance', now.date)) return;
+
+  const result = await generateDaily(profile.user_id, now.date);
+
+  if (!result.text) {
+    // Nothing worth sending is a real outcome, not a failure. It is claimed in
+    // sent_log all the same, so a skipped day is not retried every fifteen
+    // minutes for the rest of the evening.
+    console.log(`[FINANCE] nothing to send today: ${result.skipped}`);
+    await markSent(profile.user_id, 'finance', now.date);
+    return;
+  }
+
+  const sent = await deliver(profile.user_id, result.text);
+  if (sent.sent) {
+    await markSent(profile.user_id, 'finance', now.date);
+    console.log(`[FINANCE] sent: ${result.text}`);
+  } else {
+    console.error(`[FINANCE] ${JSON.stringify(sent)}`);
+  }
+}
+
+/**
+ * Judge what has gone cold, once a day, before the evening.
+ *
+ * Sends nothing. It writes verdicts to rows so the panel is already judged
+ * when it is opened, which is what keeps the model off the read path.
+ */
+async function judgeColdness(profile, now) {
+  const nowMinutes = toMinutes(now.hour, now.minute);
+  if (!inWindow(nowMinutes, toMinutes(COLD_HOUR, 0))) return;
+
+  if (await alreadySent(profile.user_id, 'coldness', now.date)) return;
+
+  const result = await judge(profile.user_id, now.date);
+
+  // Claimed either way. A day where nothing could be judged should not be
+  // retried every fifteen minutes until midnight, and judge() has already left
+  // the previous verdicts standing.
+  await markSent(profile.user_id, 'coldness', now.date);
+
+  if (!result.judged) console.log(`[COLD] nothing judged today: ${result.reason}`);
+}
+
 async function tick() {
   let profiles;
   try {
@@ -263,11 +330,24 @@ async function tick() {
       continue;
     }
 
+    // The two lanes are independent. One failing must not silence the other,
+    // and neither must stop the next person being served.
     try {
       await deliverDue(profile, now);
     } catch (err) {
-      // One person's failure must not stop the others.
       console.error(`[SEND] ${profile.user_id}: ${err.message}`);
+    }
+
+    try {
+      await deliverFinance(profile, now);
+    } catch (err) {
+      console.error(`[FINANCE] ${profile.user_id}: ${err.message}`);
+    }
+
+    try {
+      await judgeColdness(profile, now);
+    } catch (err) {
+      console.error(`[COLD] ${profile.user_id}: ${err.message}`);
     }
   }
 }
@@ -284,10 +364,14 @@ module.exports = {
   // Exported so a test can drive one user through one tick without waiting
   // fifteen minutes for cron.
   deliverDue,
+  deliverFinance,
+  judgeColdness,
   dueBlocks,
   tick,
   GRACE_MINUTES,
   GENERATION_GRACE_MS,
+  FINANCE_HOUR,
+  COLD_HOUR,
 };
 
 // Starting the loop on require is deliberate: server.js requires this module

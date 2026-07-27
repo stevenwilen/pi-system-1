@@ -503,6 +503,38 @@
         color: var(--dim);
       }
 
+      /* Gone cold. An outline, not a move: the order is the person's and
+         nothing but a drag changes it. */
+      .item.cold {
+        outline: 1px solid var(--warn);
+        outline-offset: -1px;
+      }
+
+      .cold-reason {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+      }
+
+      /* The only thing that starts a drag. Tapping the title schedules the
+         item, so the two gestures must not share a target. */
+      .grip {
+        flex: none;
+        width: 16px;
+        margin-left: -2px;
+        color: var(--dim);
+        font-size: 13px;
+        line-height: 1.5;
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
+      }
+
+      .item.dragging {
+        opacity: 0.35;
+      }
+
       /* --- the builder --- */
 
       #builder {
@@ -867,11 +899,6 @@
               <textarea id="f-why"></textarea>
             </label>
 
-            <label class="hidden" id="f-priority-wrap">
-              Priority
-              <input id="f-priority" type="number" min="1" step="1" inputmode="numeric" />
-            </label>
-
             <div class="err hidden" id="f-error"></div>
 
             <div class="row">
@@ -1035,8 +1062,13 @@
           : hex(mix(MIDDLE, COLDEST, (t - 0.5) * 2));
       }
 
-      function itemCard(item, range) {
-        const card = el('div', 'card item' + (item.paused ? ' paused' : ''));
+      function itemCard(item, range, index) {
+        const card = el(
+          'div',
+          'card item' + (item.paused ? ' paused' : '') + (item.cold ? ' cold' : '')
+        );
+        card.dataset.id = item.id;
+        if (index !== undefined) card.dataset.index = String(index);
 
         // Paused rows keep the neutral hairline. A pause is not a temperature.
         if (range && !item.paused) {
@@ -1044,6 +1076,15 @@
         }
 
         const top = el('div', 'item-top');
+
+        // The grip is the only thing that starts a drag, so tapping the title
+        // to schedule it and dragging to reorder never compete for a gesture.
+        if (!item.paused && index !== undefined) {
+          const grip = el('div', 'grip', '⠢');
+          grip.onpointerdown = (e) => startItemDrag(e, index);
+          top.append(grip);
+        }
+
         const title = el('div', 'item-title', item.title);
         // Tapping the title is how something gets into tomorrow. Paused items
         // are not offered: the person has said not now, and the panel should
@@ -1062,14 +1103,24 @@
         top.append(el('div', 'days', ageLabel(item.days) + suffix));
         card.append(top);
 
+        // The verdict, in place. It never moves the row: the order is the
+        // person's and nothing but a drag changes it.
+        if (item.cold && item.cold_reason) {
+          card.append(el('div', 'cold-reason', item.cold_reason));
+        }
+
         if (item.why) card.append(el('div', 'why', item.why));
 
         const meta = el('div', 'item-meta');
         meta.append(el('span', 'tag ' + item.type, item.type));
         if (item.frequency) meta.append(el('span', 'none', item.frequency));
-        if (item.priority) meta.append(el('span', 'none', 'priority ' + item.priority));
 
         const actions = el('div', 'actions');
+
+        const edit = el('button', 'linkbtn', 'Edit');
+        edit.type = 'button';
+        edit.onclick = () => openEntry(item);
+        actions.append(edit);
 
         const pause = el('button', 'linkbtn', item.paused ? 'Resume' : 'Not now');
         pause.type = 'button';
@@ -1087,6 +1138,88 @@
         meta.append(actions);
         card.append(meta);
         return card;
+      }
+
+      // --- dragging the stale list ------------------------------------------
+      //
+      // The same pointer-event approach as the builder, for the same reason:
+      // HTML5 drag and drop does not fire on touch. The order that comes out
+      // is sent whole, so what is stored cannot drift from what is shown.
+
+      let itemDrag = null;
+      let staleItems = [];
+
+      function startItemDrag(event, index) {
+        event.preventDefault();
+        itemDrag = { from: index, to: index };
+
+        const row = event.currentTarget.closest('.item');
+        row.classList.add('dragging');
+        row.setPointerCapture(event.pointerId);
+
+        const move = (e) => {
+          let to = itemDrag.from;
+          for (const r of $('stale').querySelectorAll('.item')) {
+            const box = r.getBoundingClientRect();
+            if (e.clientY > box.top + box.height / 2) to = Number(r.dataset.index);
+          }
+          itemDrag.to = to;
+        };
+
+        const end = async () => {
+          row.releasePointerCapture(event.pointerId);
+          row.removeEventListener('pointermove', move);
+          row.removeEventListener('pointerup', end);
+          row.removeEventListener('pointercancel', end);
+          row.classList.remove('dragging');
+
+          const moved = itemDrag && itemDrag.to !== itemDrag.from;
+          const { from, to } = itemDrag || {};
+          itemDrag = null;
+          if (!moved) return;
+
+          const next = staleItems.slice();
+          const [item] = next.splice(from, 1);
+          next.splice(to, 0, item);
+          staleItems = next;
+
+          // Redrawn from the local order first, so the row stays where it was
+          // dropped rather than jumping back until the server answers.
+          paintStale();
+
+          try {
+            await api('/entries/reorder', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ ids: next.map((i) => i.id) }),
+            });
+          } catch (err) {
+            alert(err.message);
+            await load();
+          }
+        };
+
+        row.addEventListener('pointermove', move);
+        row.addEventListener('pointerup', end);
+        row.addEventListener('pointercancel', end);
+      }
+
+      function paintStale() {
+        const list = $('stale');
+        list.replaceChildren();
+
+        if (!staleItems.length) {
+          const empty = el('div', 'card');
+          empty.append(el('span', 'none', 'Nothing here yet. Add a habit, project or task.'));
+          list.append(empty);
+          return;
+        }
+
+        // The bar reads across whatever is on screen. It informs; it sorts
+        // nothing, and the order it appears in is entirely the person's.
+        const ages = staleItems.map((i) => i.days);
+        const range = { min: Math.min(...ages), max: Math.max(...ages) };
+        staleItems.forEach((item, i) => list.append(itemCard(item, range, i)));
       }
 
       async function act(url, body) {
@@ -1111,16 +1244,8 @@
           return;
         }
 
-        stale.replaceChildren();
-        if (!data.items.length) {
-          const empty = el('div', 'card');
-          empty.append(el('span', 'none', 'Nothing here yet. Add a habit, project or task.'));
-          stale.append(empty);
-        } else {
-          const ages = data.items.map((i) => i.days);
-          const range = { min: Math.min(...ages), max: Math.max(...ages) };
-          for (const item of data.items) stale.append(itemCard(item, range));
-        }
+        staleItems = data.items;
+        paintStale();
 
         paused.replaceChildren();
         $('paused-group').classList.toggle('hidden', !data.paused.length);
@@ -1150,33 +1275,48 @@
         }
         $('f-frequency-wrap').classList.toggle('hidden', next !== 'habit');
         $('f-why-wrap').classList.toggle('hidden', next !== 'project');
-        $('f-priority-wrap').classList.toggle('hidden', next !== 'project');
       }
 
       for (const b of $('type-seg').children) {
         b.onclick = () => setType(b.dataset.type);
       }
 
-      function resetForm() {
-        $('f-title').value = '';
-        $('f-why').value = '';
-        $('f-priority').value = '';
-        $('f-frequency').value = 'daily';
+      // One form for both. Editing an existing row hides the type selector,
+      // because what something is was decided when it was created and changing
+      // it would be a different entry rather than an edit.
+      let editingEntry = null;
+
+      function openEntry(item) {
+        editingEntry = item || null;
+        const card = $('add-card');
+
+        $('f-title').value = item ? item.title : '';
+        $('f-why').value = (item && item.why) || '';
+        $('f-frequency').value = (item && item.frequency) || 'daily';
         $('f-error').classList.add('hidden');
-        setType('task');
+
+        setType(item ? item.type : 'task');
+        $('type-seg').classList.toggle('hidden', Boolean(item));
+        $('f-save').textContent = item ? 'Save changes' : 'Save';
+
+        card.classList.remove('hidden');
+        $('f-title').focus();
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
 
       $('add-toggle').onclick = () => {
         const card = $('add-card');
-        const opening = card.classList.contains('hidden');
-        card.classList.toggle('hidden', !opening);
-        if (opening) {
-          resetForm();
-          $('f-title').focus();
+        if (!card.classList.contains('hidden') && !editingEntry) {
+          card.classList.add('hidden');
+          return;
         }
+        openEntry(null);
       };
 
-      $('f-cancel').onclick = () => $('add-card').classList.add('hidden');
+      $('f-cancel').onclick = () => {
+        editingEntry = null;
+        $('add-card').classList.add('hidden');
+      };
 
       $('add-form').onsubmit = async (event) => {
         event.preventDefault();
@@ -1184,18 +1324,23 @@
         error.classList.add('hidden');
         $('f-save').disabled = true;
 
+        // Only what this type carries. Sending a why for a habit would set a
+        // field nothing reads, and the server would have to ignore it anyway.
+        const payload = { title: $('f-title').value };
+        if (!editingEntry) payload.type = type;
+        if (type === 'habit') payload.frequency = $('f-frequency').value;
+        if (type === 'project') payload.why = $('f-why').value;
+
         try {
-          await api('/entries', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              type,
-              title: $('f-title').value,
-              frequency: $('f-frequency').value,
-              why: $('f-why').value,
-              priority: $('f-priority').value,
-            }),
-          });
+          await api(
+            editingEntry ? `/entries/${editingEntry.id}/update` : '/entries',
+            {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(payload),
+            }
+          );
+          editingEntry = null;
           $('add-card').classList.add('hidden');
           await load();
         } catch (err) {
