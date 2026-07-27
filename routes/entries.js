@@ -17,6 +17,10 @@ const router = express.Router();
 const TYPES = ['habit', 'project', 'task'];
 const FREQUENCIES = ['daily', 'few times a week', 'weekly', 'monthly'];
 
+// Which types may carry a deadline. A habit has a cadence instead, and a habit
+// with a due date would be two different ideas in one row.
+const DATED = ['project', 'task'];
+
 /**
  * Habits, projects and tasks in one list, in the person's own order.
  *
@@ -38,7 +42,7 @@ router.get('/entries', async (req, res) => {
 
     const { data: rows, error } = await supabase
       .from('entries')
-      .select('id, type, title, why, frequency, sort_order, cold, cold_reason, paused_at, created_at')
+      .select('id, type, title, why, frequency, due, sort_order, cold, cold_reason, paused_at, created_at')
       .eq('user_id', CURRENT_USER)
       .eq('status', 'active')
       .in('type', TYPES);
@@ -56,6 +60,10 @@ router.get('/entries', async (req, res) => {
         title: r.title,
         why: r.why,
         frequency: r.frequency,
+        // Date only. Postgres hands a `date` back as YYYY-MM-DD already, but
+        // slicing means a driver that ever decides to widen it to a timestamp
+        // cannot shift the day by a timezone on the way through.
+        due: r.due ? String(r.due).slice(0, 10) : null,
         paused: Boolean(r.paused_at),
         // A paused item is never cold, whatever the last verdict said. The
         // person declared it set down, and 2.7 means that is not reopened.
@@ -97,7 +105,7 @@ router.get('/entries', async (req, res) => {
 
 // What the form is allowed to leave out, and what it is not. Checked here
 // rather than in the database so the message can name the field.
-function validate({ type, title, why, frequency }) {
+function validate({ type, title, why, frequency, due }) {
   if (!TYPES.includes(type)) return `type must be one of ${TYPES.join(', ')}`;
   if (!String(title || '').trim()) return 'a title is required';
 
@@ -109,8 +117,26 @@ function validate({ type, title, why, frequency }) {
   if (type === 'project' && !String(why || '').trim()) {
     return 'a project needs a why. Without one it cannot be argued for later.';
   }
+
+  // A due date is optional everywhere it is allowed at all, so only its shape
+  // and the type carrying it are checked.
+  if (due !== null && due !== undefined && due !== '') {
+    if (!DATED.includes(type)) {
+      return 'only a project or a task can have a due date. A habit has a frequency instead.';
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(due))) return 'a due date must be YYYY-MM-DD';
+    // Rejects 2026-02-31, which matches the pattern and is not a day.
+    const parsed = new Date(`${due}T12:00:00Z`);
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== due) {
+      return `${due} is not a real date`;
+    }
+  }
   return null;
 }
+
+// '' and null both mean "no date". The form sends '' when the field is
+// cleared, and the column takes null.
+const dueOrNull = (value) => (String(value || '').trim() ? String(value).trim() : null);
 
 router.post('/entries', async (req, res) => {
   const body = req.body || {};
@@ -122,6 +148,7 @@ router.post('/entries', async (req, res) => {
   const fields = { type: body.type, title: String(body.title).trim() };
   if (body.type === 'habit') fields.frequency = body.frequency;
   if (body.type === 'project') fields.why = String(body.why).trim();
+  if (DATED.includes(body.type)) fields.due = dueOrNull(body.due);
 
   const row = await create_entry(CURRENT_USER, fields);
   if (row.error) return res.status(400).json({ error: row.error });
@@ -131,12 +158,17 @@ router.post('/entries', async (req, res) => {
   // Taking one below the current minimum rather than renumbering the list
   // means nothing else moves, so a position the person chose cannot be
   // disturbed by an unrelated addition.
+  //
+  // The minimum is taken over the ranked types only. Habits are ordered by how
+  // long they have been left, not by position, so their sort_order is a value
+  // nothing reads, and letting it set the floor here would drag the priorities'
+  // numbering further negative on every habit added.
   const { data: first } = await supabase
     .from('entries')
     .select('sort_order')
     .eq('user_id', CURRENT_USER)
     .eq('status', 'active')
-    .in('type', TYPES)
+    .in('type', DATED)
     .not('sort_order', 'is', null)
     .order('sort_order', { ascending: true })
     .limit(1)
@@ -216,9 +248,14 @@ router.post('/entries/:id/update', async (req, res) => {
     if (body[key] !== undefined) fields[key] = String(body[key]).trim();
   }
 
+  // Handled apart from the others because clearing it is a real edit. The
+  // loop above turns a missing value into '', which is right for text and
+  // wrong for a date column, and null is how a deadline is removed.
+  if (body.due !== undefined) fields.due = dueOrNull(body.due);
+
   const { data: current, error: readErr } = await supabase
     .from('entries')
-    .select('type, title, why, frequency')
+    .select('type, title, why, frequency, due')
     .eq('id', req.params.id)
     .eq('user_id', CURRENT_USER)
     .eq('status', 'active')

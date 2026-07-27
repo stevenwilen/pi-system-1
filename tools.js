@@ -16,7 +16,12 @@ const supabase = require('./db');
 // by accident. `sort_order`, `cold` and `cold_reason` are absent for a
 // different reason: the first is the person's own ordering and the other two
 // are a daily verdict, and neither is a field a caller sets in passing.
-const CREATABLE = ['type', 'title', 'body', 'why', 'frequency'];
+//
+// `due` is here because the person sets it. It is a date the caller supplies or
+// clears, never something inferred: nothing in this system decides on someone's
+// behalf when a thing is due, in the same way nothing decides that a gap was
+// deliberate.
+const CREATABLE = ['type', 'title', 'body', 'why', 'frequency', 'due'];
 
 const UPDATABLE = [...CREATABLE, 'status'];
 

@@ -19,10 +19,16 @@ const { lastScheduled, daysBetween } = require('./staleness');
 const TYPES = ['habit', 'project', 'task'];
 const MAX_REASON = 120;
 
+// Ordered by when they were added, deliberately, and never by sort_order.
+//
+// sort_order is the person's ranking of their priorities, and it is not sent:
+// they can already see the order on screen, so a reason that restates their own
+// ranking back to them tells them nothing. The numbering in the briefing is
+// only how a verdict is matched to an item on the way back.
 async function gather(user_id, today) {
   const { data: rows, error } = await supabase
     .from('entries')
-    .select('id, type, title, why, frequency, paused_at, created_at')
+    .select('id, type, title, why, frequency, due, paused_at, created_at')
     .eq('user_id', user_id)
     .eq('status', 'active')
     .in('type', TYPES)
@@ -36,6 +42,8 @@ async function gather(user_id, today) {
   return rows.map((r) => {
     const seen = latest.get(r.id) || null;
     const since = seen || String(r.created_at).slice(0, 10);
+    const due = r.due ? String(r.due).slice(0, 10) : null;
+
     return {
       id: r.id,
       type: r.type,
@@ -45,6 +53,17 @@ async function gather(user_id, today) {
       paused: Boolean(r.paused_at),
       scheduled: Boolean(seen),
       days: Math.max(0, daysBetween(since, today)),
+      due,
+      // Counted here rather than left to the model. Date arithmetic is
+      // arithmetic, and asking for it alongside a judgement is how a wrong
+      // number arrives wearing a confident sentence.
+      due_in: due === null ? null : daysBetween(today, due),
+      // Whether it sits on a plan that has not happened yet. "Last scheduled
+      // three days ago" and "on tomorrow's plan" are different answers to
+      // whether a deadline is being dealt with, and only this one separates
+      // them.
+      planned: Boolean(seen && seen >= today),
+      planned_for: seen && seen >= today ? seen : null,
     };
   });
 }
@@ -63,6 +82,24 @@ function render(items, today) {
     );
     if (it.why) facts.push(`why it matters to them: ${it.why}`);
 
+    // The deadline, already counted, and whether anything is being done about
+    // it. Only projects and tasks can carry one.
+    if (it.due !== null) {
+      const when =
+        it.due_in < 0
+          ? `${Math.abs(it.due_in)} days OVERDUE`
+          : it.due_in === 0
+            ? 'DUE TODAY'
+            : it.due_in === 1
+              ? 'due tomorrow'
+              : `due in ${it.due_in} days`;
+
+      facts.push(`${when} (${it.due})`);
+      facts.push(
+        it.planned ? `already on the plan for ${it.planned_for}` : 'not on any plan yet'
+      );
+    }
+
     L.push(`${i + 1}. ${it.title}  [${facts.join('; ')}]`);
   });
 
@@ -73,7 +110,9 @@ const TASK = `For each item above, decide whether it has gone cold, and say why 
 
 Cold means it has been left long enough that they would want to see it, judged against what that particular thing is. There is no number that does this. Three days without a daily habit is a lapse; three days without a monthly one is nothing. A task added yesterday is not cold whatever else is true. A project with a real reason behind it that has sat for weeks probably is.
 
-An item marked PAUSED is never cold. They have already said they set it down deliberately, and telling them it has gone cold contradicts something they told you. Mark it false and say plainly that it is paused.
+A deadline outranks cadence. Where an item says it is due, that is the thing to judge it on, not how recently it was touched. An item that is overdue, due today, or due soon and is not on any plan yet is cold, however fresh it looks otherwise: nothing is happening about it and the date is coming anyway. Say that in the line, plainly and with the number, like "due in 2 days and not on any plan yet". An item already on a plan for a coming day is being dealt with, so its date is not a reason to flag it.
+
+An item marked PAUSED is never cold. They have already said they set it down deliberately, and telling them it has gone cold contradicts something they told you. Mark it false and say plainly that it is paused. This holds even when it has a date and that date has passed: a paused item with an overdue deadline is still paused, and they are the ones who decide when to pick it back up.
 
 Never invent a gap that is not in the figures. Never scold. The line is there so they can see at a glance why something is flagged, not to be argued with.
 

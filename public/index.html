@@ -717,11 +717,50 @@
         }
       }
 
+      /* Where this sits in the person's own ranking. A readout of position and
+         nothing else: it is never typed into, and it renumbers itself the
+         moment a row is dragged. Dim, because the order is already visible and
+         the number is only there to be quoted. */
+      .rank {
+        flex: none;
+        min-width: 14px;
+        font-size: 11.5px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--dim);
+        text-align: right;
+        padding-top: 3px;
+        user-select: none;
+      }
+
       .item-meta {
         display: flex;
         align-items: center;
         gap: 9px;
         flex-wrap: wrap;
+      }
+
+      /* The deadline, as an annotation. It sits with the type and the frequency
+         because that is what it is: something true about the row, not a reason
+         the row is where it is. Nothing sorts by it. */
+      .due {
+        flex: none;
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 2px 8px;
+        white-space: nowrap;
+      }
+
+      /* Past the date. The same colour a missed block uses, because it is the
+         same fact: something that was meant to happen did not. */
+      .due.overdue {
+        color: var(--warn);
+        border-color: var(--warn);
       }
 
       .why {
@@ -1156,9 +1195,13 @@
         <div id="review"></div>
       </div>
 
+      <!-- Two lists, because they are ranked by different things. Projects and
+           tasks compete with each other for attention and the person orders
+           them. Habits do not compete; the only useful order for them is which
+           has been left longest. -->
       <div class="group">
         <div class="group-head">
-          <h2>Stale</h2>
+          <h2>Priorities</h2>
           <button class="addbtn" id="add-toggle" type="button">+ Add</button>
         </div>
 
@@ -1190,6 +1233,17 @@
               <textarea id="f-why"></textarea>
             </label>
 
+            <!-- Projects and tasks only, and optional there. A picker rather
+                 than a text field: a date typed by hand is a date typed
+                 wrong. Clear puts it back to nothing. -->
+            <label class="hidden" id="f-due-wrap">
+              Due <span class="none">optional</span>
+              <div class="row">
+                <input id="f-due" class="grow" type="date" />
+                <button class="linkbtn" type="button" id="f-due-clear">Clear</button>
+              </div>
+            </label>
+
             <div class="err hidden" id="f-error"></div>
 
             <div class="row">
@@ -1200,6 +1254,14 @@
         </div>
 
         <div id="stale"></div>
+      </div>
+
+      <div class="group hidden" id="habits-group">
+        <div class="group-head">
+          <h2>Habits</h2>
+          <span class="none">longest left, first</span>
+        </div>
+        <div id="habits"></div>
       </div>
 
       <div class="group hidden" id="paused-group">
@@ -1583,7 +1645,59 @@
         return svg;
       }
 
-      function itemCard(item, index) {
+      // --- due dates --------------------------------------------------------
+      //
+      // An annotation, never an ordering. Nothing here sorts anything: the
+      // priorities list is the person's ranking and only a drag changes it.
+
+      // Beyond this the date is more useful than a countdown: "in 23 days" is
+      // harder to place than the day itself.
+      const NEAR_DAYS = 7;
+
+      const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+      // Whole days between two YYYY-MM-DD strings, read at noon UTC so no
+      // timezone can push the answer over a day boundary.
+      const daysUntil = (from, to) =>
+        Math.round((new Date(`${to}T12:00:00Z`) - new Date(`${from}T12:00:00Z`)) / 86400000);
+
+      /**
+       * How a deadline reads, and whether it has passed.
+       *
+       * Close by, it is said in days, because that is how a deadline is felt
+       * when it is near. Further out it is a date, because a countdown that
+       * large is just arithmetic the person has to undo.
+       */
+      function dueLabel(due, today) {
+        const days = daysUntil(today, due);
+
+        if (days < 0) {
+          const n = Math.abs(days);
+          return { text: `${n} day${n === 1 ? '' : 's'} overdue`, overdue: true };
+        }
+        if (days === 0) return { text: 'today', overdue: false };
+        if (days === 1) return { text: 'tomorrow', overdue: false };
+        if (days <= NEAR_DAYS) return { text: `in ${days} days`, overdue: false };
+
+        const [y, m, d] = due.split('-').map(Number);
+        // The year only when it is not this one, so the common case stays short.
+        const sameYear = String(y) === today.slice(0, 4);
+        return {
+          text: `${d} ${MONTHS[m - 1]}${sameYear ? '' : ' ' + y}`,
+          overdue: false,
+        };
+      }
+
+      /**
+       * One row, in whichever list it belongs to.
+       *
+       * `index` is given only for the priorities list, and it is what makes a
+       * row draggable: the habits list has no ranking to drag, and a paused row
+       * is out of the running entirely. `rank` is the number shown, derived
+       * from position every time this is called, so it cannot drift from where
+       * the row actually is.
+       */
+      function itemCard(item, { index, rank } = {}) {
         const card = el(
           'div',
           'card item' + (item.paused ? ' paused' : '') + (item.cold ? ' cold' : '')
@@ -1602,6 +1716,8 @@
           grip.onpointerdown = (e) => startItemDrag(e, index);
           top.append(grip);
         }
+
+        if (rank !== undefined) top.append(el('div', 'rank', String(rank)));
 
         // A paused row shows no phase at all. Its clock is not running, and a
         // dark moon beside it would be the screen calling it overdue, which is
@@ -1638,6 +1754,11 @@
         meta.append(el('span', 'tag ' + item.type, item.type));
         if (item.frequency) meta.append(el('span', 'none', item.frequency));
 
+        if (item.due) {
+          const when = dueLabel(item.due, todayDate);
+          meta.append(el('span', 'due' + (when.overdue ? ' overdue' : ''), when.text));
+        }
+
         const actions = el('div', 'actions');
 
         const edit = el('button', 'linkbtn', 'Edit');
@@ -1670,7 +1791,20 @@
       // is sent whole, so what is stored cannot drift from what is shown.
 
       let itemDrag = null;
+
+      // The ranked list: projects and tasks, in the person's own order. Named
+      // for the panel it has always belonged to, and it is this list alone that
+      // the drag code reorders and sends back.
       let staleItems = [];
+
+      // Habits. Never dragged and never ranked, so they are held apart rather
+      // than filtered out of one list at every use.
+      let habitItems = [];
+
+      // Today where the person lives, as the server counted it. Due dates are
+      // measured against this and never against the device clock, which can be
+      // a day out from the timezone the rest of the screen is using.
+      let todayDate = '';
 
       const FLIP_MS = 170;
 
@@ -1786,7 +1920,16 @@
           // The DOM is the truth now: it is what the person watched settle.
           const order = rows().map((r) => r.dataset.id);
           staleItems = order.map((id) => staleItems.find((i) => i.id === id)).filter(Boolean);
-          rows().forEach((r, i) => (r.dataset.index = String(i)));
+
+          // Renumber in place rather than repainting. A repaint would throw
+          // away the row that just settled under the finger, and the rank is a
+          // readout of position, so it has to agree with the position the
+          // person is looking at before the request goes anywhere.
+          rows().forEach((r, i) => {
+            r.dataset.index = String(i);
+            const rank = r.querySelector('.rank');
+            if (rank) rank.textContent = String(i + 1);
+          });
 
           try {
             await api('/entries/reorder', {
@@ -1810,27 +1953,46 @@
       // animate the whole list in, which is a page that never settles.
       let shownIds = new Set();
 
+      // Habits are ordered by how long they have been left, longest first.
+      //
+      // They are not ranked and cannot be dragged, because ranking them against
+      // each other is not a question anyone has: a habit is not more important
+      // than another habit, it is just more overdue. Ties break on title so the
+      // list does not reshuffle between two rows that are the same age.
+      const byNeglect = (a, b) => b.days - a.days || a.title.localeCompare(b.title);
+
       function paintStale() {
         const list = $('stale');
+        const habitList = $('habits');
 
         const draw = () => {
           list.replaceChildren();
+          habitList.replaceChildren();
+
+          const fresh = (card, id) => {
+            if (!shownIds.has(id) && shownIds.size) card.classList.add('entering');
+            return card;
+          };
 
           if (!staleItems.length) {
             const empty = el('div', 'card');
-            empty.append(el('span', 'none', 'Nothing here yet. Add a habit, project or task.'));
+            empty.append(el('span', 'none', 'Nothing here yet. Add a project or task.'));
             list.append(empty);
-            shownIds = new Set();
-            return;
           }
 
+          // Rank is derived from position on every paint, so it renumbers
+          // itself after a drag and can never be stored, sent or edited.
           staleItems.forEach((item, i) => {
-            const card = itemCard(item, i);
-            if (!shownIds.has(item.id) && shownIds.size) card.classList.add('entering');
-            list.append(card);
+            list.append(fresh(itemCard(item, { index: i, rank: i + 1 }), item.id));
           });
 
-          shownIds = new Set(staleItems.map((i) => i.id));
+          const habits = habitItems.slice().sort(byNeglect);
+          for (const item of habits) {
+            habitList.append(fresh(itemCard(item), item.id));
+          }
+          $('habits-group').classList.toggle('hidden', !habits.length);
+
+          shownIds = new Set([...staleItems, ...habitItems].map((i) => i.id));
           // A row that has gone should not keep a phase waiting for it.
           for (const id of [...lastPhase.keys()]) {
             if (!shownIds.has(id)) lastPhase.delete(id);
@@ -1839,10 +2001,11 @@
 
         // Rows that are about to disappear fade first, and the list is rebuilt
         // after. Deleting something otherwise makes the rows below it jump.
-        const next = new Set(staleItems.map((i) => i.id));
-        const leaving = [...list.querySelectorAll('.item')].filter(
-          (n) => !next.has(n.dataset.id)
-        );
+        const next = new Set([...staleItems, ...habitItems].map((i) => i.id));
+        const leaving = [
+          ...list.querySelectorAll('.item'),
+          ...habitList.querySelectorAll('.item'),
+        ].filter((n) => !next.has(n.dataset.id));
 
         if (leaving.length && !reduceMotion()) {
           leaving.forEach((n) => n.classList.add('leaving'));
@@ -1875,7 +2038,15 @@
           return;
         }
 
-        staleItems = data.items;
+        // The server returns one list in the person's order. It is split here
+        // because the split is a question about how the panel reads, not about
+        // what is stored: both halves are the same rows in the same table.
+        //
+        // staleItems keeps its name and its meaning for the drag code: it is
+        // the ranked list, and it is the list whose order gets sent back.
+        todayDate = data.today;
+        staleItems = data.items.filter((i) => i.type !== 'habit');
+        habitItems = data.items.filter((i) => i.type === 'habit');
         paintStale();
 
         paused.replaceChildren();
@@ -1906,11 +2077,23 @@
         }
         $('f-frequency-wrap').classList.toggle('hidden', next !== 'habit');
         $('f-why-wrap').classList.toggle('hidden', next !== 'project');
+        // Projects and tasks only. A habit has a cadence, and switching to one
+        // clears any date already typed so it cannot be sent for a type that
+        // must not carry it.
+        const dated = next === 'project' || next === 'task';
+        $('f-due-wrap').classList.toggle('hidden', !dated);
+        if (!dated) $('f-due').value = '';
       }
 
       for (const b of $('type-seg').children) {
         b.onclick = () => setType(b.dataset.type);
       }
+
+      // A date field has no empty state a person can reach on every platform:
+      // some pickers will not let you delete what is in them once it is set.
+      $('f-due-clear').onclick = () => {
+        $('f-due').value = '';
+      };
 
       // One form for both. Editing an existing row hides the type selector,
       // because what something is was decided when it was created and changing
@@ -1924,6 +2107,7 @@
         $('f-title').value = item ? item.title : '';
         $('f-why').value = (item && item.why) || '';
         $('f-frequency').value = (item && item.frequency) || 'daily';
+        $('f-due').value = (item && item.due) || '';
         $('f-error').classList.add('hidden');
 
         setType(item ? item.type : 'task');
@@ -1964,6 +2148,10 @@
         if (!editingEntry) payload.type = type;
         if (type === 'habit') payload.frequency = $('f-frequency').value;
         if (type === 'project') payload.why = $('f-why').value;
+        // Always sent for a type that can carry one, including when it is
+        // empty. That empty string is how a date is cleared: leaving the field
+        // out would mean "unchanged", and there would be no way to remove one.
+        if (type === 'project' || type === 'task') payload.due = $('f-due').value;
 
         try {
           await api(

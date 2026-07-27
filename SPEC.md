@@ -135,19 +135,52 @@ Yesterday's blocks, listed. Each has a one-tap **didn't happen**.
 Blocks are **assumed done** unless tapped. The posture is trust. An optional
 short reason can be attached to a miss.
 
-### 3.2 STALE — one list, in the user's own order
-Everything the user cares about, in **one list**: habits, projects, and tasks
-together. A task left three weeks is the same problem as a project left three
-weeks, so they share a list rather than being filed apart.
+### 3.2 STALE — two lists, ranked by different things
+
+**PRIORITIES — projects and tasks, in the user's own order.**
 
 **The order is entirely the user's.** Drag anywhere to reorder. Nothing sorts
-itself, and nothing reorders in response to age, coldness or anything else. The
-list *is* the ranking, so a position only ever changes because the user moved it.
+itself, and nothing reorders in response to age, coldness, a due date or
+anything else. The list *is* the ranking, so a position only ever changes
+because the user moved it.
+
+Each row shows its **rank number** to the left. It is derived from position
+every time the list is drawn and renumbers itself the moment a row is dragged.
+It is a readout and never an input: it is not stored, not sent anywhere, and
+cannot be typed into.
 
 New items are added at the **top**: something being added is something being
 thought about now.
 
-There is no priority field. The list position replaced it.
+There is no priority field, and none returns. The list position replaced it, and
+the rank number is that position read back rather than a second copy of it.
+
+**HABITS — below, ordered by how long they have been left, longest first.**
+
+No rank, no numbers, not draggable. Ranking habits against each other is not a
+question anyone has: a habit is not more important than another habit, it is
+just more overdue. The only meaningful order for them is cadence.
+
+Both lists carry the same things: the days-since label, the moon, the cold
+outline and its reason, and pause, edit and delete. Paused items are listed
+separately from both, as before.
+
+### 3.2.1 Due dates
+Optional, on **projects and tasks only**. A habit has a frequency instead, and a
+habit with a deadline would be two different ideas in one row.
+
+Set with a date picker in the add form and editable in place afterwards, and
+clearable back to nothing. Never inferred: nothing in this system decides on
+someone's behalf when a thing is due.
+
+Shown as a small pill on the row: the date, or `today` / `tomorrow` / `in 3
+days` when it is close, or `3 days overdue` in the miss colour once it has
+passed.
+
+**Sorting is unchanged.** A due date does not reorder anything. Position is
+still the user's ranking and a deadline is an annotation on a row, not an
+argument about where that row belongs. The user decides what is most important;
+the date is one of the facts they decide with.
 
 **Two things inform, and neither moves anything.** Every row shows how long
 since it was last scheduled, and a temperature bar coloured across the range on
@@ -164,16 +197,17 @@ Each item has these actions:
 - Tap the item to **pull it into tomorrow's plan**.
 - Tap **not now** to **pause** it. It leaves the list until unpaused, and a
   paused item is never marked cold.
-- **Edit** it: the title always, and the why or the frequency where the type
-  requires one. The same rules apply as at creation, so editing cannot empty a
-  field that was required to create it.
+- **Edit** it: the title always, the why or the frequency where the type
+  requires one, and the due date where the type allows one. The same rules apply
+  as at creation, so editing cannot empty a field that was required to create
+  it — but a due date was never required, so clearing one is always allowed.
 - **Delete** it, softly, per 2.5.
 
 Paused items are listed separately, out of the way but not hidden, so unpausing
 is always one tap and nothing disappears silently.
 
 ### Adding something
-An **+ Add** control at the top of the stale panel opens a small form:
+An **+ Add** control at the top of the priorities list opens a small form:
 
 - **type**: habit | project | task, as a segmented control
 - **title**: text
@@ -182,7 +216,9 @@ An **+ Add** control at the top of the stale panel opens a small form:
   eleven days matters for a daily habit and not for a monthly one.
 - **project only, why**: text, required. A project without a stated reason cannot
   be argued for later.
-- **task**: title only
+- **project and task only, due**: a date, optional, from a picker rather than a
+  text field, and clearable back to nothing. Never on a habit.
+- **task**: title and optionally a due date
 
 Save writes one row to `entries`. No reasoning, no model call.
 
@@ -223,12 +259,30 @@ rather than by a threshold.
 
 One call per user per day, before their evening. It receives every active entry
 with its type, title, frequency or why, how long since it was last scheduled,
-and whether it is paused. It returns, for each, cold or not and one line saying
-why. The verdict is stored on the row and the panel reads only that, so opening
-the app never calls the model.
+whether it is paused, and its due date where it has one. It returns, for each,
+cold or not and one line saying why. The verdict is stored on the row and the
+panel reads only that, so opening the app never calls the model.
+
+**Rank is not sent.** The user can already see the order on screen, so a reason
+that restates their own ranking back to them tells them nothing. The verdict is
+made on time, cadence and deadline only. The items are numbered in the briefing,
+but that numbering is by when they were added and exists only to match a verdict
+back to a row.
+
+**A deadline outranks cadence.** An item that is overdue, due today, or due soon
+and is not on any plan yet is cold however recently it was touched: nothing is
+happening about it and the date is coming anyway. The line says so, with the
+number — "due in 2 days and not on any plan yet". An item already on a plan for
+a coming day is being dealt with, so its date is not a reason to flag it.
+
+Everything countable is counted before the call: the days remaining, whether the
+date has passed, and whether the item sits on a plan for today or later. The
+model is asked for the judgement, never the arithmetic.
 
 A paused item is never cold. The user has already said it was set down on
-purpose, and 2.7 means that is not something to second-guess.
+purpose, and 2.7 means that is not something to second-guess. This holds even
+when it has a deadline and that deadline has passed, and it is enforced in code
+after the reply as well as asked for in the prompt.
 
 Failure leaves the previous verdict standing. Blanking the flags because a call
 failed would turn an outage into a screen that says everything is fine.
