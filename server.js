@@ -11,9 +11,8 @@ const { search_entries, update_entry } = require('./tools');
 const { summary } = require('./usage');
 
 // Requiring the scheduler starts its cron loop as a side effect, which is how
-// the jobs run in this one process. It also gives us the morning hour, so the
-// overview can describe the schedule without hardcoding it a second time.
-const { MORNING_HOUR } = require('./scheduler');
+// delivery runs in this one process. Nothing is imported from it.
+require('./scheduler');
 
 // Until there is real auth, every request is this one person.
 const CURRENT_USER = '00000000-0000-0000-0000-000000000001';
@@ -93,20 +92,6 @@ app.post('/observations/:id/delete', async (req, res) => {
 
 const hhmm = (t) => String(t || '').slice(0, 5);
 
-// "08:00" -> "8am", "07:30" -> "7:30am". The schedule sits in a narrow column
-// on a phone, where "Tuesdays and Saturdays at 08:00" wraps onto three lines.
-function shortTime(t) {
-  const raw = String(t || '');
-  // Shape-checked rather than parsed loosely: Number('') is 0, so an empty
-  // or malformed time would otherwise render as a confident "12am".
-  if (!/^\d{1,2}:\d{2}$/.test(raw)) return raw;
-
-  const [h, m] = raw.split(':').map(Number);
-  const suffix = h < 12 ? 'am' : 'pm';
-  const hour = h % 12 === 0 ? 12 : h % 12;
-  return m ? `${hour}:${String(m).padStart(2, '0')}${suffix}` : `${hour}${suffix}`;
-}
-
 app.get('/overview', async (req, res) => {
   const { data: profile } = await supabase
     .from('profile')
@@ -126,7 +111,6 @@ app.get('/overview', async (req, res) => {
   const of = (t) => (entries || []).filter((e) => e.type === t);
 
   const wake = hhmm(profile && profile.default_wake_time) || '07:00';
-  const morning = `${String(MORNING_HOUR).padStart(2, '0')}:00`;
 
   res.json({
     profile: {
@@ -144,15 +128,9 @@ app.get('/overview', async (req, res) => {
     tasks: of('task').sort((a, b) => (a.priority || 99) - (b.priority || 99)),
     ideas: of('idea'),
     waiting: of('waiting'),
-    schedule: [
-      { label: 'Day plan', when: `Daily ${shortTime(wake)}` },
-      { label: 'Open tasks', when: `Mon ${shortTime(morning)}` },
-      { label: 'Habit review', when: `Wed ${shortTime(morning)}` },
-      { label: 'Project review', when: `Fri ${shortTime(morning)}` },
-      { label: 'Ideas', when: `Tue, Sat ${shortTime(morning)}` },
-      { label: 'Waiting on', when: `Thu ${shortTime(morning)}` },
-      { label: 'Week ahead', when: `Sun ${shortTime(morning)}` },
-    ],
+    // `schedule` is gone with the eight digest jobs. Nothing is delivered on a
+    // timer until per-block sending is built, and reporting a schedule that no
+    // longer runs is worse than reporting none.
   });
 });
 
