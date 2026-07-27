@@ -125,26 +125,17 @@ async function markSent(user_id, job, date) {
 // delivery
 // ---------------------------------------------------------------------------
 
-// The same two tags telegram.js whitelists.
-function stripTags(text) {
-  return text.replace(/<\/?[bi]>/g, '');
-}
-
+// Outbound text used to be copied into `messages` so the chat and the bot read
+// as one thread. There is no chat now, nothing reads that table, and the text
+// of a block message lives on the block itself, so the copy is not written.
+// The table and its rows stay.
 async function deliver(user_id, text) {
   const body =
     text.length > MAX_MESSAGE
       ? `${text.slice(0, MAX_MESSAGE)}\n…(truncated)`
       : text;
 
-  const result = await sendTelegram(user_id, body);
-
-  if (result.sent) {
-    await supabase
-      .from('messages')
-      .insert({ user_id, role: 'assistant', content: stripTags(body) });
-  }
-
-  return result;
+  return sendTelegram(user_id, body);
 }
 
 // ---------------------------------------------------------------------------
