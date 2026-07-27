@@ -10,6 +10,8 @@ const express = require('express');
 
 const supabase = require('./db');
 const { create_entry, update_entry, get_calendar } = require('./tools');
+const { lastScheduled, daysBetween } = require('./staleness');
+const { generateForPlan } = require('./messages');
 
 // Requiring the scheduler starts its cron loop as a side effect, which is how
 // delivery runs in this one process. Nothing is imported from it.
@@ -46,46 +48,6 @@ function todayIn(timeZone) {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date());
-}
-
-const daysBetween = (from, to) =>
-  Math.round((new Date(`${to}T12:00:00Z`) - new Date(`${from}T12:00:00Z`)) / 86400000);
-
-/**
- * When was each entry last put in a plan?
- *
- * Joined here rather than with a PostgREST embed: the date lives on `plans`
- * and the tag lives on `blocks`, and two plain reads are easier to reason
- * about than an embed whose name depends on how the foreign key is exposed.
- */
-async function lastScheduled(user_id) {
-  const { data: blocks, error: blockErr } = await supabase
-    .from('blocks')
-    .select('entry_id, plan_id')
-    .eq('user_id', user_id)
-    .not('entry_id', 'is', null);
-
-  if (blockErr) throw new Error(`could not read blocks: ${blockErr.message}`);
-  if (!blocks || !blocks.length) return new Map();
-
-  const { data: plans, error: planErr } = await supabase
-    .from('plans')
-    .select('id, date')
-    .eq('user_id', user_id);
-
-  if (planErr) throw new Error(`could not read plans: ${planErr.message}`);
-
-  const dateOf = new Map((plans || []).map((p) => [p.id, p.date]));
-  const latest = new Map();
-
-  for (const b of blocks) {
-    const date = dateOf.get(b.plan_id);
-    if (!date) continue;
-    const seen = latest.get(b.entry_id);
-    if (!seen || date > seen) latest.set(b.entry_id, date);
-  }
-
-  return latest;
 }
 
 /**
@@ -363,7 +325,17 @@ app.post('/plan', async (req, res) => {
     const { error: blockErr } = await supabase.from('blocks').insert(rows);
     if (blockErr) throw new Error(blockErr.message);
 
+    // The plan is saved. Answer now.
     res.json({ date, blocks: rows.length, status: 'confirmed' });
+
+    // Then write the block messages, which takes a model call and the better
+    // part of a minute. Deliberately not awaited: the person confirmed a day
+    // and should not watch a spinner while a language model composes, and the
+    // plan does not depend on this succeeding. If it fails, message_text stays
+    // null and delivery sends the block title and time on its own.
+    generateForPlan(CURRENT_USER, planId).catch((err) =>
+      console.error(`[MESSAGES] unexpected: ${err.message}`)
+    );
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
