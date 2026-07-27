@@ -214,7 +214,14 @@ async function deliverDue(profile, now) {
     if (late > GRACE_MINUTES) {
       // Long past. Retire it rather than delivering a message about a block
       // the person has already lived through.
-      console.log(`[SEND] ${block.title}: ${late}m late, skipping`);
+      //
+      // Logged loudly and under its own tag on purpose. From the phone end,
+      // a message that never arrives looks the same whether the block expired
+      // or the scheduler is dead, and those need opposite responses. This line
+      // says the loop ran, found the block, and chose not to send.
+      console.warn(
+        `[EXPIRED] "${block.title}" was due at ${hhmm(block.start_time)} and is ${late} minutes late, past the ${GRACE_MINUTES} minute window. Not sent, and it will not be retried. The scheduler is running normally.`
+      );
       await markBlockSent(block.id);
       continue;
     }
