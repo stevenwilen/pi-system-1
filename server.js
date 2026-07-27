@@ -144,6 +144,59 @@ app.get('/overview', async (req, res) => {
   });
 });
 
+// --- finance diagnostics ----------------------------------------------------
+
+// The brain paraphrases tool errors conversationally, which loses the part
+// that says which of several similar failures actually happened. This reports
+// the raw error instead.
+//
+// It deliberately never returns a whole sheet URL. The publish token in the
+// middle is what grants access to the data, so only the two ends are shown,
+// which is enough to tell a truncated or quoted value from a good one.
+const finance = require('./finance');
+
+function describeUrlVar(name) {
+  const raw = process.env[name];
+  if (!raw) return { set: false };
+
+  const cleaned = raw.trim().replace(/^['"]+|['"]+$/g, '').replace(/\s+/g, '');
+
+  let parsed = null;
+  try {
+    parsed = new URL(cleaned);
+  } catch {
+    /* reported below as parses: false */
+  }
+
+  return {
+    set: true,
+    raw_length: raw.length,
+    has_quotes: /['"]/.test(raw),
+    has_whitespace: /\s/.test(raw),
+    starts: raw.slice(0, 12),
+    ends: raw.slice(-24),
+    parses: Boolean(parsed),
+    host: parsed ? parsed.host : null,
+    gid: parsed ? parsed.searchParams.get('gid') : null,
+    is_csv: /output=csv/.test(cleaned),
+    looks_like_edit_link: /\/edit/.test(cleaned) || /[?&]usp=/.test(cleaned),
+  };
+}
+
+app.get('/finance-status', async (req, res) => {
+  const result = await finance.brief();
+
+  res.json({
+    owner_matches: process.env.FINANCE_OWNER_USER_ID === CURRENT_USER,
+    owner_var_set: Boolean(process.env.FINANCE_OWNER_USER_ID),
+    transactions: describeUrlVar('FINANCE_TRANSACTIONS_CSV_URL'),
+    categories: describeUrlVar('FINANCE_CATEGORIES_CSV_URL'),
+    // The exact string the brain was given, before it reworded it.
+    error: result && result.error ? result.error : null,
+    connected: Boolean(result && !result.error && !result.empty),
+  });
+});
+
 // --- usage ------------------------------------------------------------------
 
 app.get('/usage', async (req, res) => {
