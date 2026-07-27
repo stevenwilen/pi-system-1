@@ -1,14 +1,20 @@
 {
-  "name": "Personal Intelligence",
-  "short_name": "Personal Intelligence",
-  "description": "A personal intelligence system.",
+  "name": "Planner",
+  "short_name": "Planner",
+  "description": "A personal planning system.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0f1115",
-  "theme_color": "#0f1115",
+  "background_color": "#16130F",
+  "theme_color": "#16130F",
   "icons": [
+    {
+      "src": "/icon-dusk-horizon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
