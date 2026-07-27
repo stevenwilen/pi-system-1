@@ -6,7 +6,6 @@ const path = require('path');
 const express = require('express');
 
 const supabase = require('./db');
-const { summary } = require('./usage');
 
 // Requiring the scheduler starts its cron loop as a side effect, which is how
 // delivery runs in this one process. Nothing is imported from it.
@@ -73,13 +72,9 @@ app.get('/overview', async (req, res) => {
   });
 });
 
-// --- usage ------------------------------------------------------------------
-
-app.get('/usage', async (req, res) => {
-  const result = await summary(CURRENT_USER);
-  if (result.error) return res.status(500).json({ error: result.error });
-  res.json(result);
-});
+// Token spend is still recorded on every model call, and usage.summary() still
+// works. It is simply not exposed: a usage readout is noise for anyone using
+// this to plan their day, and cost is a thing to check, not a thing to watch.
 
 app.listen(PORT, HOST, () => {
   console.log(`listening on http://localhost:${PORT}`);
