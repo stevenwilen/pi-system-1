@@ -1,0 +1,6 @@
+# `railway up` uploads this directory. It honours .gitignore, but secrets are
+# not something to leave resting on that: named here as well so the local .env
+# cannot reach a build context by accident.
+.env
+.env.*
+node_modules/
