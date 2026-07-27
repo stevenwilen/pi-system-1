@@ -231,6 +231,16 @@
         overflow-wrap: anywhere;
       }
 
+      /* Tappable, and it has to look it. Underlined on press rather than
+         always, so the list still reads as a list and not a page of links. */
+      .item-title.pullable {
+        cursor: pointer;
+      }
+
+      .item-title.pullable:active {
+        color: var(--coral-deep);
+      }
+
       /* Days sit right and never wrap, so the column of numbers stays
          readable no matter how long the titles are. */
       .days {
@@ -375,6 +385,131 @@
       .hidden {
         display: none;
       }
+
+      /* --- the builder --- */
+
+      #builder {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .block {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--surface);
+        border-radius: 16px;
+        padding: 10px 12px;
+        box-shadow: var(--shadow);
+      }
+
+      /* touch-action: none is what makes a drag a drag on a phone. Without it
+         the browser claims the gesture for scrolling and the handle never
+         receives a move event. */
+      .handle {
+        flex: none;
+        width: 22px;
+        text-align: center;
+        color: var(--muted);
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
+        font-size: 15px;
+      }
+
+      .block.pinned .handle {
+        cursor: default;
+        color: var(--blush);
+      }
+
+      .block-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .block-title {
+        font-size: 14px;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
+
+      .block-when {
+        font-size: 12px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .stepper {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+      }
+
+      .stepper button {
+        width: 28px;
+        height: 28px;
+        border: 0;
+        border-radius: 9px;
+        background: var(--sunk);
+        color: var(--text);
+        font: inherit;
+        font-size: 16px;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .stepper button:disabled {
+        opacity: 0.35;
+      }
+
+      .stepper span {
+        min-width: 52px;
+        text-align: center;
+        font-size: 12px;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .drop {
+        border: 1px dashed var(--coral);
+        border-radius: 16px;
+        height: 44px;
+      }
+
+      .block.dragging {
+        opacity: 0.4;
+      }
+
+      /* A collision is shown and never resolved. The builder will not move a
+         pinned block or silently shrink anything to make room. */
+      .clash {
+        font-size: 12px;
+        font-weight: 650;
+        color: var(--danger);
+        padding: 2px 12px;
+      }
+
+      .ends-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        font-size: 14px;
+      }
+
+      .ends-row strong {
+        font-size: 18px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .ends-row.late strong {
+        color: var(--danger);
+      }
     </style>
   </head>
   <body>
@@ -448,9 +583,35 @@
       </div>
 
       <div class="group">
-        <div class="group-head"><h2>Tomorrow</h2></div>
-        <div class="card">
-          <span class="none">The builder: blocks on 30 minute steps, pinned calendar events, a running end time. Not built.</span>
+        <div class="group-head">
+          <h2>Tomorrow</h2>
+          <span class="none" id="plan-date"></span>
+          <button class="addbtn" id="block-toggle" type="button">+ Block</button>
+        </div>
+
+        <div class="card hidden" id="block-card">
+          <form id="block-form">
+            <label>
+              What is it
+              <input id="b-title" type="text" autocomplete="off" placeholder="Lunch, rest, drive" />
+            </label>
+            <div class="row">
+              <button class="primary grow" type="submit">Add block</button>
+              <button class="linkbtn" type="button" id="b-cancel">Cancel</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card hidden" id="all-day"></div>
+
+        <div id="builder"></div>
+
+        <div class="card" id="ends">
+          <div class="ends-row">
+            <span>Day ends</span>
+            <strong id="end-time">not yet</strong>
+          </div>
+          <button class="primary" id="confirm" type="button" disabled>Confirm</button>
         </div>
       </div>
     </main>
@@ -488,7 +649,18 @@
         const card = el('div', 'card item' + (item.paused ? ' paused' : ''));
 
         const top = el('div', 'item-top');
-        top.append(el('div', 'item-title', item.title));
+        const title = el('div', 'item-title', item.title);
+        // Tapping the title is how something gets into tomorrow. Paused items
+        // are not offered: the person has said not now, and the panel should
+        // not quietly keep suggesting it.
+        if (!item.paused) {
+          title.classList.add('pullable');
+          title.onclick = () => {
+            addBlock({ title: item.title, entryId: item.id });
+            $('builder').scrollIntoView({ behavior: 'smooth', block: 'center' });
+          };
+        }
+        top.append(title);
         // Never-scheduled items count from when they were added, so the label
         // says which clock is running rather than implying a plan existed.
         const suffix = item.last_scheduled ? ' since scheduled' : ' since added';
@@ -556,6 +728,20 @@
         paused.replaceChildren();
         $('paused-group').classList.toggle('hidden', !data.paused.length);
         for (const item of data.paused) paused.append(itemCard(item));
+
+        // The builder plans tomorrow, and the first block starts at the wake
+        // time unless it is moved.
+        const [wh, wm] = String(data.wake_time).split(':').map(Number);
+        wakeMinutes = wh * 60 + wm;
+
+        if (planDate === null) {
+          planDate = nextDay(data.today);
+          $('plan-date').textContent = new Date(`${planDate}T12:00:00Z`)
+            .toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'short' });
+          await loadCalendar(planDate);
+        } else {
+          renderBuilder();
+        }
       }
 
       // --- the add form ---
@@ -621,6 +807,259 @@
         } finally {
           $('f-save').disabled = false;
         }
+      };
+
+      // --- the builder ------------------------------------------------------
+
+      const STEP = 30; // minutes. The only unit the builder speaks.
+      const MIN_DURATION = 30;
+      const MAX_DURATION = 8 * 60;
+
+      let blocks = [];
+      let wakeMinutes = 7 * 60;
+      let planDate = null;
+
+      const clock = (mins) => {
+        const m = ((Math.round(mins) % 1440) + 1440) % 1440;
+        return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+      };
+
+      function span(mins) {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        if (!h) return `${m}m`;
+        return m ? `${h}h ${m}m` : `${h}h`;
+      }
+
+      /**
+       * Walk the list once and give every block a start time.
+       *
+       * Unpinned blocks flow: each begins where the last one ended. Pinned
+       * blocks hold the start they came with and never move, so the cursor
+       * jumps to them. When the cursor has already run past a pinned block the
+       * overlap is recorded on the block and shown. It is never resolved:
+       * nothing is shortened, nothing is pushed, because the person is the one
+       * who decides what gives.
+       */
+      function layout() {
+        let cursor = wakeMinutes;
+
+        for (const b of blocks) {
+          if (b.pinned) {
+            b.clash = Math.max(0, cursor - b.start);
+            cursor = b.start + b.duration;
+          } else {
+            b.clash = 0;
+            b.start = cursor;
+            cursor += b.duration;
+          }
+        }
+        return cursor;
+      }
+
+      function blockRow(b, index) {
+        const row = el('div', 'block' + (b.pinned ? ' pinned' : ''));
+        row.dataset.index = String(index);
+
+        const handle = el('div', 'handle', b.pinned ? '📌' : '⠿');
+        if (!b.pinned) handle.onpointerdown = (e) => startDrag(e, index);
+        row.append(handle);
+
+        const body = el('div', 'block-body');
+        body.append(el('div', 'block-title', b.title));
+        body.append(
+          el('div', 'block-when', `${clock(b.start)} to ${clock(b.start + b.duration)}`)
+        );
+        row.append(body);
+
+        if (b.pinned) {
+          row.append(el('div', 'block-when', span(b.duration)));
+        } else {
+          const stepper = el('div', 'stepper');
+
+          const minus = el('button', null, '−');
+          minus.type = 'button';
+          minus.disabled = b.duration <= MIN_DURATION;
+          minus.onclick = () => {
+            b.duration = Math.max(MIN_DURATION, b.duration - STEP);
+            renderBuilder();
+          };
+
+          const plus = el('button', null, '+');
+          plus.type = 'button';
+          plus.disabled = b.duration >= MAX_DURATION;
+          plus.onclick = () => {
+            b.duration = Math.min(MAX_DURATION, b.duration + STEP);
+            renderBuilder();
+          };
+
+          stepper.append(minus, el('span', null, span(b.duration)), plus);
+          row.append(stepper);
+
+          const remove = el('button', 'linkbtn', '×');
+          remove.type = 'button';
+          remove.onclick = () => {
+            blocks.splice(index, 1);
+            renderBuilder();
+          };
+          row.append(remove);
+        }
+
+        return row;
+      }
+
+      function renderBuilder() {
+        const end = layout();
+        const builder = $('builder');
+        builder.replaceChildren();
+
+        if (!blocks.length) {
+          const empty = el('div', 'card');
+          empty.append(
+            el('span', 'none', 'Tap something in Stale to put it in tomorrow, or add a block.')
+          );
+          builder.append(empty);
+        }
+
+        blocks.forEach((b, i) => {
+          builder.append(blockRow(b, i));
+          if (b.clash) {
+            builder.append(
+              el('div', 'clash', `Overlaps ${b.title} by ${span(b.clash)}. Shorten something above.`)
+            );
+          }
+        });
+
+        $('end-time').textContent = blocks.length ? clock(end) : 'not yet';
+        // Past midnight is the one case the clock cannot show on its own:
+        // 00:30 looks earlier than 23:00 rather than later.
+        $('ends').querySelector('.ends-row').classList.toggle('late', end >= 1440);
+        if (end >= 1440 && blocks.length) {
+          $('end-time').textContent = clock(end) + ' next day';
+        }
+      }
+
+      function addBlock({ title, entryId = null, duration = 60 }) {
+        blocks.push({ title, entryId, duration, start: 0, pinned: false, clash: 0 });
+        renderBuilder();
+      }
+
+      // --- drag to reorder ---
+      //
+      // Pointer events rather than HTML5 drag and drop, which does not fire on
+      // touch. The row being dragged is left in place at reduced opacity and a
+      // marker shows where it would land, so the list never reshuffles under
+      // the finger while it is still moving.
+
+      let drag = null;
+
+      function startDrag(event, index) {
+        if (blocks[index].pinned) return;
+        event.preventDefault();
+
+        drag = { from: index, to: index };
+        const row = event.currentTarget.parentNode;
+        row.classList.add('dragging');
+        row.setPointerCapture(event.pointerId);
+
+        const move = (e) => {
+          const rows = [...$('builder').querySelectorAll('.block')];
+          let to = drag.from;
+          for (const r of rows) {
+            const box = r.getBoundingClientRect();
+            const i = Number(r.dataset.index);
+            // Past the midpoint of a row means the dragged block belongs on
+            // the far side of it.
+            if (e.clientY > box.top + box.height / 2) to = i;
+          }
+          drag.to = to;
+        };
+
+        const end = () => {
+          row.releasePointerCapture(event.pointerId);
+          row.removeEventListener('pointermove', move);
+          row.removeEventListener('pointerup', end);
+          row.removeEventListener('pointercancel', end);
+
+          if (drag && drag.to !== drag.from) {
+            const [moved] = blocks.splice(drag.from, 1);
+            blocks.splice(drag.to, 0, moved);
+          }
+          drag = null;
+          renderBuilder();
+        };
+
+        row.addEventListener('pointermove', move);
+        row.addEventListener('pointerup', end);
+        row.addEventListener('pointercancel', end);
+      }
+
+      // --- pinned blocks from the calendar ---
+
+      function nextDay(date) {
+        const d = new Date(`${date}T12:00:00Z`);
+        d.setUTCDate(d.getUTCDate() + 1);
+        return d.toISOString().slice(0, 10);
+      }
+
+      async function loadCalendar(date) {
+        let events = [];
+        let allDay = [];
+        try {
+          const data = await api(`/calendar/${date}`);
+          events = data.events || [];
+          allDay = data.all_day || [];
+        } catch {
+          // A calendar that cannot be read must never stop planning.
+        }
+
+        // All-day entries are reminders. They are worth seeing while planning
+        // and they claim no hours, so they sit above the blocks rather than
+        // inside them.
+        const note = $('all-day');
+        note.replaceChildren();
+        note.classList.toggle('hidden', !allDay.length);
+        if (allDay.length) {
+          note.append(el('span', 'none', 'All day: ' + allDay.map((a) => a.title).join(', ')));
+        }
+
+        // The server returns them already in clock order, so they only need
+        // appending. An earlier version sorted the whole list with a
+        // comparator that returned 0 for any pinned/unpinned pair, which is
+        // not a valid ordering: the result depended on the sort algorithm
+        // rather than on the times.
+        blocks = blocks.filter((b) => !b.pinned);
+        for (const e of events) {
+          blocks.push({
+            title: e.title,
+            entryId: null,
+            duration: e.duration_minutes,
+            start: e.start_minutes,
+            pinned: true,
+            clash: 0,
+          });
+        }
+        renderBuilder();
+      }
+
+      $('block-toggle').onclick = () => {
+        const card = $('block-card');
+        const opening = card.classList.contains('hidden');
+        card.classList.toggle('hidden', !opening);
+        if (opening) {
+          $('b-title').value = '';
+          $('b-title').focus();
+        }
+      };
+
+      $('b-cancel').onclick = () => $('block-card').classList.add('hidden');
+
+      $('block-form').onsubmit = (event) => {
+        event.preventDefault();
+        const title = $('b-title').value.trim();
+        if (!title) return;
+        addBlock({ title });
+        $('block-card').classList.add('hidden');
       };
 
       setType('task');

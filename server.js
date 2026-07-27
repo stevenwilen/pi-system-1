@@ -9,7 +9,7 @@ const path = require('path');
 const express = require('express');
 
 const supabase = require('./db');
-const { create_entry, update_entry } = require('./tools');
+const { create_entry, update_entry, get_calendar } = require('./tools');
 
 // Requiring the scheduler starts its cron loop as a side effect, which is how
 // delivery runs in this one process. Nothing is imported from it.
@@ -148,6 +148,80 @@ app.get('/entries', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// --- calendar ---------------------------------------------------------------
+
+// Wall-clock minutes past midnight, where this person lives.
+//
+// get_calendar returns UTC instants. Converting them here rather than in the
+// browser keeps the app doing pure arithmetic: it lays blocks out on a number
+// line and never has to know what a timezone is.
+function minutesOfDay(iso, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+    .formatToParts(new Date(iso))
+    .reduce((acc, p) => ({ ...acc, [p.type]: p.value }), {});
+
+  return Number(parts.hour) * 60 + Number(parts.minute);
+}
+
+/**
+ * The day's fixed commitments, as pinned blocks.
+ *
+ * These hours are already gone. The builder lays everything else out around
+ * them and never moves them.
+ */
+app.get('/calendar/:date', async (req, res) => {
+  const date = String(req.params.date);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+  }
+
+  const { data: profile } = await supabase
+    .from('profile')
+    .select('timezone')
+    .eq('user_id', CURRENT_USER)
+    .maybeSingle();
+
+  const timeZone = (profile && profile.timezone) || 'UTC';
+
+  // get_calendar swallows its own failures and returns [], so a feed that is
+  // down costs the pinned blocks and never the whole builder.
+  const raw = await get_calendar(CURRENT_USER, date);
+  if (!Array.isArray(raw)) return res.json({ date, events: [], all_day: [] });
+
+  const timed = [];
+  const allDay = [];
+
+  for (const e of raw) {
+    const start = minutesOfDay(e.start, timeZone);
+    const length = Math.round((new Date(e.end) - new Date(e.start)) / 60000);
+
+    // An all-day entry is a reminder, not an appointment. It claims no hours,
+    // and treating it as one would pin a 24 hour block at midnight and push
+    // the whole day past the end of it. Reported separately so it is still
+    // visible without owning any time.
+    if (start === 0 && length >= 1440) {
+      allDay.push({ title: e.title });
+      continue;
+    }
+
+    timed.push({
+      title: e.title,
+      start_minutes: start,
+      // Clamped to the end of the day: an event running past midnight would
+      // otherwise push the running end time into nonsense.
+      duration_minutes: Math.max(15, Math.min(length, 1440 - start)),
+    });
+  }
+
+  timed.sort((a, b) => a.start_minutes - b.start_minutes);
+  res.json({ date, events: timed, all_day: allDay });
 });
 
 // --- writing ----------------------------------------------------------------
