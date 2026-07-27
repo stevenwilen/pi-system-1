@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
     />
-    <meta name="theme-color" content="#16130F" />
+    <meta name="theme-color" content="#0F1420" />
     <title>Personal Planning System</title>
 
     <link rel="manifest" href="/manifest.json" />
@@ -19,27 +19,35 @@
     <meta name="apple-mobile-web-app-title" content="Planner" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <style>
-      /* Dusk. Built for a phone in a dark room at the end of the day, so the
-         whole surface sits close together in value and only the two things
-         you can act on carry any saturation. */
+      /* Night sky. Built for a phone in a dark room at the end of the day, so
+         the whole surface sits close together in value and only the things you
+         can act on carry any warmth. */
       :root {
-        --bg: #16130f;        /* warm near-black, never blue-black */
-        --surface: #211d18;   /* cards and rows */
-        --recessed: #1c1913;  /* set into the page, not raised off it */
-        --raised: #2a2620;    /* held above it, while being dragged */
-        --line: #2c2721;      /* hairlines */
+        --bg: #0f1420;        /* deep blue-black */
+        --surface: #182030;   /* cards and rows */
+        --recessed: #1c2436;  /* set into the page, not raised off it */
+        --raised: #232c40;    /* held above it, while being dragged */
+        --line: #232c40;      /* borders and hairlines */
 
-        --text: #ede7de;
-        --muted: #8b8177;
-        --dim: #6b6459;       /* disabled, completed, spent */
+        --text: #e8eaf2;
+        --muted: #6b7a96;
+        --dim: #47536b;       /* disabled, completed, spent */
 
-        /* Amber means actionable. It appears on the steppers and on Confirm
-           and nowhere else, so anything glowing is a thing you can press. */
-        --amber: #e0a458;
-        --warn: #c4694a;      /* a miss, or a collision */
+        /* Brass means actionable. It appears on the steppers and on Confirm
+           and nowhere else, so anything warm is a thing you can press. */
+        --brass: #c8b074;
+        --brass-rgb: 200, 176, 116;
+        --warn: #b5654a;      /* a miss, or a collision */
+        --star: #c9d4e8;
 
-        --pinned-line: #3a332a;
-        --radius: 10px;
+        /* The moon is drawn, not tinted: the disc, its hairline, and the lit
+           part are three fixed values so a phase reads the same on every row. */
+        --moon-dark: #1c2436;
+        --moon-line: #3d4a66;
+        --moon-lit: #e4e9f5;
+
+        --pinned-line: #232c40;
+        --radius: 12px;
       }
 
       * {
@@ -157,11 +165,11 @@
 
       /* A kind is a heading inside the list, not a card of its own. */
       .kind-head {
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 600;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: var(--dim);
+        color: var(--muted);
         padding: 0 2px 5px;
       }
 
@@ -173,6 +181,7 @@
 
       .intent {
         background: var(--surface);
+        border: 1px solid var(--line);
         border-radius: var(--radius);
         padding: 12px 13px;
         display: flex;
@@ -420,17 +429,24 @@
 
       .group-head h2 {
         margin: 0;
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 600;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
         color: var(--muted);
+      }
+
+      /* Dates sit next to those headings and are read as figures. */
+      #review-date,
+      #plan-date {
+        font-variant-numeric: tabular-nums;
       }
 
       /* Tight horizontally, generous vertically: the eye runs down a list at
          night, and side padding only narrows the text. */
       .card {
         background: var(--surface);
+        border: 1px solid var(--line);
         border-radius: var(--radius);
         padding: 14px 13px;
         display: flex;
@@ -509,13 +525,15 @@
 
       /* --- stale rows --- */
 
-      /* Square. A single-sided border against a rounded corner leaves a wedge
-         of background showing where the two curves fail to meet. */
+      /* A card again. These were square with a coloured left edge, because the
+         edge was the temperature bar and a single-sided border against a
+         rounded corner leaves a wedge of background where the two curves fail
+         to meet. The moon carries that reading now, so the row can close up. */
       .item {
         background: var(--surface);
-        border-radius: 0;
-        border-left: 3px solid var(--line);
-        padding: 13px 13px 12px 12px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 12px 13px;
         display: flex;
         flex-direction: column;
         gap: 7px;
@@ -547,8 +565,11 @@
         cursor: pointer;
       }
 
+      /* Brightens rather than warms. Pulling something into tomorrow is an
+         action, but brass is reserved for the steppers and Confirm, so nothing
+         else may borrow it. */
       .item-title.pullable:active {
-        color: var(--amber);
+        color: var(--star);
       }
 
       .days {
@@ -558,6 +579,142 @@
         color: var(--muted);
         white-space: nowrap;
         padding-top: 2px;
+      }
+
+      /* --- the moon --- */
+      /*
+         How far through its own expected window an item is, drawn rather than
+         written. The phase is arithmetic on the days and the frequency, so it
+         is absolute: eleven days reads the same whatever else is on the list.
+         The brain's cold verdict is a separate thing and still arrives as an
+         outline and a sentence.
+      */
+      .moon {
+        flex: none;
+        width: 20px;
+        height: 20px;
+        margin-top: 1px;
+        display: block;
+      }
+
+      .moon .disc {
+        fill: var(--moon-dark);
+      }
+
+      /* Drawn over the lit part, so the edge stays crisp all the way round
+         instead of the fill covering half the hairline. */
+      .moon .rim {
+        fill: none;
+        stroke: var(--moon-line);
+        stroke-width: 1;
+      }
+
+      .moon .lit {
+        fill: var(--moon-lit);
+      }
+
+      /* A phase only cross-fades when it has actually changed. Both the old
+         shape and the new one are drawn for the length of the fade. */
+      .moon .lit.out {
+        animation: moon-out 260ms ease-out forwards;
+      }
+
+      .moon .lit.in {
+        animation: moon-in 260ms ease-out;
+      }
+
+      @keyframes moon-out {
+        from { opacity: 1; }
+        to { opacity: 0; }
+      }
+
+      @keyframes moon-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      /* --- stars --- */
+      /*
+         Peripheral by construction: a fixed layer behind everything, with every
+         dot placed in the gutter outside the 14px the content is padded by, so
+         none of them can sit behind text or under a card. Positions are written
+         down rather than generated, so they do not wander between renders.
+      */
+      .stars {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .stars i {
+        position: absolute;
+        left: var(--x);
+        top: var(--y);
+        width: var(--s);
+        height: var(--s);
+        border-radius: 50%;
+        background: var(--star);
+        opacity: var(--o);
+      }
+
+      /* Above the stars. Nothing here has to be told to be opaque; the layer
+         simply sits underneath. */
+      header,
+      .tabs,
+      main {
+        position: relative;
+        z-index: 1;
+      }
+
+      /* --- motion --- */
+      /*
+         Everything that used to snap. No overshoot and no spring anywhere: this
+         is a screen for the end of the day, and a bounce is an interruption.
+      */
+      @keyframes row-in {
+        from {
+          opacity: 0;
+          transform: translateY(-6px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      .item.entering,
+      .block.entering {
+        animation: row-in 180ms ease-out;
+      }
+
+      .item.leaving {
+        opacity: 0;
+        transform: translateY(-6px);
+        transition: opacity 150ms ease-out, transform 150ms ease-out;
+      }
+
+      /* The lane swap fades the content as a whole rather than each view, so
+         one fade covers both halves of the change. */
+      main.swapping {
+        opacity: 0;
+      }
+
+      main {
+        transition: opacity 70ms ease-out;
+      }
+
+      /* Asked for none, given none. The animations are switched off rather than
+         shortened, and the JS checks the same query before it measures
+         anything, so nothing is left half-applied. */
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 1ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 1ms !important;
+        }
       }
 
       .item-meta {
@@ -589,9 +746,10 @@
         gap: 14px;
       }
 
+      /* No moon, and no fill. A pause is the person saying the clock is not
+         running, so the row must not be showing a phase at all. */
       .item.paused {
         background: none;
-        border-left-color: var(--line);
       }
 
       .item.paused .item-title {
@@ -660,8 +818,9 @@
         align-items: center;
         gap: 11px;
         background: var(--surface);
+        border: 1px solid var(--line);
         border-radius: var(--radius);
-        padding: 11px 12px;
+        padding: 10px 11px;
       }
 
       /* Recessed, and outlined rather than filled. A calendar event is a wall
@@ -724,10 +883,10 @@
       .stepper button {
         width: 30px;
         height: 30px;
-        border: 1px solid rgba(224, 164, 88, 0.28);
+        border: 1px solid rgba(var(--brass-rgb), 0.28);
         border-radius: 8px;
         background: none;
-        color: var(--amber);
+        color: var(--brass);
         font: inherit;
         font-size: 15px;
         font-weight: 600;
@@ -736,7 +895,7 @@
       }
 
       .stepper button:active {
-        background: rgba(224, 164, 88, 0.12);
+        background: rgba(var(--brass-rgb), 0.12);
       }
 
       .stepper button:disabled {
@@ -843,14 +1002,14 @@
         border-top: 1px solid var(--line);
         border-radius: 0 0 var(--radius) var(--radius);
         background: none;
-        color: var(--amber);
+        color: var(--brass);
         font-weight: 600;
         letter-spacing: 0.02em;
         padding: 14px;
       }
 
       #ends .primary:active {
-        background: rgba(224, 164, 88, 0.1);
+        background: rgba(var(--brass-rgb), 0.1);
       }
 
       #ends .primary:disabled {
@@ -925,10 +1084,11 @@
         line-height: 1.45;
       }
 
+      /* Not brass. A focused field is where you are, not something to press. */
       input:focus,
       select:focus,
       textarea:focus {
-        outline: 1px solid var(--amber);
+        outline: 1px solid var(--muted);
         outline-offset: -1px;
       }
 
@@ -961,6 +1121,22 @@
     </style>
   </head>
   <body>
+    <!-- Ten fixed points in the margins. They never move, never render behind
+         text, and carry no meaning: the screen is a night sky and this is the
+         sky. Every x sits inside the 14px gutter the content is padded by. -->
+    <div class="stars" aria-hidden="true">
+      <i style="--x: 5px; --y: 13vh; --s: 2px; --o: 0.45"></i>
+      <i style="--x: calc(100% - 9px); --y: 8vh; --s: 2px; --o: 0.3"></i>
+      <i style="--x: 9px; --y: 31vh; --s: 3px; --o: 0.55"></i>
+      <i style="--x: calc(100% - 7px); --y: 25vh; --s: 2px; --o: 0.5"></i>
+      <i style="--x: 6px; --y: 49vh; --s: 2px; --o: 0.35"></i>
+      <i style="--x: calc(100% - 11px); --y: 44vh; --s: 3px; --o: 0.4"></i>
+      <i style="--x: 4px; --y: 67vh; --s: 2px; --o: 0.5"></i>
+      <i style="--x: calc(100% - 8px); --y: 61vh; --s: 2px; --o: 0.28"></i>
+      <i style="--x: 8px; --y: 86vh; --s: 2px; --o: 0.38"></i>
+      <i style="--x: calc(100% - 6px); --y: 79vh; --s: 3px; --o: 0.6"></i>
+    </div>
+
     <header>
       Planner
     </header>
@@ -970,7 +1146,7 @@
       <button type="button" id="tab-money" role="tab" aria-selected="false">Money</button>
     </nav>
 
-    <main>
+    <main id="main">
      <div id="plan-view" class="view">
       <div class="group">
         <div class="group-head">
@@ -1173,41 +1349,247 @@
         return node;
       }
 
-      // Staleness as temperature. The edge of each row is coloured by where it
-      // sits in the range currently on screen, so the list reads as a gradient
-      // from warm at the bottom to cold at the top rather than as a set of
-      // categories. Relative, not absolute: eleven days means something
-      // different on a list where the worst is twelve than on one where the
-      // worst is ninety.
-      const FRESH = [0x7d, 0x8b, 0x6a];
-      const MIDDLE = [0x8a, 0x9a, 0x9e];
-      const COLDEST = [0x6b, 0x93, 0xb8];
+      // --- motion -----------------------------------------------------------
+      //
+      // Read at the moment of the animation rather than once at load, so
+      // turning the setting on takes effect without a reload. Every animated
+      // path checks it and takes the plain branch, which means nothing is left
+      // mid-transition with an inline transform still on it.
 
-      const hex = (rgb) =>
-        '#' + rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
-
-      const mix = (from, to, t) => from.map((v, i) => v + (to[i] - v) * t);
-
-      function temperature(days, min, max) {
-        if (!(max > min)) return hex(MIDDLE);
-        const t = (days - min) / (max - min);
-        return t < 0.5
-          ? hex(mix(FRESH, MIDDLE, t * 2))
-          : hex(mix(MIDDLE, COLDEST, (t - 0.5) * 2));
+      // Asked at the moment of the animation, not once at load. Evaluating a
+      // browser API while the script is still being read is how a page ends up
+      // blank instead of unstyled, and the setting can change under a running
+      // page anyway.
+      function reduceMotion() {
+        if (typeof window === 'undefined' || !window.matchMedia) return true;
+        return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       }
 
-      function itemCard(item, range, index) {
+      const SHIFT_MS = 180; // blocks moving when a duration changes
+      const LEAVE_MS = 150; // a row on its way out
+      const SWAP_MS = 70; //  half a lane cross-fade, out then in
+      const COLLAPSE_MS = 200;
+
+      /**
+       * FLIP a list whose rows are rebuilt, matching them up by position.
+       *
+       * Position is the right key here: a stepper changes a duration, so the
+       * blocks and their order are identical either side of the render and only
+       * their tops move. Anything that adds or removes a row uses the entering
+       * and leaving classes instead, which do not need identity at all.
+       */
+      function shiftRows(container, selector, mutate) {
+        if (reduceMotion()) {
+          mutate();
+          return;
+        }
+
+        const before = [...container.querySelectorAll(selector)].map(
+          (n) => n.getBoundingClientRect().top
+        );
+
+        mutate();
+
+        const after = [...container.querySelectorAll(selector)];
+        const moved = [];
+
+        after.forEach((node, i) => {
+          if (before[i] === undefined) return;
+          const delta = before[i] - node.getBoundingClientRect().top;
+          if (!delta) return;
+          node.style.transition = 'none';
+          node.style.transform = `translateY(${delta}px)`;
+          moved.push(node);
+        });
+
+        if (!moved.length) return;
+
+        requestAnimationFrame(() => {
+          for (const node of moved) {
+            if (!node.isConnected) continue;
+            node.style.transition = `transform ${SHIFT_MS}ms ease-out`;
+            node.style.transform = '';
+          }
+        });
+
+        // Clear the inline styles once they have done their work, so a later
+        // drag is not fighting a leftover transition.
+        setTimeout(() => {
+          for (const node of moved) {
+            node.style.transition = '';
+            node.style.transform = '';
+          }
+        }, SHIFT_MS + 20);
+      }
+
+      /**
+       * Open or close something by animating its height.
+       *
+       * Height is measured rather than assumed, because these panels hold forms
+       * whose size depends on what is in them. `hidden` is still what holds the
+       * closed state, so nothing about which things are open changes here.
+       */
+      function collapse(node, open) {
+        if (reduceMotion()) {
+          node.classList.toggle('hidden', !open);
+          return;
+        }
+
+        const done = () => {
+          node.style.height = '';
+          node.style.overflow = '';
+          node.style.transition = '';
+        };
+
+        if (open) {
+          node.classList.remove('hidden');
+          const target = node.scrollHeight;
+          node.style.overflow = 'hidden';
+          node.style.height = '0px';
+
+          requestAnimationFrame(() => {
+            node.style.transition = `height ${COLLAPSE_MS}ms ease-out`;
+            node.style.height = `${target}px`;
+          });
+
+          setTimeout(done, COLLAPSE_MS + 20);
+          return;
+        }
+
+        node.style.overflow = 'hidden';
+        node.style.height = `${node.scrollHeight}px`;
+
+        requestAnimationFrame(() => {
+          node.style.transition = `height ${COLLAPSE_MS}ms ease-out`;
+          node.style.height = '0px';
+        });
+
+        setTimeout(() => {
+          node.classList.add('hidden');
+          done();
+        }, COLLAPSE_MS + 20);
+      }
+
+      // Staleness as a moon phase.
+      //
+      // This replaced a temperature bar that coloured each row by where it sat
+      // in the range currently on screen. That was relative, so the same eleven
+      // days looked urgent on one list and fine on another, and adding a single
+      // very stale item recoloured everything else. The phase is absolute: it
+      // compares the days against the window this item was always meant to run
+      // on, so a row means the same thing however the list around it changes.
+      //
+      // Arithmetic, entirely. The brain's cold verdict is a separate judgement
+      // and still arrives as an outline and a sentence.
+      const WINDOW_DAYS = {
+        daily: 3,
+        'few times a week': 5,
+        weekly: 10,
+        monthly: 40,
+      };
+
+      // Projects and tasks state no cadence, so they get a fortnight. It is not
+      // a guess at what they need; it is the length after which anything
+      // undated is worth looking at again.
+      const UNDATED_WINDOW = 14;
+
+      // Fraction of the expected window used up. Can exceed 1, which is the
+      // whole point of the last band.
+      function throughWindow(item) {
+        return item.days / (WINDOW_DAYS[item.frequency] || UNDATED_WINDOW);
+      }
+
+      // Waning, so the moon empties as the days run out: full when it was just
+      // done, dark when it is overdue.
+      const PHASES = [
+        { name: 'full', until: 0.2, lit: 1 },
+        { name: 'waning-gibbous', until: 0.4, lit: 0.75 },
+        { name: 'last-quarter', until: 0.6, lit: 0.5 },
+        { name: 'waning-crescent', until: 0.85, lit: 0.25 },
+        { name: 'new', until: Infinity, lit: 0 },
+      ];
+
+      const phaseOf = (t) => PHASES.find((p) => t < p.until);
+
+      /**
+       * The lit part of a waning moon, as one path.
+       *
+       * Two arcs. The first is the left half of the disc, from the top round to
+       * the bottom. The second is the terminator coming back up, an ellipse
+       * half as wide as the moon is lit: when more than half is lit it bulges
+       * out to the right and adds area, and when less than half is lit it
+       * curves back to the left and takes area away. At exactly half its width
+       * is zero, which SVG draws as the straight line a quarter moon needs.
+       */
+      function litPath(lit, cx, cy, r) {
+        const rx = r * Math.abs(2 * lit - 1);
+        // Same rotational direction continues top -> left -> bottom -> right.
+        // Reversing it on the second arc is what cuts the crescent back in.
+        const sweep = lit >= 0.5 ? 0 : 1;
+        return `M ${cx},${cy - r} A ${r},${r} 0 0,0 ${cx},${cy + r} A ${rx},${r} 0 0,${sweep} ${cx},${cy - r} Z`;
+      }
+
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+
+      const svgEl = (tag, attrs) => {
+        const node = document.createElementNS(SVG_NS, tag);
+        for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+        return node;
+      };
+
+      // What phase each row was showing last time it was drawn, so a change can
+      // be faded rather than swapped. Ids that leave the list are dropped with
+      // it: a row that comes back is new again and simply appears.
+      let lastPhase = new Map();
+
+      function moonFor(item) {
+        const phase = phaseOf(throughWindow(item));
+        const svg = svgEl('svg', {
+          class: 'moon',
+          viewBox: '0 0 20 20',
+          width: '20',
+          height: '20',
+          'aria-hidden': 'true',
+        });
+
+        svg.append(svgEl('circle', { class: 'disc', cx: 10, cy: 10, r: 9 }));
+
+        const previous = lastPhase.get(item.id);
+        const changed = previous !== undefined && previous !== phase.name && !reduceMotion();
+
+        // The outgoing shape is drawn underneath and faded out while the new
+        // one fades in, so the two overlap rather than one replacing the other.
+        if (changed) {
+          const was = PHASES.find((p) => p.name === previous);
+          if (was && was.lit > 0) {
+            svg.append(svgEl('path', { class: 'lit out', d: litPath(was.lit, 10, 10, 9) }));
+          }
+        }
+
+        if (phase.lit > 0) {
+          svg.append(
+            svgEl('path', {
+              class: 'lit' + (changed ? ' in' : ''),
+              d: litPath(phase.lit, 10, 10, 9),
+            })
+          );
+        }
+
+        // Last, so the hairline reads all the way round instead of being half
+        // covered by the fill.
+        svg.append(svgEl('circle', { class: 'rim', cx: 10, cy: 10, r: 9 }));
+
+        lastPhase.set(item.id, phase.name);
+        return svg;
+      }
+
+      function itemCard(item, index) {
         const card = el(
           'div',
           'card item' + (item.paused ? ' paused' : '') + (item.cold ? ' cold' : '')
         );
         card.dataset.id = item.id;
         if (index !== undefined) card.dataset.index = String(index);
-
-        // Paused rows keep the neutral hairline. A pause is not a temperature.
-        if (range && !item.paused) {
-          card.style.borderLeftColor = temperature(item.days, range.min, range.max);
-        }
 
         const top = el('div', 'item-top');
 
@@ -1220,6 +1602,11 @@
           grip.onpointerdown = (e) => startItemDrag(e, index);
           top.append(grip);
         }
+
+        // A paused row shows no phase at all. Its clock is not running, and a
+        // dark moon beside it would be the screen calling it overdue, which is
+        // the inference 2.7 exists to prevent.
+        if (!item.paused) top.append(moonFor(item));
 
         const title = el('div', 'item-title', item.title);
         // Tapping the title is how something gets into tomorrow. Paused items
@@ -1418,22 +1805,52 @@
         row.addEventListener('pointercancel', end);
       }
 
+      // Which ids were on screen last time, so an arriving row can be told
+      // apart from one that was already there. Without this every reload would
+      // animate the whole list in, which is a page that never settles.
+      let shownIds = new Set();
+
       function paintStale() {
         const list = $('stale');
-        list.replaceChildren();
 
-        if (!staleItems.length) {
-          const empty = el('div', 'card');
-          empty.append(el('span', 'none', 'Nothing here yet. Add a habit, project or task.'));
-          list.append(empty);
+        const draw = () => {
+          list.replaceChildren();
+
+          if (!staleItems.length) {
+            const empty = el('div', 'card');
+            empty.append(el('span', 'none', 'Nothing here yet. Add a habit, project or task.'));
+            list.append(empty);
+            shownIds = new Set();
+            return;
+          }
+
+          staleItems.forEach((item, i) => {
+            const card = itemCard(item, i);
+            if (!shownIds.has(item.id) && shownIds.size) card.classList.add('entering');
+            list.append(card);
+          });
+
+          shownIds = new Set(staleItems.map((i) => i.id));
+          // A row that has gone should not keep a phase waiting for it.
+          for (const id of [...lastPhase.keys()]) {
+            if (!shownIds.has(id)) lastPhase.delete(id);
+          }
+        };
+
+        // Rows that are about to disappear fade first, and the list is rebuilt
+        // after. Deleting something otherwise makes the rows below it jump.
+        const next = new Set(staleItems.map((i) => i.id));
+        const leaving = [...list.querySelectorAll('.item')].filter(
+          (n) => !next.has(n.dataset.id)
+        );
+
+        if (leaving.length && !reduceMotion()) {
+          leaving.forEach((n) => n.classList.add('leaving'));
+          setTimeout(draw, LEAVE_MS);
           return;
         }
 
-        // The bar reads across whatever is on screen. It informs; it sorts
-        // nothing, and the order it appears in is entirely the person's.
-        const ages = staleItems.map((i) => i.days);
-        const range = { min: Math.min(...ages), max: Math.max(...ages) };
-        staleItems.forEach((item, i) => list.append(itemCard(item, range, i)));
+        draw();
       }
 
       async function act(url, body) {
@@ -1513,7 +1930,10 @@
         $('type-seg').classList.toggle('hidden', Boolean(item));
         $('f-save').textContent = item ? 'Save changes' : 'Save';
 
-        card.classList.remove('hidden');
+        // Only animate it open if it was closed. Re-opening the form on a
+        // different row while it is already showing must not collapse it to
+        // nothing and grow it back.
+        if (card.classList.contains('hidden')) collapse(card, true);
         $('f-title').focus();
         card.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
@@ -1521,7 +1941,7 @@
       $('add-toggle').onclick = () => {
         const card = $('add-card');
         if (!card.classList.contains('hidden') && !editingEntry) {
-          card.classList.add('hidden');
+          collapse(card, false);
           return;
         }
         openEntry(null);
@@ -1529,7 +1949,7 @@
 
       $('f-cancel').onclick = () => {
         editingEntry = null;
-        $('add-card').classList.add('hidden');
+        collapse($('add-card'), false);
       };
 
       $('add-form').onsubmit = async (event) => {
@@ -1555,7 +1975,7 @@
             }
           );
           editingEntry = null;
-          $('add-card').classList.add('hidden');
+          collapse($('add-card'), false);
           await load();
         } catch (err) {
           error.textContent = err.message;
@@ -1688,9 +2108,24 @@
 
       // Every edit goes through here, so there is one place that knows the
       // day on screen no longer matches the day in the database.
+      // Which row, if any, has just been added and should fade in.
+      let enteringBlock = null;
+
+      // A stepper changes one duration and everything below it slides. That was
+      // an instant jump; now the rows travel the distance they actually moved.
+      //
+      // Only when the set of blocks is the same either side of the render:
+      // shiftRows matches rows up by position, which is exact for a duration
+      // change and wrong the moment something is inserted or removed, because
+      // every row below would then be measured against its neighbour. Those
+      // cases fade instead.
       function changed() {
         saved = false;
-        renderBuilder();
+        const builder = $('builder');
+        const sameRows = builder.querySelectorAll('.block').length === blocks.length;
+
+        if (sameRows) shiftRows(builder, '.block', renderBuilder);
+        else renderBuilder();
       }
 
       const clock = (mins) => {
@@ -1827,13 +2262,17 @@
         }
 
         blocks.forEach((b, i) => {
-          builder.append(blockRow(b, i));
+          const row = blockRow(b, i);
+          if (i === enteringBlock && !reduceMotion()) row.classList.add('entering');
+          builder.append(row);
           if (b.clash) {
             builder.append(
               el('div', 'clash', `Overlaps ${b.title} by ${span(b.clash)}. Shorten something above.`)
             );
           }
         });
+
+        enteringBlock = null;
 
         refreshConfirm();
         $('end-time').textContent = blocks.length ? clock(end) : 'not yet';
@@ -1847,7 +2286,11 @@
 
       function addBlock({ title, entryId = null, duration = 60 }) {
         const block = { title, entryId, duration, start: 0, pinned: false, clash: 0 };
-        blocks.splice(insertIndexFor(duration), 0, block);
+        const at = insertIndexFor(duration);
+        blocks.splice(at, 0, block);
+        // So the render knows which row is the new one and can fade it in. It
+        // is a position, not an identity: it is consumed by the next render.
+        enteringBlock = at;
         changed();
       }
 
@@ -2000,21 +2443,21 @@
       $('block-toggle').onclick = () => {
         const card = $('block-card');
         const opening = card.classList.contains('hidden');
-        card.classList.toggle('hidden', !opening);
+        collapse(card, opening);
         if (opening) {
           $('b-title').value = '';
           $('b-title').focus();
         }
       };
 
-      $('b-cancel').onclick = () => $('block-card').classList.add('hidden');
+      $('b-cancel').onclick = () => collapse($('block-card'), false);
 
       $('block-form').onsubmit = (event) => {
         event.preventDefault();
         const title = $('b-title').value.trim();
         if (!title) return;
         addBlock({ title });
-        $('block-card').classList.add('hidden');
+        collapse($('block-card'), false);
       };
 
       $('confirm').onclick = async () => {
@@ -2047,7 +2490,7 @@
 
       // --- tabs -------------------------------------------------------------
 
-      function showTab(name) {
+      function swapView(name) {
         for (const [tab, view] of [
           ['tab-plan', 'plan-view'],
           ['tab-money', 'money-view'],
@@ -2056,6 +2499,24 @@
           $(tab).setAttribute('aria-selected', String(on));
           $(view).classList.toggle('hidden', !on);
         }
+      }
+
+      // Fading the container rather than each lane means one fade covers both
+      // halves of the change, so the two never overlap and nothing has to be
+      // taken out of the flow to sit on top of the other.
+      function showTab(name) {
+        if (reduceMotion()) {
+          swapView(name);
+          return;
+        }
+
+        const host = $('main');
+        host.classList.add('swapping');
+        setTimeout(() => {
+          swapView(name);
+          host.scrollTop = 0;
+          host.classList.remove('swapping');
+        }, SWAP_MS);
       }
 
       $('tab-plan').onclick = () => showTab('plan');
@@ -2330,8 +2791,13 @@
       let intentOpen = false;
 
       function setIntentOpen(open) {
+        const body = $('intent-body');
+        // Repainting calls this with whatever the state already is. Animating
+        // then would collapse and regrow the panel every time a row is saved.
+        const wasOpen = !body.classList.contains('hidden');
+
         intentOpen = open;
-        $('intent-body').classList.toggle('hidden', !open);
+        if (open !== wasOpen) collapse(body, open);
         $('intent-head').setAttribute('aria-expanded', String(open));
       }
 
