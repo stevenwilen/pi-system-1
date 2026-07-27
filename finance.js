@@ -111,10 +111,33 @@ function toAmount(value) {
   return negative ? -Math.abs(n) : n;
 }
 
+// Hosting dashboards store environment variables as raw text, so a value
+// pasted with wrapping quotes or a stray line break arrives with them still
+// attached. fetch() then throws "Failed to parse URL" before any request is
+// made, which reads as a network problem and sends you looking in the wrong
+// place. Strip the characters that cannot legally appear in a URL instead.
+function cleanUrl(raw) {
+  return String(raw)
+    .trim()
+    .replace(/^['"]+|['"]+$/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
 // Publishing a sheet is fiddly and every way of getting it wrong returns
 // something that looks like success, so each failure is named specifically
 // rather than reported as a generic fetch error.
-async function fetchCsv(url, label) {
+async function fetchCsv(rawUrl, label) {
+  const url = cleanUrl(rawUrl);
+
+  try {
+    new URL(url);
+  } catch {
+    throw new Error(
+      `the ${label} link is not a usable web address. Check the variable in your hosting dashboard for wrapping quotes, a line break, or a missing https:// at the front.`
+    );
+  }
+
   if (/\/edit/.test(url) || /[?&]usp=/.test(url)) {
     throw new Error(
       `the ${label} link is the normal sheet address from the browser bar, not a published one. Use File, then Share, then Publish to web, pick the ${label} tab, and choose comma-separated values.`
@@ -131,6 +154,11 @@ async function fetchCsv(url, label) {
   try {
     res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   } catch (err) {
+    if (err.name === 'TimeoutError') {
+      throw new Error(
+        `the ${label} sheet did not respond within ${TIMEOUT_MS / 1000} seconds. This is usually temporary, so try again shortly.`
+      );
+    }
     throw new Error(`could not reach the ${label} sheet: ${err.message}`);
   }
 
