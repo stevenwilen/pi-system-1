@@ -12,6 +12,29 @@ require('dotenv').config();
 const TIMEOUT_MS = 15000;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
+// The 12 categories and their types, held here rather than read from the
+// hidden Categories tab, which the database description says exists for the
+// automation and must not be relied on.
+//
+// A value outside this list is not assumed to be spending. The expensive
+// mistake is a renamed or retired Transfer category being counted, which both
+// inflates spending and invents income that was never earned, so anything
+// unrecognised is excluded from the totals and reported instead.
+const CATEGORY_TYPE = new Map([
+  ['Food', 'Expense'],
+  ['Groceries', 'Expense'],
+  ['Gas', 'Expense'],
+  ['Transportation', 'Expense'],
+  ['Entertainment', 'Expense'],
+  ['Service', 'Expense'],
+  ['Work', 'Expense'],
+  ['School', 'Expense'],
+  ['Fees', 'Expense'],
+  ['Other', 'Expense'],
+  ['Income', 'Income'],
+  ['Transfer', 'Transfer'],
+]);
+
 let cache = { at: 0, data: null };
 
 // --- csv ---------------------------------------------------------------------
@@ -192,47 +215,37 @@ async function fetchCsv(rawUrl, label) {
 
 async function load() {
   const txUrl = process.env.FINANCE_TRANSACTIONS_CSV_URL;
-  const catUrl = process.env.FINANCE_CATEGORIES_CSV_URL;
-  if (!txUrl || !catUrl) return null;
+  if (!txUrl) return null;
 
   if (cache.data && Date.now() - cache.at < CACHE_TTL_MS) return cache.data;
 
-  // Fetched separately so the error can say which of the two is wrong.
   const tx = await fetchCsv(txUrl, 'Transactions');
-  const cats = await fetchCsv(catUrl, 'Categories');
 
-  // A published Transactions tab that is missing its headers means the wrong
-  // tab was published, which would otherwise look like an empty month.
+  // A published tab missing these headers means a different tab was published,
+  // which would otherwise look like an empty month rather than a mistake.
   if (tx.length && !('Transaction ID' in tx[0])) {
     throw new Error(
       `the Transactions link does not have the expected columns. Its headers are: ${Object.keys(tx[0]).join(', ')}. Check that the Transactions tab was selected when publishing, not a different one.`
     );
   }
-  if (cats.length && !('Type' in cats[0])) {
-    throw new Error(
-      `the Categories link does not have a Type column. Its headers are: ${Object.keys(cats[0]).join(', ')}. Check that the Categories tab was selected when publishing.`
-    );
-  }
-
-  // Category -> Expense | Income | Transfer. This join is what makes the
-  // database self-describing, and without it none of the sums are meaningful.
-  const typeOf = new Map();
-  for (const c of cats) {
-    if (c.Category) typeOf.set(c.Category.trim(), (c.Type || '').trim());
-  }
 
   const rows = tx
     .filter((t) => t.Date && t['Transaction ID'])
-    .map((t) => ({
-      date: toIsoDate(t.Date),
-      account: t.Account || '',
-      merchant: (t.Merchant || '').trim(),
-      amount: toAmount(t.Amount),
-      category: (t.Category || '').trim(),
-      status: (t.Status || '').trim(),
-      note: (t.Note || '').trim(),
-      type: typeOf.get((t.Category || '').trim()) || '',
-    }))
+    .map((t) => {
+      const category = (t.Category || '').trim();
+      return {
+        date: toIsoDate(t.Date),
+        account: t.Account || '',
+        merchant: (t.Merchant || '').trim(),
+        amount: toAmount(t.Amount),
+        category,
+        status: (t.Status || '').trim(),
+        note: (t.Note || '').trim(),
+        // '' means not yet reviewed. 'Unknown' means a category outside the
+        // 12, which is a different problem and is counted separately.
+        type: category ? CATEGORY_TYPE.get(category) || 'Unknown' : '',
+      };
+    })
     // A row whose date could not be read is dropped rather than counted into
     // the wrong period.
     .filter((r) => r.date);
@@ -348,12 +361,18 @@ async function brief() {
   const monthSpend = spend(month);
   const monthIncome = income(month);
 
-  // Uncategorised rows are excluded from every total above, so their weight
-  // decides how much the rest can be trusted.
-  const unreviewed = month.filter((r) => !r.category || !r.type);
-  const unreviewedTotal = -unreviewed
-    .filter((r) => r.amount < 0)
-    .reduce((a, r) => a + r.amount, 0);
+  // Both of these are excluded from every total above, so their weight decides
+  // how much the rest can be trusted. They are separated because they call for
+  // different actions: a blank category needs reviewing in the sheet, while an
+  // unrecognised one means this code and the sheet disagree about the 12.
+  const outflow = (list) =>
+    -list.filter((r) => r.amount < 0).reduce((a, r) => a + r.amount, 0);
+
+  const unreviewed = month.filter((r) => !r.category);
+  const unreviewedTotal = outflow(unreviewed);
+
+  const unknown = month.filter((r) => r.type === 'Unknown');
+  const unknownNames = [...new Set(unknown.map((r) => r.category))].sort();
 
   const thisCats = byCategory(week);
   const lastCats = byCategory(prevWeek);
@@ -414,6 +433,9 @@ async function brief() {
     data_quality: {
       unreviewed_rows: unreviewed.length,
       unreviewed_spend: unreviewedTotal,
+      unknown_categories: unknownNames,
+      unknown_rows: unknown.length,
+      unknown_spend: outflow(unknown),
       reviewed: month.filter((r) => r.status === 'Reviewed').length,
       auto: month.filter((r) => r.status === 'Auto').length,
       total_rows_30d: month.length,
@@ -488,6 +510,24 @@ function render(b) {
       q.unreviewed_spend > 0 ? ` covering ${m(q.unreviewed_spend)} of spending not counted above` : ''
     }.`
   );
+
+  // Categories outside the 12 are a disagreement between this code and the
+  // sheet, not a gap in the user's reviewing, so it is stated separately.
+  if (q.unknown_rows) {
+    L.push(
+      `${q.unknown_rows} ${q.unknown_rows === 1 ? 'row uses' : 'rows use'} a category this system does not recognise (${q.unknown_categories.join(', ')}), ` +
+        `covering ${m(q.unknown_spend)} left out of every total above.`
+    );
+  }
+
+  // Stated without a conclusion attached. Zero income means a payroll account
+  // is not connected about as often as it means nothing was earned, and only
+  // the reader knows which.
+  if (b.month.income < 1) {
+    L.push(
+      `No income is recorded in this window. If that is unexpected, an account may not be connected.`
+    );
+  }
 
   return L.join('\n');
 }

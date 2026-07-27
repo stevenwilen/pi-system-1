@@ -189,8 +189,10 @@ app.get('/finance-status', async (req, res) => {
   res.json({
     owner_matches: process.env.FINANCE_OWNER_USER_ID === CURRENT_USER,
     owner_var_set: Boolean(process.env.FINANCE_OWNER_USER_ID),
+    // Only the Transactions tab is read. The Categories tab is hidden and
+    // exists for the sheet's own automation, so the 12 category types are
+    // held in finance.js instead of joined from it at runtime.
     transactions: describeUrlVar('FINANCE_TRANSACTIONS_CSV_URL'),
-    categories: describeUrlVar('FINANCE_CATEGORIES_CSV_URL'),
     // The exact string the brain was given, before it reworded it.
     error: result && result.error ? result.error : null,
     connected: Boolean(result && !result.error && !result.empty),
