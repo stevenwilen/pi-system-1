@@ -175,6 +175,89 @@
         overflow-wrap: anywhere;
       }
 
+      /* --- the setup interview --- */
+
+      .setup-step {
+        display: flex;
+        gap: 11px;
+        align-items: flex-start;
+      }
+
+      .step-n {
+        flex: none;
+        width: 20px;
+        height: 20px;
+        margin-top: 1px;
+        border-radius: 6px;
+        background: var(--recessed);
+        border: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .setup-title {
+        font-size: 13.5px;
+        font-weight: 600;
+        margin-bottom: 2px;
+      }
+
+      #setup-paste {
+        min-height: 90px;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      /* A class, not the id. Anything that gets hidden must not be given a
+         display by id, or hiding it becomes a specificity contest. */
+      .setup-preview {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding-top: 4px;
+        border-top: 1px solid var(--line);
+      }
+
+      #setup-list {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+
+      /* Exactly what will be written, before anything is. */
+      .preview-row {
+        display: flex;
+        gap: 9px;
+        align-items: baseline;
+        font-size: 13px;
+      }
+
+      .preview-kind {
+        flex: none;
+        min-width: 74px;
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+
+      .preview-text {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .preview-text small {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+
       /* --- the money numbers --- */
 
       #money-numbers {
@@ -1000,6 +1083,46 @@
               <button class="linkbtn" type="button" id="i-cancel">Cancel</button>
             </div>
           </form>
+        </div>
+
+        <div class="card hidden" id="setup-card">
+          <div class="setup-step">
+            <span class="step-n">1</span>
+            <div>
+              <div class="setup-title">Copy the interview</div>
+              <div class="none">It asks about your income, what you have, what is off limits, what you are building toward, and what you already know about your own spending.</div>
+            </div>
+          </div>
+          <button class="primary" id="copy-prompt" type="button">Copy setup prompt</button>
+
+          <div class="setup-step">
+            <span class="step-n">2</span>
+            <div>
+              <div class="setup-title">Answer it in a Claude chat</div>
+              <div class="none">Paste it in and talk it through. It ends by giving you a block of JSON.</div>
+            </div>
+          </div>
+
+          <div class="setup-step">
+            <span class="step-n">3</span>
+            <div>
+              <div class="setup-title">Paste the result back</div>
+              <div class="none">The whole reply is fine. Nothing is saved until you have seen exactly what it will save.</div>
+            </div>
+          </div>
+
+          <textarea id="setup-paste" placeholder="Paste the reply here"></textarea>
+          <div class="err hidden" id="setup-error"></div>
+          <button class="primary" id="setup-read" type="button">Read it</button>
+
+          <div class="setup-preview hidden" id="setup-preview">
+            <div class="setup-title" id="setup-count"></div>
+            <div id="setup-list"></div>
+            <div class="row">
+              <button class="primary grow" id="setup-confirm" type="button">Save these</button>
+              <button class="linkbtn" id="setup-discard" type="button">Discard</button>
+            </div>
+          </div>
         </div>
 
         <div id="intent-list"></div>
@@ -2018,12 +2141,20 @@
 
         list.replaceChildren();
 
-        if (!data.items.length) {
-          const empty = el('div', 'card');
-          empty.append(
-            el('span', 'none', 'Nothing yet. Tell it what it should already know, so it never has to guess.')
-          );
-          list.append(empty);
+        // The setup card stands in for the empty state. Nothing is known yet,
+        // and the interview is how that changes.
+        const nothingYet = !data.items.length;
+        $('setup-card').classList.toggle('hidden', !nothingYet);
+        $('intent-toggle').classList.toggle('hidden', nothingYet);
+
+        if (nothingYet) {
+          if (!setupPrompt) {
+            try {
+              setupPrompt = (await api('/finance-intent/setup-prompt')).prompt;
+            } catch {
+              // Held empty; the copy button falls back to the textarea.
+            }
+          }
           return;
         }
 
@@ -2039,6 +2170,161 @@
           list.append(group);
         }
       }
+
+      // --- the setup interview ----------------------------------------------
+
+      const KINDS = ['situation', 'reserve', 'target', 'declared', 'slip'];
+      let setupPrompt = '';
+      let pending = null;
+
+      /**
+       * Pull the JSON out of whatever was pasted.
+       *
+       * The reply may be a bare object, a fenced block, or a block buried in
+       * closing remarks the model was asked not to write and wrote anyway.
+       * Each candidate is tried in turn rather than assuming a shape.
+       */
+      function extractJson(text) {
+        const candidates = [];
+
+        const fenced = [...String(text).matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
+        for (const m of fenced) candidates.push(m[1]);
+
+        // Failing a fence, the widest brace span that mentions intents. Taking
+        // the first { to the last } keeps nested objects intact.
+        const first = text.indexOf('{');
+        const last = text.lastIndexOf('}');
+        if (first !== -1 && last > first) candidates.push(text.slice(first, last + 1));
+
+        candidates.push(text);
+
+        for (const candidate of candidates) {
+          try {
+            const parsed = JSON.parse(candidate.trim());
+            if (parsed && Array.isArray(parsed.intents)) return parsed.intents;
+            // A bare array is close enough to what was asked for.
+            if (Array.isArray(parsed)) return parsed;
+          } catch {
+            // Try the next shape.
+          }
+        }
+        return null;
+      }
+
+      function validateIntents(list) {
+        if (!Array.isArray(list) || !list.length) return 'there were no entries in it';
+
+        for (const [i, row] of list.entries()) {
+          const kind = String((row && row.kind) || '').trim().toLowerCase();
+          const title = String((row && row.title) || '').trim();
+          const body = String((row && row.body) || '').trim();
+
+          if (!KINDS.includes(kind)) return `entry ${i + 1} has kind "${kind}", which is not one of ${KINDS.join(', ')}`;
+          if (!title) return `entry ${i + 1} has no title`;
+
+          if (kind === 'reserve') {
+            const wall = /\bwall\b/i.test(body);
+            const floor = /\bfloor\b/i.test(body);
+            if (wall === floor) return `entry ${i + 1} ("${title}") is a reserve but does not say whether it is a wall or a floor`;
+          }
+        }
+        return null;
+      }
+
+      function showPreview(list) {
+        pending = list;
+        $('setup-count').textContent = `${list.length} thing${list.length === 1 ? '' : 's'} will be saved`;
+
+        const box = $('setup-list');
+        box.replaceChildren();
+
+        for (const row of list) {
+          const line = el('div', 'preview-row');
+          const kind = String(row.kind).toLowerCase();
+          const mode =
+            kind === 'reserve' ? (/\bwall\b/i.test(row.body || '') ? ' wall' : ' floor') : '';
+          line.append(el('div', 'preview-kind', kind + mode));
+
+          const text = el('div', 'preview-text', String(row.title));
+          if (row.body) text.append(el('small', null, String(row.body)));
+          line.append(text);
+          box.append(line);
+        }
+
+        $('setup-preview').classList.remove('hidden');
+      }
+
+      $('copy-prompt').onclick = async () => {
+        const button = $('copy-prompt');
+        try {
+          // Written from the value already held, not fetched here: awaiting
+          // inside the handler loses the user gesture that permits a write.
+          await navigator.clipboard.writeText(setupPrompt);
+          button.textContent = 'Copied';
+          setTimeout(() => (button.textContent = 'Copy setup prompt'), 2000);
+        } catch {
+          // Clipboard permission varies. Falling back to a selectable box
+          // means the prompt is still gettable rather than unreachable.
+          const box = $('setup-paste');
+          box.value = setupPrompt;
+          box.select();
+          button.textContent = 'Copy it from the box';
+        }
+      };
+
+      $('setup-read').onclick = () => {
+        const error = $('setup-error');
+        error.classList.add('hidden');
+        $('setup-preview').classList.add('hidden');
+        pending = null;
+
+        const list = extractJson($('setup-paste').value || '');
+        if (!list) {
+          error.textContent =
+            "Could not find the JSON block in that. Paste the whole reply, including the part between ```json and ```. Nothing has been saved.";
+          error.classList.remove('hidden');
+          return;
+        }
+
+        const problem = validateIntents(list);
+        if (problem) {
+          error.textContent = `Read it, but ${problem}. Nothing has been saved.`;
+          error.classList.remove('hidden');
+          return;
+        }
+
+        showPreview(list);
+      };
+
+      $('setup-discard').onclick = () => {
+        pending = null;
+        $('setup-preview').classList.add('hidden');
+        $('setup-paste').value = '';
+      };
+
+      $('setup-confirm').onclick = async () => {
+        if (!pending) return;
+        const button = $('setup-confirm');
+        button.disabled = true;
+
+        try {
+          await api('/finance-intent/import', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ intents: pending }),
+          });
+          pending = null;
+          $('setup-paste').value = '';
+          $('setup-preview').classList.add('hidden');
+          await loadIntent();
+        } catch (err) {
+          const error = $('setup-error');
+          error.textContent = `${err.message} Nothing has been saved.`;
+          error.classList.remove('hidden');
+        } finally {
+          button.disabled = false;
+        }
+      };
 
       function setIntentKind(kind) {
         $('i-mode-wrap').classList.toggle('hidden', kind !== 'reserve');

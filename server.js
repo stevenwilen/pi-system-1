@@ -545,6 +545,115 @@ function validateIntent({ kind, mode, label }) {
   return null;
 }
 
+/**
+ * The setup interview, as a prompt to take elsewhere.
+ *
+ * Engine text: identical for every user, and containing nothing about anyone.
+ * Served rather than kept in the page so there is one copy of it, and so the
+ * client only ever repeats what it was given.
+ */
+const SETUP_PROMPT = `I want you to interview me about my finances so another system can understand my situation. Act as a financial advisor taking someone on: curious, direct, and not judgemental about anything I tell you.
+
+Ask me about all of these, but conversationally, one or two questions at a time. Wait for my answers before moving on. Do not present this as a form or a wall of questions.
+
+1. Income. How much, how regular, and when it arrives. If it is irregular or has not started yet, get the timing.
+2. What is in the bank now, and anything owed to me that has not arrived.
+3. Any account or amount I treat as off limits. For each one, establish whether reaching it would need a deliberate transfer, or whether it could be reached passively by ordinary spending. This distinction matters, so ask about it directly.
+4. What I am building toward. What the money is for.
+5. Spending I have consciously chosen and do not want questioned. Things I have already decided are worth it.
+6. Categories I already know I overspend on. I know about these; the point is that nobody needs to discover them for me.
+
+Follow up where an answer is vague. Numbers are useful. If I do not know something, record that rather than guessing.
+
+When we are done, output a single fenced json block and nothing after it. No summary, no closing remarks, just the block:
+
+\`\`\`json
+{
+  "intents": [
+    { "kind": "situation", "title": "short label", "body": "the detail in my own words" },
+    { "kind": "reserve", "title": "short label", "body": "the detail, and state explicitly whether this is a wall or a floor" },
+    { "kind": "target", "title": "short label", "body": "the detail" },
+    { "kind": "declared", "title": "short label", "body": "the detail" },
+    { "kind": "slip", "title": "short label", "body": "the detail" }
+  ]
+}
+\`\`\`
+
+Rules for the block:
+- kind must be exactly one of: situation, reserve, target, declared, slip.
+- One entry per distinct thing I told you. Several of the same kind is fine and expected.
+- Every reserve entry must say the word wall or the word floor in its body.
+- Leave out any kind I had nothing to say about.
+- title is a few words. body is the substance.`;
+
+app.get('/finance-intent/setup-prompt', (req, res) => {
+  res.json({ prompt: SETUP_PROMPT });
+});
+
+/**
+ * Save a whole interview at once.
+ *
+ * All or nothing. Every row is validated before any is written, so a paste
+ * that is half understood leaves nothing behind rather than a partial picture
+ * that looks complete. Existing rows are untouched: this appends.
+ */
+app.post('/finance-intent/import', async (req, res) => {
+  const intents = (req.body && req.body.intents) || [];
+
+  if (!Array.isArray(intents) || !intents.length) {
+    return res.status(400).json({ error: 'nothing to save' });
+  }
+  if (intents.length > 40) {
+    return res.status(400).json({ error: 'that is more entries than an interview produces' });
+  }
+
+  const rows = [];
+
+  for (const [i, raw] of intents.entries()) {
+    const kind = String((raw && raw.kind) || '').trim().toLowerCase();
+    const label = String((raw && raw.title) || '').trim();
+    const body = String((raw && raw.body) || '').trim();
+
+    if (!INTENT_KINDS.includes(kind)) {
+      return res.status(400).json({ error: `entry ${i + 1}: "${kind}" is not one of ${INTENT_KINDS.join(', ')}` });
+    }
+    if (!label) {
+      return res.status(400).json({ error: `entry ${i + 1}: needs a title` });
+    }
+
+    // A reserve is useless without knowing which it is. A wall has to be
+    // crossed on purpose and a floor can be reached by doing nothing, and the
+    // message treats them differently, so the word has to be there.
+    let mode = null;
+    if (kind === 'reserve') {
+      const said = body.toLowerCase();
+      const wall = /\bwall\b/.test(said);
+      const floor = /\bfloor\b/.test(said);
+      if (wall === floor) {
+        return res.status(400).json({
+          error: `entry ${i + 1} ("${label}"): a reserve must say whether it is a wall or a floor`,
+        });
+      }
+      mode = wall ? 'wall' : 'floor';
+    }
+
+    rows.push({
+      user_id: CURRENT_USER,
+      type: 'finance_intent',
+      title: encodeIntent(kind, mode, label),
+      body: body || null,
+    });
+  }
+
+  const { data, error } = await supabase.from('entries').insert(rows).select('id, title, body');
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({
+    saved: data.length,
+    entries: data.map((r) => ({ id: r.id, ...decodeIntent(r.title), body: r.body || '' })),
+  });
+});
+
 app.get('/finance-intent', async (req, res) => {
   const { data, error } = await supabase
     .from('entries')
