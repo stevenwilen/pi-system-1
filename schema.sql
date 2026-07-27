@@ -40,7 +40,13 @@ create trigger profile_touch_updated_at
 
 
 -- entries -------------------------------------------------------------------
--- The notebook. Observations, habits, projects.
+-- The notebook. Habits, projects and tasks.
+--
+-- The type CHECK still lists observation, idea and waiting. Those types are
+-- retired and nothing creates them, but existing rows became tombstones rather
+-- than being deleted, and a CHECK applies to tombstones too. Narrowing it would
+-- mean destroying them, which is the one move that cannot be undone.
+--
 -- Deletion is soft: status = 'deleted' leaves a tombstone. Deleted rows are
 -- never returned by search_entries and can never be flipped back to active.
 
@@ -53,18 +59,15 @@ create table if not exists entries (
   body        text,
 
   why         text,          -- projects: why this matters, captured when added
-  priority    int,           -- projects and tasks: rank, 1 = highest, no ties
-  due         date,          -- tasks: the day it should be done by
+  priority    int,           -- projects: rank, 1 = highest, no ties
   frequency   text,          -- habits: 'daily', 'weekdays', '3x/week', ...
-
-  evidence    text,          -- observations: what the user said or did
-  confidence  int check (confidence between 0 and 100),
 
   status      text not null default 'active' check (status in ('active', 'deleted', 'done')),
 
-  -- Set only by the app when the person edits an observation's wording. The
-  -- brain can read it but must never write it.
-  user_corrected boolean not null default false,
+  -- Set down on purpose, not neglected. A paused entry is still active and
+  -- still cared about; it drops out of the stale list until unpaused. This is
+  -- what replaced inferring whether a gap was deliberate.
+  paused_at   timestamptz,
 
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
@@ -73,20 +76,13 @@ create table if not exists entries (
 create index if not exists entries_user_type_status_idx
   on entries (user_id, type, status);
 
--- Projects and tasks each hold a strict rank with no ties, enforced here
--- rather than in the prompt, so two things cannot both be number one.
--- Partial, so a done or deleted row frees its place in the ranking.
+-- Projects hold a strict rank with no ties, enforced here rather than in the
+-- prompt, so two things cannot both be number one. Partial, so a done or
+-- deleted project frees its place. Tasks are not ranked: they sort by how long
+-- since they were last scheduled, alongside habits and projects.
 create unique index if not exists entries_user_priority_idx
   on entries (user_id, priority)
   where type = 'project' and status = 'active' and priority is not null;
-
-create unique index if not exists entries_task_priority_idx
-  on entries (user_id, priority)
-  where type = 'task' and status = 'active' and priority is not null;
-
-create index if not exists entries_user_due_idx
-  on entries (user_id, due)
-  where status = 'active' and due is not null;
 
 drop trigger if exists entries_touch_updated_at on entries;
 create trigger entries_touch_updated_at
@@ -115,21 +111,38 @@ create index if not exists plans_user_date_idx on plans (user_id, date);
 
 -- blocks --------------------------------------------------------------------
 -- The time blocks of a plan. Assumed done unless the user reports a miss.
--- entry_id tags a block to a project or habit, which is what makes
--- time-spent-vs-priority analysis possible.
+--
+-- entry_id tags a block to a habit, project or task. That tag is what makes
+-- the stale panel possible: how long since something was last scheduled is the
+-- most recent block carrying its id.
+--
+-- Start plus duration, not start and end. The builder shifts the chain
+-- client-side and persists the resulting start_times on confirm, so the
+-- scheduler can fire from start_time without recomputing anything.
 
 create table if not exists blocks (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null,
   plan_id     uuid not null references plans (id) on delete cascade,
 
-  start_time  time not null,
-  end_time    time not null,
-  title       text not null,
-  entry_id    uuid references entries (id) on delete set null,
+  start_time       time not null,
+  duration_minutes int not null,   -- always a multiple of 30
+  sort_order       int,            -- drag to reorder
+  title            text not null,
+  entry_id         uuid references entries (id) on delete set null,
+
+  -- Calendar events and appointments. A pinned block holds its start_time and
+  -- never moves when the chain above it shifts. A collision with one is shown,
+  -- never auto-resolved.
+  pinned      boolean not null default false,
 
   completed   boolean not null default true,
   miss_reason text,
+
+  -- Written in one reasoning pass when the plan is confirmed, then sent by a
+  -- timer. The model is never called at block-start time.
+  message_text    text,
+  message_sent_at timestamptz,
 
   created_at  timestamptz not null default now()
 );
@@ -181,10 +194,15 @@ create index if not exists api_usage_user_created_idx
 -- redeploys. The unique constraint is the lock; it also provides the only
 -- index this table needs.
 
+-- No CHECK on `job`. The old one enumerated eight jobs that no longer exist,
+-- so it could only reject whatever comes next. Per-block delivery is guarded
+-- by blocks.message_sent_at, which is exact per block where (user, job, date)
+-- never could be; this table remains for anything needing a once-a-day lock.
+
 create table if not exists sent_log (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null,
-  job           text not null check (job in ('day-plan', 'habits', 'projects', 'tasks', 'ideas', 'week-brief', 'waiting', 'finance')),
+  job           text not null,
   sent_for_date date not null,
   created_at    timestamptz not null default now(),
 
