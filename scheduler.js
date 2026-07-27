@@ -1,12 +1,8 @@
 // Outbound delivery, on a timer.
 //
-// The eight weekly digest jobs are gone. What replaces them is per-block
-// delivery: at each block's start time, send the text the brain already wrote
-// and stored at confirm time. See SPEC section 5.
-//
-// That delivery is NOT built yet. It needs columns on `blocks` that do not
-// exist, so this file currently carries the machinery and nothing to fire.
-// Everything here is used by the real thing when it lands.
+// At each block's start time, send the text the brain already wrote and stored
+// when the day was confirmed. No model call happens here: this reads a row and
+// sends it. See SPEC section 5.
 //
 // Run: node scheduler.js
 
@@ -16,15 +12,28 @@ const cron = require('node-cron');
 
 const supabase = require('./db');
 const { sendTelegram } = require('./telegram');
+const { composeMessage } = require('./messages');
 
 // The tick interval, in minutes.
 //
-// Blocks sit on 30-minute boundaries, so the final value has to divide into
-// that cleanly. It is deliberately still 15 rather than 30: a tick that only
-// fires on the boundary must be exactly on time or it misses, whereas a
-// shorter tick that asks "which blocks have started and not been sent" is
-// self-correcting after a restart. Settled when delivery is built.
+// Deliberately shorter than the 30 minutes blocks sit on. A tick that only
+// fires on the boundary has to be exactly on time or the block is missed for
+// good, whereas asking "which blocks have started and not been sent" recovers
+// by itself after a restart or a deploy.
 const WINDOW = 15;
+
+// How late a block may still be sent. Two ticks: enough to survive a restart
+// or a slow deploy, short enough that nothing arrives long after the fact.
+// A block older than this is marked sent without being sent, because "Gym,
+// 08:00" arriving at 14:00 is worse than nothing.
+const GRACE_MINUTES = 30;
+
+// Block messages are written after the confirm response goes out and take
+// around half a minute. If a block is due and has no text yet, and the day was
+// confirmed this recently, generation is probably still running. Let the next
+// tick have it: a message fifteen minutes late beats one permanently stripped
+// back to its header.
+const GENERATION_GRACE_MS = 2 * 60 * 1000;
 
 // Telegram rejects anything over 4096 characters.
 const MAX_MESSAGE = 4000;
@@ -142,8 +151,93 @@ async function deliver(user_id, text) {
 // tick
 // ---------------------------------------------------------------------------
 
-// Walks every user in their own timezone. Nothing is due yet: the query that
-// finds started-but-unsent blocks needs columns that do not exist.
+const toMinutesOfDay = (time) => {
+  const [h, m] = String(time).split(':').map(Number);
+  return h * 60 + m;
+};
+
+/**
+ * Blocks of today's confirmed plan that have started and not been sent.
+ *
+ * Only a confirmed plan delivers. A day left pending was built and never
+ * agreed to, and messaging someone about it would be the system deciding.
+ */
+async function dueBlocks(user_id, date) {
+  const { data: plan, error: planErr } = await supabase
+    .from('plans')
+    .select('id')
+    .eq('user_id', user_id)
+    .eq('date', date)
+    .eq('status', 'confirmed')
+    .maybeSingle();
+
+  if (planErr) throw new Error(`could not read plan: ${planErr.message}`);
+  if (!plan) return [];
+
+  const { data, error } = await supabase
+    .from('blocks')
+    .select('id, title, start_time, duration_minutes, message_text, created_at')
+    .eq('plan_id', plan.id)
+    .is('message_sent_at', null)
+    .order('start_time');
+
+  if (error) throw new Error(`could not read blocks: ${error.message}`);
+  return data || [];
+}
+
+async function markBlockSent(id) {
+  const { error } = await supabase
+    .from('blocks')
+    .update({ message_sent_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) console.error(`[SEND] block ${id}: could not mark sent: ${error.message}`);
+}
+
+/**
+ * One user, one tick.
+ *
+ * Marking a block sent is what makes this safe to run every fifteen minutes:
+ * a block leaves the queue the moment it is delivered, so a slow tick or an
+ * overlapping one cannot send it twice.
+ */
+async function deliverDue(profile, now) {
+  const nowMinutes = toMinutes(now.hour, now.minute);
+  const blocks = await dueBlocks(profile.user_id, now.date);
+
+  for (const block of blocks) {
+    const start = toMinutesOfDay(block.start_time);
+    const late = nowMinutes - start;
+
+    if (late < 0) continue; // not started yet
+
+    if (late > GRACE_MINUTES) {
+      // Long past. Retire it rather than delivering a message about a block
+      // the person has already lived through.
+      console.log(`[SEND] ${block.title}: ${late}m late, skipping`);
+      await markBlockSent(block.id);
+      continue;
+    }
+
+    if (!block.message_text && Date.now() - new Date(block.created_at).getTime() < GENERATION_GRACE_MS) {
+      // Confirmed moments ago, so the line is probably still being written.
+      // Leave it queued; the next tick is still inside the grace window.
+      console.log(`[SEND] ${block.title}: just confirmed, waiting for its line`);
+      continue;
+    }
+
+    const result = await deliver(profile.user_id, composeMessage(block));
+
+    if (result.sent) {
+      await markBlockSent(block.id);
+      console.log(`[SEND] ${block.title}${block.message_text ? '' : ' (header only)'}`);
+    } else {
+      // No mark, so the next tick retries while the block is still in grace.
+      console.error(`[SEND] ${block.title}: ${JSON.stringify(result)}`);
+    }
+  }
+}
+
 async function tick() {
   let profiles;
   try {
@@ -154,16 +248,20 @@ async function tick() {
   }
 
   for (const profile of profiles) {
+    let now;
     try {
-      localNow(profile.timezone);
+      now = localNow(profile.timezone);
     } catch {
-      console.error(
-        `skipping ${profile.user_id}: bad timezone ${profile.timezone}`
-      );
+      console.error(`skipping ${profile.user_id}: bad timezone ${profile.timezone}`);
       continue;
     }
 
-    // Block delivery goes here.
+    try {
+      await deliverDue(profile, now);
+    } catch (err) {
+      // One person's failure must not stop the others.
+      console.error(`[SEND] ${profile.user_id}: ${err.message}`);
+    }
   }
 }
 
@@ -176,11 +274,22 @@ module.exports = {
   alreadySent,
   markSent,
   deliver,
+  // Exported so a test can drive one user through one tick without waiting
+  // fifteen minutes for cron.
+  deliverDue,
+  dueBlocks,
+  tick,
+  GRACE_MINUTES,
+  GENERATION_GRACE_MS,
 };
 
 // Starting the loop on require is deliberate: server.js requires this module
 // so the web process and the scheduler share one Railway service.
-cron.schedule(`*/${WINDOW} * * * *`, tick);
-console.log(`scheduler running, checking every ${WINDOW} minutes`);
-console.log('no delivery wired yet: per-block sending is not built');
-tick();
+// Set SCHEDULER_DISABLED=1 to load this module without starting the loop. That
+// is how a test drives a single tick: without it, requiring the file would
+// also fire cron against the real database and send real messages.
+if (process.env.SCHEDULER_DISABLED !== '1') {
+  cron.schedule(`*/${WINDOW} * * * *`, tick);
+  console.log(`scheduler running, checking every ${WINDOW} minutes`);
+  tick();
+}
