@@ -111,16 +111,17 @@ function toAmount(value) {
   return negative ? -Math.abs(n) : n;
 }
 
-// Hosting dashboards store environment variables as raw text, so a value
-// pasted with wrapping quotes or a stray line break arrives with them still
-// attached. fetch() then throws "Failed to parse URL" before any request is
-// made, which reads as a network problem and sends you looking in the wrong
-// place. Strip the characters that cannot legally appear in a URL instead.
+// Hosting dashboards store environment variables as raw text, so whatever
+// decoration the URL picked up on its way here is kept verbatim. Chat clients
+// and Markdown editors wrap pasted links in angle brackets, and copying out of
+// quoted text keeps the quotes. fetch() then throws a parse error before any
+// request is made, which reads as a network problem and sends you looking in
+// the wrong place. Strip what cannot legally begin or end a URL instead.
 function cleanUrl(raw) {
   return String(raw)
     .trim()
-    .replace(/^['"]+|['"]+$/g, '')
     .replace(/\s+/g, '')
+    .replace(/^[<'"]+|[>'"]+$/g, '')
     .trim();
 }
 
@@ -500,4 +501,6 @@ function render(b) {
   return L.join('\n');
 }
 
-module.exports = { brief, render };
+// cleanUrl is exported so /finance-status reports on the same string the
+// fetch actually uses, rather than a second copy of the rules that can drift.
+module.exports = { brief, render, cleanUrl };

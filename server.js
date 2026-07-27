@@ -159,7 +159,7 @@ function describeUrlVar(name) {
   const raw = process.env[name];
   if (!raw) return { set: false };
 
-  const cleaned = raw.trim().replace(/^['"]+|['"]+$/g, '').replace(/\s+/g, '');
+  const cleaned = finance.cleanUrl(raw);
 
   let parsed = null;
   try {
