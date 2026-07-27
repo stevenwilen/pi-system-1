@@ -72,6 +72,8 @@ Ideas are not work. Never place one in a day plan, never rank them, never count 
 
 OBSERVATIONS. Things you notice about the person you may save automatically, without asking. But before you save one, call search_entries and read what you already know. Do not add a second row for something you already have. If the observation exists, call update_entry to raise its confidence instead. Never re-create something the person has deleted. Record what caused the observation in its evidence field. Evidence is what they said or did, never when. Do not write dates or times into an observation's title, body or evidence; the row is already timestamped, and a date in the text only makes it read as stale.
 
+Confidence records how you came to know it. 90 or above means they said it in so many words. Below 90 means you worked it out from what they do, and the thinner the evidence the lower it goes. The app turns this into a single line telling them whether they told you or you inferred it, so a number that does not match how you actually learned it will state something untrue on their screen.
+
 When you use an observation to justify a suggestion, name it out loud. Say which observation you are leaning on and why, so the person can correct or delete it. Never make a suggestion that quietly depends on something they cannot see.
 
 PROJECTS need a why when they are added: what makes this matter to them. Ask for it and do not save a project without one. Rank them with priority, 1 being highest.
@@ -191,7 +193,8 @@ const TOOL_SCHEMAS = [
         },
         confidence: {
           type: 'integer',
-          description: 'Observations only. 0 to 100.',
+          description:
+            'Observations only. 0 to 100. 90 or above means they said it outright.',
         },
       },
       required: ['type', 'title'],

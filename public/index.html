@@ -1425,6 +1425,11 @@
 
       // --- what I've noticed ------------------------------------------------
 
+      // At or above this, the person said it themselves. Below it, the system
+      // worked it out. Kept next to dots() so both readings of confidence
+      // stay in one place.
+      const STATED_DIRECTLY = 90;
+
       // Quiet confidence: three dots, nothing numeric on screen.
       function dots(confidence) {
         const n =
@@ -1495,11 +1500,20 @@
         const meta = document.createElement('div');
         meta.className = 'card-evidence';
         meta.appendChild(dots(o.confidence));
-        if (o.evidence) {
-          const ev = document.createElement('span');
-          ev.textContent = `Because: ${o.evidence}`;
-          meta.appendChild(ev);
-        }
+
+        // Where it came from, not what was said. Confidence carries this
+        // because something stated outright is certain by definition, while
+        // an inference never is. A missing confidence reads as inferred,
+        // which is the claim that cannot be wrong about the person.
+        const ev = document.createElement('span');
+        ev.textContent =
+          (o.confidence || 0) >= STATED_DIRECTLY
+            ? 'You told me this'
+            : 'I noticed this myself';
+        // The evidence is kept as a tooltip rather than dropped, so the record
+        // survives without the card carrying it.
+        if (o.evidence) ev.title = o.evidence;
+        meta.appendChild(ev);
 
         const delBtn = document.createElement('button');
         delBtn.className = 'linkbtn danger';
