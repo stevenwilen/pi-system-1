@@ -472,6 +472,98 @@
         gap: 16px;
       }
 
+      /* --- the entry sheet ---------------------------------------------------
+       *
+       * Adding something is its own screen, not a panel that grows in the
+       * middle of the list. Inline, the form pushed every row below it down the
+       * page and left the list doing two jobs at once: the thing you were
+       * reading moved while you typed. It is over the app now, and the list
+       * behind it does not move at all.
+       */
+
+      .sheet-scrim {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: rgba(10, 8, 6, 0.62);
+        display: flex;
+        justify-content: center;
+      }
+
+      /* Full screen on a phone, which is the only place this runs. The width
+         cap only matters on a desktop window, where it leaves the dimmed list
+         showing either side rather than stretching one column of fields across
+         the whole monitor. */
+      .sheet {
+        flex: 1;
+        max-width: 560px;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: var(--bg);
+      }
+
+      .sheet-head {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 16px;
+        padding-top: max(10px, env(safe-area-inset-top));
+        border-bottom: 1px solid var(--line);
+      }
+
+      .sheet-head h2 {
+        margin: 0;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      /* A hit area, not a glyph. 40px square is the smallest thing a thumb
+         finds without aiming. */
+      .sheet-close {
+        margin-left: auto;
+        width: 40px;
+        height: 40px;
+        flex: none;
+        border: 0;
+        border-radius: 8px;
+        background: none;
+        color: var(--muted);
+        font: inherit;
+        font-size: 22px;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .sheet-close:active {
+        color: var(--text);
+      }
+
+      .sheet-body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 16px 16px 32px;
+        padding-bottom: max(32px, env(safe-area-inset-bottom));
+      }
+
+      /* One action, so it takes the width. Beside a Cancel it read as one of
+         two choices; the X in the header is the way out. */
+      #f-save {
+        width: 100%;
+      }
+
+      /* The page behind must not scroll under the sheet. Without this a swipe
+         that misses the fields drags the list around beneath it. */
+      main.locked {
+        overflow: hidden;
+      }
+
       /* --- buttons --- */
 
       .linkbtn {
@@ -491,6 +583,30 @@
 
       .linkbtn.danger {
         color: var(--warn);
+      }
+
+      .linkbtn:disabled {
+        color: var(--dim);
+        cursor: default;
+      }
+
+      /* What a field can do, under the field. Right-aligned so it sits at the
+         end of the box rather than starting a new column of its own, and quiet
+         enough that it never competes with the label above it. */
+      .field-actions {
+        display: flex;
+        align-items: baseline;
+        justify-content: flex-end;
+        gap: 14px;
+        margin-top: 6px;
+      }
+
+      /* The quiet failure. It sits at the left of the row and says the field
+         was left alone, which is the only thing worth knowing. */
+      .field-actions .none {
+        margin-right: auto;
+        font-size: 11.5px;
+        text-align: left;
       }
 
       /* Quiet by design. Adding something is not the point of the screen. */
@@ -1155,74 +1271,6 @@
           <button class="addbtn" id="add-toggle" type="button">+ Add</button>
         </div>
 
-        <div class="formcard hidden" id="add-card">
-          <form id="add-form">
-            <div class="seg" id="type-seg" role="group" aria-label="Type">
-              <button type="button" data-type="habit" aria-pressed="false">Habit</button>
-              <button type="button" data-type="project" aria-pressed="false">Project</button>
-              <button type="button" data-type="task" aria-pressed="true">Task</button>
-            </div>
-
-            <label>
-              Title
-              <input id="f-title" type="text" autocomplete="off" />
-            </label>
-
-            <label class="hidden" id="f-frequency-wrap">
-              Intended frequency
-              <select id="f-frequency">
-                <option value="daily">daily</option>
-                <option value="few times a week">few times a week</option>
-                <option value="weekly">weekly</option>
-                <option value="monthly">monthly</option>
-              </select>
-            </label>
-
-            <!-- Required on a project, offered on a habit. A habit with only a
-                 name and a cadence is a line nobody recognises in three
-                 months. -->
-            <label class="hidden" id="f-why-wrap">
-              Why this matters <span class="none hidden" id="f-why-optional">optional</span>
-              <textarea id="f-why" rows="2"></textarea>
-            </label>
-
-            <!-- Projects and tasks only, and optional there. A picker rather
-                 than a text field: a date typed by hand is a date typed
-                 wrong. Clear puts it back to nothing. -->
-            <!-- Where it stands. Optional, and dated when saved, so an item
-                 added by hand is not thinner than one from the interview. -->
-            <label class="hidden" id="f-state-wrap">
-              Where it stands <span class="none">optional</span>
-              <textarea id="f-state" rows="2" placeholder="What is done, what is left, what is next"></textarea>
-            </label>
-
-            <label class="hidden" id="f-size-wrap">
-              Roughly how big <span class="none">optional</span>
-              <select id="f-size">
-                <option value="">not saying</option>
-                <option value="days">days</option>
-                <option value="weeks">weeks</option>
-                <option value="months">months</option>
-              </select>
-            </label>
-
-            <label class="hidden" id="f-due-wrap">
-              Due <span class="none">optional</span>
-              <div class="row">
-                <input id="f-due" class="grow" type="date" />
-                <button class="linkbtn" type="button" id="f-due-clear">Clear</button>
-              </div>
-            </label>
-
-            <div class="err hidden" id="f-error"></div>
-
-            <div class="row">
-              <button class="primary" type="submit" id="f-save">Save</button>
-              <button class="linkbtn" type="button" id="f-cancel">Cancel</button>
-            </div>
-          </form>
-        </div>
-
         <div id="stale"></div>
       </div>
 
@@ -1358,6 +1406,99 @@
       </div>
      </div>
     </main>
+
+    <!-- Adding and editing happen here, over the app, never in the list. The
+         same form serves both: what a row is was decided when it was created,
+         so editing hides the type selector rather than offering a change that
+         would really be a different entry. -->
+    <div class="sheet-scrim hidden" id="entry-sheet">
+      <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="entry-sheet-title">
+        <div class="sheet-head">
+          <h2 id="entry-sheet-title">Add</h2>
+          <button class="sheet-close" id="entry-close" type="button" aria-label="Close">&#215;</button>
+        </div>
+
+        <div class="sheet-body">
+          <form id="add-form" class="formcard">
+            <div class="seg" id="type-seg" role="group" aria-label="Type">
+              <button type="button" data-type="habit" aria-pressed="false">Habit</button>
+              <button type="button" data-type="project" aria-pressed="false">Project</button>
+              <button type="button" data-type="task" aria-pressed="true">Task</button>
+            </div>
+
+            <label>
+              Title
+              <input id="f-title" type="text" autocomplete="off" />
+            </label>
+
+            <label class="hidden" id="f-frequency-wrap">
+              Intended frequency
+              <select id="f-frequency">
+                <option value="daily">daily</option>
+                <option value="few times a week">few times a week</option>
+                <option value="weekly">weekly</option>
+                <option value="monthly">monthly</option>
+              </select>
+            </label>
+
+            <!-- Required on a project, offered on a habit. A habit with only a
+                 name and a cadence is a line nobody recognises in three
+                 months. -->
+            <!-- A div holding a label, rather than a label. The buttons below
+                 the field belong to it, and a button inside a label forwards
+                 its taps to the control the label names. -->
+            <div class="hidden" id="f-why-wrap">
+              <label>
+                Why this matters <span class="none hidden" id="f-why-optional">optional</span>
+                <textarea id="f-why" rows="2" autocapitalize="sentences"></textarea>
+              </label>
+
+              <!-- Dictation cleanup, and only that. Saying why something
+                   matters out loud produces speech; this turns it into the
+                   sentence they meant. Quiet, and off entirely until there is
+                   something in the field to work on. -->
+              <div class="field-actions">
+                <span class="none hidden" id="why-note"></span>
+                <button class="linkbtn hidden" id="why-undo" type="button">Undo</button>
+                <button class="linkbtn" id="why-summarize" type="button" disabled>Summarize</button>
+              </div>
+            </div>
+
+            <!-- Projects and tasks only, and optional there. A picker rather
+                 than a text field: a date typed by hand is a date typed
+                 wrong. Clear puts it back to nothing. -->
+            <!-- Where it stands. Optional, and dated when saved, so an item
+                 added by hand is not thinner than one from the interview. -->
+            <label class="hidden" id="f-state-wrap">
+              Where it stands <span class="none">optional</span>
+              <textarea id="f-state" rows="2" autocapitalize="sentences" placeholder="What is done, what is left, what is next"></textarea>
+            </label>
+
+            <label class="hidden" id="f-size-wrap">
+              Roughly how big <span class="none">optional</span>
+              <select id="f-size">
+                <option value="">not saying</option>
+                <option value="days">days</option>
+                <option value="weeks">weeks</option>
+                <option value="months">months</option>
+              </select>
+            </label>
+
+            <label class="hidden" id="f-due-wrap">
+              Due <span class="none">optional</span>
+              <div class="row">
+                <input id="f-due" class="grow" type="date" />
+                <button class="linkbtn" type="button" id="f-due-clear">Clear</button>
+              </div>
+            </label>
+
+            <div class="err hidden" id="f-error"></div>
+
+            <button class="primary" type="submit" id="f-save">Save</button>
+          </form>
+        </div>
+      </section>
+    </div>
 
     <script>
       const $ = (id) => document.getElementById(id);
@@ -1842,7 +1983,12 @@
       }
 
       for (const b of $('type-seg').children) {
-        b.onclick = () => setType(b.dataset.type);
+        b.onclick = () => {
+          setType(b.dataset.type);
+          // Switching type can empty the why, which changes what the button
+          // below it is able to do.
+          clearSummarize();
+        };
       }
 
       // A date field has no empty state a person can reach on every platform:
@@ -1869,18 +2015,100 @@
         box.style.height = `${box.scrollHeight}px`;
       }
 
-      for (const id of ['f-why', 'f-state']) {
-        $(id).oninput = () => grow($(id));
+      $('f-state').oninput = () => grow($('f-state'));
+
+      // --- summarize: dictation cleanup on the why --------------------------
+      //
+      // One button on one field. It rewrites what is in the box and puts the
+      // result back in place, which means a tap overwrites something the person
+      // said out loud. So the text it replaced is held until the field is
+      // edited again or the sheet closes, and Undo puts it back.
+      //
+      // Held no longer than that, deliberately. An Undo still sitting there
+      // after the text has moved on would restore something that was true two
+      // edits ago, which is worse than not offering it.
+      let beforeSummarize = null;
+      let summarizing = false;
+
+      function paintSummarize() {
+        const btn = $('why-summarize');
+        btn.disabled = summarizing || !$('f-why').value.trim();
+        btn.textContent = summarizing ? 'Summarizing…' : 'Summarize';
+        $('why-undo').classList.toggle('hidden', beforeSummarize === null);
       }
+
+      function clearSummarize() {
+        beforeSummarize = null;
+        summarizing = false;
+        $('why-note').textContent = '';
+        $('why-note').classList.add('hidden');
+        paintSummarize();
+      }
+
+      // Typing is what retires the undo: the text it would put back is no
+      // longer the text that was replaced.
+      $('f-why').oninput = () => {
+        grow($('f-why'));
+        clearSummarize();
+      };
+
+      $('why-undo').onclick = () => {
+        if (beforeSummarize === null) return;
+        $('f-why').value = beforeSummarize;
+        grow($('f-why'));
+        // Setting a value in code raises no input event, so the state is
+        // cleared by hand rather than waiting for one that is not coming.
+        clearSummarize();
+      };
+
+      $('why-summarize').onclick = async () => {
+        const before = $('f-why').value;
+        if (!before.trim() || summarizing) return;
+
+        $('why-note').textContent = '';
+        $('why-note').classList.add('hidden');
+        summarizing = true;
+        paintSummarize();
+
+        try {
+          const { text } = await api('/summarize', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ text: before }),
+          });
+          $('f-why').value = text;
+          grow($('f-why'));
+          // Recorded after the field is written, so what Undo restores is
+          // exactly what was replaced.
+          beforeSummarize = before;
+        } catch (err) {
+          // The field keeps every word. Said once and quietly under it: the
+          // person did nothing to cause this and there is nothing to fix.
+          $('why-note').textContent = err.message;
+          $('why-note').classList.remove('hidden');
+        } finally {
+          summarizing = false;
+          paintSummarize();
+        }
+      };
 
       // One form for both. Editing an existing row hides the type selector,
       // because what something is was decided when it was created and changing
       // it would be a different entry rather than an edit.
       let editingEntry = null;
 
+      // What the fields held when the sheet opened. Closing compares against
+      // this rather than asking "is anything filled in", so opening a row and
+      // closing it untouched does not accuse you of discarding work, and
+      // clearing a field that had something in it counts as a change.
+      let openedWith = '';
+
+      const sheetFields = ['f-title', 'f-why', 'f-frequency', 'f-due', 'f-state', 'f-size'];
+
+      const sheetState = () => JSON.stringify(sheetFields.map((id) => $(id).value));
+
       function openEntry(item) {
         editingEntry = item || null;
-        const card = $('add-card');
 
         $('f-title').value = item ? item.title : '';
         $('f-why').value = (item && item.why) || '';
@@ -1896,27 +2124,36 @@
         setType(item ? item.type : 'task');
         $('type-seg').classList.toggle('hidden', Boolean(item));
         $('f-save').textContent = item ? 'Save changes' : 'Save';
+        $('entry-sheet-title').textContent = item ? 'Edit' : 'Add';
 
-        // Only animate it open if it was closed. Re-opening the form on a
-        // different row while it is already showing must not collapse it to
-        // nothing and grow it back.
-        card.classList.remove('hidden');
+        // setType clears the fields a type does not carry, so the snapshot is
+        // taken after it runs. Taken before, switching type on the way in would
+        // read as something the person typed.
+        openedWith = sheetState();
+        clearSummarize();
+
+        $('entry-sheet').classList.remove('hidden');
+        $('main').classList.add('locked');
         $('f-title').focus();
-        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
 
-      $('add-toggle').onclick = () => {
-        const card = $('add-card');
-        if (!card.classList.contains('hidden') && !editingEntry) {
-          card.classList.add('hidden');
+      function closeEntry() {
+        editingEntry = null;
+        clearSummarize();
+        $('entry-sheet').classList.add('hidden');
+        $('main').classList.remove('locked');
+      }
+
+      $('add-toggle').onclick = () => openEntry(null);
+
+      // The X discards. It asks first only when there is something to lose:
+      // a confirm on an untouched sheet is a dialog that is always wrong.
+      $('entry-close').onclick = () => {
+        if (sheetState() !== openedWith &&
+            !confirm('Discard this? What you have typed will not be saved.')) {
           return;
         }
-        openEntry(null);
-      };
-
-      $('f-cancel').onclick = () => {
-        editingEntry = null;
-        $('add-card').classList.add('hidden');
+        closeEntry();
       };
 
       $('add-form').onsubmit = async (event) => {
@@ -1949,8 +2186,7 @@
               body: JSON.stringify(payload),
             }
           );
-          editingEntry = null;
-          $('add-card').classList.add('hidden');
+          closeEntry();
           await load();
         } catch (err) {
           error.textContent = err.message;

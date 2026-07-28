@@ -17,6 +17,12 @@ const PRICING = {
     cache_read: 0.3,
     cache_write: 3.75,
   },
+  'claude-opus-5': {
+    input: 5.0,
+    output: 25.0,
+    cache_read: 0.5,
+    cache_write: 6.25,
+  },
 };
 
 const FALLBACK_MODEL = 'claude-sonnet-4-6';

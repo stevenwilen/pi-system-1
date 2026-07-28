@@ -1,7 +1,9 @@
 // The web server. Serves the page, mounts the routes, and starts delivery.
 //
 // Nothing is handled here. Every route lives in routes/, one file per part of
-// the screen, and none of them calls the model.
+// the screen. One of them calls the model — routes/summarize.js, which rewrites
+// the text of a single field on request — and it is the only one. Everything
+// that draws the screen is a database read.
 
 require('dotenv').config();
 
@@ -38,6 +40,7 @@ app.use(require('./routes/entries'));
 app.use(require('./routes/plan'));
 app.use(require('./routes/review'));
 app.use(require('./routes/finance'));
+app.use(require('./routes/summarize'));
 
 // The `messages` table is no longer read or written. It is deliberately left
 // in place with its rows: dropping a table is the one move that cannot be

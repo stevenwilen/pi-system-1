@@ -62,7 +62,7 @@ console.log('\n2. placeholders read as placeholders');
 
 console.log('\n3. no nested cards');
 {
-  check('the add form is not a card', /<div class="formcard hidden" id="add-card">/.test(body));
+  check('the add form is not a card', /<form id="add-form" class="formcard">/.test(body));
   check('nor the block form', /<div class="formcard hidden" id="block-card">/.test(body));
   check('a formcard has no background', /background: none/.test(rule('.formcard')));
 
@@ -120,7 +120,7 @@ console.log('\n7. the segmented control is a mode switch');
 
 console.log('\n8. textareas start at two rows and grow');
 {
-  check('why starts at two', /<textarea id="f-why" rows="2">/.test(body));
+  check('why starts at two', /<textarea id="f-why" rows="2"/.test(body));
   check('where it stands too', /<textarea id="f-state" rows="2"/.test(body));
   // Searched across the stylesheet: `textarea` appears both as the tail of the
   // shared input group and as its own rule, and rule() finds the first.
@@ -137,15 +137,21 @@ console.log('\n9. Clear only when there is a date');
   check('and re-checked when the form opens', /paintDueClear\(\);\s*\n\s*grow/.test(script));
 }
 
-console.log('\n10. Save and Cancel share a row');
+console.log('\n10. a pair shares a row, a lone action takes the width');
 {
   // The Plan screen's button pairs, all of them. The Money tab is out of scope
   // and keeps its own treatment.
   const plan = body.slice(body.indexOf('id="plan-view"'), body.indexOf('id="money-view"'));
   check('no full-width button in a pair on this screen', !/class="primary grow"/.test(plan),
     (plan.match(/class="primary grow"[^>]*/g) || []).join(' | '));
-  check('and sits beside Cancel', /<button class="primary" type="submit" id="f-save">[\s\S]{0,120}id="f-cancel"/.test(body));
+  check('the block form still pairs Save with Cancel',
+    /<button class="primary" type="submit">Add block<\/button>[\s\S]{0,120}id="b-cancel"/.test(body));
   check('with spacing between them', px('.row', 'gap') >= 12, String(px('.row', 'gap')));
+
+  // The sheet is one screen doing one thing, so Save is not one of two
+  // choices. The X in its header is the way out.
+  check('the sheet offers no Cancel', !/id="f-cancel"/.test(body));
+  check('and its Save takes the width', /width: 100%/.test(rule('#f-save')));
 }
 
 console.log('\n11. the header does not waste a row');
@@ -191,6 +197,36 @@ console.log('\n13. section headers lead, their buttons do not');
   check('nor larger', size(btn) <= size(head), `${size(btn)} against ${size(head)}`);
   check('and it is dimmer', /color: var\(--dim\)/.test(btn));
   check('its pill border is gone', /border: 0/.test(btn));
+}
+
+console.log('\n14. the add form is a sheet over the app, never in the list');
+{
+  const plan = body.slice(body.indexOf('id="plan-view"'), body.indexOf('id="money-view"'));
+  check('no form left inside the plan view', !/id="add-form"/.test(plan));
+  check('the priorities section is the list and nothing else',
+    /<h2>Priorities<\/h2>[\s\S]{0,200}?<div id="stale"><\/div>/.test(body));
+
+  check('the sheet is fixed over the page', /position: fixed/.test(rule('.sheet-scrim')));
+  check('and dims what is behind it', /background: rgba\(/.test(rule('.sheet-scrim')));
+  check('it has a header', /<div class="sheet-head">/.test(body));
+  check('with a close control', /id="entry-close"/.test(body));
+  check('the close target is a real hit area',
+    px('.sheet-close', 'width') >= 40 && px('.sheet-close', 'height') >= 40,
+    `${px('.sheet-close', 'width')}x${px('.sheet-close', 'height')}`);
+  check('the fields scroll inside it', /overflow-y: auto/.test(rule('.sheet-body')));
+
+  // Opening it must not leave the list scrolling underneath.
+  check('the page behind is locked', /overflow: hidden/.test(rule('main.locked')));
+  check('locked on open', /\$\('main'\)\.classList\.add\('locked'\)/.test(script));
+  check('and released on close', /\$\('main'\)\.classList\.remove\('locked'\)/.test(script));
+
+  // Nothing may expand in place any more.
+  check('opening no longer scrolls a card into the list', !/scrollIntoView/.test(script.slice(script.indexOf('function openEntry'), script.indexOf('function closeEntry'))));
+
+  // Discarding asks, but only when there is something to lose.
+  check('the X compares against what it opened with', /sheetState\(\) !== openedWith/.test(script));
+  check('and only then confirms', /openedWith &&\s*\n?\s*!confirm\(/.test(script));
+  check('saving closes it', /closeEntry\(\);\s*\n\s*await load\(\)/.test(script));
 }
 
 console.log('\nthe palette is untouched');

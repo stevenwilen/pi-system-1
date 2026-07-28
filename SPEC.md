@@ -301,11 +301,23 @@ An **+ Add** control at the top of the stale list opens a small form:
   project has in place of a deadline.
 - **task**: title, and optionally a due date and where it stands
 
+**The form is a sheet over the app, not a panel inside the list.** Both **+ Add**
+and editing a row open the same full-screen sheet, with its own header and a
+close X; the list behind it is dimmed and does not move. Nothing expands in
+place, so the row you were reading stays where it was. Editing hides the type
+selector, because what a row is was decided when it was created. Save writes and
+closes. The X discards, and asks first only when something has been entered. The
+list is a list at every moment.
+
 Save writes one row to `entries`. No reasoning, no model call.
 
 Creating an entry needs no judgment. Chat was only ever there to pull structure
 out of a sentence, and there is nothing to pull when the person picks a type and
 types a title. That makes this arithmetic, so it lives in the app.
+
+The one exception is the **Summarize** button under the why, which rewrites what
+is already in that field and adds nothing to it. It is a reasoning place and is
+specified as one in 4.3.
 
 ### 3.3 BUILDER — tomorrow
 - Every block has a **start time** and a **duration**.
@@ -344,10 +356,10 @@ types a title. That makes this arithmetic, so it lives in the app.
 ## 4. Where Reasoning Is Used
 
 The count is **per lane**, not global. Each lane carries its own, and a lane
-that grows one does not spend the planner's. The planner has two. The finance
+that grows one does not spend the planner's. The planner has three. The finance
 lane has one (section 7).
 
-Within the planner, exactly two places. Nowhere else.
+Within the planner, exactly three places. Nowhere else.
 
 **1. The coldness verdict, once a day.** How long is too long differs per item.
 Three days without a daily habit is not three days without a monthly one, and a
@@ -384,6 +396,40 @@ Failure leaves the previous verdict standing. Blanking the flags because a call
 failed would turn an outage into a screen that says everything is fine.
 
 **2. Block message generation, at confirm time.** See section 5.
+
+**3. Summarize, on one field, when the button is pressed.** The narrowest of the
+three, and the only one a person triggers directly. It exists because the why
+and the where-it-stands are dictated, and speech is not writing: "um so
+basically the thing is I want to like build this business because you know I
+don't want to be paycheck to paycheck" is a real thing to say and a poor thing
+to read back in four months.
+
+It is handed the current text of **one field** and returns that same text,
+tidied, which replaces what is in the box. Nothing else about the entry is sent,
+because nothing else is needed and everything else sent is something that could
+come back. It carries **no tools**, cannot read the notebook and cannot write a
+row. The field text arrives fenced as untrusted data (2.2), so an instruction
+typed into a form field is rewritten as the sentence it is.
+
+The rules it is held to: keep the person's meaning and every specific exactly,
+**add nothing**, strip filler and repetition and false starts, aim for one or two
+sentences, first person and plain language, no headers or bullets. Never a
+question and never a remark, because the whole reply is written straight into
+the field and anything else becomes something to delete by hand.
+
+**This is not capture and not extraction.** It never pulls structure out of a
+sentence, never decides what an entry is, and never invents a detail that was
+not already typed. Creating an entry stays arithmetic and stays in the app
+(3.2); a rewrite button is not a way back in to that.
+
+**The original is recoverable.** A tap overwrites something the person said, so
+the replaced text is held and an undo restores it — until the field is edited
+again or the sheet is closed, and no longer. An undo still offering itself after
+the text has moved on would put back something that was true two edits ago.
+
+**Failure changes nothing.** The field keeps every word, the page says so once
+and quietly, and the field is never cleared. A rewrite that half-lands is worse
+than one that does not happen.
 
 Deliberate-versus-drift was once the third. It is not reasoned any more: the user
 declares it with the **not now** button (2.7). A tap replaced a judgment call,
@@ -662,6 +708,8 @@ Nothing in the web layer calls the model, and nothing in the engine serves HTTP.
 | `clock.js` | dates and clock times as numbers, in the user's timezone |
 | `db.js` | the Supabase client |
 | `brain.js` | the engine: the system prompt and the agent loop |
+| `summarize.js` | the one-field rewrite (4.3). No tools, no notebook, no rows |
+| `routes/summarize.js` | the only route that reaches a model |
 | `tools.js` | the whitelisted tool set (2.3) |
 | `untrusted.js` | the fence (2.2) |
 | `coldness.js` | the daily verdict |

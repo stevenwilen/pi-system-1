@@ -101,6 +101,7 @@ const SUITES = [
   ['money-order-test.js', 120],
   ['stale-render-check.js', 120],
   ['plan-layout-check.js', 120],
+  ['summarize-test.js', 120],
   ['icons-check.js', 60],
   // guarded writers
   ['verify-isolation.js', 120],
