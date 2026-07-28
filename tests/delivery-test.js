@@ -72,9 +72,22 @@ const statusOf = async (planId) => {
   await H.ensureProfile();
 
   const profile = (await scheduler.allProfiles()).find((p) => p.user_id === U);
-  const now = scheduler.localNow(profile.timezone);
-  const nowMinutes = now.hour * 60 + now.minute;
-  console.log(`  local now: ${now.date} ${String(now.hour).padStart(2, '0')}:${String(now.minute).padStart(2, '0')} ${profile.timezone}\n`);
+
+  // Driven at a fixed midday rather than the real clock.
+  //
+  // The offsets below reach 90 minutes back, and `at` clamps to the start of
+  // the day so it cannot produce a negative time. Run shortly after midnight
+  // that clamp turned "90 minutes ago" into 00:00, which is only a few minutes
+  // late and therefore still inside the grace window, so a block that had to
+  // expire was delivered instead. The test failed for the first ninety minutes
+  // of every day and passed for the other twenty-two and a half hours.
+  //
+  // Only the hour is synthetic. The date stays real, because that is what the
+  // plan is written for.
+  const today = scheduler.localNow(profile.timezone);
+  const now = { ...today, hour: 12, minute: 0 };
+  const nowMinutes = 12 * 60;
+  console.log(`  driving ${now.date} at 12:00 ${profile.timezone} (really ${String(today.hour).padStart(2, '0')}:${String(today.minute).padStart(2, '0')})\n`);
 
   const at = (offset) => hhmmss(Math.max(0, Math.min(1439, nowMinutes + offset)));
   const old = new Date(Date.now() - 60 * 60 * 1000).toISOString();
