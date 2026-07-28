@@ -66,14 +66,20 @@
         touch-action: manipulation;
       }
 
+      /* Title and tabs share one row. The title had a row of its own above
+         them, spending vertical space on a word that never changes. */
       header {
         flex: none;
-        padding: 14px 18px 10px;
-        padding-top: max(14px, env(safe-area-inset-top));
-        font-size: 15px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 8px 16px;
+        padding-top: max(8px, env(safe-area-inset-top));
+        font-size: 13px;
         font-weight: 600;
-        letter-spacing: 0.02em;
-        color: var(--muted);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--dim);
       }
 
       /* Two lanes, and the planner is the primary one. Quiet enough that the
@@ -82,7 +88,7 @@
         flex: none;
         display: flex;
         gap: 4px;
-        padding: 0 14px 8px;
+        margin-left: auto;
       }
 
       .tabs button {
@@ -397,10 +403,10 @@
         flex: 1;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
-        padding: 2px 14px 32px;
+        padding: 8px 16px 32px;
         display: flex;
         flex-direction: column;
-        gap: 22px;
+        gap: 32px;
       }
 
       /* --- sections --- */
@@ -408,14 +414,14 @@
       .group {
         display: flex;
         flex-direction: column;
-        gap: 7px;
+        gap: 8px;
       }
 
       .group-head {
         display: flex;
-        align-items: center;
+        align-items: baseline;
         gap: 10px;
-        padding: 0 2px 2px;
+        padding: 0 2px;
       }
 
       .group-head h2 {
@@ -432,16 +438,37 @@
       .card {
         background: var(--surface);
         border-radius: var(--radius);
-        padding: 14px 13px;
+        padding: 12px;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 12px;
       }
 
       .none {
         font-size: 13px;
         color: var(--muted);
         line-height: 1.45;
+      }
+
+      /* An empty list is not a thing, so it does not get a card. A card around
+         "nothing here yet" is a container drawn around an absence, and next to
+         real cards it reads as another item. */
+      .empty {
+        font-size: 13px;
+        color: var(--dim);
+        line-height: 1.45;
+        padding: 4px 2px;
+      }
+
+      /* A form is the section's content, not an object inside it. The wrapping
+         card put a panel inside a panel and stacked a third under it. */
+      .formcard {
+        background: none;
+        border-radius: 0;
+        padding: 2px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
       }
 
       /* --- buttons --- */
@@ -468,20 +495,19 @@
       /* Quiet by design. Adding something is not the point of the screen. */
       .addbtn {
         margin-left: auto;
-        border: 1px solid var(--line);
-        border-radius: 999px;
+        border: 0;
         background: none;
-        color: var(--muted);
+        color: var(--dim);
         font: inherit;
-        font-size: 11.5px;
-        font-weight: 600;
-        letter-spacing: 0.03em;
-        padding: 3px 11px;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 2px 0;
         cursor: pointer;
       }
 
       .addbtn:active {
-        background: var(--surface);
         color: var(--text);
       }
 
@@ -493,8 +519,9 @@
         background: var(--recessed);
         color: var(--text);
         font: inherit;
+        font-size: 14px;
         font-weight: 600;
-        padding: 10px 16px;
+        padding: 10px 22px;
         cursor: pointer;
       }
 
@@ -515,17 +542,20 @@
         background: var(--surface);
         border-radius: 0;
         border-left: 3px solid var(--line);
-        padding: 13px 13px 12px 12px;
+        padding: 8px 12px;
         display: flex;
         flex-direction: column;
-        gap: 7px;
+        gap: 8px;
       }
 
+      /* Tight inside a row, loose between rows. It was the other way round,
+         which is why the page looked jammed and still sprawled. */
       #stale,
+      #habits,
       #paused {
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: 8px;
       }
 
       .item-top {
@@ -718,12 +748,13 @@
         flex: none;
         display: flex;
         align-items: center;
-        gap: 3px;
+        gap: 2px;
       }
 
       .stepper button {
-        width: 30px;
-        height: 30px;
+        width: 32px;
+        height: 32px;
+        flex: none;
         border: 1px solid rgba(224, 164, 88, 0.28);
         border-radius: 8px;
         background: none;
@@ -746,7 +777,7 @@
       }
 
       .stepper span {
-        min-width: 50px;
+        min-width: 42px;
         text-align: center;
         font-size: 11.5px;
         font-weight: 600;
@@ -809,22 +840,30 @@
       }
 
       /* --- the ends of the day --- */
-
+      /*
+         Two compact rows that bookend the block list, not two cards. A card is
+         a container for several things; one label and one control is a row, and
+         boxing it spent a whole panel on a single stepper.
+      */
       #ends,
       #starts {
+        background: none;
+        border-radius: 0;
         gap: 0;
         padding: 0;
       }
 
-      /* The start reads as a readout with a control on it, the same shape as
-         the end of the day, so the two bookend the list. */
-      #starts .ends-row {
-        padding: 9px 10px 9px 14px;
+      .ends-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        min-height: 44px;
+        font-size: 12.5px;
+        color: var(--muted);
+        padding: 0 2px;
       }
 
-      #starts strong {
-        min-width: 54px;
-        text-align: center;
+      .ends-row strong {
         font-size: 16px;
         font-weight: 600;
         color: var(--text);
@@ -832,21 +871,17 @@
         letter-spacing: 0.01em;
       }
 
-      .ends-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        font-size: 12.5px;
-        color: var(--muted);
-        padding: 14px 14px 13px;
+      #starts strong {
+        min-width: 46px;
+        text-align: center;
       }
 
-      .ends-row strong {
-        font-size: 19px;
-        font-weight: 600;
-        color: var(--text);
-        font-variant-numeric: tabular-nums;
-        letter-spacing: 0.01em;
+      /* A value that has not been computed yet is a placeholder, and reads like
+         one: muted and ordinary weight. Only a real end time is emphasised. */
+      .ends-row strong.placeholder {
+        font-size: 12.5px;
+        font-weight: 400;
+        color: var(--dim);
       }
 
       .ends-row.late strong {
@@ -855,24 +890,33 @@
 
       /* The hairline is the whole separation. The time is a readout, Confirm
          is a commitment, and they should not read as one control. */
-      #ends .primary {
-        border: 0;
-        border-top: 1px solid var(--line);
-        border-radius: 0 0 var(--radius) var(--radius);
+      /* Confirm is an action, not the bottom of a readout.
+         It used to sit inside the "day ends" box under a hairline, which made
+         committing the day look like the last line of a display. It stands on
+         its own, full width, with real space above it. */
+      #confirm {
+        width: 100%;
+        margin-top: 16px;
+        border: 1px solid rgba(224, 164, 88, 0.28);
+        border-radius: var(--radius);
         background: none;
         color: var(--amber);
+        font: inherit;
         font-weight: 600;
         letter-spacing: 0.02em;
         padding: 14px;
+        cursor: pointer;
       }
 
-      #ends .primary:active {
+      #confirm:active {
         background: rgba(224, 164, 88, 0.1);
       }
 
-      #ends .primary:disabled {
+      #confirm:disabled {
+        border-color: var(--line);
         color: var(--dim);
         background: none;
+        cursor: default;
       }
 
       /* --- forms --- */
@@ -880,7 +924,7 @@
       form {
         display: flex;
         flex-direction: column;
-        gap: 11px;
+        gap: 16px;
       }
 
       .seg {
@@ -893,14 +937,15 @@
 
       .seg button {
         flex: 1;
+        height: 30px;
         border: 0;
         border-radius: 7px;
         background: none;
         font: inherit;
-        font-size: 12.5px;
-        font-weight: 600;
+        font-size: 12px;
+        font-weight: 500;
         color: var(--muted);
-        padding: 7px 0;
+        padding: 0;
         cursor: pointer;
       }
 
@@ -909,15 +954,44 @@
         color: var(--text);
       }
 
+      /* One label style, everywhere.
+         Block rather than a flex column: as a flex column the label text and
+         its "optional" marker became two rows, both uppercase and bold at
+         different sizes, which read as two competing headings. Inline flow puts
+         them on one line and the control below, which is what a label is. */
       label {
-        display: flex;
-        flex-direction: column;
-        gap: 5px;
+        display: block;
         font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
+        font-weight: 500;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
         color: var(--muted);
+      }
+
+      /* The control the label names. Forced onto its own line, since inline
+         flow would otherwise leave it beside the text. */
+      label > input,
+      label > select,
+      label > textarea {
+        display: block;
+        margin-top: 8px;
+      }
+
+      /* A row of controls is already block level, so it only needs the gap.
+         Setting display here would flatten the flex it depends on. */
+      label > .row {
+        margin-top: 8px;
+      }
+
+      /* "optional" is an aside on the label, not a second label. Lowercase,
+         smaller, dimmer, and always on the same line. */
+      label .none {
+        margin-left: 6px;
+        font-size: 10px;
+        font-weight: 400;
+        letter-spacing: 0.01em;
+        text-transform: lowercase;
+        color: var(--dim);
       }
 
       input,
@@ -937,8 +1011,10 @@
       }
 
       textarea {
-        resize: vertical;
-        min-height: 62px;
+        resize: none;
+        min-height: 0;
+        height: auto;
+        overflow-y: hidden;
         line-height: 1.45;
       }
 
@@ -949,13 +1025,19 @@
         outline-offset: -1px;
       }
 
-      input::placeholder {
+      /* Clearly dimmer than typed text, and never bold. A placeholder rendered
+         near the brightness of real content reads as something already
+         entered. */
+      input::placeholder,
+      textarea::placeholder {
         color: var(--dim);
+        font-weight: 400;
+        opacity: 1; /* Firefox dims placeholders again on top of the colour. */
       }
 
       .row {
         display: flex;
-        gap: 11px;
+        gap: 12px;
         align-items: center;
       }
 
@@ -986,11 +1068,8 @@
       */
 
       /* The habits list, laid out like the one above it. */
-      #habits {
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-      }
+      /* Laid out with the list above it; the shared rule near .item sets the
+         gap so the two lists cannot drift apart. */
 
       /* Position in the person's own ranking, read back. Never an input. */
       .rank {
@@ -1030,12 +1109,11 @@
   <body>
     <header>
       Planner
+      <nav class="tabs" role="tablist">
+        <button type="button" id="tab-plan" role="tab" aria-selected="true">Plan</button>
+        <button type="button" id="tab-money" role="tab" aria-selected="false">Money</button>
+      </nav>
     </header>
-
-    <nav class="tabs" role="tablist">
-      <button type="button" id="tab-plan" role="tab" aria-selected="true">Plan</button>
-      <button type="button" id="tab-money" role="tab" aria-selected="false">Money</button>
-    </nav>
 
     <main id="main">
      <div id="plan-view" class="view">
@@ -1093,7 +1171,7 @@
             <div class="setup-title" id="plan-setup-count"></div>
             <div id="plan-setup-list"></div>
             <div class="row">
-              <button class="primary grow" id="plan-setup-confirm" type="button">Save these</button>
+              <button class="primary" id="plan-setup-confirm" type="button">Save these</button>
               <button class="linkbtn" id="plan-setup-discard" type="button">Discard</button>
             </div>
           </div>
@@ -1106,7 +1184,7 @@
           <button class="addbtn" id="add-toggle" type="button">+ Add</button>
         </div>
 
-        <div class="card hidden" id="add-card">
+        <div class="formcard hidden" id="add-card">
           <form id="add-form">
             <div class="seg" id="type-seg" role="group" aria-label="Type">
               <button type="button" data-type="habit" aria-pressed="false">Habit</button>
@@ -1134,7 +1212,7 @@
                  months. -->
             <label class="hidden" id="f-why-wrap">
               Why this matters <span class="none hidden" id="f-why-optional">optional</span>
-              <textarea id="f-why"></textarea>
+              <textarea id="f-why" rows="2"></textarea>
             </label>
 
             <!-- Projects and tasks only, and optional there. A picker rather
@@ -1144,7 +1222,7 @@
                  added by hand is not thinner than one from the interview. -->
             <label class="hidden" id="f-state-wrap">
               Where it stands <span class="none">optional</span>
-              <textarea id="f-state" placeholder="What is done, what is left, what is next"></textarea>
+              <textarea id="f-state" rows="2" placeholder="What is done, what is left, what is next"></textarea>
             </label>
 
             <label class="hidden" id="f-size-wrap">
@@ -1168,7 +1246,7 @@
             <div class="err hidden" id="f-error"></div>
 
             <div class="row">
-              <button class="primary grow" type="submit" id="f-save">Save</button>
+              <button class="primary" type="submit" id="f-save">Save</button>
               <button class="linkbtn" type="button" id="f-cancel">Cancel</button>
             </div>
           </form>
@@ -1197,14 +1275,14 @@
           <button class="addbtn" id="block-toggle" type="button">+ Block</button>
         </div>
 
-        <div class="card hidden" id="block-card">
+        <div class="formcard hidden" id="block-card">
           <form id="block-form">
             <label>
               What is it
               <input id="b-title" type="text" autocomplete="off" placeholder="Lunch, rest, drive" />
             </label>
             <div class="row">
-              <button class="primary grow" type="submit">Add block</button>
+              <button class="primary" type="submit">Add block</button>
               <button class="linkbtn" type="button" id="b-cancel">Cancel</button>
             </div>
           </form>
@@ -1215,7 +1293,7 @@
         <!-- Where the day starts, set per day rather than once. It used to be
              fixed at the profile default, which made every day begin at the
              same hour whatever the day actually was. -->
-        <div class="card" id="starts">
+        <div id="starts">
           <div class="ends-row">
             <span>Day starts</span>
             <div class="stepper" id="wake-stepper">
@@ -1228,13 +1306,14 @@
 
         <div id="builder"></div>
 
-        <div class="card" id="ends">
+        <div id="ends">
           <div class="ends-row">
             <span>Day ends</span>
-            <strong id="end-time">not yet</strong>
+            <strong id="end-time" class="placeholder">not yet</strong>
           </div>
-          <button class="primary" id="confirm" type="button" disabled>Confirm</button>
         </div>
+
+        <button id="confirm" type="button" disabled>Confirm</button>
       </div>
      </div>
 
@@ -1839,9 +1918,7 @@
         habitList.replaceChildren();
 
         if (!staleItems.length) {
-          const empty = el('div', 'card');
-          empty.append(el('span', 'none', 'Nothing here yet. Add a project or task.'));
-          list.append(empty);
+          list.append(el('div', 'empty', 'Nothing here yet. Add a project or task.'));
         }
 
         // The bar reads across whatever is on screen, both lists together,
@@ -1974,9 +2051,31 @@
 
       // A date field has no empty state a person can reach on every platform:
       // some pickers will not let you delete what is in them once it is set.
+      //
+      // Shown only when there is something to clear. On an empty field it was
+      // a control offering to undo nothing.
+      function paintDueClear() {
+        $('f-due-clear').classList.toggle('hidden', !$('f-due').value);
+      }
+
+      $('f-due').oninput = paintDueClear;
+      $('f-due').onchange = paintDueClear;
+
       $('f-due-clear').onclick = () => {
         $('f-due').value = '';
+        paintDueClear();
       };
+
+      // Textareas start at two rows and grow to fit. A fixed tall box is empty
+      // space on a phone until it is not enough.
+      function grow(box) {
+        box.style.height = 'auto';
+        box.style.height = `${box.scrollHeight}px`;
+      }
+
+      for (const id of ['f-why', 'f-state']) {
+        $(id).oninput = () => grow($(id));
+      }
 
       // One form for both. Editing an existing row hides the type selector,
       // because what something is was decided when it was created and changing
@@ -1994,6 +2093,9 @@
         $('f-state').value = (item && item.state) || '';
         $('f-size').value = (item && item.size) || '';
         $('f-error').classList.add('hidden');
+        paintDueClear();
+        grow($('f-why'));
+        grow($('f-state'));
 
         setType(item ? item.type : 'task');
         $('type-seg').classList.toggle('hidden', Boolean(item));
@@ -2139,9 +2241,7 @@
         list.replaceChildren();
 
         if (!data.blocks.length) {
-          const empty = el('div', 'card');
-          empty.append(el('span', 'none', 'Nothing planned yesterday.'));
-          list.append(empty);
+          list.append(el('div', 'empty', 'Nothing planned yesterday.'));
           return;
         }
 
@@ -2339,11 +2439,7 @@
         builder.replaceChildren();
 
         if (!blocks.length) {
-          const empty = el('div', 'card');
-          empty.append(
-            el('span', 'none', 'Tap something in Stale to put it in tomorrow, or add a block.')
-          );
-          builder.append(empty);
+          builder.append(el('div', 'empty', 'Tap something in Stale to put it in tomorrow, or add a block.'));
         }
 
         blocks.forEach((b, i) => {
@@ -2358,6 +2454,9 @@
         paintWake();
         refreshConfirm();
         $('end-time').textContent = blocks.length ? clock(end) : 'not yet';
+        // Emphasis is earned by a real computed time, not by the word standing
+        // in for one.
+        $('end-time').classList.toggle('placeholder', !blocks.length);
         // Past midnight is the one case the clock cannot show on its own:
         // 00:30 looks earlier than 23:00 rather than later.
         $('ends').querySelector('.ends-row').classList.toggle('late', end >= 1440);

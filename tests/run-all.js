@@ -100,6 +100,7 @@ const SUITES = [
   ['tasks-render-test.js', 120],
   ['money-order-test.js', 120],
   ['split-render-check.js', 120],
+  ['plan-layout-check.js', 120],
   // guarded writers
   ['verify-isolation.js', 120],
   ['due-test.js', 180],
