@@ -2586,9 +2586,15 @@
       async function fetchCalendar(date) {
         try {
           const data = await api(`/calendar/${date}`);
-          return { events: data.events || [], allDay: data.all_day || [] };
+          return {
+            events: data.events || [],
+            allDay: data.all_day || [],
+            failed: data.failed || [],
+          };
         } catch {
-          return { events: [], allDay: [] };
+          // The request itself failed, which is not the same as a feed being
+          // down and is not something the server can name for us.
+          return { events: [], allDay: [], failed: [{ label: 'your calendar' }] };
         }
       }
 
@@ -2596,18 +2602,28 @@
       // they claim no hours, so they sit above the blocks rather than inside
       // them. An earlier version made each one a 24 hour pinned block, which
       // swallowed the whole day.
-      function showAllDay(allDay) {
+      function showAllDay(allDay, failed = []) {
         const note = $('all-day');
         note.replaceChildren();
-        note.classList.toggle('hidden', !allDay.length);
+        note.classList.toggle('hidden', !allDay.length && !failed.length);
+
+        // The failure goes first and in the miss colour. An unreachable feed
+        // and a day with nothing on it both produce no blocks, and without
+        // this they look identical — so a calendar that has been broken for a
+        // week reads as a quiet week.
+        if (failed.length) {
+          const names = failed.map((f) => f.label).join(' and ');
+          note.append(el('div', 'err', `Couldn't reach ${names}. Anything on it is missing from this day.`));
+        }
+
         if (allDay.length) {
           note.append(el('span', 'none', 'All day: ' + allDay.map((a) => a.title).join(', ')));
         }
       }
 
       async function loadCalendar(date) {
-        const { events, allDay } = await fetchCalendar(date);
-        showAllDay(allDay);
+        const { events, allDay, failed } = await fetchCalendar(date);
+        showAllDay(allDay, failed);
 
         // The server returns them already in clock order, so they only need
         // appending. An earlier version sorted the whole list with a
@@ -2664,7 +2680,8 @@
           }));
           // The note still comes from the feed: it is not part of the plan
           // because it never occupied any of it.
-          showAllDay((await fetchCalendar(date)).allDay);
+          const fresh = await fetchCalendar(date);
+          showAllDay(fresh.allDay, fresh.failed);
           renderBuilder();
           setSaved(existing.plan.status === 'confirmed');
           return;
@@ -2672,6 +2689,35 @@
 
         setSaved(false);
         await loadCalendar(date);
+        await placeActionItems(date);
+      }
+
+      /**
+       * Pull in whatever the action calendar is offering for this day.
+       *
+       * Only on a day with no saved plan, and only once per event per day: the
+       * server records each one as it hands it over, so deleting the block and
+       * reopening the builder does not bring it back. Saying no has to stick,
+       * or the feature is just a thing that keeps arguing.
+       *
+       * They arrive as ordinary blocks — not pinned, movable, resizable,
+       * deletable — placed the same way anything else is: the first gap they
+       * fit in, otherwise the end.
+       */
+      async function placeActionItems(date) {
+        let placed = [];
+        try {
+          const res = await api(`/calendar/${date}/place`, { method: 'POST' });
+          placed = res.placed || [];
+        } catch {
+          // Nothing to add is the normal case, and a failure here must not
+          // cost the day that has already been laid out.
+          return;
+        }
+
+        for (const item of placed) {
+          addBlock({ title: item.title, duration: item.duration_minutes });
+        }
       }
 
       $('block-toggle').onclick = () => {

@@ -351,6 +351,59 @@ specified as one in 4.3.
   stops counting as confirmed until it is confirmed again.
 - **Confirm** saves the plan.
 
+### 3.4 Two calendars: things to know, and things to do
+
+Calendar input is two feeds, and **which feed something is on is the entire
+signal**. Nothing is filtered by `TRANSP`, by calendar name, or by anything
+written inside the event. The user already sorts their own life by choosing
+which calendar a thing goes on; this reads that decision rather than
+second-guessing it.
+
+| | |
+|---|---|
+| `CALENDAR_ICS_URL` | **Dates** — things to **know** |
+| `CALENDAR_ACTION_ICS_URL` | **Personal** — things to **do**. Optional |
+
+**Timed events are appointments on either feed.** Pinned, immovable, collisions
+shown and never resolved. The hour is spoken for whichever calendar it came
+from. Unchanged from before.
+
+**All-day events are where the feeds differ**, because an all-day event claims
+no hours and so the system has to decide what it means:
+
+- **On Dates** it is a fact about the day — a birthday, a deadline someone else
+  owns. It shows as a quiet note above the blocks and is **never** placed.
+- **On Personal** it is work with no time attached yet. On the **first** open of
+  a day with no saved plan, each one is added as an **ordinary block**: the
+  event's title, 30 minutes, **not pinned** — movable, resizable, deletable like
+  anything else — placed the way any new block is, in the first gap it fits in,
+  otherwise appended.
+
+**Placing happens once, and saying no sticks.** Each event is claimed in
+`sent_log` under `placed:<event id>` for that date at the moment it is handed
+over, and the claim is the insert rather than a check-then-write, so two
+builders opening at once cannot both place it. Delete the block, reopen the
+builder, and it does not come back. Without that the feature would be one that
+keeps arguing.
+
+A recurring event's id carries its occurrence, so next week's instance is a
+different thing to place from this week's.
+
+With `CALENDAR_ACTION_ICS_URL` unset there is one feed and the behaviour is
+exactly what it was.
+
+### 3.5 A broken feed does not look like a quiet day
+
+`get_calendar` returns what it could read, so a feed that is down costs its own
+events and never the whole builder. But `[]` from a dead feed and `[]` from a
+Tuesday with nothing on it are the same value, and a calendar that has been
+broken for a week must not read as a quiet week.
+
+So each feed is read separately and **failure is reported rather than
+swallowed**: logged loudly and by name (`[CALENDAR] could not read the Dates
+feed`), and returned to the builder, which says *"Couldn't reach Dates"* in the
+miss colour above the blocks. One feed failing never blames the other.
+
 ---
 
 ## 4. Where Reasoning Is Used
@@ -744,7 +797,8 @@ Set in Railway, and in a local `.env` that is never committed.
 | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | the notebook. The service key bypasses row level security, which is why every query scopes `user_id` in code rather than trusting the database to do it |
 | `ANTHROPIC_API_KEY` | the brain |
 | `TELEGRAM_BOT_TOKEN` | outbound only |
-| `CALENDAR_ICS_URL` | the read-only feed of fixed commitments |
+| `CALENDAR_ICS_URL` | the read-only *Dates* feed: things to know. See 3.4 |
+| `CALENDAR_ACTION_ICS_URL` | *optional.* The read-only *Personal* feed: things to do |
 | `FINANCE_TRANSACTIONS_CSV_URL` | the published Google Sheet. Read-only, and the sheet is the system of record: nothing here ever writes to it |
 | `PORT` | assigned by the host |
 | `PI_USER_ID` | *optional.* Which user the server serves |

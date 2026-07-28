@@ -9,10 +9,22 @@ const express = require('express');
 const supabase = require('../db');
 const { CURRENT_USER } = require('../user');
 const { minutesOfDay, toMinutes, hhmmss } = require('../clock');
-const { get_calendar } = require('../tools');
+const { readCalendar } = require('../tools');
 const { generateForPlan } = require('../messages');
 
 const router = express.Router();
+
+// How long an auto-placed block is, before the person changes it. Half an hour
+// is the smallest thing the steppers can express, so it is the least the
+// system can assume on someone's behalf.
+const AUTO_BLOCK_MINUTES = 30;
+
+// The sent_log job name for "this event has been offered to this day".
+//
+// Prefixed so it cannot collide with a real job, and carrying the event's own
+// id so two things on the same date are tracked apart. sent_log is keyed
+// (user_id, job, sent_for_date), which is exactly this question.
+const placementJob = (eventId) => `placed:${eventId}`;
 
 /**
  * The day's fixed commitments, as pinned blocks.
@@ -34,26 +46,29 @@ router.get('/calendar/:date', async (req, res) => {
 
   const timeZone = (profile && profile.timezone) || 'UTC';
 
-  // get_calendar swallows its own failures and returns [], so a feed that is
-  // down costs the pinned blocks and never the whole builder.
-  const raw = await get_calendar(CURRENT_USER, date);
-  if (!Array.isArray(raw)) return res.json({ date, events: [], all_day: [] });
+  // readCalendar returns what it could read and names what it could not, so a
+  // feed that is down costs its own events and never the whole builder — but
+  // the failure travels with the answer instead of looking like a quiet day.
+  const { events, failed } = await readCalendar(CURRENT_USER, date);
 
   const timed = [];
   const allDay = [];
+  const toPlace = [];
 
-  for (const e of raw) {
-    const start = minutesOfDay(e.start, timeZone);
-    const length = Math.round((new Date(e.end) - new Date(e.start)) / 60000);
-
-    // An all-day entry is a reminder, not an appointment. It claims no hours,
-    // and treating it as one would pin a 24 hour block at midnight and push
-    // the whole day past the end of it. Reported separately so it is still
-    // visible without owning any time.
-    if (start === 0 && length >= 1440) {
-      allDay.push({ title: e.title });
+  for (const e of events) {
+    // An all-day entry claims no hours. What happens to it depends entirely on
+    // which calendar it is on: a thing to know is shown, a thing to do is
+    // offered to the day as a block.
+    if (e.all_day) {
+      if (e.source === 'action') toPlace.push({ id: e.id, title: e.title });
+      else allDay.push({ title: e.title });
       continue;
     }
+
+    // A timed event is an appointment on either feed. It is pinned and it
+    // cannot move, because the hour is already spoken for either way.
+    const start = minutesOfDay(e.start, timeZone);
+    const length = Math.round((new Date(e.end) - new Date(e.start)) / 60000);
 
     timed.push({
       title: e.title,
@@ -65,7 +80,68 @@ router.get('/calendar/:date', async (req, res) => {
   }
 
   timed.sort((a, b) => a.start_minutes - b.start_minutes);
-  res.json({ date, events: timed, all_day: allDay });
+
+  res.json({
+    date,
+    events: timed,
+    all_day: allDay,
+    // What the action feed is offering for this day. Reported here so the
+    // builder can show it; nothing is claimed until the placement route is
+    // called, because reporting must stay repeatable and placing must not.
+    to_place: toPlace,
+    // Named feeds, so the screen can say which calendar it could not reach
+    // rather than leaving an empty day to speak for itself.
+    failed,
+  });
+});
+
+/**
+ * Claim the action feed's all-day events for this date, and hand them back.
+ *
+ * Separate from the read above, and a POST, because it has a side effect: each
+ * event it returns is recorded as placed and will never be returned again for
+ * this date. That is the whole point. Without it, deleting an auto-added block
+ * and reopening the builder would put it straight back, and the person would
+ * have no way to say no.
+ *
+ * sent_log already holds exactly this shape — a thing that happened once, for
+ * one user, on one date — and its unique constraint is the lock, so two
+ * builders opening at once cannot both place the same event.
+ */
+router.post('/calendar/:date/place', async (req, res) => {
+  const date = String(req.params.date);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+  }
+
+  const { events, failed } = await readCalendar(CURRENT_USER, date);
+  const candidates = events.filter((e) => e.source === 'action' && e.all_day);
+
+  const placed = [];
+
+  for (const e of candidates) {
+    const job = placementJob(e.id);
+
+    // The insert is the claim. Asking first and writing after would leave a
+    // gap two requests could both pass through; letting the constraint refuse
+    // the second one cannot.
+    const { error } = await supabase
+      .from('sent_log')
+      .insert({ user_id: CURRENT_USER, job, sent_for_date: date });
+
+    // 23505 is unique_violation: already placed, on a previous open. Not a
+    // failure, and the reason this route is safe to call every time.
+    if (error) {
+      if (error.code !== '23505') {
+        console.error(`[CALENDAR] could not claim "${e.title}": ${error.message}`);
+      }
+      continue;
+    }
+
+    placed.push({ title: e.title, duration_minutes: AUTO_BLOCK_MINUTES });
+  }
+
+  res.json({ date, placed, failed });
 });
 
 /**

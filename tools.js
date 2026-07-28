@@ -118,31 +118,50 @@ async function update_profile(user_id, fields) {
 }
 
 // --- calendar ---------------------------------------------------------------
+//
+// Two feeds, and which one an event is on is the whole signal.
+//
+//   awareness  CALENDAR_ICS_URL         things to KNOW
+//   action     CALENDAR_ACTION_ICS_URL  things to DO
+//
+// Nothing is filtered by TRANSP, by calendar name, or by anything written
+// inside the event. The person sorts their own life by putting a thing on one
+// calendar or the other, and this reads that decision rather than second
+// guessing it.
+//
+// The action feed is optional. With it unset there is one feed and the
+// behaviour is exactly what it was.
 
-// The ICS feed is refetched at most this often. One brain turn can call
+const FEEDS = [
+  { source: 'awareness', env: 'CALENDAR_ICS_URL', label: 'Dates' },
+  { source: 'action', env: 'CALENDAR_ACTION_ICS_URL', label: 'Personal' },
+];
+
+// Each feed is refetched at most this often. One brain turn can call
 // get_calendar several times; without this each call re-downloads the file.
 const CALENDAR_TTL_MS = 60 * 1000;
 const CALENDAR_TIMEOUT_MS = 10000;
 
-let calendarCache = { at: 0, parsed: null };
+// Keyed by url, so two feeds cannot share one cache slot.
+const calendarCache = new Map();
 
-async function loadCalendar() {
-  const url = process.env.CALENDAR_ICS_URL;
-  if (!url) return null;
-
-  if (calendarCache.parsed && Date.now() - calendarCache.at < CALENDAR_TTL_MS) {
-    return calendarCache.parsed;
-  }
+/**
+ * One feed, parsed. Returns null when it is not configured, and throws when it
+ * is configured and unreachable — the caller decides what a failure costs.
+ */
+async function loadFeed(url) {
+  const hit = calendarCache.get(url);
+  if (hit && Date.now() - hit.at < CALENDAR_TTL_MS) return hit.parsed;
 
   // Our own fetch rather than ical.async.fromURL, so a hung feed cannot
   // stall a scheduled job forever.
   const res = await fetch(url, {
     signal: AbortSignal.timeout(CALENDAR_TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`calendar returned ${res.status}`);
+  if (!res.ok) throw new Error(`returned ${res.status}`);
 
   const parsed = await ical.async.parseICS(await res.text());
-  calendarCache = { at: Date.now(), parsed };
+  calendarCache.set(url, { at: Date.now(), parsed });
   return parsed;
 }
 
@@ -194,75 +213,134 @@ async function timezoneFor(user_id) {
   return (data && data.timezone) || 'UTC';
 }
 
-function event(title, start, end) {
+function event(id, title, start, end, source) {
   return {
+    // Stable across reads of the same feed, so a placement can be remembered
+    // without storing the event itself. A recurring series repeats its uid on
+    // every occurrence, so the occurrence start is part of the identity.
+    id,
     title: title || '(untitled)',
     start: start.toISOString(),
     end: end.toISOString(),
+    // 'awareness' or 'action'. Which feed it came from is the only thing that
+    // decides whether it is a fact to know or a thing to do.
+    source,
   };
+}
+
+/** Whole-day by the calendar's own reckoning: starts at midnight, runs 24h. */
+function isAllDay(startMs, endMs, date, timeZone) {
+  const dayStart = startOfDay(date, timeZone).getTime();
+  return startMs <= dayStart && endMs - startMs >= 24 * 60 * 60 * 1000 - 1;
+}
+
+/** Every event on one date from one parsed feed. */
+function eventsOn(parsed, source, date, timeZone) {
+  const dayStart = startOfDay(date, timeZone);
+  const dayEnd = startOfDay(nextDay(date), timeZone);
+  const out = [];
+
+  for (const key of Object.keys(parsed)) {
+    const ev = parsed[key];
+    if (!ev || ev.type !== 'VEVENT' || !ev.start) continue;
+
+    const uid = ev.uid || key;
+    const duration = ev.end ? ev.end.getTime() - ev.start.getTime() : 0;
+
+    if (!ev.rrule) {
+      const end = ev.end || new Date(ev.start.getTime() + duration);
+      if (ev.start < dayEnd && end > dayStart) {
+        out.push(event(uid, ev.summary, ev.start, end, source));
+      }
+      continue;
+    }
+
+    // Recurring. Look back one duration so an occurrence that began
+    // yesterday and runs into today is still caught.
+    const from = new Date(dayStart.getTime() - Math.max(duration, 0) - 1);
+
+    for (const occurrence of ev.rrule.between(from, dayEnd, true)) {
+      const dayId = occurrence.toISOString().slice(0, 10);
+      const isoId = occurrence.toISOString();
+
+      // This occurrence was deleted from the series.
+      if (ev.exdate && (ev.exdate[dayId] || ev.exdate[isoId])) continue;
+
+      // This occurrence was edited — moved, renamed, or both.
+      const override =
+        ev.recurrences && (ev.recurrences[dayId] || ev.recurrences[isoId]);
+
+      const start = override ? override.start : occurrence;
+      const end = override
+        ? override.end
+        : new Date(occurrence.getTime() + duration);
+
+      if (start < dayEnd && end > dayStart) {
+        out.push(
+          event(`${uid}:${isoId}`, override ? override.summary : ev.summary, start, end, source)
+        );
+      }
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Everything on one date, across both feeds, with the failures named.
+ *
+ * A feed that cannot be read costs its own events and nothing else: the other
+ * feed still reports, and the day is still planned. But the failure is
+ * returned rather than swallowed, because [] from a dead feed and [] from a
+ * quiet Tuesday are the same value and must not look the same on screen.
+ */
+async function readCalendar(user_id, date) {
+  const result = { events: [], failed: [], configured: [] };
+  if (!user_id || !date) return result;
+
+  const timeZone = await timezoneFor(user_id);
+
+  for (const feed of FEEDS) {
+    const url = String(process.env[feed.env] || '').replace(/[<>]/g, '').trim();
+    if (!url) continue;
+
+    result.configured.push(feed.source);
+
+    try {
+      const parsed = await loadFeed(url);
+      for (const e of eventsOn(parsed, feed.source, date, timeZone)) {
+        result.events.push({
+          ...e,
+          all_day: isAllDay(Date.parse(e.start), Date.parse(e.end), date, timeZone),
+        });
+      }
+    } catch (err) {
+      // Loud, and named by feed. Without this a calendar that has been broken
+      // for a week looks exactly like a week with nothing on.
+      console.error(
+        `[CALENDAR] could not read the ${feed.label} feed (${feed.env}): ${err.message}`
+      );
+      result.failed.push({ source: feed.source, label: feed.label });
+    }
+  }
+
+  result.events.sort((a, b) => a.start.localeCompare(b.start));
+  return result;
 }
 
 /**
  * Calendar events for one day, in the user's own timezone.
- * Any failure returns [] — a calendar that cannot be read must never stop
- * day planning.
+ *
+ * Any failure returns the events it could read — a calendar that cannot be
+ * read must never stop day planning. Callers that need to know a feed was
+ * unreachable use readCalendar instead.
  */
 async function get_calendar(user_id, date) {
   if (!user_id) return { error: 'user_id is required' };
   if (!date) return [];
 
   try {
-    const parsed = await loadCalendar();
-    if (!parsed) return [];
-
-    const timeZone = await timezoneFor(user_id);
-    const dayStart = startOfDay(date, timeZone);
-    const dayEnd = startOfDay(nextDay(date), timeZone);
-
-    const out = [];
-
-    for (const key of Object.keys(parsed)) {
-      const ev = parsed[key];
-      if (!ev || ev.type !== 'VEVENT' || !ev.start) continue;
-
-      const duration = ev.end ? ev.end.getTime() - ev.start.getTime() : 0;
-
-      if (!ev.rrule) {
-        const end = ev.end || new Date(ev.start.getTime() + duration);
-        if (ev.start < dayEnd && end > dayStart) {
-          out.push(event(ev.summary, ev.start, end));
-        }
-        continue;
-      }
-
-      // Recurring. Look back one duration so an occurrence that began
-      // yesterday and runs into today is still caught.
-      const from = new Date(dayStart.getTime() - Math.max(duration, 0) - 1);
-
-      for (const occurrence of ev.rrule.between(from, dayEnd, true)) {
-        const dayId = occurrence.toISOString().slice(0, 10);
-        const isoId = occurrence.toISOString();
-
-        // This occurrence was deleted from the series.
-        if (ev.exdate && (ev.exdate[dayId] || ev.exdate[isoId])) continue;
-
-        // This occurrence was edited — moved, renamed, or both.
-        const override =
-          ev.recurrences && (ev.recurrences[dayId] || ev.recurrences[isoId]);
-
-        const start = override ? override.start : occurrence;
-        const end = override
-          ? override.end
-          : new Date(occurrence.getTime() + duration);
-
-        if (start < dayEnd && end > dayStart) {
-          out.push(event(override ? override.summary : ev.summary, start, end));
-        }
-      }
-    }
-
-    out.sort((a, b) => a.start.localeCompare(b.start));
-    return out;
+    return (await readCalendar(user_id, date)).events;
   } catch {
     return [];
   }
@@ -329,6 +407,10 @@ async function update_entry(user_id, id, fields) {
 module.exports = {
   search_entries,
   get_calendar,
+  // The same read, with the failures named. get_calendar is the tool the brain
+  // holds and answers with events alone; the web layer needs to know when a
+  // feed was unreachable so it can say so.
+  readCalendar,
   create_entry,
   update_entry,
   update_profile,

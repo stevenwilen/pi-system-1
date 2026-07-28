@@ -95,6 +95,7 @@ const SUITES = [
   ['sheet-contract.js', 90],
   ['money-test.js', 60],
   ['calendar-endpoint-test.js', 120],
+  ['calendar-feeds-test.js', 180],
   ['builder-test.js', 120],
   ['task-test.js', 120],
   ['tasks-render-test.js', 120],
