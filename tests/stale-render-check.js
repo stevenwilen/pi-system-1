@@ -1,7 +1,7 @@
-// The two lists, as the page draws them.
+// The stale list, as the page draws it.
 //
-// Drives the shipped script through a fake DOM: what lands in each list, what
-// carries a rank, what can be dragged, and how a due date reads. No database.
+// Drives the shipped script through a fake DOM: what lands in the list, how it
+// is ordered, and how a due date reads. No database.
 const fs = require('fs');
 const vm = require('vm');
 // The app, found from where this file sits, so the suite runs from any clone.
@@ -107,8 +107,8 @@ const payload = (items, paused = []) => ({
   today: TODAY, timezone: 'America/New_York', wake_time: '08:00', items, paused,
 });
 
-// In sort_order, as the server returns them. Habits are interleaved on purpose:
-// the split must not depend on the server having grouped them.
+// Deliberately not in age order: the panel sorts, and this proves it rather
+// than inheriting whatever the server happened to send.
 const ITEMS = [
   { id: 'p1', type: 'project', title: 'Thesis', days: 4, why: 'It is the year', due: '2026-07-30' },
   { id: 'h1', type: 'habit', title: 'Gym', frequency: 'daily', days: 2 },
@@ -119,7 +119,7 @@ const ITEMS = [
 ];
 
 let byTitleAll = () => null;
-const rankOf = (row) => { const r = row.querySelector('.rank'); return r ? r.textContent : null; };
+const markOf = (row) => { const m = row.querySelector('.mark'); return m ? m.textContent : null; };
 const titleOf = (row) => row.querySelector('.item-title').textContent;
 const dueOf = (row) => { const d = row.querySelector('.due'); return d ? d.textContent : null; };
 
@@ -127,66 +127,64 @@ const dueOf = (row) => { const d = row.querySelector('.due'); return d ? d.textC
   const { ctx, byId } = boot(payload(ITEMS));
   await ctx.load();
 
-  console.log('the split');
-  const priorities = byId['stale'].children;
-  const habits = byId['habits'].children;
+  console.log('one list, holding all three types');
+  const rows = byId['stale'].children;
 
-  // Look a row up by its title, across both lists.
-  const rowsByTitle = Object.fromEntries(
-    [...priorities, ...habits].map((r) => [titleOf(r), r])
-  );
+  const rowsByTitle = Object.fromEntries(rows.map((r) => [titleOf(r), r]));
   byTitleAll = (t) => rowsByTitle[t];
 
-  check('priorities hold only projects and tasks', priorities.map(titleOf).join(',') === 'Thesis,Passport,Call bank', priorities.map(titleOf).join(','));
-  check('habits hold only habits', habits.map(titleOf).join(',') === 'Reading,Piano,Gym', habits.map(titleOf).join(','));
-  check('nothing is lost between them', priorities.length + habits.length === ITEMS.length);
-  check('the habits section is shown', !byId['habits-group']._class.has('hidden'));
+  check('every item is in it', rows.length === ITEMS.length, `${rows.length}`);
+  check('habits among them', rows.some((r) => titleOf(r) === 'Gym'));
+  check('and there is no second list', byId['habits'] === undefined || !byId['habits'].children.length);
 
-  console.log('\npriorities keep the order the server sent');
-  check('server order preserved, not re-sorted by age or due', priorities.map(titleOf).join(',') === 'Thesis,Passport,Call bank');
-  // Passport is overdue and Call bank is barely touched; neither moves.
-  check('an overdue item does not jump the queue', titleOf(priorities[1]) === 'Passport');
-
-  console.log('\nrank is a readout of position');
-  check('numbered from one, in order', priorities.map(rankOf).join(',') === '1,2,3', priorities.map(rankOf).join(','));
-  check('habits carry no rank', habits.every((r) => rankOf(r) === null));
-  check('habits cannot be dragged', habits.every((r) => !r.querySelector('.grip')));
-  check('priorities can be', priorities.every((r) => Boolean(r.querySelector('.grip'))));
-
-  console.log('\nhabits are ordered by neglect, longest first');
-  check('coldest first', habits.map(titleOf).join(',') === 'Reading,Piano,Gym', habits.map(titleOf).join(','));
-  const days = habits.map((r) => Number(r.text().match(/(\d+) days?/)[1]));
-  check('and the days descend', days.every((d, i) => i === 0 || days[i - 1] >= d), days.join(','));
-
-  console.log('\ndue dates read as they should');
-  check('overdue says so', dueOf(priorities[1]) === '3 days overdue', dueOf(priorities[1]));
-  check('overdue is marked', priorities[1].querySelector('.due')._class.has('overdue'));
-  check('near dates count down', dueOf(priorities[0]) === 'in 3 days', dueOf(priorities[0]));
-  check('no date, no pill', dueOf(priorities[2]) === null, String(dueOf(priorities[2])));
-
+  console.log('\nlongest left, first');
   {
-    const cases = [
-      ['2026-07-27', 'today', false],
-      ['2026-07-28', 'tomorrow', false],
-      ['2026-07-29', 'in 2 days', false],
-      ['2026-08-03', 'in 7 days', false],
-      ['2026-08-04', '4 Aug', false],
-      ['2027-01-09', '9 Jan 2027', false],
-      ['2026-07-26', '1 day overdue', true],
-      ['2026-06-27', '30 days overdue', true],
-    ];
-    for (const [due, want, overdue] of cases) {
-      const got = ctx.dueLabel(due, TODAY);
-      check(`${due} reads "${want}"`, got.text === want && got.overdue === overdue, `${got.text} overdue=${got.overdue}`);
-    }
+    // Ages are 4, 2, 9, 11, 1, 5 in the order the server sent them.
+    check('sorted by days, coldest first',
+      rows.map(titleOf).join(',') === 'Reading,Passport,Piano,Thesis,Gym,Call bank',
+      rows.map(titleOf).join(','));
+
+    const days = rows.map((r) => Number(r.text().match(/(\d+) days?/)[1]));
+    check('and the days descend', days.every((d, i) => i === 0 || days[i - 1] >= d), days.join(','));
+
+    // The old panel put whatever the server sent first at the top. It does not
+    // any more, and a row that has been left longest wins wherever it sat.
+    check('the server order is not preserved', titleOf(rows[0]) !== 'Thesis', titleOf(rows[0]));
+  }
+
+  console.log('\nnothing is ranked and nothing is dragged');
+  {
+    check('no row carries a number', rows.every((r) => !r.querySelector('.rank')));
+    check('no row carries a drag handle', rows.every((r) => !r.querySelector('.grip')));
+    check('and the page has no reorder call left in it',
+      !script.includes('/entries/reorder'), 'found /entries/reorder');
+    check('nor any drag wiring for the list', !/startItemDrag/.test(script));
+  }
+
+  console.log('\na quiet mark says what each row is');
+  {
+    check('a habit is marked', markOf(byTitleAll('Gym')) === '↻', String(markOf(byTitleAll('Gym'))));
+    check('a project is marked', markOf(byTitleAll('Thesis')) === '◆', String(markOf(byTitleAll('Thesis'))));
+    check('a task is marked', markOf(byTitleAll('Passport')) === '·', String(markOf(byTitleAll('Passport'))));
+    check('and it is one character, not a word',
+      rows.every((r) => (markOf(r) || '').length === 1), rows.map(markOf).join(''));
+    check('nothing spells the type out in full',
+      !rows.some((r) => /TASK|PROJECT|HABIT/.test(r.text())), rows[0].text().slice(0, 50));
+  }
+
+  console.log('\nthe why is not on the row');
+  {
+    check('a project with a why does not print it',
+      !byTitleAll('Thesis').text().includes('It is the year'),
+      byTitleAll('Thesis').text().slice(0, 60));
+    check('and the page no longer builds that element', !/el\('div', 'why'/.test(script));
   }
 
   console.log('\nthe temperature bar');
   {
-    // Ages on screen run 1..11, across both lists: Call bank 1, Gym 2, Thesis
-    // 4, Passport 9, Reading 11. So the scale is min 1, max 11 and the midpoint
-    // is 6.
-    const all = [...priorities, ...habits];
+    // Ages on screen run 1..11: Call bank 1, Gym 2, Thesis 4, Piano 5,
+    // Passport 9, Reading 11. So the scale is min 1, max 11.
+    const all = rows;
     check('every row is coloured', all.every((r) => Boolean(r.style.borderLeftColor)),
       all.map((r) => r.style.borderLeftColor).join(' '));
 
@@ -203,7 +201,7 @@ const dueOf = (row) => { const d = row.querySelector('.due'); return d ? d.textC
     check('and its blue sits between the two ends',
       mid[2] > warm[2] && mid[2] < cold[2], `${mid[2]} between ${warm[2]} and ${cold[2]}`);
 
-    check('both lists share one scale',
+    check('every type is on the same scale',
       colour('Gym') !== colour('Reading') && colour('Gym') !== colour('Call bank'),
       `Gym ${colour('Gym')}`);
 
@@ -222,20 +220,6 @@ const dueOf = (row) => { const d = row.querySelector('.due'); return d ? d.textC
     const row = bp['paused'].children[0];
     check('the edge is left neutral', !row.style.borderLeftColor, String(row.style.borderLeftColor));
     check('a pause is not a temperature', row._class.has('paused'));
-  }
-
-  console.log('\nrank never leaves the browser');
-  {
-    sent.length = 0;
-    // Reordering sends ids and nothing else. There is no rank field to send.
-    const list = byId['stale'];
-    const order = list.children.map((r) => r.dataset.id);
-    await ctx.api('/entries/reorder', {
-      method: 'POST', headers: {}, body: JSON.stringify({ ids: order }),
-    });
-    check('the reorder body is ids only', JSON.stringify(Object.keys(sent[0].body)) === '["ids"]', JSON.stringify(sent[0].body));
-    check('and carries the priorities only', sent[0].body.ids.join(',') === 'p1,t1,t2', sent[0].body.ids.join(','));
-    check('no habit id is in it', !sent[0].body.ids.some((id) => id.startsWith('h')));
   }
 
   console.log('\nthe form offers each type only what means something for it');
@@ -280,22 +264,23 @@ const dueOf = (row) => { const d = row.querySelector('.due'); return d ? d.textC
     check('Clear empties it', byId['f-due'].value === '');
   }
 
-  console.log('\nan empty priorities list still invites one');
+  console.log('\nan empty list invites the first thing');
   {
-    const { ctx: c2, byId: b2 } = boot(payload([{ id: 'h9', type: 'habit', title: 'Gym', frequency: 'daily', days: 1 }]));
+    const { ctx: c2, byId: b2 } = boot(payload([]));
     await c2.load();
-    check('the empty note is shown', b2['stale'].text().includes('Add a project or task'), b2['stale'].text());
-    check('and the habits list still renders', b2['habits'].children.length === 1);
+    check('the empty note names all three types',
+      b2['stale'].text().includes('Add a habit, project or task'), b2['stale'].text());
   }
 
-  console.log('\nno habits, no habits section');
+  console.log('\na list of only habits is still just the list');
   {
-    const { ctx: c3, byId: b3 } = boot(payload([{ id: 'p9', type: 'task', title: 'Renew', days: 1 }]));
+    const { ctx: c3, byId: b3 } = boot(payload([{ id: 'h9', type: 'habit', title: 'Gym', frequency: 'daily', days: 1 }]));
     await c3.load();
-    check('section hidden', b3['habits-group']._class.has('hidden'));
+    check('the habit is in the one list', b3['stale'].children.length === 1);
+    check('and no empty note is shown', !b3['stale'].text().includes('Nothing here yet'));
   }
 
-  console.log('\npaused items stay apart from both lists');
+  console.log('\npaused items stay in their own list below');
   {
     const { ctx: c4, byId: b4 } = boot(
       payload(
@@ -309,14 +294,13 @@ const dueOf = (row) => { const d = row.querySelector('.due'); return d ? d.textC
     await c4.load();
     check('both paused rows listed', b4['paused'].children.length === 2);
     check('paused section shown', !b4['paused-group']._class.has('hidden'));
-    check('no rank on a paused row', b4['paused'].children.every((r) => rankOf(r) === null));
-    check('no grip on a paused row', b4['paused'].children.every((r) => !r.querySelector('.grip')));
-    check('a paused row is not in the priorities list', !b4['stale'].text().includes('Visa'));
-    check('nor in the habits list', !b4['habits'].text().includes('Piano'));
+    check('no rank on a paused row', b4['paused'].children.every((r) => !r.querySelector('.rank')));
+    check('neither paused row is in the main list',
+      !b4['stale'].text().includes('Visa') && !b4['stale'].text().includes('Piano'));
     // The date is still a fact about the row, so it is still shown.
     check('a paused row still shows its date', dueOf(b4['paused'].children[1]) === '26 days overdue', String(dueOf(b4['paused'].children[1])));
   }
 
-  console.log(bad === 0 ? '\nSplit renders clean' : `\n${bad} FAILURE(S)`);
+  console.log(bad === 0 ? '\nStale list renders clean' : `\n${bad} FAILURE(S)`);
   process.exit(bad === 0 ? 0 : 1);
 })().catch((e) => { console.error(e); process.exit(1); });

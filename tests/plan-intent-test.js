@@ -75,12 +75,13 @@ const INTERVIEW = {
     check('asks how big', /days, weeks, or months/i.test(p));
     check('and says not to ask a project for a deadline', /Do not ask me for a deadline on a project/i.test(p));
     check('asks a habit for its why rather than waiting', /Ask for the why rather than waiting/i.test(p));
-    check('asks the ranking question directly', /what order they matter in|order they matter/i.test(p));
-    check('and says not to infer it', /Do not infer it/i.test(p));
+    // Ranking is gone: the list orders itself, so the interview must not ask.
+    check('does not ask what order things come in', !/what order they matter in|most important first/i.test(p));
+    check('and covers three things, not four', /Cover these three things/i.test(p));
     check('covers habits with a cadence', /daily, a few times a week, weekly, or monthly/i.test(p));
     check('covers tasks with blockers', /anything that has to happen before/i.test(p));
     check('ends in a fenced json block', /```json/.test(p));
-    check('demands priority order', /most important first/i.test(p));
+    check('and asks for no order at all', !/priority order|rank/i.test(p));
 
     // Rule 2.4: the engine is identical for everyone.
     check('names nobody', !/steve|steven/i.test(p));
@@ -126,23 +127,26 @@ const INTERVIEW = {
   const saved = await post('/plan-intent/import', INTERVIEW);
   check('accepted', saved.status === 200, JSON.stringify(saved.body).slice(0, 120));
   check('all five saved', saved.body.saved === 5, `${saved.body.saved}`);
-  check('three of them ranked', saved.body.ranked === 3, `${saved.body.ranked}`);
+  check('and nothing is reported as ranked', saved.body.ranked === undefined, String(saved.body.ranked));
 
   const list = (await get('/entries')).body;
 
-  console.log('\nthe ranking is the order it came in');
+  console.log('\nthe order it came in carries no meaning');
   {
-    const priorities = list.items.filter((i) => i.type !== 'habit');
-    check('projects and tasks in interview order',
-      priorities.map((i) => i.title).join(',') === 'Thesis,Website,Renew passport',
-      priorities.map((i) => i.title).join(','));
-    check('sort_order counts from zero',
-      priorities.map((i) => i.sort_order).join(',') === '0,1,2',
-      priorities.map((i) => i.sort_order).join(','));
+    check('all five are in one list', list.items.length === 5, `${list.items.length}`);
+    check('habits among them', list.items.filter((i) => i.type === 'habit').length === 2);
 
-    const habits = list.items.filter((i) => i.type === 'habit');
-    check('habits are not ranked', habits.every((h) => h.sort_order === null), habits.map((h) => h.sort_order).join(','));
-    check('and there are two', habits.length === 2);
+    // No position is written and none is returned. Every row here was created
+    // in the same moment, so the list falls back to title order, which is what
+    // "no ranking" looks like from outside.
+    check('no row carries a position', list.items.every((i) => i.sort_order === undefined),
+      list.items.map((i) => i.sort_order).join(','));
+
+    const { data: rows } = await H.db
+      .from('entries').select('title, sort_order').eq('user_id', U);
+    check('and none was written to the column either',
+      rows.every((r) => r.sort_order === null),
+      rows.map((r) => `${r.title}=${r.sort_order}`).join(' '));
   }
 
   console.log('\nwhat each row carries');
@@ -245,7 +249,9 @@ const INTERVIEW = {
     check('state stored', row.state === 'Started yesterday', String(row.state));
     check('size stored', row.size === 'days', String(row.size));
     check('dated on the way in', row.state_days_old === 0, String(row.state_days_old));
-    check('and it went to the top of the ranking', row.sort_order < 0, String(row.sort_order));
+    // Being newly added is not a position. It is simply in the list, where its
+    // age puts it.
+    check('and it carries no position', row.sort_order === undefined, String(row.sort_order));
   }
 
   console.log('\nthe brain is told the age, never the claim alone');

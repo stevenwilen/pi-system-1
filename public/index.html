@@ -551,7 +551,6 @@
       /* Tight inside a row, loose between rows. It was the other way round,
          which is why the page looked jammed and still sprawled. */
       #stale,
-      #habits,
       #paused {
         display: flex;
         flex-direction: column;
@@ -642,39 +641,17 @@
         overflow-wrap: anywhere;
       }
 
-      /* The only thing that starts a drag. Tapping the title schedules the
-         item, so the two gestures must not share a target. */
-      /* Sized to match the builder's handle, so the same gesture looks the
-         same in both lists. */
-      .grip {
+      /* What kind of thing this is, in the slot the drag handle used to sit
+         in. A readout, not a control: nothing here can be pressed or dragged. */
+      .mark {
         flex: none;
-        width: 18px;
-        margin-left: -2px;
+        width: 14px;
         text-align: center;
         color: var(--dim);
-        font-size: 15px;
+        font-size: 13px;
         line-height: 1.35;
-        cursor: grab;
-        touch-action: none;
         user-select: none;
-      }
-
-      /* Lifted, not faded. The old version dropped it to 35% opacity, which
-         made the thing you were holding the hardest thing on screen to see.
-         It rises off the surface instead: a lighter tone, a shadow with some
-         depth, and barely any scale. */
-      .item.dragging {
-        background: var(--raised);
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-        transform-origin: center left;
-        scale: 1.015;
-        position: relative;
-        z-index: 5;
-        cursor: grabbing;
-      }
-
-      .item.dragging .grip {
-        color: var(--muted);
+        pointer-events: none;
       }
 
       /* --- the builder --- */
@@ -876,6 +853,18 @@
         text-align: center;
       }
 
+      /* No box around the two arrows. The amber already says they can be
+         pressed, and an outline on each turned one small control into three
+         objects sitting in a row. */
+      #starts .stepper button {
+        border-color: transparent;
+        font-size: 19px;
+      }
+
+      #starts .stepper button:disabled {
+        color: var(--dim);
+      }
+
       /* A value that has not been computed yet is a placeholder, and reads like
          one: muted and ordinary weight. Only a real end time is emphasised. */
       .ends-row strong.placeholder {
@@ -1063,26 +1052,9 @@
          The stylesheet above is the one from before the night sky theme,
          restored whole rather than unpicked by hand. Everything below it is
          here because something built afterwards draws it and would otherwise
-         render unstyled: the second list, the rank number and the due pill.
-         Nothing below is decoration.
+         render unstyled: the type mark and the due pill. Nothing below is
+         decoration.
       */
-
-      /* The habits list, laid out like the one above it. */
-      /* Laid out with the list above it; the shared rule near .item sets the
-         gap so the two lists cannot drift apart. */
-
-      /* Position in the person's own ranking, read back. Never an input. */
-      .rank {
-        flex: none;
-        min-width: 14px;
-        font-size: 11.5px;
-        font-weight: 600;
-        font-variant-numeric: tabular-nums;
-        color: var(--dim);
-        text-align: right;
-        padding-top: 3px;
-        user-select: none;
-      }
 
       /* A deadline, as an annotation on the row. Nothing sorts by it. */
       .due {
@@ -1125,11 +1097,7 @@
         <div id="review"></div>
       </div>
 
-      <!-- Two lists, because they are ranked by different things. Projects and
-           tasks compete with each other for attention and the person orders
-           them. Habits do not compete; the only useful order for them is which
-           has been left longest. -->
-      <!-- Shown only while both lists are empty. The same shape as the money
+      <!-- Shown only while the list is empty. The same shape as the money
            tab's: the app writes the question, a chat assistant asks it, and
            the answer comes back as JSON. Nothing here calls the model. -->
       <div class="group hidden" id="plan-setup-group">
@@ -1253,14 +1221,6 @@
         </div>
 
         <div id="stale"></div>
-      </div>
-
-      <div class="group hidden" id="habits-group">
-        <div class="group-head">
-          <h2>Habits</h2>
-          <span class="none">longest left, first</span>
-        </div>
-        <div id="habits"></div>
       </div>
 
       <div class="group hidden" id="paused-group">
@@ -1450,8 +1410,8 @@
 
       // --- due dates --------------------------------------------------------
       //
-      // An annotation, never an ordering. Nothing here sorts anything: the
-      // priorities list is the person's ranking and only a drag changes it.
+      // An annotation, never an ordering. A deadline says something true about
+      // a row; it does not decide where the row sits.
 
       // Beyond this the date is more useful than a countdown: "in 23 days" is
       // harder to place than the day itself.
@@ -1491,22 +1451,27 @@
         };
       }
 
+      // What kind of thing a row is, as one quiet character.
+      //
+      // A habit has to be tellable from a project at a glance, because the list
+      // holds all three again and a daily habit at eleven days means something
+      // a monthly project at eleven days does not. A full-width uppercase TASK
+      // down the side of a list of tasks was a column of the same four letters,
+      // which is noise wearing the clothes of information.
+      const TYPE_MARK = { habit: '↻', project: '◆', task: '·' };
+
       /**
-       * One row, in whichever list it belongs to.
+       * One row.
        *
-       * `index` is given only for the priorities list, and it is what makes a
-       * row draggable: the habits list has no ranking to drag, and a paused row
-       * is out of the running entirely. `rank` is the number shown, derived
-       * from position every time this is called, so it cannot drift from where
-       * the row actually is.
+       * There is no position and nothing to drag. Rows are ordered by how long
+       * they have been left, which the list works out for itself.
        */
-      function itemCard(item, { index, rank, range } = {}) {
+      function itemCard(item, { range } = {}) {
         const card = el(
           'div',
           'card item' + (item.paused ? ' paused' : '') + (item.cold ? ' cold' : '')
         );
         card.dataset.id = item.id;
-        if (index !== undefined) card.dataset.index = String(index);
 
         // Paused rows keep the neutral hairline. A pause is not a temperature:
         // the person has said the clock is not running, so the edge has nothing
@@ -1517,17 +1482,9 @@
 
         const top = el('div', 'item-top');
 
-        // The grip is the only thing that starts a drag, so tapping the title
-        // to schedule it and dragging to reorder never compete for a gesture.
-        if (!item.paused && index !== undefined) {
-          // The six dot grip, the same one the builder uses. It is the shape
-          // people already read as "drag me".
-          const grip = el('div', 'grip', '⠿');
-          grip.onpointerdown = (e) => startItemDrag(e, index);
-          top.append(grip);
-        }
-
-        if (rank !== undefined) top.append(el('div', 'rank', String(rank)));
+        const mark = el('div', 'mark', TYPE_MARK[item.type] || '');
+        mark.title = item.type;
+        top.append(mark);
 
         const title = el('div', 'item-title', item.title);
         // Tapping the title is how something gets into tomorrow. Paused items
@@ -1553,7 +1510,10 @@
           card.append(el('div', 'cold-reason', item.cold_reason));
         }
 
-        if (item.why) card.append(el('div', 'why', item.why));
+        // The why is not shown here. It is a paragraph per row, and a list of
+        // paragraphs is not a list you can scan — which is the one thing this
+        // panel has to be. It is still there, still required on a project, and
+        // still one tap away under Edit. The brain reads it either way.
 
         const meta = el('div', 'item-meta');
         meta.append(el('span', 'tag ' + item.type, item.type));
@@ -1589,22 +1549,12 @@
         return card;
       }
 
-      // --- dragging the stale list ------------------------------------------
-      //
-      // The same pointer-event approach as the builder, for the same reason:
-      // HTML5 drag and drop does not fire on touch. The order that comes out
-      // is sent whole, so what is stored cannot drift from what is shown.
+      // --- the stale list ---------------------------------------------------
 
-      let itemDrag = null;
-
-      // The ranked list: projects and tasks, in the person's own order. Named
-      // for the panel it has always belonged to, and it is this list alone that
-      // the drag code reorders and sends back.
+      // Everything the person is keeping track of, in one list. Ordered by how
+      // long each has been left rather than by anything they arranged: there is
+      // no position to preserve any more.
       let staleItems = [];
-
-      // Habits. Never dragged and never ranked, so they are held apart rather
-      // than filtered out of one list at every use.
-      let habitItems = [];
 
       // How many rows are set down. Only the setup card reads it, to tell an
       // empty system from one whose owner has paused everything in it.
@@ -1614,149 +1564,6 @@
       // measured against this and never against the device clock, which can be
       // a day out from the timezone the rest of the screen is using.
       let todayDate = '';
-
-      // Reordering settles at the same speed as everything else that moves.
-      const FLIP_MS = 180;
-
-      /**
-       * Where the dragged row should sit, as an index into the list WITHOUT it.
-       *
-       * Counting how many of the other rows the pointer has passed is symmetric
-       * by construction: it gives 0 above everything and n at the bottom, and
-       * every value between. The previous version only assigned a target when
-       * the pointer was below a midpoint, so upward drags past the first row
-       * had nothing to match and never moved.
-       *
-       * `boxes` excludes the dragged row, which is why the result can be used
-       * directly as a splice index after removing it. Computing against the
-       * full list and splicing afterwards is the off-by-one that made downward
-       * drops land one short.
-       */
-      function dropIndex(boxes, pointerY) {
-        let index = 0;
-        for (const box of boxes) {
-          if (pointerY > box.top + box.height / 2) index += 1;
-        }
-        return index;
-      }
-
-      /**
-       * FLIP. Measure where everything was, let the DOM change, measure again,
-       * put each row back with a transform, then release it.
-       *
-       * The dragged row is skipped: it is already following the pointer, and
-       * animating it as well would fight the finger.
-       */
-      function flip(before, skip) {
-        for (const [row, top] of before) {
-          if (row === skip || !row.isConnected) continue;
-          const delta = top - row.getBoundingClientRect().top;
-          if (!delta) continue;
-
-          row.style.transition = 'none';
-          row.style.transform = `translateY(${delta}px)`;
-        }
-
-        requestAnimationFrame(() => {
-          for (const [row] of before) {
-            if (row === skip || !row.isConnected) continue;
-            row.style.transition = `transform ${FLIP_MS}ms ease-out`;
-            row.style.transform = '';
-          }
-        });
-      }
-
-      function startItemDrag(event, index) {
-        event.preventDefault();
-
-        const list = $('stale');
-        const row = event.currentTarget.closest('.item');
-        const rows = () => [...list.querySelectorAll('.item')];
-
-        // Where in the row the finger landed, so it stays under the same point
-        // rather than snapping the row's top to the pointer.
-        const grabOffset = event.clientY - row.getBoundingClientRect().top;
-
-        itemDrag = { id: staleItems[index].id, moved: false };
-        row.classList.add('dragging');
-        row.setPointerCapture(event.pointerId);
-
-        // The row is transformed to follow the pointer, so its own rect is not
-        // where it would rest. Measuring with the transform cleared gives the
-        // resting position, which is what the offset must be relative to.
-        const follow = (pointerY) => {
-          row.style.transition = 'none';
-          row.style.transform = '';
-          const rest = row.getBoundingClientRect().top;
-          row.style.transform = `translateY(${pointerY - grabOffset - rest}px)`;
-        };
-
-        const move = (e) => {
-          const others = rows().filter((r) => r !== row);
-          const to = dropIndex(others.map((r) => r.getBoundingClientRect()), e.clientY);
-
-          const currentIndex = rows().indexOf(row);
-          if (to !== currentIndex) {
-            // The nodes are moved rather than re-rendered. Re-rendering would
-            // destroy the element under the finger and with it the pointer
-            // capture, ending the drag mid-gesture.
-            const before = new Map(rows().map((r) => [r, r.getBoundingClientRect().top]));
-            list.insertBefore(row, others[to] || null);
-            flip(before, row);
-            itemDrag.moved = true;
-          }
-
-          follow(e.clientY);
-        };
-
-        const end = async () => {
-          row.releasePointerCapture(event.pointerId);
-          row.removeEventListener('pointermove', move);
-          row.removeEventListener('pointerup', end);
-          row.removeEventListener('pointercancel', end);
-
-          // Settle into place rather than snapping back to zero.
-          row.style.transition = `transform ${FLIP_MS}ms ease-out`;
-          row.style.transform = '';
-          setTimeout(() => {
-            row.style.transition = '';
-            row.classList.remove('dragging');
-          }, FLIP_MS);
-
-          const moved = itemDrag && itemDrag.moved;
-          itemDrag = null;
-          if (!moved) return;
-
-          // The DOM is the truth now: it is what the person watched settle.
-          const order = rows().map((r) => r.dataset.id);
-          staleItems = order.map((id) => staleItems.find((i) => i.id === id)).filter(Boolean);
-
-          // Renumber in place rather than repainting. A repaint would throw
-          // away the row that just settled under the finger, and the rank is a
-          // readout of position, so it has to agree with the position the
-          // person is looking at before the request goes anywhere.
-          rows().forEach((r, i) => {
-            r.dataset.index = String(i);
-            const rank = r.querySelector('.rank');
-            if (rank) rank.textContent = String(i + 1);
-          });
-
-          try {
-            await api('/entries/reorder', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ ids: order }),
-            });
-          } catch (err) {
-            alert(err.message);
-            await load();
-          }
-        };
-
-        row.addEventListener('pointermove', move);
-        row.addEventListener('pointerup', end);
-        row.addEventListener('pointercancel', end);
-      }
 
       // --- the planner's setup interview ------------------------------------
       //
@@ -1804,8 +1611,7 @@
         return null;
       }
 
-      // Exactly what will be written, in the order it will be written, with the
-      // rank each ranked item will get. Nothing is saved until this is seen.
+      // Exactly what will be written. Nothing is saved until this is seen.
       function showPlanPreview(list) {
         planPending = list;
         $('plan-setup-count').textContent = `${list.length} thing${list.length === 1 ? '' : 's'} will be saved`;
@@ -1813,11 +1619,10 @@
         const box = $('plan-setup-list');
         box.replaceChildren();
 
-        let rank = 0;
         for (const row of list) {
           const type = String(row.type).toLowerCase();
           const line = el('div', 'preview-row');
-          line.append(el('div', 'preview-kind', type === 'habit' ? type : `${type} ${++rank}`));
+          line.append(el('div', 'preview-kind', type));
 
           const text = el('div', 'preview-text', String(row.title));
           const notes = [];
@@ -1902,48 +1707,39 @@
         }
       };
 
-      // Habits are ordered by how long they have been left, longest first.
+      // Longest left, first.
       //
-      // They are not ranked and cannot be dragged, because ranking them against
-      // each other is not a question anyone has: a habit is not more important
-      // than another habit, it is just more overdue. Ties break on title so the
-      // list does not reshuffle between two rows that are the same age.
+      // The list orders itself, and there is nothing to arrange. Ranking these
+      // against each other was a question nobody was asking: the useful one is
+      // which has been left longest, and that is arithmetic. Ties break on
+      // title so two rows of the same age do not swap places between paints.
       const byNeglect = (a, b) => b.days - a.days || a.title.localeCompare(b.title);
 
       function paintStale() {
         const list = $('stale');
-        const habitList = $('habits');
-
         list.replaceChildren();
-        habitList.replaceChildren();
 
         if (!staleItems.length) {
-          list.append(el('div', 'empty', 'Nothing here yet. Add a project or task.'));
+          list.append(el('div', 'empty', 'Nothing here yet. Add a habit, project or task.'));
         }
 
-        // The bar reads across whatever is on screen, both lists together,
-        // because it is one scale and a row means the same thing wherever it
-        // sits. It informs; it sorts nothing, and the order the rows appear in
-        // is entirely the person's.
-        const ages = [...staleItems, ...habitItems].map((i) => i.days);
+        // The bar reads across the whole list, which is the only list there is.
+        const ages = staleItems.map((i) => i.days);
         const range = ages.length
           ? { min: Math.min(...ages), max: Math.max(...ages) }
           : null;
 
-        // Rank is derived from position on every paint, so it renumbers
-        // itself after a drag and can never be stored, sent or edited.
-        staleItems.forEach((item, i) => {
-          list.append(itemCard(item, { index: i, rank: i + 1, range }));
-        });
-
-        const habits = habitItems.slice().sort(byNeglect);
-        for (const item of habits) habitList.append(itemCard(item, { range }));
-        $('habits-group').classList.toggle('hidden', !habits.length);
+        // Longest left, first. Across all three types together: a task left
+        // three weeks is the same problem as a project left three weeks, and
+        // the list says so by putting them next to each other.
+        for (const item of staleItems.slice().sort(byNeglect)) {
+          list.append(itemCard(item, { range }));
+        }
 
         // The interview is offered only while there is nothing at all. Once one
         // row exists the person has started, and a setup card above their list
         // is a screen telling them to begin something they have begun.
-        const empty = !staleItems.length && !habitItems.length && !pausedCount;
+        const empty = !staleItems.length && !pausedCount;
         $('plan-setup-group').classList.toggle('hidden', !empty);
         if (empty && !planSetupPrompt) loadPlanPrompt();
       }
@@ -1982,15 +1778,8 @@
           return;
         }
 
-        // The server returns one list in the person's order. It is split here
-        // because the split is a question about how the panel reads, not about
-        // what is stored: both halves are the same rows in the same table.
-        //
-        // staleItems keeps its name and its meaning for the drag code: it is
-        // the ranked list, and it is the list whose order gets sent back.
         todayDate = data.today;
-        staleItems = data.items.filter((i) => i.type !== 'habit');
-        habitItems = data.items.filter((i) => i.type === 'habit');
+        staleItems = data.items;
         // Counted before painting: a person with everything paused has still
         // set this up, and should not be shown the interview again.
         pausedCount = data.paused.length;

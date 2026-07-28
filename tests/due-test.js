@@ -121,22 +121,27 @@ const get = async (path) => {
       after.body.items.find((i) => i.id === task.id).due === day(2));
   }
 
-  console.log('\nreordering still works, and still only takes ids');
+  console.log('\nthere is no reordering to do');
   {
     const list = await get('/entries');
-    const priorities = list.body.items.filter((i) => i.type !== 'habit');
-    const ids = priorities.map((i) => i.id).reverse();
+    const ids = list.body.items.map((i) => i.id);
 
-    const r = await post('/entries/reorder', { ids });
-    check('the priorities reorder', r.status === 200 && r.body.ordered === ids.length, JSON.stringify(r.body));
+    // Read as a raw response rather than through post(): an unknown path falls
+    // through to the static handler and comes back as the page, so asking for
+    // JSON here throws on the HTML instead of reporting the 404.
+    const r = await fetch(`${BASE}/entries/reorder`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    check('the endpoint is gone', r.status === 404, `${r.status}`);
 
     const after = await get('/entries');
-    const order = after.body.items.filter((i) => i.type !== 'habit').map((i) => i.id);
-    check('the new order sticks', order.join(',') === ids.join(','), order.join(','));
-
-    // Habits were not in the payload and must be untouched by it.
-    const habits = after.body.items.filter((i) => i.type === 'habit');
-    check('habits are still in the list', habits.length === 1, `${habits.length}`);
+    check('and the list still reads', after.status === 200 && after.body.items.length === ids.length,
+      `${after.body.items.length}`);
+    check('ordered longest left first',
+      after.body.items.every((it, i, a) => i === 0 || a[i - 1].days >= it.days),
+      after.body.items.map((i) => i.days).join(','));
   }
 
   console.log('\nwhat the coldness job is told');

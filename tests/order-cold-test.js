@@ -1,4 +1,5 @@
-// Manual ordering and the coldness verdict. Real rows, one real model call.
+// How the list orders itself, and the coldness verdict. Real rows, one real
+// model call.
 const H = require('./harness');
 const U = H.TEST_USER_ID;
 process.env.SCHEDULER_DISABLED = '1';
@@ -40,9 +41,12 @@ const made = [];
   const supabase = H.db;
 
   console.log('schema');
-  for (const col of ['sort_order', 'cold', 'cold_reason']) {
+  // sort_order and priority are checked for existence, not for use. Both are
+  // retired and neither is written; the point is that they are still there
+  // rather than dropped.
+  for (const col of ['sort_order', 'priority', 'cold', 'cold_reason']) {
     const { error } = await supabase.from('entries').select(`id, ${col}`).limit(1);
-    check(`${col} exists`, !error, error ? 'run migration-manual-order.sql' : '');
+    check(`${col} still exists in the schema`, !error, error ? error.message : '');
   }
   if (bad) { server.kill(); process.exit(1); }
 
@@ -53,40 +57,76 @@ const made = [];
   const { data: raw } = await supabase.from('entries').select('priority').eq('id', withPriority.data.entry.id).single();
   check('and the value was dropped, not stored', raw.priority === null, String(raw.priority));
 
-  console.log('\nnew items go to the top');
+  console.log('\nthe list orders itself by neglect');
   const a = await call('/entries', { type: 'task', title: '__p A' });
   const b = await call('/entries', { type: 'task', title: '__p B' });
   const c = await call('/entries', { type: 'task', title: '__p C' });
   for (const r of [a, b, c]) if (r.data.entry) made.push(r.data.entry.id);
 
+  // Backdated so the ages actually differ. Four rows created now would all tie
+  // at zero days and fall back to alphabetical, which would prove nothing.
+  const daysAgo = (n) => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - n);
+    return d.toISOString();
+  };
+  await supabase.from('entries').update({ created_at: daysAgo(30) }).eq('user_id', U).eq('id', a.data.entry.id);
+  await supabase.from('entries').update({ created_at: daysAgo(10) }).eq('user_id', U).eq('id', b.data.entry.id);
+  await supabase.from('entries').update({ created_at: daysAgo(2) }).eq('user_id', U).eq('id', c.data.entry.id);
+
   let feed = (await call('/entries')).data;
   const titles = feed.items.map((i) => i.title);
-  check('newest first', titles.slice(0, 3).join(',') === '__p C,__p B,__p A', titles.slice(0, 4).join(','));
-  check('adding one did not disturb the others', titles.indexOf('__p A') < titles.indexOf('__p project') + 2);
+  check('longest left, first', titles.slice(0, 3).join(',') === '__p A,__p B,__p C', titles.slice(0, 4).join(','));
+  check('and the days descend',
+    feed.items.every((it, i, all) => i === 0 || all[i - 1].days >= it.days),
+    feed.items.map((i) => i.days).join(','));
 
-  console.log('\nreorder takes the whole list');
+  // Being newly added is not a position. The freshest row sorts to the bottom.
+  check('a new row does not jump the queue', titles[0] !== '__p project', titles.slice(0, 2).join(','));
+
+  console.log('\nthere is no order to set');
   const ids = feed.items.map((i) => i.id);
-  const reversed = ids.slice().reverse();
-  const ok = await call('/entries/reorder', { ids: reversed });
-  check('accepted', ok.status === 200 && ok.data.ordered === reversed.length, JSON.stringify(ok.data));
+  const reorder = await fetch(BASE + '/entries/reorder', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids: ids.slice().reverse() }),
+  });
+  check('the reorder endpoint is gone', reorder.status === 404, String(reorder.status));
 
-  feed = (await call('/entries')).data;
-  check('the stored order is the sent order', feed.items.map((i) => i.id).join(',') === reversed.join(','));
-  check('sort_order is 0..n', feed.items.every((it, i) => it.sort_order === i), feed.items.map((i) => i.sort_order).join(','));
+  const stillThere = (await call('/entries')).data;
+  check('and asking did not change anything', stillThere.items.map((i) => i.id).join(',') === ids.join(','));
 
-  console.log('\nreorder refuses what it should');
-  check('empty list', (await call('/entries/reorder', { ids: [] })).status === 400);
-  check('not an array', (await call('/entries/reorder', { ids: 'nope' })).status === 400);
-  check('repeated ids', (await call('/entries/reorder', { ids: [ids[0], ids[0]] })).status === 400);
-  const foreign = await call('/entries/reorder', { ids: ['00000000-0000-0000-0000-0000000000ff'] });
-  check('an id that is not theirs', foreign.status === 400, foreign.data.error);
+  console.log('\nno position is written on create');
+  {
+    const { data: rows } = await supabase
+      .from('entries').select('title, sort_order').eq('user_id', U).in('id', made);
+    check('every row this made has a null sort_order',
+      rows.every((r) => r.sort_order === null),
+      rows.map((r) => r.title + '=' + r.sort_order).join(' '));
+    check('and the column is still in the schema', rows.length > 0 && 'sort_order' in rows[0]);
+  }
+
+  console.log('\na row carrying an old position still renders');
+  {
+    // Rows written before ranking was removed still hold a number. It has to be
+    // ignored rather than obeyed: this one is 0, which under the old rule would
+    // have put it first.
+    await supabase.from('entries').update({ sort_order: 0 }).eq('user_id', U).eq('id', c.data.entry.id);
+    const mixed = (await call('/entries')).data;
+    check('the leftover number does not move it', mixed.items[0].title === '__p A', mixed.items[0].title);
+    check('and it is not sent to the client', mixed.items[0].sort_order === undefined);
+    await supabase.from('entries').update({ sort_order: null }).eq('user_id', U).eq('id', c.data.entry.id);
+  }
 
   console.log('\nnothing reorders itself');
   const before = (await call('/entries')).data.items.map((i) => i.id);
-  await call(`/entries/${before[before.length - 1]}/pause`, { paused: true });
-  await call(`/entries/${before[before.length - 1]}/pause`, { paused: false });
+  await call('/entries/' + before[before.length - 1] + '/pause', { paused: true });
+  await call('/entries/' + before[before.length - 1] + '/pause', { paused: false });
   const after = (await call('/entries')).data.items.map((i) => i.id);
   check('pausing and resuming leaves the order alone', before.join(',') === after.join(','));
+
+  feed = (await call('/entries')).data;
+
 
   console.log('\nediting keeps the rules');
   const proj = feed.items.find((i) => i.title === '__p project');
@@ -163,7 +203,12 @@ const made = [];
 
   check('something cold was actually found', all.some((i) => i.cold), `${all.filter((i) => i.cold).length} cold`);
   check('a daily habit untouched for 10 days is cold', dailyOld && dailyOld.cold === true, dailyOld && dailyOld.cold_reason);
-  check('items added today are not cold', all.filter((i) => /__p [ABC]$/.test(i.title)).every((i) => !i.cold));
+  // These three are the same kind of thing at three different ages, which is
+  // the judgement the whole job exists to make.
+  const twoDays = all.find((i) => i.title === '__p C');
+  const thirtyDays = all.find((i) => i.title === '__p A');
+  check('a task untouched for two days is not cold', twoDays && twoDays.cold === false, twoDays && twoDays.cold_reason);
+  check('a task untouched for thirty is', thirtyDays && thirtyDays.cold === true, thirtyDays && thirtyDays.cold_reason);
 
   // Ten days is genuinely borderline for a monthly habit: a third of a cycle
   // gone with nothing done. The model has answered it both ways across runs,

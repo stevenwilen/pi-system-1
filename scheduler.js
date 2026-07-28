@@ -16,6 +16,7 @@ const { sendTelegram } = require('./telegram');
 const { composeMessage } = require('./messages');
 const { generateDaily } = require('./finance-insight');
 const { judge } = require('./coldness');
+const { lastScheduled, daysBetween } = require('./staleness');
 
 // The tick interval, in minutes.
 //
@@ -52,10 +53,9 @@ const COLD_HOUR = 16;
 // planning tomorrow is still a reasonable thing to ask of someone.
 const NUDGE_HOUR = 20;
 
-// The types that sit in the priorities list. Habits are not named in the nudge:
-// a habit going quiet is what the panel is for, and this message is about
-// tomorrow having no shape yet.
-const RANKED = ['project', 'task'];
+// Habits are not named in the nudge: a habit going quiet is what the panel is
+// for, and this message is about tomorrow having no shape yet.
+const NAMEABLE = ['project', 'task'];
 
 // At most two, and they are the person's own top two. More than that stops
 // being a nudge and becomes the digest this is deliberately not.
@@ -347,18 +347,15 @@ async function composeNudge(user_id) {
 
   const { data, error } = await supabase
     .from('entries')
-    .select('title')
+    .select('id, title, created_at')
     .eq('user_id', user_id)
     .eq('status', 'active')
-    .in('type', RANKED)
+    .in('type', NAMEABLE)
     .eq('cold', true)
     // A paused item is never cold, whatever a stale verdict on the row says.
     // The panel applies the same rule when it draws, and this has to agree
     // with the panel or the message names something the screen calls quiet.
-    .is('paused_at', null)
-    // Their own ranking, so the two named are the two they put at the top.
-    .order('sort_order', { ascending: true, nullsFirst: false })
-    .limit(MAX_NAMED);
+    .is('paused_at', null);
 
   if (error) {
     // The second line is a bonus and the first is the message. A failure here
@@ -367,7 +364,28 @@ async function composeNudge(user_id) {
     return lines.join('\n');
   }
 
-  const named = (data || []).map((r) => r.title);
+  // The two left longest, which is the order the panel puts them in. This used
+  // to take the two the person had ranked highest; there is no ranking now, and
+  // naming two at random would point somewhere the screen does not.
+  let named = [];
+  try {
+    const latest = await lastScheduled(user_id);
+    const today = new Date().toISOString().slice(0, 10);
+
+    named = (data || [])
+      .map((r) => ({
+        title: r.title,
+        days: daysBetween(latest.get(r.id) || String(r.created_at).slice(0, 10), today),
+      }))
+      .sort((a, b) => b.days - a.days || a.title.localeCompare(b.title))
+      .slice(0, MAX_NAMED)
+      .map((r) => r.title);
+  } catch (err) {
+    // Ordering is a nicety. If the plans cannot be read, name whatever came
+    // back rather than dropping the line.
+    console.error(`[NUDGE] could not order what has gone cold: ${err.message}`);
+    named = (data || []).slice(0, MAX_NAMED).map((r) => r.title);
+  }
   if (named.length === 1) lines.push(`${named[0]} has gone quiet.`);
   else if (named.length >= 2) lines.push(`${named[0]} and ${named[1]} have gone quiet.`);
 

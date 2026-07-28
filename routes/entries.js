@@ -24,9 +24,9 @@ const router = express.Router();
 const TYPES = ['habit', 'project', 'task'];
 const FREQUENCIES = ['daily', 'few times a week', 'weekly', 'monthly'];
 
-// The two that sit in the priorities list and carry a position. They are also
-// the two that can say where they stand.
-const RANKED = ['project', 'task'];
+// The two that can say where they stand. A habit has a cadence instead: there
+// is no "what is left" on something meant to recur.
+const STATEFUL = ['project', 'task'];
 
 // Which type may carry a deadline: a task, and only a task.
 //
@@ -60,7 +60,7 @@ router.get('/entries', async (req, res) => {
 
     const { data: rows, error } = await supabase
       .from('entries')
-      .select('id, type, title, why, frequency, due, body, sort_order, cold, cold_reason, paused_at, created_at')
+      .select('id, type, title, why, frequency, due, body, cold, cold_reason, paused_at, created_at')
       .eq('user_id', CURRENT_USER)
       .eq('status', 'active')
       .in('type', TYPES);
@@ -106,16 +106,13 @@ router.get('/entries', async (req, res) => {
         cold_reason: r.cold_reason,
         last_scheduled: seen,
         days: Math.max(0, daysBetween(since, today)),
-        sort_order: r.sort_order,
       };
     });
 
-    // The list is the person's ranking, so it is returned in their order and
-    // in no other. A row with no position yet sorts to the end rather than
-    // jumping the queue on a null.
-    const inOrder = (a, b) =>
-      (a.sort_order ?? Number.MAX_SAFE_INTEGER) - (b.sort_order ?? Number.MAX_SAFE_INTEGER) ||
-      a.title.localeCompare(b.title);
+    // Longest left, first, across all three types. The order is arithmetic on
+    // the days rather than anything the person arranged, so the server can
+    // compute it and the panel does not have to be told.
+    const inOrder = (a, b) => b.days - a.days || a.title.localeCompare(b.title);
 
     res.json({
       today,
@@ -165,33 +162,20 @@ router.post('/plan-intent/import', async (req, res) => {
   // this paste was described in the same conversation, so they age together.
   const captured = todayIn((profile && profile.timezone) || 'UTC');
 
-  // Position comes from the order the interview returned, which is the order
-  // the person ranked them in. It is asked for explicitly and it is the whole
-  // reason the ranking question is in the prompt.
-  //
-  // Habits are not ranked and take no position: that list is ordered by how
-  // long each has been left, and a sort_order on them would be a number
-  // nothing reads.
-  let rank = 0;
-  const rows = items.map((item) => {
-    const row = toRow(item, captured);
-    return {
-      user_id: CURRENT_USER,
-      ...row,
-      sort_order: row.type === 'habit' ? null : rank++,
-    };
-  });
+  // No position is written. The order these arrive in carries no meaning any
+  // more: the list sorts itself by how long each thing has been left, so the
+  // sequence the interview happened to produce is not something to preserve.
+  const rows = items.map((item) => ({ user_id: CURRENT_USER, ...toRow(item, captured) }));
 
   const { data, error } = await supabase
     .from('entries')
     .insert(rows)
-    .select('id, type, title, why, frequency, due, body, sort_order');
+    .select('id, type, title, why, frequency, due, body');
 
   if (error) return res.status(500).json({ error: error.message });
 
   res.json({
     saved: data.length,
-    ranked: rows.filter((r) => r.sort_order !== null).length,
     entries: data.map((r) => ({
       id: r.id,
       type: r.type,
@@ -199,7 +183,6 @@ router.post('/plan-intent/import', async (req, res) => {
       why: r.why,
       frequency: r.frequency,
       due: r.due,
-      rank: r.sort_order === null ? null : r.sort_order + 1,
       ...(decodeState(r.body) || {}),
     })),
   });
@@ -276,7 +259,7 @@ router.post('/entries', async (req, res) => {
 
   if (DATED.includes(body.type)) fields.due = dueOrNull(body.due);
 
-  if (RANKED.includes(body.type)) {
+  if (STATEFUL.includes(body.type)) {
     // Stamped with today where the person lives, so a note about where this
     // stands carries the date it was true from the moment it is written.
     fields.body = encodeState({
@@ -289,84 +272,7 @@ router.post('/entries', async (req, res) => {
   const row = await create_entry(CURRENT_USER, fields);
   if (row.error) return res.status(400).json({ error: row.error });
 
-  // New things go to the top: adding something is thinking about it now.
-  //
-  // Taking one below the current minimum rather than renumbering the list
-  // means nothing else moves, so a position the person chose cannot be
-  // disturbed by an unrelated addition.
-  //
-  // The minimum is taken over the ranked types only. Habits are ordered by how
-  // long they have been left, not by position, so their sort_order is a value
-  // nothing reads, and letting it set the floor here would drag the priorities'
-  // numbering further negative on every habit added.
-  const { data: first } = await supabase
-    .from('entries')
-    .select('sort_order')
-    .eq('user_id', CURRENT_USER)
-    .eq('status', 'active')
-    .in('type', RANKED)
-    .not('sort_order', 'is', null)
-    .order('sort_order', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  const top = first && first.sort_order !== null ? first.sort_order - 1 : 0;
-
-  const { data: placed } = await supabase
-    .from('entries')
-    .update({ sort_order: top })
-    .eq('id', row.id)
-    .eq('user_id', CURRENT_USER)
-    .select()
-    .maybeSingle();
-
-  res.json({ entry: placed || row });
-});
-
-/**
- * The whole list, in the order the person just put it in.
- *
- * Takes every id rather than a moved one and its neighbour: the client already
- * holds the order it is showing, and sending it entire means the stored order
- * cannot drift from the visible one through a dropped update.
- */
-router.post('/entries/reorder', async (req, res) => {
-  const ids = (req.body && req.body.ids) || [];
-
-  if (!Array.isArray(ids) || !ids.length) {
-    return res.status(400).json({ error: 'ids must be a non-empty array' });
-  }
-  if (new Set(ids).size !== ids.length) {
-    return res.status(400).json({ error: 'ids must not repeat' });
-  }
-
-  // Only rows this person owns, so an id from anywhere else moves nothing.
-  const { data: owned, error: readErr } = await supabase
-    .from('entries')
-    .select('id')
-    .eq('user_id', CURRENT_USER)
-    .eq('status', 'active')
-    .in('id', ids);
-
-  if (readErr) return res.status(500).json({ error: readErr.message });
-
-  const mine = new Set((owned || []).map((r) => r.id));
-  const unknown = ids.filter((id) => !mine.has(id));
-  if (unknown.length) {
-    return res.status(400).json({ error: `${unknown.length} id(s) are not yours or not active` });
-  }
-
-  for (let i = 0; i < ids.length; i++) {
-    const { error } = await supabase
-      .from('entries')
-      .update({ sort_order: i })
-      .eq('id', ids[i])
-      .eq('user_id', CURRENT_USER);
-
-    if (error) return res.status(500).json({ error: error.message });
-  }
-
-  res.json({ ordered: ids.length });
+  res.json({ entry: row });
 });
 
 /**

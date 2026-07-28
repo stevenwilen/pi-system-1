@@ -189,7 +189,7 @@ const SETUP_PROMPT = `I want you to interview me about everything I am currently
 
 Ask me conversationally, one or two questions at a time. Wait for my answers before moving on. Do not present this as a form or a wall of questions.
 
-Cover these four things.
+Cover these three things.
 
 1. PROJECTS. The things with more than one step that I am actually trying to finish. For each one, get:
    - what it is
@@ -199,11 +199,9 @@ Cover these four things.
 
 Do not ask me for a deadline on a project and do not record one. How much work is in it is the useful thing; a date is a guess about when it will end, and it goes stale without anything having happened. If I volunteer a deadline anyway, put it in the state text as something I said rather than in a date field.
 
-2. RANKING. Once you have the projects, ask me directly what order they matter in, most important first. Do not infer it from how long I talked about each one. If I struggle, ask which one I would keep if I had to drop the rest.
+2. HABITS. Things I do regularly, or want to. For each, get what it is, how often it is meant to happen (daily, a few times a week, weekly, or monthly), and why it matters to me. Ask for the why rather than waiting to see if I offer one: a habit with only a name and a frequency is a line I will not recognise in three months. If I genuinely have no reason beyond wanting to, record that. A habit has no deadline.
 
-3. HABITS. Things I do regularly, or want to. For each, get what it is, how often it is meant to happen (daily, a few times a week, weekly, or monthly), and why it matters to me. Ask for the why rather than waiting to see if I offer one: a habit with only a name and a frequency is a line I will not recognise in three months. If I genuinely have no reason beyond wanting to, record that. A habit has no deadline.
-
-4. TASKS. One-off things to get done. For each, get what it actually involves, roughly how long it takes, anything that has to happen before it can start, and any deadline.
+3. TASKS. One-off things to get done. For each, get what it actually involves, roughly how long it takes, anything that has to happen before it can start, and any deadline.
 
 Where an answer is vague, follow up. If I do not know something, record that rather than guessing. If I give you a deadline as "end of the month" or "before the trip", ask me for the actual date.
 
@@ -237,7 +235,6 @@ When we are done, output a single fenced json block and nothing after it. No sum
 
 Rules for the block:
 - type must be exactly one of: project, habit, task.
-- Projects and tasks must appear in the order I ranked them, most important first. That order is the whole point of asking, so do not sort them by anything else.
 - Every project must have a why and a size, and must not have a due date.
 - Every habit must have a frequency and a why, and must not have a due date.
 - Only a task may have a due date, and only when I gave you a real one.

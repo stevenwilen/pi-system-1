@@ -162,7 +162,7 @@ console.log('\n12. one spacing scale');
   const spacings = {
     'between sections': px('main', 'gap'),
     'between rows of a section': px('.group', 'gap'),
-    'between list rows': px('#stale,\n      #habits,\n      #paused', 'gap'),
+    'between list rows': px('#stale,\n      #paused', 'gap'),
     'inside a card': px('.card', 'padding'),
     'inside a row': px('.item', 'padding'),
     'between form fields': px('form', 'gap'),

@@ -121,12 +121,21 @@ const makeEntry = async (fields) => {
       (await scheduler.composeNudge(U)).split('\n')[1]);
 
     await clear();
-    for (const [i, t] of ['First', 'Second', 'Third', 'Fourth'].entries()) {
-      await makeEntry({ type: 'task', title: t, sort_order: i, cold: true });
+    // Four cold at four different ages. The two named must be the two left
+    // longest, which is the pair the panel puts at the top of the list.
+    const ago = (n) => {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() - n);
+      return d.toISOString();
+    };
+    for (const [t, days] of [['Freshest', 1], ['Oldest', 40], ['Middling', 8], ['Next oldest', 25]]) {
+      await makeEntry({ type: 'task', title: t, cold: true, created_at: ago(days) });
     }
     const many = await scheduler.composeNudge(U);
-    check('four cold still names only two', many.split('\n')[1] === 'First and Second have gone quiet.', many.split('\n')[1]);
-    check('and it is their own top two', !many.includes('Third') && !many.includes('Fourth'));
+    check('four cold still names only two',
+      many.split('\n')[1] === 'Oldest and Next oldest have gone quiet.', many.split('\n')[1]);
+    check('and they are the two left longest',
+      !many.includes('Middling') && !many.includes('Freshest'));
 
     await clear();
     await makeEntry({ type: 'task', title: 'Warm', sort_order: 0, cold: false });

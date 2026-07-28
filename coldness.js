@@ -19,12 +19,12 @@ const { lastScheduled, daysBetween } = require('./staleness');
 const TYPES = ['habit', 'project', 'task'];
 const MAX_REASON = 120;
 
-// Ordered by when they were added, deliberately, and never by sort_order.
+// Ordered by when they were added, deliberately.
 //
-// sort_order is the person's ranking of their priorities, and it is not sent:
-// they can already see the order on screen, so a reason that restates their own
-// ranking back to them tells them nothing. The numbering in the briefing is
-// only how a verdict is matched to an item on the way back.
+// The numbering in the briefing is only how a verdict is matched back to an
+// item on the way out. It is not a position and means nothing to the person:
+// there is no ranking, and the panel orders itself by how long each thing has
+// been left.
 async function gather(user_id, today) {
   const { data: rows, error } = await supabase
     .from('entries')

@@ -99,7 +99,7 @@ const SUITES = [
   ['task-test.js', 120],
   ['tasks-render-test.js', 120],
   ['money-order-test.js', 120],
-  ['split-render-check.js', 120],
+  ['stale-render-check.js', 120],
   ['plan-layout-check.js', 120],
   ['icons-check.js', 60],
   // guarded writers
@@ -112,7 +112,6 @@ const SUITES = [
   ['setup-test.js', 180],
   ['plan-test.js', 180],
   ['review-test.js', 180],
-  ['drag-test.js', 180],
   ['delivery-test.js', 240],
   // these call the model for real
   ['messages-test.js', 300],

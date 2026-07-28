@@ -135,35 +135,39 @@ Yesterday's blocks, listed. Each has a one-tap **didn't happen**.
 Blocks are **assumed done** unless tapped. The posture is trust. An optional
 short reason can be attached to a miss.
 
-### 3.2 STALE — two lists, ranked by different things
+### 3.2 STALE — one list, ordered by how long each thing has been left
 
-**PRIORITIES — projects and tasks, in the user's own order.**
+Everything the user cares about, in **one list**: habits, projects, and tasks
+together. A task left three weeks is the same problem as a project left three
+weeks, so they share a list rather than being filed apart.
 
-**The order is entirely the user's.** Drag anywhere to reorder. Nothing sorts
-itself, and nothing reorders in response to age, coldness, a due date or
-anything else. The list *is* the ranking, so a position only ever changes
-because the user moved it.
+**Longest left, first.** The order is arithmetic on the days-since figure and
+nothing else, across all three types. Ties break on title so two rows of the
+same age do not swap places between paints.
 
-Each row shows its **rank number** to the left. It is derived from position
-every time the list is drawn and renumbers itself the moment a row is dragged.
-It is a readout and never an input: it is not stored, not sent anywhere, and
-cannot be typed into.
+**There is no ranking.** Nothing is dragged, nothing carries a position, and no
+row shows a number. Ordering these against each other by hand was a question
+nobody was asking; the useful one is which has been left longest, and that is
+something the list can work out for itself.
 
-New items are added at the **top**: something being added is something being
-thought about now.
+Each row carries a **quiet type mark** — one muted character, not a label — so a
+habit is tellable from a project at a glance. That distinction matters because
+eleven days means something different for a daily habit than for a monthly one.
 
-There is no priority field, and none returns. The list position replaced it, and
-the rank number is that position read back rather than a second copy of it.
-
-**HABITS — below, ordered by how long they have been left, longest first.**
-
-No rank, no numbers, not draggable. Ranking habits against each other is not a
-question anyone has: a habit is not more important than another habit, it is
-just more overdue. The only meaningful order for them is cadence.
-
-Both lists carry the same things: the days-since label, the temperature bar, the cold
+Every row also carries the days-since label, the temperature bar, the cold
 outline and its reason, and pause, edit and delete. Paused items are listed
-separately from both, as before.
+separately below, as before.
+
+**The why is not shown on the row.** It is a paragraph per item, and a list of
+paragraphs cannot be scanned, which is the one thing this panel has to be. It is
+still required on a project, still editable, and still read by the brain.
+
+**Two retired columns remain in the schema, holding whatever they last held.**
+`priority` was the first attempt at ordering this list by hand and `sort_order`
+was the second. Both are unused, neither is written, and both are off the tools
+whitelist so nothing can write to them by accident. They are kept because
+dropping a column is the one move that cannot be undone, and an unread column
+costs nothing.
 
 ### 3.2.1 Due dates
 Optional, and on **tasks only**.
@@ -184,10 +188,9 @@ Shown as a small pill on the row: the date, or `today` / `tomorrow` / `in 3
 days` when it is close, or `3 days overdue` in the miss colour once it has
 passed.
 
-**Sorting is unchanged.** A due date does not reorder anything. Position is
-still the user's ranking and a deadline is an annotation on a row, not an
-argument about where that row belongs. The user decides what is most important;
-the date is one of the facts they decide with.
+**Sorting is unchanged.** A due date does not reorder anything. The list is
+ordered by how long each thing has been left, and a deadline is an annotation on
+a row rather than an argument about where that row belongs.
 
 **Two things inform, and neither moves anything.** Every row shows how long
 since it was last scheduled, and a temperature bar: a 3px left edge coloured
@@ -234,16 +237,14 @@ is a screen telling them to begin something they have begun.
 1. **Copy setup prompt** serves `SETUP_PROMPT` from `plan-intent.js` — engine
    text, identical for everyone, containing nothing about anyone.
 2. They answer it in a chat assistant. It asks about projects (what, **why**,
-   where it stands, roughly how big, any deadline), then asks **directly** what
-   order the projects matter in, then habits and their cadence, then one-off
-   tasks and what each involves.
+   where it stands, how big), then habits with their cadence and why, then
+   one-off tasks and what each involves.
 3. They paste the JSON block back. `POST /plan-intent/import` validates every
    item before writing any of them, and appends.
 
-**The ranking is the array order.** It is asked for explicitly, and it becomes
-`sort_order` for projects and tasks. Habits take no position: that list is
-ordered by how long each has been left, so a number on them would be one
-nothing reads.
+**Order carries no meaning.** The interview does not ask what order things come
+in and the import does not write a position. The list sorts itself by how long
+each thing has been left.
 
 All-or-nothing, as in the finance lane. One bad entry rejects the whole paste
 rather than leaving a list that looks complete. A project needs a why, a habit
@@ -280,7 +281,7 @@ services, 11am" into something worth reading, and it is usually the most useful
 thing the model has about a block.
 
 ### Adding something
-An **+ Add** control at the top of the priorities list opens a small form:
+An **+ Add** control at the top of the stale list opens a small form:
 
 - **type**: habit | project | task, as a segmented control
 - **title**: text
@@ -357,11 +358,10 @@ whether it is paused, and its due date where it has one. It returns, for each,
 cold or not and one line saying why. The verdict is stored on the row and the
 panel reads only that, so opening the app never calls the model.
 
-**Rank is not sent.** The user can already see the order on screen, so a reason
-that restates their own ranking back to them tells them nothing. The verdict is
-made on time, cadence and deadline only. The items are numbered in the briefing,
-but that numbering is by when they were added and exists only to match a verdict
-back to a row.
+The verdict is made on time, cadence and deadline only. The items are numbered
+in the briefing, but that numbering is by when they were added and exists only
+to match a verdict back to a row. It is not a position, and there is no longer
+one to send.
 
 **A deadline outranks cadence.** An item that is overdue, due today, or due soon
 and is not on any plan yet is cold however recently it was touched: nothing is
@@ -449,9 +449,9 @@ No plan for tomorrow yet.
 Reading and Spanish have gone quiet.
 ```
 
-The first line is the message. The second appears only when a **priorities**
-item already carries a cold verdict, and names **at most two**, taken in the
-user's own ranking. Habits are never named: a habit going quiet is what the
+The first line is the message. The second appears only when a project or task
+already carries a cold verdict, and names **at most two**: the two left longest,
+which is the order the panel puts them in. Habits are never named: a habit going quiet is what the
 panel is for, and this message is about tomorrow having no shape yet. Paused
 items are never named either, matching the panel exactly — a screen that calls
 something quiet must not be contradicted by a message that calls it cold.

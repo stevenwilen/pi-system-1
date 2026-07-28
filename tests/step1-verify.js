@@ -98,13 +98,16 @@ const server = H.spawnServer(PORT);
   check('rejects blank title', (await call(`/entries/${id}/update`, { title: ' ' })).status === 400);
   check('rejects bad frequency', (await call(`/entries/${h.data.entry.id}/update`, { frequency: 'sometimes' })).status === 400);
 
-  console.log('\ntwo projects can now sit anywhere in the list');
-  // There is no rank to collide over. The order is the person's, held in
-  // sort_order, and nothing enforces uniqueness on anything.
+  console.log('\ntwo projects are simply two rows');
+  // There is no position to collide over and nothing enforces uniqueness.
   const dup = await call('/entries', { type: 'project', title: '__probe second', why: 'x' });
   check('a second project is simply accepted', dup.status === 200, dup.data.error || '');
   if (dup.data.entry) made.push(dup.data.entry.id);
-  check('and it went to the top', (await call('/entries')).data.items[0].title === '__probe second');
+
+  // Where it lands is decided by how long it has been left, not by being new.
+  const listed = (await call('/entries')).data.items;
+  check('and it is in the list', listed.some((i) => i.title === '__probe second'), `${listed.length} items`);
+  check('carrying no position', listed.every((i) => i.sort_order === undefined));
 
   console.log('\ndelete is soft');
   await call(`/entries/${id}/delete`, {});
