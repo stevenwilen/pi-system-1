@@ -17,6 +17,7 @@ const { fence } = require('./untrusted');
 const { get_calendar } = require('./tools');
 const { toMinutes } = require('./clock');
 const { lastScheduled, daysBetween } = require('./staleness');
+const { decodeState } = require('./plan-intent');
 
 // A line is one sentence. Anything longer has stopped being a nudge.
 const MAX_LINE = 180;
@@ -77,7 +78,7 @@ async function buildBriefing(user_id, planId) {
   if (ids.length) {
     const { data: rows, error: entryErr } = await supabase
       .from('entries')
-      .select('id, type, title, why, frequency')
+      .select('id, type, title, why, frequency, body')
       .in('id', ids);
     if (entryErr) throw new Error(entryErr.message);
     entries = new Map((rows || []).map((r) => [r.id, r]));
@@ -140,6 +141,22 @@ function renderBriefing({ plan, blocks, entries, latest, allDay }) {
           : 'never scheduled before'
       );
       if (entry.why) facts.push(`why it matters: ${entry.why}`);
+
+      // Where it stood when they last wrote it down, and how long ago that
+      // was. The age is attached to the claim itself rather than mentioned
+      // nearby, so there is no way to read the words without the date.
+      const held = decodeState(entry.body);
+      if (held && held.state) {
+        const age =
+          held.captured === null
+            ? 'at some point they did not date'
+            : daysBetween(held.captured, plan.date) === 0
+              ? 'as of today'
+              : `as of ${daysBetween(held.captured, plan.date)} days ago`;
+
+        facts.push(`${age} they said: ${held.state}`);
+        if (held.size) facts.push(`they called it ${held.size} of work`);
+      }
     }
 
     lines.push(
@@ -158,9 +175,12 @@ The title and both times are already sent for you, on the line above yours. Neve
 You may say where a block sits in the day, but say it in words rather than numbers: "the last block of the day", not "you finish at 10:45".
 
 A line earns its place by carrying one of these:
+- The next step. Where they said this stood, and specifically what they said came next. This is usually the most useful thing you have: "Web services, 11am" is a calendar entry, and naming the thing they meant to do next is not.
 - Staleness. How long it has been since they last scheduled this, when that gap is worth naming.
 - The why. A project's own stated reason, in their words, not a paraphrase that inflates it.
 - The arc of the day. Why this sits where it does against what surrounds it: after the hard thing, before the appointment, the last block of a long day.
+
+Anything marked "as of N days ago they said" is what they wrote down then, not what is true now. They may have done it since, or abandoned it. Refer to it as the last thing you know rather than as the current position: "last you wrote, the pricing page was next" and never "the pricing page is next". If it is more than a few weeks old, the gap is worth naming on its own. Never congratulate them on progress you cannot see and never assume none has been made.
 
 If none of those apply, write something plain and true about the block instead. Never invent significance. Never guess at a reason nobody gave you. A flat line is fine; a fabricated one is not.
 

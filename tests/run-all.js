@@ -103,6 +103,7 @@ const SUITES = [
   // guarded writers
   ['verify-isolation.js', 120],
   ['due-test.js', 180],
+  ['plan-intent-test.js', 180],
   ['nudge-test.js', 180],
   ['step1-verify.js', 150],
   ['intent-test.js', 180],

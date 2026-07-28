@@ -11,6 +11,13 @@ const { CURRENT_USER } = require('../user');
 const { todayIn } = require('../clock');
 const { create_entry, update_entry } = require('../tools');
 const { lastScheduled, daysBetween } = require('../staleness');
+const {
+  SETUP_PROMPT,
+  encodeState,
+  decodeState,
+  validateImport,
+  toRow,
+} = require('../plan-intent');
 
 const router = express.Router();
 
@@ -42,7 +49,7 @@ router.get('/entries', async (req, res) => {
 
     const { data: rows, error } = await supabase
       .from('entries')
-      .select('id, type, title, why, frequency, due, sort_order, cold, cold_reason, paused_at, created_at')
+      .select('id, type, title, why, frequency, due, body, sort_order, cold, cold_reason, paused_at, created_at')
       .eq('user_id', CURRENT_USER)
       .eq('status', 'active')
       .in('type', TYPES);
@@ -54,6 +61,13 @@ router.get('/entries', async (req, res) => {
     const items = (rows || []).map((r) => {
       const seen = latest.get(r.id) || null;
       const since = seen || String(r.created_at).slice(0, 10);
+
+      // Where this stood when it was last written down, and how long ago that
+      // was. The age travels with the claim everywhere it goes: a note about
+      // what is left is true on the day it is written and drifts from then on,
+      // so nothing is allowed to read the words without reading the date.
+      const held = decodeState(r.body);
+
       return {
         id: r.id,
         type: r.type,
@@ -64,6 +78,11 @@ router.get('/entries', async (req, res) => {
         // slicing means a driver that ever decides to widen it to a timestamp
         // cannot shift the day by a timezone on the way through.
         due: r.due ? String(r.due).slice(0, 10) : null,
+        state: held && held.state,
+        size: held && held.size,
+        state_captured: held && held.captured,
+        state_days_old:
+          held && held.captured ? Math.max(0, daysBetween(held.captured, today)) : null,
         paused: Boolean(r.paused_at),
         // A paused item is never cold, whatever the last verdict said. The
         // person declared it set down, and 2.7 means that is not reopened.
@@ -99,6 +118,80 @@ router.get('/entries', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// --- the setup interview ----------------------------------------------------
+//
+// The same shape as the finance lane's: the app hands over a prompt, the person
+// answers it in a chat assistant, and pastes the JSON back. Nothing here calls
+// the model. This system writes the question and reads the answer; the
+// conversation happens in a tool the person already has.
+
+router.get('/plan-intent/setup-prompt', (req, res) => {
+  res.json({ prompt: SETUP_PROMPT });
+});
+
+/**
+ * Save a whole interview at once.
+ *
+ * All or nothing. Every item is checked before any is written, so a paste that
+ * is half understood leaves nothing behind rather than a list that looks
+ * complete. Existing rows are untouched: this appends.
+ */
+router.post('/plan-intent/import', async (req, res) => {
+  const items = (req.body && req.body.items) || [];
+
+  const problem = validateImport(items);
+  if (problem) return res.status(400).json({ error: problem });
+
+  const { data: profile } = await supabase
+    .from('profile')
+    .select('timezone')
+    .eq('user_id', CURRENT_USER)
+    .maybeSingle();
+
+  // One date for the whole import, read where the person lives. Every state in
+  // this paste was described in the same conversation, so they age together.
+  const captured = todayIn((profile && profile.timezone) || 'UTC');
+
+  // Position comes from the order the interview returned, which is the order
+  // the person ranked them in. It is asked for explicitly and it is the whole
+  // reason the ranking question is in the prompt.
+  //
+  // Habits are not ranked and take no position: that list is ordered by how
+  // long each has been left, and a sort_order on them would be a number
+  // nothing reads.
+  let rank = 0;
+  const rows = items.map((item) => {
+    const row = toRow(item, captured);
+    return {
+      user_id: CURRENT_USER,
+      ...row,
+      sort_order: row.type === 'habit' ? null : rank++,
+    };
+  });
+
+  const { data, error } = await supabase
+    .from('entries')
+    .insert(rows)
+    .select('id, type, title, why, frequency, due, body, sort_order');
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({
+    saved: data.length,
+    ranked: rows.filter((r) => r.sort_order !== null).length,
+    entries: data.map((r) => ({
+      id: r.id,
+      type: r.type,
+      title: r.title,
+      why: r.why,
+      frequency: r.frequency,
+      due: r.due,
+      rank: r.sort_order === null ? null : r.sort_order + 1,
+      ...(decodeState(r.body) || {}),
+    })),
+  });
 });
 
 // --- writing ----------------------------------------------------------------
@@ -138,6 +231,18 @@ function validate({ type, title, why, frequency, due }) {
 // cleared, and the column takes null.
 const dueOrNull = (value) => (String(value || '').trim() ? String(value).trim() : null);
 
+// Today where this person lives. Used to date a state note at the moment it is
+// written, so its age is measured from their day rather than the server's.
+async function todayForUser() {
+  const { data } = await supabase
+    .from('profile')
+    .select('timezone')
+    .eq('user_id', CURRENT_USER)
+    .maybeSingle();
+
+  return todayIn((data && data.timezone) || 'UTC');
+}
+
 router.post('/entries', async (req, res) => {
   const body = req.body || {};
   const problem = validate(body);
@@ -148,7 +253,16 @@ router.post('/entries', async (req, res) => {
   const fields = { type: body.type, title: String(body.title).trim() };
   if (body.type === 'habit') fields.frequency = body.frequency;
   if (body.type === 'project') fields.why = String(body.why).trim();
-  if (DATED.includes(body.type)) fields.due = dueOrNull(body.due);
+  if (DATED.includes(body.type)) {
+    fields.due = dueOrNull(body.due);
+    // Stamped with today where the person lives, so a note about where this
+    // stands carries the date it was true from the moment it is written.
+    fields.body = encodeState({
+      state: body.state,
+      size: body.size,
+      captured: await todayForUser(),
+    });
+  }
 
   const row = await create_entry(CURRENT_USER, fields);
   if (row.error) return res.status(400).json({ error: row.error });
@@ -255,7 +369,7 @@ router.post('/entries/:id/update', async (req, res) => {
 
   const { data: current, error: readErr } = await supabase
     .from('entries')
-    .select('type, title, why, frequency, due')
+    .select('type, title, why, frequency, due, body')
     .eq('id', req.params.id)
     .eq('user_id', CURRENT_USER)
     .eq('status', 'active')
@@ -267,9 +381,22 @@ router.post('/entries/:id/update', async (req, res) => {
   const problem = validate({ ...current, ...fields });
   if (problem) return res.status(400).json({ error: problem });
 
+  // Rewriting where something stands re-dates it. That is the point: the claim
+  // has just been made again, so its clock starts again. Leaving the old date
+  // on new words would be the one thing this must not do — present a fresh
+  // statement as an old one, or an old one as fresh.
+  if (body.state !== undefined || body.size !== undefined) {
+    const held = decodeState(current.body) || {};
+    fields.body = encodeState({
+      state: body.state !== undefined ? body.state : held.state,
+      size: body.size !== undefined ? body.size : held.size,
+      captured: await todayForUser(),
+    });
+  }
+
   const row = await update_entry(CURRENT_USER, req.params.id, fields);
   if (row.error) return res.status(400).json({ error: row.error });
-  res.json({ entry: row });
+  res.json({ entry: { ...row, ...(decodeState(row.body) || {}) } });
 });
 
 /**

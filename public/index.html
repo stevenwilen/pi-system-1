@@ -1051,6 +1051,55 @@
            tasks compete with each other for attention and the person orders
            them. Habits do not compete; the only useful order for them is which
            has been left longest. -->
+      <!-- Shown only while both lists are empty. The same shape as the money
+           tab's: the app writes the question, a chat assistant asks it, and
+           the answer comes back as JSON. Nothing here calls the model. -->
+      <div class="group hidden" id="plan-setup-group">
+        <div class="group-head">
+          <h2>Set up</h2>
+        </div>
+
+        <div class="card" id="plan-setup-card">
+          <div class="setup-step">
+            <span class="step-n">1</span>
+            <div>
+              <div class="setup-title">Copy the interview</div>
+              <div class="none">It asks what you are working on, why each one matters, where it stands, what order they come in, and what you do regularly.</div>
+            </div>
+          </div>
+          <button class="primary" id="plan-copy-prompt" type="button">Copy setup prompt</button>
+
+          <div class="setup-step">
+            <span class="step-n">2</span>
+            <div>
+              <div class="setup-title">Answer it in a Claude chat</div>
+              <div class="none">Paste it in and talk it through. It ends by giving you a block of JSON.</div>
+            </div>
+          </div>
+
+          <div class="setup-step">
+            <span class="step-n">3</span>
+            <div>
+              <div class="setup-title">Paste the result back</div>
+              <div class="none">The whole reply is fine. Nothing is saved until you have seen exactly what it will save.</div>
+            </div>
+          </div>
+
+          <textarea id="plan-setup-paste" placeholder="Paste the reply here"></textarea>
+          <div class="err hidden" id="plan-setup-error"></div>
+          <button class="primary" id="plan-setup-read" type="button">Read it</button>
+
+          <div class="setup-preview hidden" id="plan-setup-preview">
+            <div class="setup-title" id="plan-setup-count"></div>
+            <div id="plan-setup-list"></div>
+            <div class="row">
+              <button class="primary grow" id="plan-setup-confirm" type="button">Save these</button>
+              <button class="linkbtn" id="plan-setup-discard" type="button">Discard</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="group">
         <div class="group-head">
           <h2>Priorities</h2>
@@ -1088,6 +1137,23 @@
             <!-- Projects and tasks only, and optional there. A picker rather
                  than a text field: a date typed by hand is a date typed
                  wrong. Clear puts it back to nothing. -->
+            <!-- Where it stands. Optional, and dated when saved, so an item
+                 added by hand is not thinner than one from the interview. -->
+            <label class="hidden" id="f-state-wrap">
+              Where it stands <span class="none">optional</span>
+              <textarea id="f-state" placeholder="What is done, what is left, what is next"></textarea>
+            </label>
+
+            <label class="hidden" id="f-size-wrap">
+              Roughly how big <span class="none">optional</span>
+              <select id="f-size">
+                <option value="">not saying</option>
+                <option value="days">days</option>
+                <option value="weeks">weeks</option>
+                <option value="months">months</option>
+              </select>
+            </label>
+
             <label class="hidden" id="f-due-wrap">
               Due <span class="none">optional</span>
               <div class="row">
@@ -1458,6 +1524,10 @@
       // than filtered out of one list at every use.
       let habitItems = [];
 
+      // How many rows are set down. Only the setup card reads it, to tell an
+      // empty system from one whose owner has paused everything in it.
+      let pausedCount = 0;
+
       // Today where the person lives, as the server counted it. Due dates are
       // measured against this and never against the device clock, which can be
       // a day out from the timezone the rest of the screen is using.
@@ -1606,6 +1676,150 @@
         row.addEventListener('pointercancel', end);
       }
 
+      // --- the planner's setup interview ------------------------------------
+      //
+      // The same three steps as the money tab: copy a prompt, answer it
+      // elsewhere, paste the block back. extractJson is shared with that flow,
+      // because a reply arrives in the same three shapes either way.
+
+      const PLAN_TYPES = ['project', 'habit', 'task'];
+      const PLAN_FREQUENCIES = {
+        daily: 'daily',
+        'few-times-weekly': 'few times a week',
+        'few times a week': 'few times a week',
+        'few times weekly': 'few times a week',
+        weekly: 'weekly',
+        monthly: 'monthly',
+      };
+
+      let planSetupPrompt = '';
+      let planPending = null;
+
+      function validatePlanItems(list) {
+        if (!Array.isArray(list) || !list.length) return 'there were no items in it';
+
+        for (const [i, row] of list.entries()) {
+          const at = `entry ${i + 1}`;
+          const type = String((row && row.type) || '').trim().toLowerCase();
+          const title = String((row && row.title) || '').trim();
+
+          if (!PLAN_TYPES.includes(type)) return `${at} has type "${type}", which is not one of ${PLAN_TYPES.join(', ')}`;
+          if (!title) return `${at} has no title`;
+
+          if (type === 'project' && !String((row && row.why) || '').trim()) {
+            return `${at} ("${title}") is a project with no why`;
+          }
+          if (type === 'habit' && !PLAN_FREQUENCIES[String((row && row.frequency) || '').trim().toLowerCase()]) {
+            return `${at} ("${title}") is a habit with frequency "${(row && row.frequency) || ''}", which is not one this understands`;
+          }
+          if (type === 'habit' && row && row.due) {
+            return `${at} ("${title}") is a habit with a due date. Habits have a frequency instead.`;
+          }
+          if (row && row.due && !/^\d{4}-\d{2}-\d{2}$/.test(String(row.due))) {
+            return `${at} ("${title}") has due "${row.due}", which is not a date in YYYY-MM-DD form`;
+          }
+        }
+        return null;
+      }
+
+      // Exactly what will be written, in the order it will be written, with the
+      // rank each ranked item will get. Nothing is saved until this is seen.
+      function showPlanPreview(list) {
+        planPending = list;
+        $('plan-setup-count').textContent = `${list.length} thing${list.length === 1 ? '' : 's'} will be saved`;
+
+        const box = $('plan-setup-list');
+        box.replaceChildren();
+
+        let rank = 0;
+        for (const row of list) {
+          const type = String(row.type).toLowerCase();
+          const line = el('div', 'preview-row');
+          line.append(el('div', 'preview-kind', type === 'habit' ? type : `${type} ${++rank}`));
+
+          const text = el('div', 'preview-text', String(row.title));
+          const notes = [];
+          if (row.why) notes.push(String(row.why));
+          if (row.frequency) notes.push(PLAN_FREQUENCIES[String(row.frequency).toLowerCase()] || String(row.frequency));
+          if (row.state) notes.push(String(row.state));
+          if (row.size) notes.push(`${row.size} of work`);
+          if (row.due) notes.push(`due ${row.due}`);
+          if (notes.length) text.append(el('small', null, notes.join(' · ')));
+
+          line.append(text);
+          box.append(line);
+        }
+
+        $('plan-setup-preview').classList.remove('hidden');
+      }
+
+      $('plan-copy-prompt').onclick = async () => {
+        const button = $('plan-copy-prompt');
+        try {
+          // Written from the value already held, not fetched here: awaiting
+          // inside the handler loses the user gesture that permits a write.
+          await navigator.clipboard.writeText(planSetupPrompt);
+          button.textContent = 'Copied';
+          setTimeout(() => (button.textContent = 'Copy setup prompt'), 1600);
+        } catch {
+          button.textContent = 'Could not copy';
+          setTimeout(() => (button.textContent = 'Copy setup prompt'), 1600);
+        }
+      };
+
+      $('plan-setup-read').onclick = () => {
+        const error = $('plan-setup-error');
+        error.classList.add('hidden');
+        $('plan-setup-preview').classList.add('hidden');
+        planPending = null;
+
+        const list = extractJson($('plan-setup-paste').value || '', 'items');
+        if (!list) {
+          error.textContent = 'No JSON block found in that. Paste the whole reply, including the ```json part.';
+          error.classList.remove('hidden');
+          return;
+        }
+
+        const problem = validatePlanItems(list);
+        if (problem) {
+          error.textContent = `${problem}. Nothing has been saved.`;
+          error.classList.remove('hidden');
+          return;
+        }
+
+        showPlanPreview(list);
+      };
+
+      $('plan-setup-discard').onclick = () => {
+        planPending = null;
+        $('plan-setup-preview').classList.add('hidden');
+        $('plan-setup-paste').value = '';
+      };
+
+      $('plan-setup-confirm').onclick = async () => {
+        if (!planPending) return;
+        const button = $('plan-setup-confirm');
+        button.disabled = true;
+
+        try {
+          await api('/plan-intent/import', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ items: planPending }),
+          });
+          planPending = null;
+          $('plan-setup-paste').value = '';
+          $('plan-setup-preview').classList.add('hidden');
+          await load();
+        } catch (err) {
+          const error = $('plan-setup-error');
+          error.textContent = `${err.message} Nothing has been saved.`;
+          error.classList.remove('hidden');
+        } finally {
+          button.disabled = false;
+        }
+      };
+
       // Habits are ordered by how long they have been left, longest first.
       //
       // They are not ranked and cannot be dragged, because ranking them against
@@ -1645,6 +1859,25 @@
         const habits = habitItems.slice().sort(byNeglect);
         for (const item of habits) habitList.append(itemCard(item, { range }));
         $('habits-group').classList.toggle('hidden', !habits.length);
+
+        // The interview is offered only while there is nothing at all. Once one
+        // row exists the person has started, and a setup card above their list
+        // is a screen telling them to begin something they have begun.
+        const empty = !staleItems.length && !habitItems.length && !pausedCount;
+        $('plan-setup-group').classList.toggle('hidden', !empty);
+        if (empty && !planSetupPrompt) loadPlanPrompt();
+      }
+
+      // Fetched once and held, so copying is a synchronous act inside the tap
+      // that permits it. Served rather than kept in the page so there is one
+      // copy of it, and so the client only ever repeats what it was given.
+      async function loadPlanPrompt() {
+        try {
+          planSetupPrompt = (await api('/plan-intent/setup-prompt')).prompt || '';
+        } catch {
+          // The rest of the card still works; only copying would fail, and it
+          // says so when it does.
+        }
       }
 
       async function act(url, body) {
@@ -1678,6 +1911,9 @@
         todayDate = data.today;
         staleItems = data.items.filter((i) => i.type !== 'habit');
         habitItems = data.items.filter((i) => i.type === 'habit');
+        // Counted before painting: a person with everything paused has still
+        // set this up, and should not be shown the interview again.
+        pausedCount = data.paused.length;
         paintStale();
 
         paused.replaceChildren();
@@ -1715,7 +1951,13 @@
         // must not carry it.
         const dated = next === 'project' || next === 'task';
         $('f-due-wrap').classList.toggle('hidden', !dated);
-        if (!dated) $('f-due').value = '';
+        $('f-state-wrap').classList.toggle('hidden', !dated);
+        $('f-size-wrap').classList.toggle('hidden', next !== 'project');
+        if (!dated) {
+          $('f-due').value = '';
+          $('f-state').value = '';
+        }
+        if (next !== 'project') $('f-size').value = '';
       }
 
       for (const b of $('type-seg').children) {
@@ -1741,6 +1983,8 @@
         $('f-why').value = (item && item.why) || '';
         $('f-frequency').value = (item && item.frequency) || 'daily';
         $('f-due').value = (item && item.due) || '';
+        $('f-state').value = (item && item.state) || '';
+        $('f-size').value = (item && item.size) || '';
         $('f-error').classList.add('hidden');
 
         setType(item ? item.type : 'task');
@@ -1784,7 +2028,13 @@
         // Always sent for a type that can carry one, including when it is
         // empty. That empty string is how a date is cleared: leaving the field
         // out would mean "unchanged", and there would be no way to remove one.
-        if (type === 'project' || type === 'task') payload.due = $('f-due').value;
+        if (type === 'project' || type === 'task') {
+          payload.due = $('f-due').value;
+          // Always sent, empty included, so clearing a note removes it rather
+          // than leaving the old one standing under a new date.
+          payload.state = $('f-state').value;
+        }
+        if (type === 'project') payload.size = $('f-size').value;
 
         try {
           await api(
@@ -2711,14 +2961,14 @@
        * closing remarks the model was asked not to write and wrote anyway.
        * Each candidate is tried in turn rather than assuming a shape.
        */
-      function extractJson(text) {
+      function extractJson(text, key = 'intents') {
         const candidates = [];
 
         const fenced = [...String(text).matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
         for (const m of fenced) candidates.push(m[1]);
 
-        // Failing a fence, the widest brace span that mentions intents. Taking
-        // the first { to the last } keeps nested objects intact.
+        // Failing a fence, the widest brace span. Taking the first { to the
+        // last } keeps nested objects intact.
         const first = text.indexOf('{');
         const last = text.lastIndexOf('}');
         if (first !== -1 && last > first) candidates.push(text.slice(first, last + 1));
@@ -2728,7 +2978,7 @@
         for (const candidate of candidates) {
           try {
             const parsed = JSON.parse(candidate.trim());
-            if (parsed && Array.isArray(parsed.intents)) return parsed.intents;
+            if (parsed && Array.isArray(parsed[key])) return parsed[key];
             // A bare array is close enough to what was asked for.
             if (Array.isArray(parsed)) return parsed;
           } catch {

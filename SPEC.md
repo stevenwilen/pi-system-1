@@ -215,6 +215,63 @@ Each item has these actions:
 Paused items are listed separately, out of the way but not hidden, so unpausing
 is always one tap and nothing disappears silently.
 
+### 3.2.2 Setting it up: the interview
+The same shape as the finance lane's (§7), for the same reason: getting
+everything out of someone's head needs follow-up questions, and follow-up
+questions are a conversation this system does not hold.
+
+Shown **only while both lists are empty**, and while nothing is paused. Once a
+single row exists the person has started, and a setup card above their own list
+is a screen telling them to begin something they have begun.
+
+1. **Copy setup prompt** serves `SETUP_PROMPT` from `plan-intent.js` — engine
+   text, identical for everyone, containing nothing about anyone.
+2. They answer it in a chat assistant. It asks about projects (what, **why**,
+   where it stands, roughly how big, any deadline), then asks **directly** what
+   order the projects matter in, then habits and their cadence, then one-off
+   tasks and what each involves.
+3. They paste the JSON block back. `POST /plan-intent/import` validates every
+   item before writing any of them, and appends.
+
+**The ranking is the array order.** It is asked for explicitly, and it becomes
+`sort_order` for projects and tasks. Habits take no position: that list is
+ordered by how long each has been left, so a number on them would be one
+nothing reads.
+
+All-or-nothing, as in the finance lane. One bad entry rejects the whole paste
+rather than leaving a list that looks complete. A project needs a why, a habit
+needs a cadence it understands and must not carry a deadline, and every date
+must be a real one.
+
+### 3.2.3 State, and why it is always dated
+Where a project or task actually stands: what is done, what is left, and what
+the next step is. Optional, and offered in the manual add form as well as the
+interview, so an item added later is not thinner than one added at setup.
+
+It lives in the existing `body` column, which no habit, project or task has ever
+used. **No new columns.**
+
+**It is stored with the date it was captured, and never read without it.**
+Progress ages. "Landing page done, pricing next" is true the day it is written
+and wrong two months later, and a system that repeats it as current is lying
+with the user's own words. So:
+
+- Editing state **re-dates** it. The claim has just been made again, so its
+  clock starts again.
+- Anywhere the brain sees it, it arrives as a dated claim — *"as of 12 days ago
+  they said: ..."* — never as a fact about now.
+- The prompt is explicit that this is the last thing known and not the current
+  position, that the right phrasing is *"last you wrote, the pricing page was
+  next"*, and that it must neither congratulate progress it cannot see nor
+  assume none has been made.
+
+Same discipline as a declared balance in the finance lane, for the same reason:
+a stale figure presented confidently is worse than no figure.
+
+**Block messages draw on it.** Knowing the next step is what turns "Web
+services, 11am" into something worth reading, and it is usually the most useful
+thing the model has about a block.
+
 ### Adding something
 An **+ Add** control at the top of the priorities list opens a small form:
 
@@ -227,7 +284,10 @@ An **+ Add** control at the top of the priorities list opens a small form:
   be argued for later.
 - **project and task only, due**: a date, optional, from a picker rather than a
   text field, and clearable back to nothing. Never on a habit.
-- **task**: title and optionally a due date
+- **project and task only, where it stands**: optional prose, dated when saved
+  and re-dated whenever it is changed. See 3.2.3.
+- **project only, roughly how big**: days / weeks / months, optional.
+- **task**: title, and optionally a due date and where it stands
 
 Save writes one row to `entries`. No reasoning, no model call.
 
@@ -587,7 +647,8 @@ Nothing in the web layer calls the model, and nothing in the engine serves HTTP.
 | `untrusted.js` | the fence (2.2) |
 | `coldness.js` | the daily verdict |
 | `messages.js` | block messages, written at confirm time |
-| `finance-intent.js` | how a declaration is stored and validated, and the interview prompt |
+| `finance-intent.js` | how a money declaration is stored and validated, and its interview prompt |
+| `plan-intent.js` | how state is stored and validated, and the planner's interview prompt |
 | `finance-insight.js` | the daily finance line |
 | `money.js` | counting a sheet: transfers, categories, repeats, sync age |
 | `sheet.js` | reading the Google Sheet. Never throws; returns `[]` and logs |
