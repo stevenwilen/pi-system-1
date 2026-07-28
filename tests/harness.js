@@ -133,7 +133,20 @@ function spawnServer(port, extraEnv = {}) {
       SCHEDULER_DISABLED: '1',
       ...extraEnv,
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    // No pipes, deliberately.
+    //
+    // Nothing that spawns through here reads the server's output, so the pipes
+    // existed only to be torn down — and tearing them down is what aborted the
+    // process. A suite that called process.exit() straight after server.kill()
+    // was closing a handle libuv was already closing, which raises a native
+    // assertion and a garbage exit code, so a run where every check passed was
+    // reported as a failure. It surfaced as one flaky suite, but it was
+    // whichever suite lost that race on the day.
+    //
+    // Inheriting instead means there is no handle to race over. The two suites
+    // that genuinely read server output spawn their own child and handle their
+    // own teardown.
+    stdio: 'ignore',
   });
 }
 
