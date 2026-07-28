@@ -166,8 +166,15 @@ outline and its reason, and pause, edit and delete. Paused items are listed
 separately from both, as before.
 
 ### 3.2.1 Due dates
-Optional, on **projects and tasks only**. A habit has a frequency instead, and a
-habit with a deadline would be two different ideas in one row.
+Optional, and on **tasks only**.
+
+A habit has a cadence instead. A project has a **size** — days, weeks or months
+— which says how much work is in it, and that is the useful thing to know about
+a project. A date on a project is a guess about when the work will end rather
+than a fact about the work, and it goes stale on its own without anything having
+happened. The interview is told not to ask for one and the form does not offer
+one; a deadline someone volunteers for a project belongs in its state text, as
+something they said.
 
 Set with a date picker in the add form and editable in place afterwards, and
 clearable back to nothing. Never inferred: nothing in this system decides on
@@ -282,11 +289,15 @@ An **+ Add** control at the top of the priorities list opens a small form:
   eleven days matters for a daily habit and not for a monthly one.
 - **project only, why**: text, required. A project without a stated reason cannot
   be argued for later.
-- **project and task only, due**: a date, optional, from a picker rather than a
-  text field, and clearable back to nothing. Never on a habit.
+- **habit only, why**: text, optional but asked for. A habit carrying only a name
+  and a cadence is a line nobody recognises three months later, so the interview
+  asks rather than waiting to be offered one, and the form does the same.
+- **task only, due**: a date, optional, from a picker rather than a text field,
+  and clearable back to nothing. Never on a project or a habit.
 - **project and task only, where it stands**: optional prose, dated when saved
   and re-dated whenever it is changed. See 3.2.3.
-- **project only, roughly how big**: days / weeks / months, optional.
+- **project only, roughly how big**: days / weeks / months. This is what a
+  project has in place of a deadline.
 - **task**: title, and optionally a due date and where it stands
 
 Save writes one row to `entries`. No reasoning, no model call.

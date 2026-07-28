@@ -129,6 +129,13 @@ function validateItem(row, index) {
     if (row && row.due) return `${at} ("${title}") is a habit with a due date. Habits have a frequency instead.`;
   }
 
+  // A project has a size, not a date. Days, weeks or months says how much work
+  // is in it, which is the useful thing; a deadline on a project is a guess
+  // about when it will end rather than a fact about what it is.
+  if (type === 'project' && row && row.due) {
+    return `${at} ("${title}") is a project with a due date. A project has a size instead: days, weeks or months.`;
+  }
+
   if (row && row.due !== undefined && row.due !== null && row.due !== '' && !isDate(row.due)) {
     return `${at} ("${title}") has due "${row.due}", which is not a date in YYYY-MM-DD form`;
   }
@@ -168,7 +175,9 @@ function toRow(row, captured) {
 
   if (type === 'habit') fields.frequency = normaliseFrequency(row.frequency);
   if (type === 'project') fields.why = String(row.why).trim();
-  if (type !== 'habit') fields.due = row.due ? String(row.due).trim() : null;
+
+  // Tasks only. A habit has a cadence and a project has a size.
+  if (type === 'task') fields.due = row.due ? String(row.due).trim() : null;
 
   // A habit's why is optional and worth keeping when it is offered.
   if (type === 'habit' && String(row.why || '').trim()) fields.why = String(row.why).trim();
@@ -186,12 +195,13 @@ Cover these four things.
    - what it is
    - why it matters to me. Press on this. "Because I need to" is not a reason, and neither is saying the title again in longer words. Keep asking until I say something that would still be true in six months.
    - where it stands right now: what is already done, what is left, and what the immediate next step is
-   - roughly how big it is: days, weeks, or months of work
-   - any hard deadline
+   - how big it is: days, weeks, or months of work
+
+Do not ask me for a deadline on a project and do not record one. How much work is in it is the useful thing; a date is a guess about when it will end, and it goes stale without anything having happened. If I volunteer a deadline anyway, put it in the state text as something I said rather than in a date field.
 
 2. RANKING. Once you have the projects, ask me directly what order they matter in, most important first. Do not infer it from how long I talked about each one. If I struggle, ask which one I would keep if I had to drop the rest.
 
-3. HABITS. Things I do regularly, or want to. For each, get what it is, how often it is meant to happen (daily, a few times a week, weekly, or monthly), and why it matters to me if I will say. A habit does not need a reason and does not have a deadline.
+3. HABITS. Things I do regularly, or want to. For each, get what it is, how often it is meant to happen (daily, a few times a week, weekly, or monthly), and why it matters to me. Ask for the why rather than waiting to see if I offer one: a habit with only a name and a frequency is a line I will not recognise in three months. If I genuinely have no reason beyond wanting to, record that. A habit has no deadline.
 
 4. TASKS. One-off things to get done. For each, get what it actually involves, roughly how long it takes, anything that has to happen before it can start, and any deadline.
 
@@ -207,14 +217,13 @@ When we are done, output a single fenced json block and nothing after it. No sum
       "title": "short name",
       "why": "the real reason, in my words",
       "state": "what is done, what is left, and the next step",
-      "size": "days | weeks | months",
-      "due": "YYYY-MM-DD or null"
+      "size": "days | weeks | months"
     },
     {
       "type": "habit",
       "title": "short name",
       "frequency": "daily | few-times-weekly | weekly | monthly",
-      "why": "why it matters, or null"
+      "why": "why it matters to me"
     },
     {
       "type": "task",
@@ -229,8 +238,9 @@ When we are done, output a single fenced json block and nothing after it. No sum
 Rules for the block:
 - type must be exactly one of: project, habit, task.
 - Projects and tasks must appear in the order I ranked them, most important first. That order is the whole point of asking, so do not sort them by anything else.
-- Every project must have a why. A task does not need one.
-- A habit must have a frequency and must not have a due date.
+- Every project must have a why and a size, and must not have a due date.
+- Every habit must have a frequency and a why, and must not have a due date.
+- Only a task may have a due date, and only when I gave you a real one.
 - Use null where I did not give you something. Do not invent a date, a size, or a reason I did not say.`;
 
 module.exports = {

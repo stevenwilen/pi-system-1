@@ -1129,8 +1129,11 @@
               </select>
             </label>
 
+            <!-- Required on a project, offered on a habit. A habit with only a
+                 name and a cadence is a line nobody recognises in three
+                 months. -->
             <label class="hidden" id="f-why-wrap">
-              Why this matters
+              Why this matters <span class="none hidden" id="f-why-optional">optional</span>
               <textarea id="f-why"></textarea>
             </label>
 
@@ -1945,18 +1948,23 @@
           b.setAttribute('aria-pressed', String(b.dataset.type === next));
         }
         $('f-frequency-wrap').classList.toggle('hidden', next !== 'habit');
-        $('f-why-wrap').classList.toggle('hidden', next !== 'project');
+        // A project must give one, a habit is invited to, a task has none.
+        const reasoned = next === 'project' || next === 'habit';
+        $('f-why-wrap').classList.toggle('hidden', !reasoned);
+        $('f-why-optional').classList.toggle('hidden', next !== 'habit');
+        if (!reasoned) $('f-why').value = '';
         // Projects and tasks only. A habit has a cadence, and switching to one
         // clears any date already typed so it cannot be sent for a type that
         // must not carry it.
-        const dated = next === 'project' || next === 'task';
-        $('f-due-wrap').classList.toggle('hidden', !dated);
-        $('f-state-wrap').classList.toggle('hidden', !dated);
+        // A task has a deadline. A project has a size instead, which says how
+        // much work is in it rather than guessing when it ends. A habit has a
+        // cadence. Each type carries the one that means something for it.
+        const ranked = next === 'project' || next === 'task';
+        $('f-due-wrap').classList.toggle('hidden', next !== 'task');
+        $('f-state-wrap').classList.toggle('hidden', !ranked);
         $('f-size-wrap').classList.toggle('hidden', next !== 'project');
-        if (!dated) {
-          $('f-due').value = '';
-          $('f-state').value = '';
-        }
+        if (next !== 'task') $('f-due').value = '';
+        if (!ranked) $('f-state').value = '';
         if (next !== 'project') $('f-size').value = '';
       }
 
@@ -2024,16 +2032,14 @@
         const payload = { title: $('f-title').value };
         if (!editingEntry) payload.type = type;
         if (type === 'habit') payload.frequency = $('f-frequency').value;
-        if (type === 'project') payload.why = $('f-why').value;
+        if (type === 'project' || type === 'habit') payload.why = $('f-why').value;
         // Always sent for a type that can carry one, including when it is
         // empty. That empty string is how a date is cleared: leaving the field
         // out would mean "unchanged", and there would be no way to remove one.
-        if (type === 'project' || type === 'task') {
-          payload.due = $('f-due').value;
-          // Always sent, empty included, so clearing a note removes it rather
-          // than leaving the old one standing under a new date.
-          payload.state = $('f-state').value;
-        }
+        if (type === 'task') payload.due = $('f-due').value;
+        // Always sent, empty included, so clearing a note removes it rather
+        // than leaving the old one standing under a new date.
+        if (type === 'project' || type === 'task') payload.state = $('f-state').value;
         if (type === 'project') payload.size = $('f-size').value;
 
         try {

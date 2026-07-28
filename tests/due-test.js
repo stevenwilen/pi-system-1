@@ -56,8 +56,14 @@ const get = async (path) => {
     const made = await post('/entries', { type: 'task', title: 'Passport', due: day(5) });
     check('a task takes a due date', made.status === 200 && made.body.entry.due === day(5), JSON.stringify(made.body).slice(0, 120));
 
+    // A project is refused one. It has a size instead — days, weeks or months —
+    // which says how much work is in it rather than guessing when it ends.
     const proj = await post('/entries', { type: 'project', title: 'Thesis', why: 'The year', due: day(30) });
-    check('a project takes one', proj.status === 200, JSON.stringify(proj.body).slice(0, 120));
+    check('a project is refused one', proj.status === 400, `${proj.status} ${proj.body.error}`);
+    check('and told what it has instead', /size/i.test(proj.body.error || ''), proj.body.error);
+
+    const sized = await post('/entries', { type: 'project', title: 'Thesis', why: 'The year', size: 'months' });
+    check('a project with a size is fine', sized.status === 200, JSON.stringify(sized.body).slice(0, 90));
 
     const habit = await post('/entries', { type: 'habit', title: 'Gym', frequency: 'daily', due: day(3) });
     check('a habit is refused one', habit.status === 400, `${habit.status} ${habit.body.error}`);

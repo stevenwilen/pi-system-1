@@ -45,11 +45,11 @@ const INTERVIEW = {
   items: [
     {
       type: 'project', title: 'Thesis', why: 'It is the whole year',
-      state: 'Chapter two drafted, chapter three next', size: 'months', due: '2031-06-01',
+      state: 'Chapter two drafted, chapter three next', size: 'months',
     },
     {
       type: 'project', title: 'Website', why: 'Clients cannot find me',
-      state: 'Landing page done, pricing next', size: 'weeks', due: null,
+      state: 'Landing page done, pricing next', size: 'weeks',
     },
     { type: 'habit', title: 'Gym', frequency: 'few-times-weekly', why: 'Back pain' },
     { type: 'task', title: 'Renew passport', state: 'Need photos first, about an hour', due: '2031-05-01' },
@@ -73,6 +73,8 @@ const INTERVIEW = {
     check('asks for the why and presses on it', /Press on this/i.test(p));
     check('asks where it stands', /what is already done, what is left/i.test(p));
     check('asks how big', /days, weeks, or months/i.test(p));
+    check('and says not to ask a project for a deadline', /Do not ask me for a deadline on a project/i.test(p));
+    check('asks a habit for its why rather than waiting', /Ask for the why rather than waiting/i.test(p));
     check('asks the ranking question directly', /what order they matter in|order they matter/i.test(p));
     check('and says not to infer it', /Do not infer it/i.test(p));
     check('covers habits with a cadence', /daily, a few times a week, weekly, or monthly/i.test(p));
@@ -92,6 +94,7 @@ const INTERVIEW = {
       ['a habit with no frequency', { items: [{ type: 'habit', title: 'X' }] }],
       ['a habit with a nonsense cadence', { items: [{ type: 'habit', title: 'X', frequency: 'often' }] }],
       ['a habit with a deadline', { items: [{ type: 'habit', title: 'X', frequency: 'daily', due: '2031-01-01' }] }],
+      ['a project with a deadline', { items: [{ type: 'project', title: 'X', why: 'y', due: '2031-01-01' }] }],
       ['an unknown type', { items: [{ type: 'errand', title: 'X' }] }],
       ['a date that is not one', { items: [{ type: 'task', title: 'X', due: '2031-02-31' }] }],
       ['a size that is not one', { items: [{ type: 'task', title: 'X', size: 'ages' }] }],
@@ -148,15 +151,19 @@ const INTERVIEW = {
     check('a project keeps its why', by['Thesis'].why === 'It is the whole year');
     check('and its state', by['Thesis'].state === 'Chapter two drafted, chapter three next', String(by['Thesis'].state));
     check('and its size', by['Thesis'].size === 'months', String(by['Thesis'].size));
-    check('and its deadline', by['Thesis'].due === '2031-06-01', String(by['Thesis'].due));
-    check('a null deadline stays null', by['Website'].due === null, String(by['Website'].due));
+
+    // A project has a size instead of a date: how much work is in it, rather
+    // than a guess about when it ends that goes stale on its own.
+    check('a project carries no deadline', by['Thesis'].due === null, String(by['Thesis'].due));
+    check('nor does the other one', by['Website'].due === null, String(by['Website'].due));
 
     check('the hyphenated cadence is mapped', by['Gym'].frequency === 'few times a week', String(by['Gym'].frequency));
-    check('a habit why is kept when offered', by['Gym'].why === 'Back pain');
-    check('and null when not', !by['Reading'].why, String(by['Reading'].why));
+    check('a habit keeps its why', by['Gym'].why === 'Back pain');
+    check('and survives without one', !by['Reading'].why, String(by['Reading'].why));
     check('a habit carries no state', !by['Gym'].state, String(by['Gym'].state));
 
     check('a task keeps its state', by['Renew passport'].state.includes('photos first'), String(by['Renew passport'].state));
+    check('and its deadline, which only a task has', by['Renew passport'].due === '2031-05-01', String(by['Renew passport'].due));
     check('a task needs no why', !by['Renew passport'].why, String(by['Renew passport'].why));
   }
 
@@ -213,9 +220,24 @@ const INTERVIEW = {
 
   console.log('\nadded by hand, not thinner than the interview');
   {
+    const dated = await post('/entries', {
+      type: 'project', title: 'Nope', why: 'Because', due: '2031-09-09',
+    });
+    check('the form cannot put a deadline on a project either', dated.status === 400, dated.body.error);
+    check('and says what a project has instead', /size/i.test(dated.body.error || ''), dated.body.error);
+
+    const habit = await post('/entries', {
+      type: 'habit', title: 'Walk', frequency: 'daily', why: 'Head clears',
+    });
+    check('a habit added by hand keeps its why', habit.status === 200 && habit.body.entry.why === 'Head clears',
+      JSON.stringify(habit.body).slice(0, 120));
+
+    const bare = await post('/entries', { type: 'habit', title: 'Bare', frequency: 'weekly' });
+    check('and one without is still allowed', bare.status === 200, JSON.stringify(bare.body).slice(0, 90));
+
     const made = await post('/entries', {
       type: 'project', title: 'Manual', why: 'Because',
-      state: 'Started yesterday', size: 'days', due: '2031-09-09',
+      state: 'Started yesterday', size: 'days',
     });
     check('a project takes state and size', made.status === 200, JSON.stringify(made.body).slice(0, 120));
 

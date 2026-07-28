@@ -24,9 +24,20 @@ const router = express.Router();
 const TYPES = ['habit', 'project', 'task'];
 const FREQUENCIES = ['daily', 'few times a week', 'weekly', 'monthly'];
 
-// Which types may carry a deadline. A habit has a cadence instead, and a habit
-// with a due date would be two different ideas in one row.
-const DATED = ['project', 'task'];
+// The two that sit in the priorities list and carry a position. They are also
+// the two that can say where they stand.
+const RANKED = ['project', 'task'];
+
+// Which type may carry a deadline: a task, and only a task.
+//
+// A habit has a cadence instead. A project has a size — days, weeks or months —
+// which says how much work is in it, and that is the useful thing about a
+// project. A date on one is a guess about when the work will end rather than a
+// fact about the work, and it goes stale without anything having happened.
+const DATED = ['task'];
+
+// Which types may say why they matter. A project must; a habit may.
+const REASONED = ['project', 'habit'];
 
 /**
  * Habits, projects and tasks in one list, in the person's own order.
@@ -215,7 +226,9 @@ function validate({ type, title, why, frequency, due }) {
   // and the type carrying it are checked.
   if (due !== null && due !== undefined && due !== '') {
     if (!DATED.includes(type)) {
-      return 'only a project or a task can have a due date. A habit has a frequency instead.';
+      return type === 'project'
+        ? 'a project has a size rather than a deadline. Say whether it is days, weeks or months of work.'
+        : 'only a task can have a due date. A habit has a frequency instead.';
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(due))) return 'a due date must be YYYY-MM-DD';
     // Rejects 2026-02-31, which matches the pattern and is not a day.
@@ -252,9 +265,18 @@ router.post('/entries', async (req, res) => {
   // task carrying a frequency, would be noise nothing reads.
   const fields = { type: body.type, title: String(body.title).trim() };
   if (body.type === 'habit') fields.frequency = body.frequency;
-  if (body.type === 'project') fields.why = String(body.why).trim();
-  if (DATED.includes(body.type)) {
-    fields.due = dueOrNull(body.due);
+
+  // A project must say why and a habit may. A habit with only a title and a
+  // cadence is a row that cannot be argued for later either, and the interview
+  // already asks for one, so the form does too.
+  if (REASONED.includes(body.type)) {
+    const why = String(body.why || '').trim();
+    if (why) fields.why = why;
+  }
+
+  if (DATED.includes(body.type)) fields.due = dueOrNull(body.due);
+
+  if (RANKED.includes(body.type)) {
     // Stamped with today where the person lives, so a note about where this
     // stands carries the date it was true from the moment it is written.
     fields.body = encodeState({
@@ -282,7 +304,7 @@ router.post('/entries', async (req, res) => {
     .select('sort_order')
     .eq('user_id', CURRENT_USER)
     .eq('status', 'active')
-    .in('type', DATED)
+    .in('type', RANKED)
     .not('sort_order', 'is', null)
     .order('sort_order', { ascending: true })
     .limit(1)
@@ -377,6 +399,12 @@ router.post('/entries/:id/update', async (req, res) => {
 
   if (readErr) return res.status(500).json({ error: readErr.message });
   if (!current) return res.status(404).json({ error: 'entry not found for this user' });
+
+  // A project that already carries a deadline from before they were taken off
+  // projects is cleaned rather than refused. Validating the merged row would
+  // otherwise reject every edit to it, and a row nobody can edit because of a
+  // field they can no longer set is a trap rather than a rule.
+  if (current.type === 'project' && current.due) fields.due = null;
 
   const problem = validate({ ...current, ...fields });
   if (problem) return res.status(400).json({ error: problem });

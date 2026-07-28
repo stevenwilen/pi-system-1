@@ -238,18 +238,36 @@ const dueOf = (row) => { const d = row.querySelector('.due'); return d ? d.textC
     check('no habit id is in it', !sent[0].body.ids.some((id) => id.startsWith('h')));
   }
 
-  console.log('\nthe form offers a date only where one is allowed');
+  console.log('\nthe form offers each type only what means something for it');
   {
-    ctx.setType('habit');
-    check('habit: no due field', byId['f-due-wrap']._class.has('hidden'));
-    ctx.setType('project');
-    check('project: due field shown', !byId['f-due-wrap']._class.has('hidden'));
-    ctx.setType('task');
-    check('task: due field shown', !byId['f-due-wrap']._class.has('hidden'));
+    const shown = (id) => !byId[id]._class.has('hidden');
 
-    byId['f-due'].value = '2026-08-09';
+    // A task has a deadline. A project has a size, which says how much work is
+    // in it rather than guessing when it ends. A habit has a cadence.
+    ctx.setType('task');
+    check('task: due, no size', shown('f-due-wrap') && !shown('f-size-wrap'));
+    check('task: no why asked', !shown('f-why-wrap'));
+
+    ctx.setType('project');
+    check('project: size, no due', shown('f-size-wrap') && !shown('f-due-wrap'));
+    check('project: why is asked for', shown('f-why-wrap'));
+    check('and not marked optional', byId['f-why-optional']._class.has('hidden'));
+
     ctx.setType('habit');
-    check('switching to habit clears any date typed', byId['f-due'].value === '');
+    check('habit: neither due nor size', !shown('f-due-wrap') && !shown('f-size-wrap'));
+    check('habit: why is offered', shown('f-why-wrap'));
+    check('and marked optional', !byId['f-why-optional']._class.has('hidden'));
+
+    // Anything typed into a field the new type does not carry is cleared, so
+    // it cannot be sent for a type that must not have it.
+    ctx.setType('task');
+    byId['f-due'].value = '2026-08-09';
+    ctx.setType('project');
+    check('switching to project clears any date typed', byId['f-due'].value === '');
+
+    byId['f-why'].value = 'a reason';
+    ctx.setType('task');
+    check('switching to task clears the why', byId['f-why'].value === '');
   }
 
   console.log('\nediting loads the date back, and can clear it');
