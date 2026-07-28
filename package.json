@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "scheduler": "node scheduler.js"
+    "scheduler": "node scheduler.js",
+    "test": "node tests/run-all.js"
   },
   "keywords": [],
   "author": "",

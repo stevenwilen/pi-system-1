@@ -406,14 +406,37 @@ A Google Sheet connected to the user's bank. Transactions are NEVER stored in
 the notebook. Read a bounded window (~60 days) at reasoning time, reason,
 discard the raw data. Store only the resulting insight as a row.
 
-### Primary metric: runway, not categories
-The metric is liquid balance and burn against it: how much cash is on hand, what
-is committed against it, and how long it lasts.
+### Runway lives in the message, not on the screen
+Runway is still the metric that matters: how much cash is on hand, what is
+committed against it, and how long it lasts. **It is not on the screen, and that
+is deliberate.**
+
+**The sheet carries no balances.** It is a list of transactions, so nothing in
+it can be counted into a balance. The only way a figure could appear on that
+screen is if the user typed one, and a typed balance ages silently: it is
+correct the day it is entered and quietly wrong every day after, while looking
+exactly as authoritative. A number that is confidently stale is worse than no
+number, which is the same reason the sync date is always shown rather than only
+when something is wrong.
+
+So the split is:
+
+- **The screen counts spending from the sheet.** Total, categories, transfers
+  excluded, and how old the data is. Arithmetic on what is actually known.
+- **The daily message carries runway**, because that is where a declared balance
+  can be *weighed against how old the claim is*. The brain has the intent rows,
+  knows the date each was written, and can say "you said £X three weeks ago" or
+  decline to reason about it at all. A screen cannot hedge; a sentence can.
+
+If no `finance_intent` row states what is on hand, the balance is not knowable
+and **must not be guessed**. The message says nothing about runway rather than
+inventing it.
 
 Month-over-month category comparison is explicitly REJECTED as the frame. It is
 a tool for someone with steady income asking "am I drifting." It produces noise
 for anyone with variable or zero income, and it flags normal monthly variability
-as behaviour change.
+as behaviour change. The screen showing category totals is **not** that: it
+reports what a window contained, and compares nothing.
 
 Where category-level comparison IS used, it must be against a rolling 3-6 month
 median, and only flag a shift sustained 2+ weeks. Never last-month-vs-this-month.
@@ -482,9 +505,11 @@ What was spent, counted. Transfers between the user's own accounts excluded, a
 total, categories with their counts, and the transactions themselves. It leads
 with spending because that is what the sheet actually knows.
 
-Balance and runway appear only when a `finance_intent` row states what is on
-hand. Transactions carry no balances, so on a sheet alone the balance is not
-knowable, and the screen shows what it counted rather than guessing.
+**No balance and no runway appear here at all.** Transactions carry no balances,
+so the sheet cannot produce one, and a figure the user typed would age silently
+while still looking authoritative. Runway is the message's job, where a declared
+balance can be weighed against how old the claim is. See "Runway lives in the
+message, not on the screen" above.
 
 The sheet reports its own age. If its newest transaction is several days old the
 screen says so, because stale numbers presented as current are worse than none.
