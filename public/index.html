@@ -2062,16 +2062,34 @@
       // does not quietly rewrite the standing one.
       let defaultWakeMinutes = 7 * 60;
 
-      // Quarter hours. Durations move in half hours because they are lengths
-      // that have to add up; a waking time is a point, and a quarter past is a
-      // real answer to when someone gets up.
-      const WAKE_STEP = 15;
+      // Half hours, the same step the durations move in, so the whole day sits
+      // on one grid.
+      const WAKE_STEP = 30;
       const WAKE_MIN = 4 * 60;
       const WAKE_MAX = 12 * 60;
 
       function setWake(mins) {
         wakeMinutes = Math.max(WAKE_MIN, Math.min(WAKE_MAX, mins));
         paintWake();
+      }
+
+      /**
+       * One step, landing on the half hour.
+       *
+       * A day saved when the step was fifteen minutes can start at 08:15, and
+       * adding thirty to that gives 08:45 and then 09:15 — off the grid for
+       * ever. Stepping to the next boundary instead means the first press
+       * corrects it, without rewriting a saved plan the moment it is opened.
+       */
+      function stepWake(direction) {
+        const onGrid = wakeMinutes % WAKE_STEP === 0;
+        setWake(
+          direction > 0
+            ? Math.floor(wakeMinutes / WAKE_STEP) * WAKE_STEP + WAKE_STEP
+            : onGrid
+              ? wakeMinutes - WAKE_STEP
+              : Math.floor(wakeMinutes / WAKE_STEP) * WAKE_STEP
+        );
       }
 
       function paintWake() {
@@ -2438,12 +2456,12 @@
       // any collision with a pinned event is shown, and the day stops counting
       // as saved until it is confirmed again.
       $('wake-minus').onclick = () => {
-        setWake(wakeMinutes - WAKE_STEP);
+        stepWake(-1);
         changed();
       };
 
       $('wake-plus').onclick = () => {
-        setWake(wakeMinutes + WAKE_STEP);
+        stepWake(1);
         changed();
       };
 
@@ -2546,7 +2564,7 @@
         box.append(sync);
 
         const total = el('div', 'total');
-        total.append(el('div', 'label', `Spent over ${data.days} days, transfers excluded`));
+        total.append(el('div', 'label', `Spent over ${data.days} days`));
         total.append(el('div', 'figure', amount(data.total_spend)));
         box.append(total);
 
@@ -2568,11 +2586,13 @@
           box.append(row);
         }
 
-        // Transfers are not shown. They are still found, still paired, and
-        // still netted out of every figure above; the endpoint returns them
-        // and nothing renders them. Seeing money move between your own
-        // accounts every day is noise, and the total already says "transfers
-        // excluded" so their absence is stated rather than silent.
+        // Transfers are not shown, and are no longer mentioned either. They are
+        // still found, still paired, and still netted out of every figure
+        // above; the endpoint returns them and nothing renders them. Seeing
+        // money move between your own accounts every day is noise.
+        //
+        // Their exclusion is now silent rather than stated. The figures are
+        // unchanged by that: what went was the label, not the arithmetic.
       }
 
       // --- what the person has declared about their money -------------------

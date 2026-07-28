@@ -154,7 +154,10 @@ const INTENTS = [
     check('no transfer row', !/Payment/.test(rendered));
     check('no transfer total', !/1129/.test(rendered));
     check('the spend total is still there', /390\.60/.test(rendered));
-    check('and still says transfers are excluded', /transfers excluded/i.test(rendered));
+    // The screen no longer mentions transfers at all. Their exclusion is silent
+    // now rather than stated, and the section below proves the arithmetic that
+    // matters is unchanged by that.
+    check('and says nothing about transfers', !/transfer/i.test(rendered), rendered.slice(0, 80));
     check('categories still render', /Work/.test(rendered));
     check('sync line still renders', /synced|stale|days ago/i.test(rendered));
   }

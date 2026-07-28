@@ -270,21 +270,41 @@ function boot(events = [], allDay = []) {
     check('starts at the profile default', rows()[0].text().includes('08:00 to 09:00'), rows()[0].text());
     check('and the control shows it', byId['wake-time'].textContent === '08:00', byId['wake-time'].textContent);
 
-    // Quarter hours, not the half hours durations move in.
+    // Half hours, the same step the durations move in.
     byId['wake-plus'].onclick();
-    check('one step is fifteen minutes', byId['wake-time'].textContent === '08:15', byId['wake-time'].textContent);
-    check('and the day moved with it', rows()[0].text().includes('08:15 to 09:15'), rows()[0].text());
-    check('the end time followed', byId['end-time'].textContent === '09:15', byId['end-time'].textContent);
+    check('one step is half an hour', byId['wake-time'].textContent === '08:30', byId['wake-time'].textContent);
+    check('and the day moved with it', rows()[0].text().includes('08:30 to 09:30'), rows()[0].text());
+    check('the end time followed', byId['end-time'].textContent === '09:30', byId['end-time'].textContent);
 
     byId['wake-minus'].onclick();
     byId['wake-minus'].onclick();
-    check('it goes back down', byId['wake-time'].textContent === '07:45', byId['wake-time'].textContent);
-    check('the day came back with it', rows()[0].text().includes('07:45 to 08:45'), rows()[0].text());
+    check('it goes back down', byId['wake-time'].textContent === '07:30', byId['wake-time'].textContent);
+    check('the day came back with it', rows()[0].text().includes('07:30 to 08:30'), rows()[0].text());
 
     // Moving the start is an edit like any other: the day stops being saved.
     ctx.setSaved(true);
     byId['wake-plus'].onclick();
     check('moving it un-saves the day', byId['confirm'].textContent !== 'Confirmed', byId['confirm'].textContent);
+  }
+
+  console.log('\na day saved off the half hour is corrected by one press');
+  {
+    // Days built when the step was fifteen minutes can start at 08:15. Adding
+    // thirty to that would give 08:45, then 09:15, off the grid for ever.
+    const { ctx, byId } = boot();
+    await ctx.load();
+    ctx.setWake(8 * 60 + 15);
+    check('it opens on the odd time it was saved with', byId['wake-time'].textContent === '08:15', byId['wake-time'].textContent);
+
+    byId['wake-plus'].onclick();
+    check('forward lands on the half hour', byId['wake-time'].textContent === '08:30', byId['wake-time'].textContent);
+
+    ctx.setWake(8 * 60 + 15);
+    byId['wake-minus'].onclick();
+    check('and back lands on it too', byId['wake-time'].textContent === '08:00', byId['wake-time'].textContent);
+
+    byId['wake-minus'].onclick();
+    check('then it steps a full half hour', byId['wake-time'].textContent === '07:30', byId['wake-time'].textContent);
   }
 
   console.log('\nthe start is clamped to hours a person actually wakes');

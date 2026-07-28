@@ -320,10 +320,12 @@ types a title. That makes this arithmetic, so it lives in the app.
 - **Drag to reorder.**
 - Buffer and rest time is added **manually**, by the user, as a normal block. The
   system never inserts automatic padding.
-- **The day's start is set per day**, with steppers, in **15-minute** steps
-  between 04:00 and 12:00. Quarter hours rather than the half hours durations
-  move in: a duration is a length that has to add up, a waking time is a point,
-  and quarter past is a real answer to when someone got up.
+- **The day's start is set per day**, with steppers, in **30-minute** steps
+  between 04:00 and 12:00 — the same step durations move in, so the whole day
+  sits on one grid. A day saved when the step was fifteen minutes can start at
+  08:15; the stepper moves to the next boundary rather than carrying the offset
+  forward, so one press corrects it without a saved plan being rewritten the
+  moment it is opened.
 - `profile.default_wake_time` seeds a day that has not been built yet. Changing
   tomorrow's start does **not** rewrite that standing default, and reopening a
   saved day restores the hour it was actually built with rather than the
@@ -586,9 +588,15 @@ Nothing in this flow calls the model. The system writes the prompt and reads the
 answer; the reasoning happens in a tool the user already has.
 
 ### The screen
-What was spent, counted. Transfers between the user's own accounts excluded, a
-total, categories with their counts, and the transactions themselves. It leads
-with spending because that is what the sheet actually knows.
+What was spent, counted: a total, categories with their counts, and the
+transactions themselves. It leads with spending because that is what the sheet
+actually knows.
+
+Transfers between the user's own accounts are excluded from every figure, and
+the screen does not say so. Naming them put the word "transfers" on a screen
+that never shows one. The exclusion is silent, not absent — the briefing the
+model receives still states it, because a total it cannot see the workings of is
+a total it could misread.
 
 **No balance and no runway appear here at all.** Transactions carry no balances,
 so the sheet cannot produce one, and a figure the user typed would age silently
