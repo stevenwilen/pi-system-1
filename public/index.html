@@ -11,6 +11,17 @@
 
     <link rel="manifest" href="/manifest.json" />
 
+    <!-- Inter Tight. A warm grotesque, slightly narrow, which is what lets a
+         16px title and a 12px figure share one row on a phone. `swap` so a slow
+         font never holds the screen back: the fallback stack below is metrically
+         close enough that the reflow is not a jump. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
     <!-- iOS ignores the manifest for installation, so these carry the same
          information again. apple-touch-icon is the home screen icon. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -40,11 +51,22 @@
         --warn: #b5654a;      /* a miss, or a collision */
         --star: #c9d4e8;
 
-        /* The moon is drawn, not tinted: the disc, its hairline, and the lit
-           part are three fixed values so a phase reads the same on every row. */
-        --moon-dark: #1c2436;
+        /* The moon is drawn, not tinted, so a phase reads the same on every
+           row. The shadowed side is darker than any surface on the page: it
+           has to look like a body in shadow rather than a hole in the card. */
+        --moon-shadow: #0c1220;
         --moon-line: #3d4a66;
         --moon-lit: #e4e9f5;
+        --moon-crater: #c6cee1;
+        --moon-lip: #f4f7fd;
+
+        /* Three real surfaces, not one colour at three opacities: the page,
+           the card sitting on it, and the card while it is being pressed. */
+        --pressed: #1c2436;
+
+        /* The light is above. One hairline of it along the top edge of every
+           card is the whole effect. */
+        --lip: rgba(255, 255, 255, 0.05);
 
         --pinned-line: #232c40;
         --radius: 12px;
@@ -63,15 +85,32 @@
       body {
         background: var(--bg);
         color: var(--text);
-        font: 15px/1.5 ui-rounded, "SF Pro Rounded", -apple-system,
-          BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Roboto,
-          system-ui, sans-serif;
+        font: 400 15px/1.45 "Inter Tight", -apple-system, BlinkMacSystemFont,
+          "Segoe UI", Roboto, system-ui, sans-serif;
         -webkit-font-smoothing: antialiased;
+        /* Every figure on this screen is read against another one: days
+           against days, times against times, amounts against amounts. They
+           line up by default rather than being asked to, one class at a time. */
+        font-variant-numeric: tabular-nums;
         display: flex;
         flex-direction: column;
         height: 100dvh;
         overscroll-behavior: none;
         touch-action: manipulation;
+      }
+
+      /* Grain.
+         A flat dark rectangle reads as an unfinished div; a dark surface with
+         some tooth reads as a material. Barely above the threshold of visible,
+         and fixed, so it does not swim while the list scrolls. */
+      body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+        opacity: 0.04;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
       }
 
       header {
@@ -424,16 +463,35 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 0 2px 2px;
+        padding: 0 2px 4px;
       }
 
       .group-head h2 {
         margin: 0;
         font-size: 10px;
         font-weight: 600;
-        letter-spacing: 0.1em;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--muted);
+        color: var(--dim);
+        white-space: nowrap;
+      }
+
+      /* The rule carries the label across to the controls, so a heading reads
+         as the top of a section rather than a word floating above a list.
+         Ordered between the text and any button, so it fills whatever space is
+         actually left rather than being pushed off the end. */
+      .group-head::after {
+        content: '';
+        order: 5;
+        flex: 1;
+        height: 1px;
+        min-width: 12px;
+        background: var(--line);
+      }
+
+      .group-head .addbtn,
+      .group-head .chevron {
+        order: 9;
       }
 
       /* Dates sit next to those headings and are read as figures. */
@@ -444,11 +502,15 @@
 
       /* Tight horizontally, generous vertically: the eye runs down a list at
          night, and side padding only narrows the text. */
+      /* The light comes from above, so the top edge catches it and the other
+         three are just where the card stops. One inset hairline does it; a
+         drop shadow at this value range only makes the page muddy. */
       .card {
         background: var(--surface);
         border: 1px solid var(--line);
         border-radius: var(--radius);
-        padding: 14px 13px;
+        box-shadow: inset 0 1px 0 var(--lip);
+        padding: 13px;
         display: flex;
         flex-direction: column;
         gap: 8px;
@@ -462,13 +524,16 @@
 
       /* --- buttons --- */
 
+      /* Quieter than the row they belong to. These are always available and
+         almost never the reason the screen was opened, so they sit at the
+         bottom of the hierarchy and only come up when touched. */
       .linkbtn {
         border: 0;
         background: none;
         padding: 0;
         font: inherit;
-        font-size: 12.5px;
-        font-weight: 600;
+        font-size: 12px;
+        font-weight: 500;
         color: var(--muted);
         cursor: pointer;
       }
@@ -477,7 +542,14 @@
         color: var(--text);
       }
 
+      /* Delete is not the brightest thing on the row. It reads like its
+         neighbours until it is actually touched, and only then admits what it
+         is: a destructive action should be findable, not advertised. */
       .linkbtn.danger {
+        color: var(--muted);
+      }
+
+      .linkbtn.danger:active {
         color: var(--warn);
       }
 
@@ -533,32 +605,47 @@
         background: var(--surface);
         border: 1px solid var(--line);
         border-radius: var(--radius);
-        padding: 12px 13px;
+        box-shadow: inset 0 1px 0 var(--lip);
+        padding: 9px 11px 10px;
         display: flex;
         flex-direction: column;
-        gap: 7px;
+        gap: 5px;
       }
 
+      /* Tight inside, loose between. It was the other way round, which is what
+         made a short list read as a sprawl: the rows ran together while each
+         one held more air than it had content for. */
       #stale,
+      #habits,
       #paused {
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: 10px;
       }
 
+      /* One line: the moon, the title, the deadline, the count. Everything that
+         says what this row is and how it stands, read left to right without the
+         eye going down. */
       .item-top {
         display: flex;
-        align-items: flex-start;
-        gap: 12px;
+        align-items: center;
+        gap: 9px;
       }
 
       .item-title {
         flex: 1;
         min-width: 0;
-        font-size: 14.5px;
+        font-size: 16px;
         font-weight: 500;
-        line-height: 1.35;
-        overflow-wrap: anywhere;
+        line-height: 1.25;
+        color: var(--text);
+        letter-spacing: -0.005em;
+        /* Truncated rather than wrapped, which is what keeps the row one line.
+           Nothing is lost by it: tapping the title is what schedules the item,
+           and the full text is one tap away in Edit. */
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .item-title.pullable {
@@ -574,11 +661,10 @@
 
       .days {
         flex: none;
-        font-size: 11.5px;
-        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+        font-weight: 400;
         color: var(--muted);
         white-space: nowrap;
-        padding-top: 2px;
       }
 
       /* --- the moon --- */
@@ -591,18 +677,25 @@
       */
       .moon {
         flex: none;
-        width: 20px;
-        height: 20px;
-        margin-top: 1px;
+        width: 22px;
+        height: 22px;
         display: block;
+        /* It is a readout, not a control. At this size a plain filled circle
+           is a radio button, and the first thing anyone does with a radio
+           button is press it. Nothing here takes a pointer at all. */
+        pointer-events: none;
       }
 
+      /* The shadowed side is a body in shadow, not a hole. It is darker than
+         the card it sits on, so even a new moon reads as a thing rather than
+         an empty outline waiting to be ticked. */
       .moon .disc {
-        fill: var(--moon-dark);
+        fill: var(--moon-shadow);
       }
 
       /* Drawn over the lit part, so the edge stays crisp all the way round
-         instead of the fill covering half the hairline. */
+         instead of the fill covering half the hairline. The limb is what keeps
+         the dark side visible against the card. */
       .moon .rim {
         fill: none;
         stroke: var(--moon-line);
@@ -611,6 +704,19 @@
 
       .moon .lit {
         fill: var(--moon-lit);
+      }
+
+      /* Craters. Slightly darker than the surface with one lighter edge, which
+         is the whole trick: a flat grey circle reads as a smudge, a circle with
+         a lit rim reads as a depression. */
+      .moon .crater {
+        fill: var(--moon-crater);
+      }
+
+      .moon .crater-lip {
+        fill: none;
+        stroke: var(--moon-lip);
+        stroke-width: 0.5;
       }
 
       /* A phase only cross-fades when it has actually changed. Both the old
@@ -691,7 +797,16 @@
       .item.leaving {
         opacity: 0;
         transform: translateY(-6px);
-        transition: opacity 150ms ease-out, transform 150ms ease-out;
+        transition: opacity 180ms ease-out, transform 180ms ease-out;
+      }
+
+      /* Pressed, not hovered. The third surface exists for exactly this: the
+         card lifts a step while a finger is on it and returns when it lets go. */
+      /* Pressed, not hovered. The third surface exists for exactly this: the
+         card lifts a step while a finger is on it and returns when it lets go.
+         The colour change on the title itself is declared with the title. */
+      .item:has(.item-title.pullable:active) {
+        background: var(--pressed);
       }
 
       /* The lane swap fades the content as a whole rather than each view, so
@@ -723,13 +838,11 @@
          the number is only there to be quoted. */
       .rank {
         flex: none;
-        min-width: 14px;
-        font-size: 11.5px;
+        min-width: 13px;
+        font-size: 11px;
         font-weight: 600;
-        font-variant-numeric: tabular-nums;
         color: var(--dim);
         text-align: right;
-        padding-top: 3px;
         user-select: none;
       }
 
@@ -747,12 +860,12 @@
         flex: none;
         font-size: 10.5px;
         font-weight: 600;
-        letter-spacing: 0.04em;
-        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.03em;
         color: var(--muted);
+        background: var(--recessed);
         border: 1px solid var(--line);
         border-radius: 999px;
-        padding: 2px 8px;
+        padding: 1px 7px;
         white-space: nowrap;
       }
 
@@ -770,19 +883,23 @@
         overflow-wrap: anywhere;
       }
 
-      /* The type is a label, not a badge. No fill, no colour of its own. */
+      /* What kind of thing a row is, as a mark rather than a word. TASK
+         repeated down a list of tasks is a column of the same five letters,
+         which is noise wearing the clothes of information. The shape is enough
+         to tell one from another at a glance, and the list is already split by
+         the distinction that matters. */
       .tag {
-        font-size: 10.5px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
+        flex: none;
+        font-size: 11px;
+        line-height: 1;
         color: var(--dim);
+        user-select: none;
       }
 
       .actions {
         margin-left: auto;
         display: flex;
-        gap: 14px;
+        gap: 15px;
       }
 
       /* No moon, and no fill. A pause is the person saying the clock is not
@@ -1428,7 +1545,7 @@
       }
 
       const SHIFT_MS = 180; // blocks moving when a duration changes
-      const LEAVE_MS = 150; // a row on its way out
+      const LEAVE_MS = 180; // a row on its way out
       const SWAP_MS = 70; //  half a lane cross-fade, out then in
       const COLLAPSE_MS = 200;
 
@@ -1604,17 +1721,100 @@
       // it: a row that comes back is new again and simply appears.
       let lastPhase = new Map();
 
+      // The moon is 22px across, drawn in a 22 unit box.
+      const M = { cx: 11, cy: 11, r: 10 };
+
+      // Craters, in the same units. Placed on the left because a waning moon is
+      // lit on the left, so these are the part of the face that is still in
+      // daylight through every phase but the last.
+      const CRATERS = [
+        { x: 7.6, y: 7.4, r: 2.1 },
+        { x: 5.5, y: 12.8, r: 1.4 },
+        { x: 9.6, y: 14.6, r: 1.1 },
+        { x: 4.4, y: 9.0, r: 0.85 },
+      ];
+
+      // Every gradient and clip needs an id of its own, or the first moon on
+      // the page silently supplies its shape to all the others.
+      let moonSeq = 0;
+
+      /**
+       * One moon, as a body rather than a filled circle.
+       *
+       * Four layers: the shadowed disc, the lit face with its craters, a soft
+       * terminator masking the join, and the limb over the whole thing. The
+       * softness is the point — a hard edge between white and dark at this size
+       * is a progress ring, and the eye reads it as a control.
+       */
+      function drawMoon(svg, lit, id, extraClass) {
+        if (lit <= 0) return;
+
+        const { cx, cy, r } = M;
+        const d = litPath(lit, cx, cy, r);
+
+        // Where the shadow line falls, and how wide the fade across it is. A
+        // fixed fraction of the radius, so a crescent softens as much as a
+        // gibbous one rather than being blurred away entirely.
+        const edge = cx + r * (2 * lit - 1);
+        const blur = r * 0.22;
+        const span = (x) => Math.max(0, Math.min(1, (x - (cx - r)) / (2 * r)));
+
+        const defs = svgEl('defs', {});
+
+        const grad = svgEl('linearGradient', {
+          id: `mg${id}`,
+          x1: '0', y1: '0', x2: '1', y2: '0',
+        });
+        grad.append(svgEl('stop', { offset: span(edge - blur), 'stop-color': '#fff' }));
+        grad.append(svgEl('stop', { offset: span(edge + blur * 0.4), 'stop-color': '#fff', 'stop-opacity': '0.45' }));
+        grad.append(svgEl('stop', { offset: span(edge + blur), 'stop-color': '#fff', 'stop-opacity': '0' }));
+        defs.append(grad);
+
+        const mask = svgEl('mask', { id: `mm${id}` });
+        mask.append(svgEl('rect', { x: 0, y: 0, width: 22, height: 22, fill: `url(#mg${id})` }));
+        defs.append(mask);
+
+        // Craters are clipped to the lit shape so none of them floats in the
+        // shadow, which would read as dirt on the card rather than a surface.
+        const clip = svgEl('clipPath', { id: `mc${id}` });
+        clip.append(svgEl('path', { d }));
+        defs.append(clip);
+
+        svg.append(defs);
+
+        const face = svgEl('g', {
+          class: 'lit' + (extraClass ? ' ' + extraClass : ''),
+          mask: `url(#mm${id})`,
+        });
+        face.append(svgEl('path', { class: 'lit', d }));
+
+        const pocked = svgEl('g', { 'clip-path': `url(#mc${id})` });
+        for (const c of CRATERS) {
+          pocked.append(svgEl('circle', { class: 'crater', cx: c.x, cy: c.y, r: c.r }));
+          // One lit edge, offset up and left, so the dip has a direction.
+          pocked.append(
+            svgEl('circle', { class: 'crater-lip', cx: c.x - c.r * 0.16, cy: c.y - c.r * 0.16, r: c.r })
+          );
+        }
+        face.append(pocked);
+
+        svg.append(face);
+      }
+
       function moonFor(item) {
         const phase = phaseOf(throughWindow(item));
         const svg = svgEl('svg', {
           class: 'moon',
-          viewBox: '0 0 20 20',
-          width: '20',
-          height: '20',
+          viewBox: '0 0 22 22',
+          width: '22',
+          height: '22',
           'aria-hidden': 'true',
+          focusable: 'false',
         });
 
-        svg.append(svgEl('circle', { class: 'disc', cx: 10, cy: 10, r: 9 }));
+        // The shadowed body first, and it is opaque. A transparent dark side
+        // would let the card through and turn a new moon into an empty ring.
+        svg.append(svgEl('circle', { class: 'disc', cx: M.cx, cy: M.cy, r: M.r }));
 
         const previous = lastPhase.get(item.id);
         const changed = previous !== undefined && previous !== phase.name && !reduceMotion();
@@ -1623,23 +1823,14 @@
         // one fades in, so the two overlap rather than one replacing the other.
         if (changed) {
           const was = PHASES.find((p) => p.name === previous);
-          if (was && was.lit > 0) {
-            svg.append(svgEl('path', { class: 'lit out', d: litPath(was.lit, 10, 10, 9) }));
-          }
+          if (was) drawMoon(svg, was.lit, ++moonSeq, 'out');
         }
 
-        if (phase.lit > 0) {
-          svg.append(
-            svgEl('path', {
-              class: 'lit' + (changed ? ' in' : ''),
-              d: litPath(phase.lit, 10, 10, 9),
-            })
-          );
-        }
+        drawMoon(svg, phase.lit, ++moonSeq, changed ? 'in' : '');
 
         // Last, so the hairline reads all the way round instead of being half
-        // covered by the fill.
-        svg.append(svgEl('circle', { class: 'rim', cx: 10, cy: 10, r: 9 }));
+        // covered by the fill. It is what gives the dark side an edge.
+        svg.append(svgEl('circle', { class: 'rim', cx: M.cx, cy: M.cy, r: M.r }));
 
         lastPhase.set(item.id, phase.name);
         return svg;
@@ -1687,6 +1878,11 @@
           overdue: false,
         };
       }
+
+      // What kind of thing a row is, as a mark. The lists are already split by
+      // the distinction that decides how a row is ranked, so all this has left
+      // to say is project against task, and a word is more than that is worth.
+      const TYPE_MARK = { project: '◆', task: '•', habit: '↻' };
 
       /**
        * One row, in whichever list it belongs to.
@@ -1736,10 +1932,20 @@
           };
         }
         top.append(title);
-        // Never-scheduled items count from when they were added, so the label
-        // says which clock is running rather than implying a plan existed.
-        const suffix = item.last_scheduled ? ' since scheduled' : ' since added';
-        top.append(el('div', 'days', ageLabel(item.days) + suffix));
+
+        // The deadline sits on the same line as the thing it is about, next to
+        // the count it has to be read against: four days left, eleven days
+        // since anyone touched it.
+        if (item.due) {
+          const when = dueLabel(item.due, todayDate);
+          top.append(el('span', 'due' + (when.overdue ? ' overdue' : ''), when.text));
+        }
+
+        // Just the count here. Which clock is running is worth saying once, in
+        // the line below, and only in the case where it is not obvious — a row
+        // that has never been scheduled at all. Spelling it out on every row
+        // was most of what pushed this line into wrapping.
+        top.append(el('div', 'days', ageLabel(item.days)));
         card.append(top);
 
         // The verdict, in place. It never moves the row: the order is the
@@ -1751,13 +1957,10 @@
         if (item.why) card.append(el('div', 'why', item.why));
 
         const meta = el('div', 'item-meta');
-        meta.append(el('span', 'tag ' + item.type, item.type));
+        meta.append(el('span', 'tag ' + item.type, TYPE_MARK[item.type] || ''));
         if (item.frequency) meta.append(el('span', 'none', item.frequency));
-
-        if (item.due) {
-          const when = dueLabel(item.due, todayDate);
-          meta.append(el('span', 'due' + (when.overdue ? ' overdue' : ''), when.text));
-        }
+        // Said once, and only where it is not obvious from the count alone.
+        if (!item.last_scheduled) meta.append(el('span', 'none', 'never scheduled'));
 
         const actions = el('div', 'actions');
 
@@ -1806,7 +2009,8 @@
       // a day out from the timezone the rest of the screen is using.
       let todayDate = '';
 
-      const FLIP_MS = 170;
+      // Reordering settles at the same speed as everything else that moves.
+      const FLIP_MS = 180;
 
       /**
        * Where the dragged row should sit, as an index into the list WITHOUT it.
