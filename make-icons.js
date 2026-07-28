@@ -18,7 +18,7 @@ const zlib = require('zlib');
 // asked for. Keep the two in step: this file is the SVG's twin, not its source.
 const GROUND = [0x16, 0x13, 0x0f]; // --bg
 const LINE = [0x8b, 0x81, 0x77]; //   --muted
-const MARK = [0xe0, 0xa4, 0x58]; //   --amber
+const MARK = [0x8f, 0xa0, 0x7a]; //   --accent
 
 const BAR = { x0: 112, x1: 400, cy: 256, half: 9 };
 const DOT = { cx: 256, cy: 256, r: 44 };

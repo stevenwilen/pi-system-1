@@ -87,7 +87,7 @@ console.log('\n4. the two ends of the day are rows, not cards');
   check('label left, control right', /justify-content: space-between/.test(row));
 
   check('stepper buttons are 32px', px('.stepper button', 'width') === 32, String(px('.stepper button', 'width')));
-  check('and keep the amber border', /rgba\(224, 164, 88/.test(rule('.stepper button')));
+  check('and keep the sage border', /rgba\(143, 160, 122/.test(rule('.stepper button')));
   check('the gap between them is tight', px('.stepper', 'gap') <= 2, String(px('.stepper', 'gap')));
 }
 
@@ -197,7 +197,8 @@ console.log('\nthe palette is untouched');
 {
   for (const [name, value] of Object.entries({
     '--bg': '#16130f', '--surface': '#211d18', '--text': '#ede7de',
-    '--muted': '#8b8177', '--dim': '#6b6459', '--amber': '#e0a458', '--warn': '#c4694a',
+    '--muted': '#8b8177', '--dim': '#6b6459', '--warn': '#c4694a',
+    '--accent': '#8fa07a', '--accent-press': '#7d8b6a',
   })) {
     check(`${name} still ${value}`, new RegExp(`${name}: ${value};`).test(css));
   }

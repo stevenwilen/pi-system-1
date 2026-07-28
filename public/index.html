@@ -33,9 +33,10 @@
         --muted: #8b8177;
         --dim: #6b6459;       /* disabled, completed, spent */
 
-        /* Amber means actionable. It appears on the steppers and on Confirm
+        /* Sage means actionable. It appears on the steppers and on Confirm
            and nowhere else, so anything glowing is a thing you can press. */
-        --amber: #e0a458;
+        --accent: #8fa07a;
+        --accent-press: #7d8b6a; /* the same green, held down */
         --warn: #c4694a;      /* a miss, or a collision */
 
         --pinned-line: #3a332a;
@@ -511,8 +512,8 @@
         color: var(--text);
       }
 
-      /* Used inside forms. Not amber: saving a row is not the commitment the
-         amber is reserved for. */
+      /* Used inside forms. Not the accent: saving a row is not the commitment
+         the accent is reserved for. */
       .primary {
         border: 1px solid var(--line);
         border-radius: var(--radius);
@@ -577,7 +578,7 @@
       }
 
       .item-title.pullable:active {
-        color: var(--amber);
+        color: var(--accent);
       }
 
       .days {
@@ -719,7 +720,7 @@
         letter-spacing: 0.01em;
       }
 
-      /* --- steppers: actionable, so amber --- */
+      /* --- steppers: actionable, so sage --- */
 
       .stepper {
         flex: none;
@@ -732,10 +733,10 @@
         width: 32px;
         height: 32px;
         flex: none;
-        border: 1px solid rgba(224, 164, 88, 0.28);
+        border: 1px solid rgba(143, 160, 122, 0.28);
         border-radius: 8px;
         background: none;
-        color: var(--amber);
+        color: var(--accent);
         font: inherit;
         font-size: 15px;
         font-weight: 600;
@@ -744,7 +745,8 @@
       }
 
       .stepper button:active {
-        background: rgba(224, 164, 88, 0.12);
+        background: rgba(125, 139, 106, 0.12);
+        color: var(--accent-press);
       }
 
       .stepper button:disabled {
@@ -853,7 +855,7 @@
         text-align: center;
       }
 
-      /* No box around the two arrows. The amber already says they can be
+      /* No box around the two arrows. The sage already says they can be
          pressed, and an outline on each turned one small control into three
          objects sitting in a row. */
       #starts .stepper button {
@@ -886,10 +888,10 @@
       #confirm {
         width: 100%;
         margin-top: 16px;
-        border: 1px solid rgba(224, 164, 88, 0.28);
+        border: 1px solid rgba(143, 160, 122, 0.28);
         border-radius: var(--radius);
         background: none;
-        color: var(--amber);
+        color: var(--accent);
         font: inherit;
         font-weight: 600;
         letter-spacing: 0.02em;
@@ -898,7 +900,8 @@
       }
 
       #confirm:active {
-        background: rgba(224, 164, 88, 0.1);
+        background: rgba(125, 139, 106, 0.1);
+        color: var(--accent-press);
       }
 
       #confirm:disabled {
@@ -1010,7 +1013,7 @@
       input:focus,
       select:focus,
       textarea:focus {
-        outline: 1px solid var(--amber);
+        outline: 1px solid var(--accent);
         outline-offset: -1px;
       }
 
@@ -1387,11 +1390,15 @@
 
       // Staleness as temperature. The edge of each row is coloured by where it
       // sits in the range currently on screen, so the list reads as a gradient
-      // from warm at the bottom to cold at the top rather than as a set of
+      // from fresh at the bottom to cold at the top rather than as a set of
       // categories. Relative, not absolute: eleven days means something
       // different on a list where the worst is twelve than on one where the
       // worst is ninety.
-      const FRESH = [0x7d, 0x8b, 0x6a];
+      //
+      // The fresh end is deliberately cooler than the sage accent. They were a
+      // few points apart once, and a fresh row's edge read as something you
+      // could press.
+      const FRESH = [0x6f, 0x92, 0x70];
       const MIDDLE = [0x8a, 0x9a, 0x9e];
       const COLDEST = [0x6b, 0x93, 0xb8];
 

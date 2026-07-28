@@ -189,21 +189,38 @@ const dueOf = (row) => { const d = row.querySelector('.due'); return d ? d.textC
       all.map((r) => r.style.borderLeftColor).join(' '));
 
     const colour = (title) => byTitleAll(title).style.borderLeftColor;
-    check('the freshest is the warm end', colour('Call bank') === '#7d8b6a', colour('Call bank'));
+    check('the freshest is the fresh end', colour('Call bank') === '#6f9270', colour('Call bank'));
     check('the coldest is the cold end', colour('Reading') === '#6b93b8', colour('Reading'));
 
     // Anything between the ends must sit between them on every channel.
     const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
     const mid = rgb(colour('Thesis'));
-    const [warm, cold] = [rgb('#7d8b6a'), rgb('#6b93b8')];
+    const [fresh, cold] = [rgb('#6f9270'), rgb('#6b93b8')];
     check('a middling row is interpolated, not snapped to an end',
-      colour('Thesis') !== '#7d8b6a' && colour('Thesis') !== '#6b93b8', colour('Thesis'));
+      colour('Thesis') !== '#6f9270' && colour('Thesis') !== '#6b93b8', colour('Thesis'));
     check('and its blue sits between the two ends',
-      mid[2] > warm[2] && mid[2] < cold[2], `${mid[2]} between ${warm[2]} and ${cold[2]}`);
+      mid[2] > fresh[2] && mid[2] < cold[2], `${mid[2]} between ${fresh[2]} and ${cold[2]}`);
 
     check('every type is on the same scale',
       colour('Gym') !== colour('Reading') && colour('Gym') !== colour('Call bank'),
       `Gym ${colour('Gym')}`);
+
+    // The fresh end and the accent are both greens, and they were once the same
+    // hue at two brightnesses, which made a fresh row's edge read as something
+    // you could press. Hue, not distance: darkening a colour leaves it
+    // mistakable, turning it does not.
+    const hue = (h) => {
+      const [r, g, b] = rgb(h).map((v) => v / 255);
+      const max = Math.max(r, g, b);
+      const d = max - Math.min(r, g, b);
+      if (!d) return 0;
+      const turn = max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      return turn * 60;
+    };
+    const accent = /--accent: (#[0-9a-f]{6});/.exec(html)[1];
+    const apart = Math.abs(hue(colour('Call bank')) - hue(accent));
+    check('and the fresh end is not mistakable for the accent', apart >= 20,
+      `${colour('Call bank')} against ${accent}, ${Math.round(apart)}° apart`);
 
     check('rows are square, so the edge meets the corner', /\.item \{[^}]*border-radius: 0/.test(html));
     check('the edge is 3px', /\.item \{[^}]*border-left: 3px solid/.test(html));

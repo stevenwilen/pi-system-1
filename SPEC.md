@@ -194,7 +194,7 @@ a row rather than an argument about where that row belongs.
 
 **Two things inform, and neither moves anything.** Every row shows how long
 since it was last scheduled, and a temperature bar: a 3px left edge coloured
-across the range currently on screen, from `#7D8B6A` at the freshest through
+across the range currently on screen, from `#6F9270` at the freshest through
 `#8A9A9E` to `#6B93B8` at the coldest, interpolated. Both lists share one
 scale, so a row means the same thing wherever it sits.
 
