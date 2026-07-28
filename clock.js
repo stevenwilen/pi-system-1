@@ -24,6 +24,13 @@ function yesterdayOf(date) {
   return d.toISOString().slice(0, 10);
 }
 
+/** The day after, by the same reckoning. */
+function tomorrowOf(date) {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 /**
  * A UTC instant as wall-clock minutes past midnight, where this person lives.
  *
@@ -53,4 +60,4 @@ const toMinutes = (time) => {
 const hhmmss = (mins) =>
   `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}:00`;
 
-module.exports = { todayIn, yesterdayOf, minutesOfDay, toMinutes, hhmmss };
+module.exports = { todayIn, yesterdayOf, tomorrowOf, minutesOfDay, toMinutes, hhmmss };

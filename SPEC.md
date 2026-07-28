@@ -161,7 +161,7 @@ No rank, no numbers, not draggable. Ranking habits against each other is not a
 question anyone has: a habit is not more important than another habit, it is
 just more overdue. The only meaningful order for them is cadence.
 
-Both lists carry the same things: the days-since label, the moon, the cold
+Both lists carry the same things: the days-since label, the temperature bar, the cold
 outline and its reason, and pause, edit and delete. Paused items are listed
 separately from both, as before.
 
@@ -183,10 +183,19 @@ argument about where that row belongs. The user decides what is most important;
 the date is one of the facts they decide with.
 
 **Two things inform, and neither moves anything.** Every row shows how long
-since it was last scheduled, and a temperature bar coloured across the range on
-screen. Last-scheduled is the most recent block tagged to that entry, and for
-anything never scheduled the clock runs from when it was added. Both are read
-and neither acts.
+since it was last scheduled, and a temperature bar: a 3px left edge coloured
+across the range currently on screen, from `#7D8B6A` at the freshest through
+`#8A9A9E` to `#6B93B8` at the coldest, interpolated. Both lists share one
+scale, so a row means the same thing wherever it sits.
+
+Relative, not absolute. Eleven days means something different on a list whose
+worst is twelve than on one whose worst is ninety, and the bar says which list
+this is. A paused row keeps the neutral hairline: the user has said its clock
+is not running, so the edge has nothing to report.
+
+Last-scheduled is the most recent block tagged to that entry, and for anything
+never scheduled the clock runs from when it was added. Both are read and
+neither acts.
 
 **Cold is a verdict, not a sort.** A cold item gets a red outline and shows one
 line saying why, in place. It does not move. What counts as too long differs per
@@ -328,6 +337,49 @@ or the scheduler is dead, and those need opposite responses.
 One exception delays rather than expires. If a block is due and has no stored
 line yet, and its day was confirmed in the last two minutes, generation is
 probably still running, so it is left queued for the next tick.
+
+### 5.1 The evening nudge
+The one thing this system cannot do for someone is notice that they never
+opened it. Every other message is about something the user already decided;
+this one is about the evening they did not spend deciding.
+
+**Once a day, at `profile.nudge_hour` in their timezone, defaulting to 20:00
+when the column is null.** Late enough that the evening has happened, early
+enough that planning tomorrow is still a reasonable thing to ask.
+
+**It sends only when tomorrow has no confirmed plan.** That is the whole
+condition, and it is read from the row rather than inferred from anything. If
+tomorrow is confirmed, nothing is sent at all. Telling someone who has planned
+their day that they have not is the one failure this job must never have.
+
+A plan left *pending* is not a plan. It was built and never agreed to, so the
+nudge still fires.
+
+**No model call.** Either tomorrow has a confirmed plan or it does not, and
+either something is flagged cold or nothing is. Both are lookups, so both are
+code. The text is composed from rows:
+
+```
+No plan for tomorrow yet.
+Reading and Spanish have gone quiet.
+```
+
+The first line is the message. The second appears only when a **priorities**
+item already carries a cold verdict, and names **at most two**, taken in the
+user's own ranking. Habits are never named: a habit going quiet is what the
+panel is for, and this message is about tomorrow having no shape yet. Paused
+items are never named either, matching the panel exactly — a screen that calls
+something quiet must not be contradicted by a message that calls it cold.
+
+Nothing else. This is a nudge, not a digest.
+
+Guarded by `sent_log` under the job name `nudge`, so a restart cannot send it
+twice in one evening. An evening that is already planned is claimed in
+`sent_log` too, so the rest of the evening does not keep asking. A **failed
+send writes no row**, so the next tick inside the window tries again.
+
+An unreadable `plans` table stops the job rather than sending. Silence is the
+safe wrong answer here; the alternative is the one thing this job must never do.
 
 ---
 
@@ -542,6 +594,29 @@ recovered; that is what this prevents.
 requiring the file would also fire cron against the real database and send real
 messages. **It must never be set in production**, where its absence is what makes
 delivery run.
+
+### Running one job by hand
+```
+node scheduler.js --run nudge      # also: blocks, finance, coldness
+```
+Fires that job for every profile immediately, ignoring both the hour it is meant
+to run at and the `sent_log` guard, and writing no `sent_log` row, so it can be
+tried repeatedly. A manual run does not start the timer.
+
+What it does **not** skip is the condition the job exists for: `--run nudge` on
+an evening that is already planned still sends nothing, because that is the
+behaviour worth testing rather than the timing.
+
+### What is configurable per user
+Everything else about the engine is identical for everyone (2.4). These are
+timing rows, read by a schedule that is itself the same for all.
+
+| | |
+|---|---|
+| `profile.timezone` | which day and which hour everything is measured in |
+| `profile.default_wake_time` | where the builder starts the first block |
+| `profile.telegram_chat_id` | where outbound goes, or nowhere if unset |
+| `profile.nudge_hour` | the evening nudge hour, 0–23. Null means 20 |
 
 ### What a call costs
 Every model call writes one row to `api_usage`: the source, model, four token

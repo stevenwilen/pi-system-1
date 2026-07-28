@@ -964,8 +964,8 @@
          The stylesheet above is the one from before the night sky theme,
          restored whole rather than unpicked by hand. Everything below it is
          here because something built afterwards draws it and would otherwise
-         render unstyled: the second list, the rank number, the due pill and
-         the moon. Nothing below is decoration.
+         render unstyled: the second list, the rank number and the due pill.
+         Nothing below is decoration.
       */
 
       /* The habits list, laid out like the one above it. */
@@ -1008,43 +1008,6 @@
         border-color: var(--warn);
       }
 
-      /* The moon: how far through its own expected window an item is.
-         Its colours are the one thing here with nowhere to be restored from,
-         because it did not exist before the theme it arrived with. They are
-         warmed to sit on this surface rather than the blue one it was drawn
-         for: a body in shadow, its lit face the same value as the text. */
-      .moon {
-        flex: none;
-        width: 22px;
-        height: 22px;
-        display: block;
-        /* A readout, not a control. */
-        pointer-events: none;
-      }
-
-      .moon .disc {
-        fill: #14110c;
-      }
-
-      .moon .rim {
-        fill: none;
-        stroke: #4a4238;
-        stroke-width: 1;
-      }
-
-      .moon .lit {
-        fill: #ede7de;
-      }
-
-      .moon .crater {
-        fill: #cfc7ba;
-      }
-
-      .moon .crater-lip {
-        fill: none;
-        stroke: #f7f2ea;
-        stroke-width: 0.5;
-      }
     </style>
   </head>
   <body>
@@ -1283,180 +1246,27 @@
         return node;
       }
 
-      // Staleness as a moon phase.
-      //
-      // This replaced a temperature bar that coloured each row by where it sat
-      // in the range currently on screen. That was relative, so the same eleven
-      // days looked urgent on one list and fine on another, and adding a single
-      // very stale item recoloured everything else. The phase is absolute: it
-      // compares the days against the window this item was always meant to run
-      // on, so a row means the same thing however the list around it changes.
-      //
-      // Arithmetic, entirely. The brain's cold verdict is a separate judgement
-      // and still arrives as an outline and a sentence.
-      const WINDOW_DAYS = {
-        daily: 3,
-        'few times a week': 5,
-        weekly: 10,
-        monthly: 40,
-      };
+      // Staleness as temperature. The edge of each row is coloured by where it
+      // sits in the range currently on screen, so the list reads as a gradient
+      // from warm at the bottom to cold at the top rather than as a set of
+      // categories. Relative, not absolute: eleven days means something
+      // different on a list where the worst is twelve than on one where the
+      // worst is ninety.
+      const FRESH = [0x7d, 0x8b, 0x6a];
+      const MIDDLE = [0x8a, 0x9a, 0x9e];
+      const COLDEST = [0x6b, 0x93, 0xb8];
 
-      // Projects and tasks state no cadence, so they get a fortnight. It is not
-      // a guess at what they need; it is the length after which anything
-      // undated is worth looking at again.
-      const UNDATED_WINDOW = 14;
+      const hex = (rgb) =>
+        '#' + rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
 
-      // Fraction of the expected window used up. Can exceed 1, which is the
-      // whole point of the last band.
-      function throughWindow(item) {
-        return item.days / (WINDOW_DAYS[item.frequency] || UNDATED_WINDOW);
-      }
+      const mix = (from, to, t) => from.map((v, i) => v + (to[i] - v) * t);
 
-      // Waning, so the moon empties as the days run out: full when it was just
-      // done, dark when it is overdue.
-      const PHASES = [
-        { name: 'full', until: 0.2, lit: 1 },
-        { name: 'waning-gibbous', until: 0.4, lit: 0.75 },
-        { name: 'last-quarter', until: 0.6, lit: 0.5 },
-        { name: 'waning-crescent', until: 0.85, lit: 0.25 },
-        { name: 'new', until: Infinity, lit: 0 },
-      ];
-
-      const phaseOf = (t) => PHASES.find((p) => t < p.until);
-
-      /**
-       * The lit part of a waning moon, as one path.
-       *
-       * Two arcs. The first is the left half of the disc, from the top round to
-       * the bottom. The second is the terminator coming back up, an ellipse
-       * half as wide as the moon is lit: when more than half is lit it bulges
-       * out to the right and adds area, and when less than half is lit it
-       * curves back to the left and takes area away. At exactly half its width
-       * is zero, which SVG draws as the straight line a quarter moon needs.
-       */
-      function litPath(lit, cx, cy, r) {
-        const rx = r * Math.abs(2 * lit - 1);
-        // Same rotational direction continues top -> left -> bottom -> right.
-        // Reversing it on the second arc is what cuts the crescent back in.
-        const sweep = lit >= 0.5 ? 0 : 1;
-        return `M ${cx},${cy - r} A ${r},${r} 0 0,0 ${cx},${cy + r} A ${rx},${r} 0 0,${sweep} ${cx},${cy - r} Z`;
-      }
-
-      const SVG_NS = 'http://www.w3.org/2000/svg';
-
-      const svgEl = (tag, attrs) => {
-        const node = document.createElementNS(SVG_NS, tag);
-        for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
-        return node;
-      };
-
-      // The moon is 22px across, drawn in a 22 unit box.
-      const M = { cx: 11, cy: 11, r: 10 };
-
-      // Craters, in the same units. Placed on the left because a waning moon is
-      // lit on the left, so these are the part of the face that is still in
-      // daylight through every phase but the last.
-      const CRATERS = [
-        { x: 7.6, y: 7.4, r: 2.1 },
-        { x: 5.5, y: 12.8, r: 1.4 },
-        { x: 9.6, y: 14.6, r: 1.1 },
-        { x: 4.4, y: 9.0, r: 0.85 },
-      ];
-
-      // Every gradient and clip needs an id of its own, or the first moon on
-      // the page silently supplies its shape to all the others.
-      let moonSeq = 0;
-
-      /**
-       * One moon, as a body rather than a filled circle.
-       *
-       * Four layers: the shadowed disc, the lit face with its craters, a soft
-       * terminator masking the join, and the limb over the whole thing. The
-       * softness is the point — a hard edge between white and dark at this size
-       * is a progress ring, and the eye reads it as a control.
-       */
-      function drawMoon(svg, lit, id, extraClass) {
-        if (lit <= 0) return;
-
-        const { cx, cy, r } = M;
-        const d = litPath(lit, cx, cy, r);
-
-        // Where the shadow line falls, and how wide the fade across it is. A
-        // fixed fraction of the radius, so a crescent softens as much as a
-        // gibbous one rather than being blurred away entirely.
-        const edge = cx + r * (2 * lit - 1);
-        const blur = r * 0.22;
-        const span = (x) => Math.max(0, Math.min(1, (x - (cx - r)) / (2 * r)));
-
-        const defs = svgEl('defs', {});
-
-        const grad = svgEl('linearGradient', {
-          id: `mg${id}`,
-          x1: '0', y1: '0', x2: '1', y2: '0',
-        });
-        grad.append(svgEl('stop', { offset: span(edge - blur), 'stop-color': '#fff' }));
-        grad.append(svgEl('stop', { offset: span(edge + blur * 0.4), 'stop-color': '#fff', 'stop-opacity': '0.45' }));
-        grad.append(svgEl('stop', { offset: span(edge + blur), 'stop-color': '#fff', 'stop-opacity': '0' }));
-        defs.append(grad);
-
-        const mask = svgEl('mask', { id: `mm${id}` });
-        mask.append(svgEl('rect', { x: 0, y: 0, width: 22, height: 22, fill: `url(#mg${id})` }));
-        defs.append(mask);
-
-        // Craters are clipped to the lit shape so none of them floats in the
-        // shadow, which would read as dirt on the card rather than a surface.
-        const clip = svgEl('clipPath', { id: `mc${id}` });
-        clip.append(svgEl('path', { d }));
-        defs.append(clip);
-
-        svg.append(defs);
-
-        const face = svgEl('g', {
-          class: 'lit' + (extraClass ? ' ' + extraClass : ''),
-          mask: `url(#mm${id})`,
-        });
-        face.append(svgEl('path', { class: 'lit', d }));
-
-        const pocked = svgEl('g', { 'clip-path': `url(#mc${id})` });
-        for (const c of CRATERS) {
-          pocked.append(svgEl('circle', { class: 'crater', cx: c.x, cy: c.y, r: c.r }));
-          // One lit edge, offset up and left, so the dip has a direction.
-          pocked.append(
-            svgEl('circle', { class: 'crater-lip', cx: c.x - c.r * 0.16, cy: c.y - c.r * 0.16, r: c.r })
-          );
-        }
-        face.append(pocked);
-
-        svg.append(face);
-      }
-
-      function moonFor(item) {
-        const phase = phaseOf(throughWindow(item));
-        const svg = svgEl('svg', {
-          class: 'moon',
-          viewBox: '0 0 22 22',
-          width: '22',
-          height: '22',
-          'aria-hidden': 'true',
-          focusable: 'false',
-        });
-
-        // The shadowed body first, and it is opaque. A transparent dark side
-        // would let the card through and turn a new moon into an empty ring.
-        svg.append(svgEl('circle', { class: 'disc', cx: M.cx, cy: M.cy, r: M.r }));
-
-        // One phase, drawn once. There was a cross-fade here that drew the
-        // outgoing shape underneath the incoming one and faded between them.
-        // It went with the styling that made it work: without the fade the old
-        // shape simply stays, so a moon that had been full would keep showing
-        // its full disc behind a crescent.
-        drawMoon(svg, phase.lit, ++moonSeq, '');
-
-        // Last, so the hairline reads all the way round instead of being half
-        // covered by the fill. It is what gives the dark side an edge.
-        svg.append(svgEl('circle', { class: 'rim', cx: M.cx, cy: M.cy, r: M.r }));
-
-        return svg;
+      function temperature(days, min, max) {
+        if (!(max > min)) return hex(MIDDLE);
+        const t = (days - min) / (max - min);
+        return t < 0.5
+          ? hex(mix(FRESH, MIDDLE, t * 2))
+          : hex(mix(MIDDLE, COLDEST, (t - 0.5) * 2));
       }
 
       // --- due dates --------------------------------------------------------
@@ -1511,13 +1321,20 @@
        * from position every time this is called, so it cannot drift from where
        * the row actually is.
        */
-      function itemCard(item, { index, rank } = {}) {
+      function itemCard(item, { index, rank, range } = {}) {
         const card = el(
           'div',
           'card item' + (item.paused ? ' paused' : '') + (item.cold ? ' cold' : '')
         );
         card.dataset.id = item.id;
         if (index !== undefined) card.dataset.index = String(index);
+
+        // Paused rows keep the neutral hairline. A pause is not a temperature:
+        // the person has said the clock is not running, so the edge has nothing
+        // to report.
+        if (range && !item.paused) {
+          card.style.borderLeftColor = temperature(item.days, range.min, range.max);
+        }
 
         const top = el('div', 'item-top');
 
@@ -1532,11 +1349,6 @@
         }
 
         if (rank !== undefined) top.append(el('div', 'rank', String(rank)));
-
-        // A paused row shows no phase at all. Its clock is not running, and a
-        // dark moon beside it would be the screen calling it overdue, which is
-        // the inference 2.7 exists to prevent.
-        if (!item.paused) top.append(moonFor(item));
 
         const title = el('div', 'item-title', item.title);
         // Tapping the title is how something gets into tomorrow. Paused items
@@ -1784,14 +1596,23 @@
           list.append(empty);
         }
 
+        // The bar reads across whatever is on screen, both lists together,
+        // because it is one scale and a row means the same thing wherever it
+        // sits. It informs; it sorts nothing, and the order the rows appear in
+        // is entirely the person's.
+        const ages = [...staleItems, ...habitItems].map((i) => i.days);
+        const range = ages.length
+          ? { min: Math.min(...ages), max: Math.max(...ages) }
+          : null;
+
         // Rank is derived from position on every paint, so it renumbers
         // itself after a drag and can never be stored, sent or edited.
         staleItems.forEach((item, i) => {
-          list.append(itemCard(item, { index: i, rank: i + 1 }));
+          list.append(itemCard(item, { index: i, rank: i + 1, range }));
         });
 
         const habits = habitItems.slice().sort(byNeglect);
-        for (const item of habits) habitList.append(itemCard(item));
+        for (const item of habits) habitList.append(itemCard(item, { range }));
         $('habits-group').classList.toggle('hidden', !habits.length);
       }
 

@@ -11,7 +11,7 @@ require('dotenv').config();
 const cron = require('node-cron');
 
 const supabase = require('./db');
-const { toMinutes } = require('./clock');
+const { toMinutes, tomorrowOf } = require('./clock');
 const { sendTelegram } = require('./telegram');
 const { composeMessage } = require('./messages');
 const { generateDaily } = require('./finance-insight');
@@ -46,6 +46,20 @@ const FINANCE_HOUR = 18;
 // by the time anyone opens it to plan tomorrow. Nothing is sent; it only
 // writes to rows.
 const COLD_HOUR = 16;
+
+// When the evening nudge goes out, for anyone who has not said otherwise.
+// Late enough that the evening has had a chance to happen, early enough that
+// planning tomorrow is still a reasonable thing to ask of someone.
+const NUDGE_HOUR = 20;
+
+// The types that sit in the priorities list. Habits are not named in the nudge:
+// a habit going quiet is what the panel is for, and this message is about
+// tomorrow having no shape yet.
+const RANKED = ['project', 'task'];
+
+// At most two, and they are the person's own top two. More than that stops
+// being a nudge and becomes the digest this is deliberately not.
+const MAX_NAMED = 2;
 
 // Telegram rejects anything over 4096 characters.
 const MAX_MESSAGE = 4000;
@@ -102,7 +116,7 @@ function hhmm(time) {
 async function allProfiles() {
   const { data, error } = await supabase
     .from('profile')
-    .select('user_id, timezone, default_wake_time, telegram_chat_id');
+    .select('user_id, timezone, default_wake_time, telegram_chat_id, nudge_hour');
 
   if (error) throw new Error(`could not load profiles: ${error.message}`);
   return data || [];
@@ -263,11 +277,11 @@ async function deliverDue(profile, now) {
  * window cannot send a second one, and a failed send leaves no row so the next
  * tick retries.
  */
-async function deliverFinance(profile, now) {
+async function deliverFinance(profile, now, { force = false } = {}) {
   const nowMinutes = minutesOf(now.hour, now.minute);
-  if (!inWindow(nowMinutes, minutesOf(FINANCE_HOUR, 0))) return;
+  if (!force && !inWindow(nowMinutes, minutesOf(FINANCE_HOUR, 0))) return;
 
-  if (await alreadySent(profile.user_id, 'finance', now.date)) return;
+  if (!force && (await alreadySent(profile.user_id, 'finance', now.date))) return;
 
   const result = await generateDaily(profile.user_id, now.date);
 
@@ -276,13 +290,13 @@ async function deliverFinance(profile, now) {
     // sent_log all the same, so a skipped day is not retried every fifteen
     // minutes for the rest of the evening.
     console.log(`[FINANCE] nothing to send today: ${result.skipped}`);
-    await markSent(profile.user_id, 'finance', now.date);
+    if (!force) await markSent(profile.user_id, 'finance', now.date);
     return;
   }
 
   const sent = await deliver(profile.user_id, result.text);
   if (sent.sent) {
-    await markSent(profile.user_id, 'finance', now.date);
+    if (!force) await markSent(profile.user_id, 'finance', now.date);
     console.log(`[FINANCE] sent: ${result.text}`);
   } else {
     console.error(`[FINANCE] ${JSON.stringify(sent)}`);
@@ -295,20 +309,117 @@ async function deliverFinance(profile, now) {
  * Sends nothing. It writes verdicts to rows so the panel is already judged
  * when it is opened, which is what keeps the model off the read path.
  */
-async function judgeColdness(profile, now) {
+async function judgeColdness(profile, now, { force = false } = {}) {
   const nowMinutes = minutesOf(now.hour, now.minute);
-  if (!inWindow(nowMinutes, minutesOf(COLD_HOUR, 0))) return;
+  if (!force && !inWindow(nowMinutes, minutesOf(COLD_HOUR, 0))) return;
 
-  if (await alreadySent(profile.user_id, 'coldness', now.date)) return;
+  if (!force && (await alreadySent(profile.user_id, 'coldness', now.date))) return;
 
   const result = await judge(profile.user_id, now.date);
 
   // Claimed either way. A day where nothing could be judged should not be
   // retried every fifteen minutes until midnight, and judge() has already left
   // the previous verdicts standing.
-  await markSent(profile.user_id, 'coldness', now.date);
+  if (!force) await markSent(profile.user_id, 'coldness', now.date);
 
   if (!result.judged) console.log(`[COLD] nothing judged today: ${result.reason}`);
+}
+
+// --- the evening nudge ------------------------------------------------------
+//
+// The one thing this system cannot do for someone is notice that they never
+// opened it. Every other message is about something they already decided;
+// this one is about the evening they did not spend deciding.
+//
+// No model call. There is nothing here to reason about: either tomorrow has a
+// confirmed plan or it does not, and either something is flagged cold or
+// nothing is. Both are lookups, so both are code.
+
+/**
+ * The message, composed from rows.
+ *
+ * The first line is the whole point. The second is only worth adding when the
+ * panel already has a verdict standing, and it names at most two things,
+ * because a list of everything is the digest this is not.
+ */
+async function composeNudge(user_id) {
+  const lines = ['No plan for tomorrow yet.'];
+
+  const { data, error } = await supabase
+    .from('entries')
+    .select('title')
+    .eq('user_id', user_id)
+    .eq('status', 'active')
+    .in('type', RANKED)
+    .eq('cold', true)
+    // A paused item is never cold, whatever a stale verdict on the row says.
+    // The panel applies the same rule when it draws, and this has to agree
+    // with the panel or the message names something the screen calls quiet.
+    .is('paused_at', null)
+    // Their own ranking, so the two named are the two they put at the top.
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .limit(MAX_NAMED);
+
+  if (error) {
+    // The second line is a bonus and the first is the message. A failure here
+    // costs the detail, never the nudge.
+    console.error(`[NUDGE] could not read what has gone cold: ${error.message}`);
+    return lines.join('\n');
+  }
+
+  const named = (data || []).map((r) => r.title);
+  if (named.length === 1) lines.push(`${named[0]} has gone quiet.`);
+  else if (named.length >= 2) lines.push(`${named[0]} and ${named[1]} have gone quiet.`);
+
+  return lines.join('\n');
+}
+
+/**
+ * Tell them the day ahead has no shape yet, once, in their evening.
+ *
+ * Silent on any day tomorrow is already confirmed. That is the whole condition
+ * and it is checked against the row rather than inferred from anything: a
+ * person who has planned their day must never be told they have not.
+ */
+async function sendNudge(profile, now, { force = false } = {}) {
+  const hour = Number.isInteger(profile.nudge_hour) ? profile.nudge_hour : NUDGE_HOUR;
+  const nowMinutes = minutesOf(now.hour, now.minute);
+  if (!force && !inWindow(nowMinutes, minutesOf(hour, 0))) return;
+
+  if (!force && (await alreadySent(profile.user_id, 'nudge', now.date))) return;
+
+  const tomorrow = tomorrowOf(now.date);
+
+  const { data: plan, error } = await supabase
+    .from('plans')
+    .select('id')
+    .eq('user_id', profile.user_id)
+    .eq('date', tomorrow)
+    .eq('status', 'confirmed')
+    .maybeSingle();
+
+  // Unreadable is not the same as absent. Saying nothing is the safe wrong
+  // answer here, because the alternative is telling someone who has planned
+  // their day that they have not.
+  if (error) throw new Error(`could not read the plan for ${tomorrow}: ${error.message}`);
+
+  if (plan) {
+    // Claimed anyway, so the rest of the evening does not ask again.
+    if (!force) await markSent(profile.user_id, 'nudge', now.date);
+    console.log(`[NUDGE] ${tomorrow} is already confirmed, sending nothing`);
+    return;
+  }
+
+  const text = await composeNudge(profile.user_id);
+  const sent = await deliver(profile.user_id, text);
+
+  if (sent.sent) {
+    if (!force) await markSent(profile.user_id, 'nudge', now.date);
+    console.log(`[NUDGE] sent: ${text.replace(/\n/g, ' / ')}`);
+  } else {
+    // No mark, so the next tick inside the window tries again.
+    console.error(`[NUDGE] ${JSON.stringify(sent)}`);
+  }
 }
 
 async function tick() {
@@ -348,6 +459,12 @@ async function tick() {
     } catch (err) {
       console.error(`[COLD] ${profile.user_id}: ${err.message}`);
     }
+
+    try {
+      await sendNudge(profile, now);
+    } catch (err) {
+      console.error(`[NUDGE] ${profile.user_id}: ${err.message}`);
+    }
   }
 }
 
@@ -365,14 +482,79 @@ module.exports = {
   localNow, //    build the 'now' to drive it at
   deliverDue, //  the tick itself, for one user
   hhmm, //        so a test can spell the time the same way the message does
+  sendNudge, //   the evening nudge, for one user at one moment
+  composeNudge, //the text it would send, without sending it
 };
 
-// Starting the loop on require is deliberate: server.js requires this module
-// so the web process and the scheduler share one Railway service.
-// Set SCHEDULER_DISABLED=1 to load this module without starting the loop. That
-// is how a test drives a single tick: without it, requiring the file would
-// also fire cron against the real database and send real messages.
-if (process.env.SCHEDULER_DISABLED !== '1') {
+// ---------------------------------------------------------------------------
+// running one job by hand
+// ---------------------------------------------------------------------------
+//
+//   node scheduler.js --run nudge
+//
+// Fires one job for every profile, now, ignoring both the hour it is meant to
+// run at and the sent_log guard, so it can be tried repeatedly without a row
+// blocking the second attempt. Nothing is written to sent_log either, for the
+// same reason.
+//
+// What it does NOT skip is the condition the job exists for. `--run nudge` on
+// an evening that is already planned still sends nothing, because that is the
+// behaviour worth testing rather than the timing.
+
+const JOBS = {
+  blocks: deliverDue,
+  finance: deliverFinance,
+  coldness: judgeColdness,
+  nudge: sendNudge,
+};
+
+async function runOnce(name) {
+  const job = JOBS[name];
+
+  if (!job) {
+    console.error(
+      `unknown job ${JSON.stringify(name)}. One of: ${Object.keys(JOBS).join(', ')}`
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  let profiles;
+  try {
+    profiles = await allProfiles();
+  } catch (err) {
+    console.error(err.message);
+    process.exitCode = 1;
+    return;
+  }
+
+  for (const profile of profiles) {
+    const now = localNow(profile.timezone);
+    console.log(
+      `[RUN] ${name} for ${profile.user_id}, local ${now.date} ${String(now.hour).padStart(2, '0')}:${String(now.minute).padStart(2, '0')}`
+    );
+
+    try {
+      await job(profile, now, { force: true });
+    } catch (err) {
+      console.error(`[RUN] ${name}: ${err.message}`);
+      process.exitCode = 1;
+    }
+  }
+}
+
+const runAt = process.argv.indexOf('--run');
+
+if (runAt !== -1) {
+  // A manual run must not also start the timer, or the process would sit there
+  // afterwards ticking against the real database.
+  runOnce(process.argv[runAt + 1]);
+} else if (process.env.SCHEDULER_DISABLED !== '1') {
+  // Starting the loop on require is deliberate: server.js requires this module
+  // so the web process and the scheduler share one Railway service.
+  // Set SCHEDULER_DISABLED=1 to load this module without starting the loop.
+  // That is how a test drives a single tick: without it, requiring the file
+  // would also fire cron against the real database and send real messages.
   cron.schedule(`*/${WINDOW} * * * *`, tick);
   console.log(`scheduler running, checking every ${WINDOW} minutes`);
   tick();
