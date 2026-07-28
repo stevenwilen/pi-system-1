@@ -248,7 +248,21 @@ types a title. That makes this arithmetic, so it lives in the app.
 - **Drag to reorder.**
 - Buffer and rest time is added **manually**, by the user, as a normal block. The
   system never inserts automatic padding.
-- The first block starts at `profile.default_wake_time` unless moved.
+- **The day's start is set per day**, with steppers, in **15-minute** steps
+  between 04:00 and 12:00. Quarter hours rather than the half hours durations
+  move in: a duration is a length that has to add up, a waking time is a point,
+  and quarter past is a real answer to when someone got up.
+- `profile.default_wake_time` seeds a day that has not been built yet. Changing
+  tomorrow's start does **not** rewrite that standing default, and reopening a
+  saved day restores the hour it was actually built with rather than the
+  default. A day that began at 9 does not silently become an 8 o'clock day.
+- The stored `plans.wake_time` is **the hour that was set**, not the earliest
+  block. Those differ whenever a pinned calendar event sits before the day is
+  meant to start, and inferring it would put a 6am appointment on record as a
+  6am start.
+- Moving the start is an edit like any other: everything unpinned reflows from
+  it, any collision with a pinned block is shown and not resolved, and the day
+  stops counting as confirmed until it is confirmed again.
 - **Confirm** saves the plan.
 
 ---

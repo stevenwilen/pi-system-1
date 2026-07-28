@@ -83,7 +83,7 @@ router.get('/plan/:date', async (req, res) => {
 
   const { data: plan, error } = await supabase
     .from('plans')
-    .select('id, date, status')
+    .select('id, date, status, wake_time')
     .eq('user_id', CURRENT_USER)
     .eq('date', date)
     .maybeSingle();
@@ -100,7 +100,14 @@ router.get('/plan/:date', async (req, res) => {
   if (blockErr) return res.status(500).json({ error: blockErr.message });
 
   res.json({
-    plan: { date: plan.date, status: plan.status },
+    // The hour this day was actually built to start at, which is not the same
+    // as the profile default and not the same as the first block either: a
+    // calendar event at 6am does not mean anyone got up then.
+    plan: {
+      date: plan.date,
+      status: plan.status,
+      wake_minutes: toMinutes(plan.wake_time),
+    },
     blocks: (rows || []).map((b) => ({
       title: b.title,
       entryId: b.entry_id,
@@ -111,9 +118,17 @@ router.get('/plan/:date', async (req, res) => {
   });
 });
 
-function validatePlan(date, blocks) {
+function validatePlan(date, blocks, wakeMinutes) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return 'date must be YYYY-MM-DD';
   if (!Array.isArray(blocks) || !blocks.length) return 'a plan needs at least one block';
+
+  // Optional: a client that does not send one gets the old behaviour below.
+  if (wakeMinutes !== undefined && wakeMinutes !== null) {
+    const w = Number(wakeMinutes);
+    if (!Number.isInteger(w) || w < 0 || w > 1439) {
+      return 'wake_minutes must be inside the day';
+    }
+  }
 
   for (const b of blocks) {
     if (!String(b.title || '').trim()) return 'every block needs a title';
@@ -144,12 +159,21 @@ function validatePlan(date, blocks) {
  * versions of the same day would only invent a third nobody asked for.
  */
 router.post('/plan', async (req, res) => {
-  const { date, blocks } = req.body || {};
+  const { date, blocks, wake_minutes } = req.body || {};
 
-  const problem = validatePlan(date, blocks);
+  const problem = validatePlan(date, blocks, wake_minutes);
   if (problem) return res.status(400).json({ error: problem });
 
-  const wake = hhmmss(Math.min(...blocks.map((b) => Number(b.start_minutes))));
+  // The hour the person set for this day, stored as the fact it is.
+  //
+  // It used to be inferred from the earliest block, which is wrong whenever a
+  // pinned calendar event sits before the day is meant to start: a 6am
+  // appointment would have this day on record as a 6am start. Falling back to
+  // that inference only when nothing was sent, so an older client still works.
+  const wake =
+    wake_minutes === undefined || wake_minutes === null
+      ? hhmmss(Math.min(...blocks.map((b) => Number(b.start_minutes))))
+      : hhmmss(Number(wake_minutes));
 
   try {
     const { data: existing } = await supabase

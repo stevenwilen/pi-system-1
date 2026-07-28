@@ -808,11 +808,28 @@
         overflow-wrap: anywhere;
       }
 
-      /* --- the end of the day --- */
+      /* --- the ends of the day --- */
 
-      #ends {
+      #ends,
+      #starts {
         gap: 0;
         padding: 0;
+      }
+
+      /* The start reads as a readout with a control on it, the same shape as
+         the end of the day, so the two bookend the list. */
+      #starts .ends-row {
+        padding: 9px 10px 9px 14px;
+      }
+
+      #starts strong {
+        min-width: 54px;
+        text-align: center;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.01em;
       }
 
       .ends-row {
@@ -1125,6 +1142,20 @@
         </div>
 
         <div class="card hidden" id="all-day"></div>
+
+        <!-- Where the day starts, set per day rather than once. It used to be
+             fixed at the profile default, which made every day begin at the
+             same hour whatever the day actually was. -->
+        <div class="card" id="starts">
+          <div class="ends-row">
+            <span>Day starts</span>
+            <div class="stepper" id="wake-stepper">
+              <button type="button" id="wake-minus" aria-label="Earlier">−</button>
+              <strong id="wake-time">07:00</strong>
+              <button type="button" id="wake-plus" aria-label="Later">+</button>
+            </div>
+          </div>
+        </div>
 
         <div id="builder"></div>
 
@@ -1653,10 +1684,12 @@
         $('paused-group').classList.toggle('hidden', !data.paused.length);
         for (const item of data.paused) paused.append(itemCard(item));
 
-        // The builder plans tomorrow, and the first block starts at the wake
-        // time unless it is moved.
+        // The profile's standing answer. It seeds a day that has not been
+        // built yet; a day already saved keeps whatever it was saved with,
+        // which openDay restores.
         const [wh, wm] = String(data.wake_time).split(':').map(Number);
-        wakeMinutes = wh * 60 + wm;
+        defaultWakeMinutes = wh * 60 + wm;
+        if (planDate === null) wakeMinutes = defaultWakeMinutes;
 
         if (planDate === null) {
           planDate = nextDay(data.today);
@@ -1878,6 +1911,29 @@
 
       let blocks = [];
       let wakeMinutes = 7 * 60;
+
+      // What the profile says, kept apart from what this day is set to. A day
+      // with no saved plan starts from the default; changing tomorrow's start
+      // does not quietly rewrite the standing one.
+      let defaultWakeMinutes = 7 * 60;
+
+      // Quarter hours. Durations move in half hours because they are lengths
+      // that have to add up; a waking time is a point, and a quarter past is a
+      // real answer to when someone gets up.
+      const WAKE_STEP = 15;
+      const WAKE_MIN = 4 * 60;
+      const WAKE_MAX = 12 * 60;
+
+      function setWake(mins) {
+        wakeMinutes = Math.max(WAKE_MIN, Math.min(WAKE_MAX, mins));
+        paintWake();
+      }
+
+      function paintWake() {
+        $('wake-time').textContent = clock(wakeMinutes);
+        $('wake-minus').disabled = wakeMinutes <= WAKE_MIN;
+        $('wake-plus').disabled = wakeMinutes >= WAKE_MAX;
+      }
       let planDate = null;
       // Whether what is on screen matches what is saved. Any edit clears it,
       // so the button always says whether there is unsaved work.
@@ -2043,6 +2099,7 @@
           }
         });
 
+        paintWake();
         refreshConfirm();
         $('end-time').textContent = blocks.length ? clock(end) : 'not yet';
         // Past midnight is the one case the clock cannot show on its own:
@@ -2186,6 +2243,12 @@
         }
 
         if (existing.plan && existing.blocks.length) {
+          // A saved day is reopened as it was built, not as the profile would
+          // build it. Without this, coming back to a day that started at 9
+          // would silently re-lay it out from the default and shift everything.
+          if (Number.isInteger(existing.plan.wake_minutes)) {
+            wakeMinutes = existing.plan.wake_minutes;
+          }
           blocks = existing.blocks.map((b) => ({
             title: b.title,
             entryId: b.entryId,
@@ -2226,6 +2289,20 @@
         $('block-card').classList.add('hidden');
       };
 
+      // Moving the start moves the day. Everything unpinned flows from it, so
+      // this goes through changed() like any other edit: the layout is redone,
+      // any collision with a pinned event is shown, and the day stops counting
+      // as saved until it is confirmed again.
+      $('wake-minus').onclick = () => {
+        setWake(wakeMinutes - WAKE_STEP);
+        changed();
+      };
+
+      $('wake-plus').onclick = () => {
+        setWake(wakeMinutes + WAKE_STEP);
+        changed();
+      };
+
       $('confirm').onclick = async () => {
         const button = $('confirm');
         button.disabled = true;
@@ -2235,6 +2312,9 @@
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
               date: planDate,
+              // Sent rather than left to be inferred from the first block: a
+              // pinned event before the day starts is not when the day starts.
+              wake_minutes: wakeMinutes,
               blocks: blocks.map((b) => ({
                 title: b.title,
                 entryId: b.entryId,

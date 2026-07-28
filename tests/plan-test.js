@@ -94,6 +94,51 @@ const DATE = '2031-03-09';
   check('pinned round trips', back.blocks[1].pinned === true);
   check('entryId round trips', back.blocks[0].entryId === target.id);
 
+  console.log('\nthe wake time is a fact about the day, not an inference');
+  {
+    // The case that made inferring it wrong: a pinned appointment two hours
+    // before the day is meant to start. The old code took the earliest block,
+    // so this day would have gone on record as a 06:00 start.
+    const early = await call('/plan', {
+      date: DATE,
+      wake_minutes: 8 * 60,
+      blocks: [
+        { title: 'Dentist', start_minutes: 360, duration_minutes: 45, pinned: true },
+        { title: 'Work', start_minutes: 480, duration_minutes: 60 },
+      ],
+    });
+    check('a day with an earlier pinned event saves', early.status === 200, JSON.stringify(early.data));
+
+    const { data: row } = await supabase
+      .from('plans').select('wake_time').eq('user_id', U).eq('date', DATE).maybeSingle();
+    check('the stored wake time is the one that was sent', row.wake_time.startsWith('08:00'), row.wake_time);
+    check('and not the 06:00 pinned block', !row.wake_time.startsWith('06:00'));
+
+    const reopened = (await call(`/plan/${DATE}`)).data;
+    check('it comes back as minutes', reopened.plan.wake_minutes === 480, `${reopened.plan.wake_minutes}`);
+
+    // Quarter hours are the step the builder moves in.
+    await call('/plan', { date: DATE, wake_minutes: 555, blocks: [{ title: 'x', start_minutes: 555, duration_minutes: 30 }] });
+    const quarter = (await call(`/plan/${DATE}`)).data;
+    check('a quarter past round trips', quarter.plan.wake_minutes === 555, `${quarter.plan.wake_minutes}`);
+
+    for (const [label, value] of [
+      ['past the end of the day', 1440],
+      ['negative', -1],
+      ['not a whole minute', 480.5],
+    ]) {
+      const r = await call('/plan', { date: DATE, wake_minutes: value, blocks: [{ title: 'x', start_minutes: 480, duration_minutes: 30 }] });
+      check(`rejects a wake time ${label}`, r.status === 400, `${r.status} ${r.data.error || ''}`);
+    }
+
+    // Older clients send no wake time at all and must keep working.
+    const legacy = await call('/plan', { date: DATE, blocks: [{ title: 'x', start_minutes: 600, duration_minutes: 30 }] });
+    check('omitting it still saves', legacy.status === 200);
+    const { data: fell } = await supabase
+      .from('plans').select('wake_time').eq('user_id', U).eq('date', DATE).maybeSingle();
+    check('and falls back to the first block', fell.wake_time.startsWith('10:00'), fell.wake_time);
+  }
+
   console.log('\nre-confirming replaces, never appends');
   const again = await call('/plan', { date: DATE, blocks: [{ title: 'Only this', start_minutes: 540, duration_minutes: 30 }] });
   check('second confirm succeeds', again.status === 200);

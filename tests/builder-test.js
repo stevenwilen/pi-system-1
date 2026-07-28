@@ -262,6 +262,63 @@ function boot(events = [], allDay = []) {
     check('end time followed', byId['end-time'].textContent === '09:00');
   }
 
+  console.log('\nthe day can start at a different hour every day');
+  {
+    const { ctx, byId, rows } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A', duration: 60 });
+    check('starts at the profile default', rows()[0].text().includes('08:00 to 09:00'), rows()[0].text());
+    check('and the control shows it', byId['wake-time'].textContent === '08:00', byId['wake-time'].textContent);
+
+    // Quarter hours, not the half hours durations move in.
+    byId['wake-plus'].onclick();
+    check('one step is fifteen minutes', byId['wake-time'].textContent === '08:15', byId['wake-time'].textContent);
+    check('and the day moved with it', rows()[0].text().includes('08:15 to 09:15'), rows()[0].text());
+    check('the end time followed', byId['end-time'].textContent === '09:15', byId['end-time'].textContent);
+
+    byId['wake-minus'].onclick();
+    byId['wake-minus'].onclick();
+    check('it goes back down', byId['wake-time'].textContent === '07:45', byId['wake-time'].textContent);
+    check('the day came back with it', rows()[0].text().includes('07:45 to 08:45'), rows()[0].text());
+
+    // Moving the start is an edit like any other: the day stops being saved.
+    ctx.setSaved(true);
+    byId['wake-plus'].onclick();
+    check('moving it un-saves the day', byId['confirm'].textContent !== 'Confirmed', byId['confirm'].textContent);
+  }
+
+  console.log('\nthe start is clamped to hours a person actually wakes');
+  {
+    const { ctx, byId } = boot();
+    await ctx.load();
+
+    for (let i = 0; i < 40; i++) byId['wake-minus'].onclick();
+    check('cannot go before 04:00', byId['wake-time'].textContent === '04:00', byId['wake-time'].textContent);
+    check('and the button says so', byId['wake-minus'].disabled === true);
+
+    for (let i = 0; i < 80; i++) byId['wake-plus'].onclick();
+    check('cannot go past 12:00', byId['wake-time'].textContent === '12:00', byId['wake-time'].textContent);
+    check('and that button says so too', byId['wake-plus'].disabled === true);
+  }
+
+  console.log('\na pinned event before the start does not drag the day back');
+  {
+    // 06:00 appointment, day set to start at 08:00. The endpoint has already
+    // turned the feed into minutes, which is the shape the page receives.
+    const { ctx, byId, rows } = boot([{ title: 'Dentist', start_minutes: 360, duration_minutes: 45 }]);
+    await ctx.load();
+    ctx.addBlock({ title: 'Work', duration: 60 });
+
+    check('the day still starts where it was set', byId['wake-time'].textContent === '08:00', byId['wake-time'].textContent);
+
+    const work = rows().find((r) => r.text().includes('Work'));
+    check('the unpinned block flows from the wake time, not the appointment',
+      work.text().includes('08:00 to 09:00'), work.text().trim());
+
+    const dentist = rows().find((r) => r.text().includes('Dentist'));
+    check('and the appointment keeps its own hour', dentist.text().includes('06:00 to 06:45'), dentist.text().trim());
+  }
+
   console.log(bad === 0 ? '\nBuilder clean' : `\n${bad} FAILURE(S)`);
   process.exit(bad === 0 ? 0 : 1);
 })().catch((e) => {
