@@ -226,10 +226,20 @@ async function post(body) {
 
   vm.runInContext(script, ctx);
 
+  // The controls are built by attachSummarize rather than written into the
+  // page, so they are found the way a person finds them: under the field.
+  const controls = (host) => {
+    const actions = host.children.find((c) => c.className === 'field-actions');
+    if (!actions) throw new Error('no Summarize row under that field');
+    const [note, undo, run] = actions.children;
+    return { note, undo, run };
+  };
+
   const why = byId['f-why'];
-  const btn = byId['why-summarize'];
-  const undo = byId['why-undo'];
-  const note = byId['why-note'];
+  const { btn, undo, note } = (() => {
+    const c = controls(byId['f-why-wrap']);
+    return { btn: c.run, undo: c.undo, note: c.note };
+  })();
   const SPOKEN = "um so basically the thing is I want to like build this business because you know I don't want to be paycheck to paycheck";
   const CLEAN = 'Building a second income so I am not living paycheck to paycheck.';
 
@@ -303,13 +313,125 @@ async function post(body) {
     check('the note clears when typing resumes', note._class.has('hidden'));
   }
 
-  console.log('\nthe field stays dictation-friendly');
+  console.log('\nevery long-form field has the button, from one implementation');
   {
-    const field = html.match(/<textarea id="f-why"[^>]*>/)[0];
-    check('a plain multiline box', /^<textarea /.test(field) && !/type=/.test(field), field);
-    check('autocapitalise left on', /autocapitalize="sentences"/.test(field), field);
-    check('and no autocomplete fighting the keyboard', !/autocomplete/.test(field), field);
-    check('nothing intercepts keys on it', !/f-why'\)\.onkey|f-why'\)\.onbeforeinput/.test(script));
+    // One definition, four uses. Four copies would be four places for the undo
+    // rule to drift, and the undo rule is what protects what was dictated.
+    check('attachSummarize is defined once',
+      (script.match(/function attachSummarize\(/g) || []).length === 1);
+    check('and there is no second copy of the call',
+      (script.match(/'\/summarize'/g) || []).length === 1,
+      `${(script.match(/'\/summarize'/g) || []).length} call site(s)`);
+
+    check('why this matters has one', Boolean(controls(byId['f-why-wrap']).run));
+    check('where it stands has one', Boolean(controls(byId['f-state-wrap']).run));
+    check('the miss reason has one', Boolean(controls(byId['f-miss-wrap']).run));
+
+    // Money's rows are built per edit, so this one is checked on a real editor.
+    const row = ctx.intentEditor({});
+    check('a finance intent detail has one', Boolean(controls(row).run));
+
+    // Roughly how big is a select, and a rewrite button over four fixed
+    // options would have nothing to rewrite.
+    check('roughly how big is a select', /<select id="f-size">/.test(html));
+    check('and has no Summarize on it', !/attachSummarize\(\$\('f-size'\)/.test(script));
+  }
+
+  console.log('\nthe same rules hold on a field that is not the why');
+  {
+    const state = byId['f-state'];
+    const c = controls(byId['f-state-wrap']);
+
+    ctx.openEntry({ id: 'p2', type: 'project', title: 'Kitchen', state: '' });
+    check('off on an empty field', c.run.disabled === true);
+
+    state.value = 'so the units are in and the worktop is like next week I think';
+    state.oninput();
+    check('on once something is dictated', c.run.disabled === false);
+
+    reply = { ok: true, body: { text: 'The units are in and the worktop goes in next week.' } };
+    await c.run.onclick();
+    check('it rewrites in place', state.value === 'The units are in and the worktop goes in next week.', state.value);
+    check('and offers an undo', !c.undo._class.has('hidden'));
+
+    c.undo.onclick();
+    check('undo restores what was said',
+      state.value === 'so the units are in and the worktop is like next week I think', state.value);
+
+    // Each field keeps its own undo. One shared slot would let a rewrite on one
+    // field arm the undo on another, and restore text that was never there.
+    why.value = SPOKEN;
+    why.oninput();
+    reply = { ok: true, body: { text: CLEAN } };
+    await btn.onclick();
+    check('the why has an undo', !undo._class.has('hidden'));
+    check('and the state field still does not', c.undo._class.has('hidden'));
+
+    ctx.closeEntry();
+    check('closing the sheet clears both',
+      undo._class.has('hidden') && c.undo._class.has('hidden'));
+  }
+
+  console.log('\nthe miss reason is a field now, not a browser prompt');
+  {
+    check('nothing calls prompt() any more', !/\bprompt\(/.test(script));
+
+    ctx.askReason({ id: 'b1', title: 'Gym' });
+    const c = controls(byId['f-miss-wrap']);
+    check('the sheet is open', !byId['miss-sheet']._class.has('hidden'));
+    check('it names the block', /Gym/.test(byId['miss-what'].textContent), byId['miss-what'].textContent);
+    check('the button is off on an empty reason', c.run.disabled === true);
+
+    byId['f-miss'].value = 'i just kept putting it off and then it was late';
+    byId['f-miss'].oninput();
+    reply = { ok: true, body: { text: 'I kept putting it off and then it was too late.' } };
+    await c.run.onclick();
+    check('it rewrites the reason', byId['f-miss'].value === 'I kept putting it off and then it was too late.', byId['f-miss'].value);
+
+    // Closing marks nothing, which is what dismissing the prompt did.
+    let posted = null;
+    const realFetch = ctx.fetch;
+    ctx.fetch = async (url, opts) => {
+      if (String(url).includes('/miss')) posted = JSON.parse(opts.body);
+      return realFetch(url, opts);
+    };
+
+    byId['miss-close'].onclick();
+    check('closing marks nothing', posted === null, JSON.stringify(posted));
+    check('and the sheet is gone', byId['miss-sheet']._class.has('hidden'));
+
+    ctx.askReason({ id: 'b1', title: 'Gym' });
+    byId['f-miss'].value = 'I kept putting it off.';
+    byId['f-miss'].oninput();
+    await byId['miss-save'].onclick();
+    check('saving marks it missed', posted && posted.missed === true, JSON.stringify(posted));
+    check('with the reason as written', posted && posted.reason === 'I kept putting it off.', JSON.stringify(posted));
+
+    // The reason is optional. Demanding one is how a review stops getting done.
+    posted = null;
+    ctx.askReason({ id: 'b2', title: 'Reading' });
+    await byId['miss-save'].onclick();
+    check('an empty reason still marks it', posted && posted.missed === true && posted.reason === '', JSON.stringify(posted));
+
+    ctx.fetch = realFetch;
+  }
+
+  console.log('\nevery one of them stays dictation-friendly');
+  {
+    for (const id of ['f-why', 'f-state', 'f-miss']) {
+      const field = html.match(new RegExp(`<textarea id="${id}"[^>]*>`))[0];
+      check(`${id} is a plain multiline box`, /^<textarea /.test(field) && !/type=/.test(field), field);
+      check(`${id} keeps autocapitalise on`, /autocapitalize="sentences"/.test(field), field);
+      check(`${id} has no autocomplete fighting the keyboard`, !/autocomplete/.test(field), field);
+    }
+
+    // Money's is built in script rather than markup, so it is read there.
+    const editor = script.slice(script.indexOf('const bodyWrap'), script.indexOf('attachSummarize(body'));
+    check('the finance detail box keeps autocapitalise on', /autocapitalize = 'sentences'/.test(editor));
+    check('and sets no autocomplete', !/autocomplete/.test(editor));
+
+    check('nothing intercepts keys on any of them',
+      !/\.onkeydown|\.onkeypress|\.onbeforeinput/.test(script));
   }
 
   console.log(bad === 0 ? '\nSummarize clean' : `\n${bad} FAILURE(S)`);

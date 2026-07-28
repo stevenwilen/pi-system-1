@@ -1452,16 +1452,9 @@
                 Why this matters <span class="none hidden" id="f-why-optional">optional</span>
                 <textarea id="f-why" rows="2" autocapitalize="sentences"></textarea>
               </label>
-
-              <!-- Dictation cleanup, and only that. Saying why something
-                   matters out loud produces speech; this turns it into the
-                   sentence they meant. Quiet, and off entirely until there is
-                   something in the field to work on. -->
-              <div class="field-actions">
-                <span class="none hidden" id="why-note"></span>
-                <button class="linkbtn hidden" id="why-undo" type="button">Undo</button>
-                <button class="linkbtn" id="why-summarize" type="button" disabled>Summarize</button>
-              </div>
+              <!-- The Summarize row is attached here by attachSummarize rather
+                   than written out, so every long-form field gets the same one
+                   and there is one place for it to change. -->
             </div>
 
             <!-- Projects and tasks only, and optional there. A picker rather
@@ -1469,10 +1462,16 @@
                  wrong. Clear puts it back to nothing. -->
             <!-- Where it stands. Optional, and dated when saved, so an item
                  added by hand is not thinner than one from the interview. -->
-            <label class="hidden" id="f-state-wrap">
-              Where it stands <span class="none">optional</span>
-              <textarea id="f-state" rows="2" autocapitalize="sentences" placeholder="What is done, what is left, what is next"></textarea>
-            </label>
+            <!-- A div holding a label, for the same reason the why is: the
+                 Summarize row below the field belongs to it, and a button
+                 inside a label forwards its taps to the control the label
+                 names. -->
+            <div class="hidden" id="f-state-wrap">
+              <label>
+                Where it stands <span class="none">optional</span>
+                <textarea id="f-state" rows="2" autocapitalize="sentences" placeholder="What is done, what is left, what is next"></textarea>
+              </label>
+            </div>
 
             <label class="hidden" id="f-size-wrap">
               Roughly how big <span class="none">optional</span>
@@ -1496,6 +1495,39 @@
 
             <button class="primary" type="submit" id="f-save">Save</button>
           </form>
+        </div>
+      </section>
+    </div>
+
+    <!-- Why a block didn't happen.
+         A sheet rather than the browser's own prompt. A prompt is one line
+         with nowhere to put a button, and this is the field most likely to be
+         spoken rather than typed: it is answered at the end of a long day,
+         about something that went wrong. Closing it still cancels, exactly as
+         dismissing the prompt did, because the reason is optional and marking
+         a block missed by accident is worse than not marking it. -->
+    <div class="sheet-scrim hidden" id="miss-sheet">
+      <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="miss-sheet-title">
+        <div class="sheet-head">
+          <h2 id="miss-sheet-title">Didn't happen</h2>
+          <button class="sheet-close" id="miss-close" type="button" aria-label="Close">&#215;</button>
+        </div>
+
+        <div class="sheet-body">
+          <div class="formcard">
+            <div class="none" id="miss-what"></div>
+
+            <div id="f-miss-wrap">
+              <label>
+                Why <span class="none">optional</span>
+                <textarea id="f-miss" rows="2" autocapitalize="sentences" placeholder="What got in the way"></textarea>
+              </label>
+            </div>
+
+            <div class="err hidden" id="miss-error"></div>
+
+            <button class="primary" type="button" id="miss-save">Mark as missed</button>
+          </div>
         </div>
       </section>
     </div>
@@ -2015,81 +2047,114 @@
         box.style.height = `${box.scrollHeight}px`;
       }
 
-      $('f-state').oninput = () => grow($('f-state'));
-
-      // --- summarize: dictation cleanup on the why --------------------------
+      // --- summarize: dictation cleanup, on every long-form field -----------
       //
-      // One button on one field. It rewrites what is in the box and puts the
-      // result back in place, which means a tap overwrites something the person
-      // said out loud. So the text it replaced is held until the field is
-      // edited again or the sheet closes, and Undo puts it back.
+      // One button under one field. It rewrites what is in the box and puts
+      // the result back in place, which means a tap overwrites something the
+      // person said out loud. So the text it replaced is held until the field
+      // is edited again or the sheet closes, and Undo puts it back.
       //
       // Held no longer than that, deliberately. An Undo still sitting there
       // after the text has moved on would restore something that was true two
       // edits ago, which is worse than not offering it.
-      let beforeSummarize = null;
-      let summarizing = false;
+      //
+      // Attached rather than written out per field. Four fields with four
+      // copies of this would be four places for the undo rule to drift, and
+      // the rule is the part that protects what the person said.
+      // host is the element the row is appended to, and is always the field's
+      // wrapper rather than its label. A button inside a label forwards its
+      // taps to the control the label names, so an Undo in there would put the
+      // cursor in the box instead of restoring anything.
+      function attachSummarize(box, host) {
+        const actions = el('div', 'field-actions');
+        const note = el('span', 'none hidden');
+        const undo = el('button', 'linkbtn hidden', 'Undo');
+        const run = el('button', 'linkbtn', 'Summarize');
+        undo.type = 'button';
+        run.type = 'button';
+        // Off until there is something in the field to work on.
+        run.disabled = true;
+        actions.append(note, undo, run);
+        host.append(actions);
 
-      function paintSummarize() {
-        const btn = $('why-summarize');
-        btn.disabled = summarizing || !$('f-why').value.trim();
-        btn.textContent = summarizing ? 'Summarizing…' : 'Summarize';
-        $('why-undo').classList.toggle('hidden', beforeSummarize === null);
-      }
+        let before = null;
+        let busy = false;
 
-      function clearSummarize() {
-        beforeSummarize = null;
-        summarizing = false;
-        $('why-note').textContent = '';
-        $('why-note').classList.add('hidden');
-        paintSummarize();
-      }
-
-      // Typing is what retires the undo: the text it would put back is no
-      // longer the text that was replaced.
-      $('f-why').oninput = () => {
-        grow($('f-why'));
-        clearSummarize();
-      };
-
-      $('why-undo').onclick = () => {
-        if (beforeSummarize === null) return;
-        $('f-why').value = beforeSummarize;
-        grow($('f-why'));
-        // Setting a value in code raises no input event, so the state is
-        // cleared by hand rather than waiting for one that is not coming.
-        clearSummarize();
-      };
-
-      $('why-summarize').onclick = async () => {
-        const before = $('f-why').value;
-        if (!before.trim() || summarizing) return;
-
-        $('why-note').textContent = '';
-        $('why-note').classList.add('hidden');
-        summarizing = true;
-        paintSummarize();
-
-        try {
-          const { text } = await api('/summarize', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ text: before }),
-          });
-          $('f-why').value = text;
-          grow($('f-why'));
-          // Recorded after the field is written, so what Undo restores is
-          // exactly what was replaced.
-          beforeSummarize = before;
-        } catch (err) {
-          // The field keeps every word. Said once and quietly under it: the
-          // person did nothing to cause this and there is nothing to fix.
-          $('why-note').textContent = err.message;
-          $('why-note').classList.remove('hidden');
-        } finally {
-          summarizing = false;
-          paintSummarize();
+        function paint() {
+          run.disabled = busy || !box.value.trim();
+          run.textContent = busy ? 'Summarizing…' : 'Summarize';
+          undo.classList.toggle('hidden', before === null);
         }
+
+        function reset() {
+          before = null;
+          busy = false;
+          note.textContent = '';
+          note.classList.add('hidden');
+          paint();
+        }
+
+        // Typing is what retires the undo: the text it would put back is no
+        // longer the text that was replaced.
+        box.oninput = () => {
+          grow(box);
+          reset();
+        };
+
+        undo.onclick = () => {
+          if (before === null) return;
+          box.value = before;
+          grow(box);
+          // Setting a value in code raises no input event, so the state is
+          // cleared by hand rather than waiting for one that is not coming.
+          reset();
+        };
+
+        run.onclick = async () => {
+          const was = box.value;
+          if (!was.trim() || busy) return;
+
+          note.textContent = '';
+          note.classList.add('hidden');
+          busy = true;
+          paint();
+
+          try {
+            const { text } = await api('/summarize', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ text: was }),
+            });
+            box.value = text;
+            grow(box);
+            // Recorded after the field is written, so what Undo restores is
+            // exactly what was replaced.
+            before = was;
+          } catch (err) {
+            // The field keeps every word. Said once and quietly under it: the
+            // person did nothing to cause this and there is nothing to fix.
+            note.textContent = err.message;
+            note.classList.remove('hidden');
+          } finally {
+            busy = false;
+            paint();
+          }
+        };
+
+        paint();
+        return { reset };
+      }
+
+      // The two on the entry sheet. Saying why something matters, or where it
+      // stands, out loud produces speech; this turns it into the sentence they
+      // meant.
+      const whySummarize = attachSummarize($('f-why'), $('f-why-wrap'));
+      const stateSummarize = attachSummarize($('f-state'), $('f-state-wrap'));
+
+      // Both are cleared together, because both live and die with the sheet.
+      const clearSummarize = () => {
+        whySummarize.reset();
+        stateSummarize.reset();
       };
 
       // One form for both. Editing an existing row hides the type selector,
@@ -2224,31 +2289,77 @@
         action.type = 'button';
         action.textContent = block.completed ? "Didn't happen" : 'Undo';
         action.onclick = () =>
-          block.completed ? askReason(block) : setMissed(block, false, '');
+          block.completed
+            ? askReason(block)
+            : setMissed(block, false, '').catch((err) => alert(err.message));
         row.append(action);
 
         return row;
       }
 
-      // The reason is optional, and the prompt says so. Demanding one is how a
+      // The reason is optional, and the sheet says so. Demanding one is how a
       // review stops getting done.
+      //
+      // Which block is being explained. Held here rather than read back off
+      // the screen, so a list that reloads under the open sheet cannot change
+      // what gets marked.
+      let missBlock = null;
+      const missSummarize = attachSummarize($('f-miss'), $('f-miss-wrap'));
+
       function askReason(block) {
-        const reason = prompt(`"${block.title}" didn't happen.\n\nWhy? (optional)`, '');
-        if (reason === null) return; // cancelled, so nothing is marked
-        setMissed(block, true, reason);
+        missBlock = block;
+        $('f-miss').value = '';
+        $('miss-what').textContent = `"${block.title}" didn't happen.`;
+        $('miss-error').classList.add('hidden');
+        missSummarize.reset();
+        grow($('f-miss'));
+
+        $('miss-sheet').classList.remove('hidden');
+        $('main').classList.add('locked');
+        $('f-miss').focus();
       }
 
-      async function setMissed(block, missed, reason) {
+      function closeMiss() {
+        missBlock = null;
+        missSummarize.reset();
+        $('miss-sheet').classList.add('hidden');
+        $('main').classList.remove('locked');
+      }
+
+      // Closing marks nothing, which is what dismissing the old prompt did.
+      $('miss-close').onclick = closeMiss;
+
+      $('miss-save').onclick = async () => {
+        const block = missBlock;
+        if (!block) return;
+
+        const reason = $('f-miss').value;
+        $('miss-save').disabled = true;
+        $('miss-error').classList.add('hidden');
+
         try {
-          await api(`/blocks/${block.id}/miss`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ missed, reason }),
-          });
-          await loadReview();
+          await setMissed(block, true, reason);
+          closeMiss();
         } catch (err) {
-          alert(err.message);
+          // The sheet stays open holding every word, so a failed save is not
+          // also a lost sentence.
+          $('miss-error').textContent = err.message;
+          $('miss-error').classList.remove('hidden');
+        } finally {
+          $('miss-save').disabled = false;
         }
+      };
+
+      // Throws rather than reporting, so the caller decides. The sheet needs to
+      // stay open holding what was typed; the un-mark tap below has nothing to
+      // lose and can just say so.
+      async function setMissed(block, missed, reason) {
+        await api(`/blocks/${block.id}/miss`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ missed, reason }),
+        });
+        await loadReview();
       }
 
       async function loadReview() {
@@ -2971,9 +3082,19 @@
 
         const bodyWrap = el('label', null, 'Detail');
         const body = document.createElement('textarea');
+        // Dictated like the rest, so it carries the same keyboard settings the
+        // sheet's textareas do: plain multiline, autocapitalise on, and nothing
+        // set that would put a suggestion strip over the microphone.
+        body.rows = 2;
+        body.autocapitalize = 'sentences';
         body.value = item.body || '';
         bodyWrap.append(body);
         row.append(bodyWrap);
+
+        // Same button, same rules. Hosted on the row rather than the label, and
+        // the undo lives as long as this editor does: the row is rebuilt on
+        // save or cancel, which retires it exactly when the sheet's does.
+        attachSummarize(body, row);
 
         const error = el('div', 'err hidden');
         row.append(error);
@@ -3022,7 +3143,12 @@
           }
         };
 
-        setTimeout(() => label.focus(), 0);
+        // After the row is on the screen: a textarea that is not rendered yet
+        // measures as zero, and sizing it then would collapse it.
+        setTimeout(() => {
+          label.focus();
+          grow(body);
+        }, 0);
         return row;
       }
 

@@ -315,9 +315,9 @@ Creating an entry needs no judgment. Chat was only ever there to pull structure
 out of a sentence, and there is nothing to pull when the person picks a type and
 types a title. That makes this arithmetic, so it lives in the app.
 
-The one exception is the **Summarize** button under the why, which rewrites what
-is already in that field and adds nothing to it. It is a reasoning place and is
-specified as one in 4.3.
+The one exception is the **Summarize** button, which sits under every long-form
+field and rewrites what is already in that field, adding nothing to it. It is a
+reasoning place and is specified as one in 4.3.
 
 ### 3.3 BUILDER — tomorrow
 - Every block has a **start time** and a **duration**.
@@ -451,11 +451,30 @@ failed would turn an outage into a screen that says everything is fine.
 **2. Block message generation, at confirm time.** See section 5.
 
 **3. Summarize, on one field, when the button is pressed.** The narrowest of the
-three, and the only one a person triggers directly. It exists because the why
-and the where-it-stands are dictated, and speech is not writing: "um so
-basically the thing is I want to like build this business because you know I
-don't want to be paycheck to paycheck" is a real thing to say and a poor thing
-to read back in four months.
+three, and the only one a person triggers directly. It exists because these
+fields are dictated, and speech is not writing: "um so basically the thing is I
+want to like build this business because you know I don't want to be paycheck to
+paycheck" is a real thing to say and a poor thing to read back in four months.
+
+It sits under **every field long enough to be spoken into**, from one shared
+implementation rather than a copy per field:
+
+| Field | Where |
+|---|---|
+| why this matters | projects, habits |
+| where it stands | projects, tasks |
+| why a block didn't happen | the review screen |
+| detail | finance intent rows, in Money |
+
+Not on **roughly how big**, which is a select: four fixed options are not
+dictation and there is nothing there to rewrite.
+
+The miss reason is a sheet rather than the browser's own `prompt`, which has one
+line and nowhere to put a button. It is the field most likely to be spoken — it
+is answered at the end of a long day, about something that went wrong. Closing
+the sheet still marks nothing, exactly as dismissing the prompt did, because the
+reason is optional and marking a block missed by accident is worse than not
+marking it at all.
 
 It is handed the current text of **one field** and returns that same text,
 tidied, which replaces what is in the box. Nothing else about the entry is sent,
@@ -479,6 +498,9 @@ not already typed. Creating an entry stays arithmetic and stays in the app
 the replaced text is held and an undo restores it — until the field is edited
 again or the sheet is closed, and no longer. An undo still offering itself after
 the text has moved on would put back something that was true two edits ago.
+
+Each field holds **its own** undo. One shared between them would let a rewrite on
+one field arm the undo on another, and restore text that had never been there.
 
 **Failure changes nothing.** The field keeps every word, the page says so once
 and quietly, and the field is never cleared. A rewrite that half-lands is worse
