@@ -674,6 +674,19 @@
         gap: 8px;
       }
 
+      /* Three lists in one panel, so the gap between them has to be bigger than
+         the gap between rows. At the same 8px the headings would read as rows
+         and the whole thing would look like one list with labels dropped in it. */
+      #stale {
+        gap: 20px;
+      }
+
+      .type-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
       .item-top {
         display: flex;
         align-items: flex-start;
@@ -1646,7 +1659,9 @@
        * There is no position and nothing to drag. Rows are ordered by how long
        * they have been left, which the list works out for itself.
        */
-      function itemCard(item, { range } = {}) {
+      // showType is off in the three lists, where the heading already says it,
+      // and on in Paused, which is one list holding all three.
+      function itemCard(item, { range, showType = true } = {}) {
         const card = el(
           'div',
           'card item' + (item.paused ? ' paused' : '') + (item.cold ? ' cold' : '')
@@ -1696,7 +1711,7 @@
         // still one tap away under Edit. The brain reads it either way.
 
         const meta = el('div', 'item-meta');
-        meta.append(el('span', 'tag ' + item.type, item.type));
+        if (showType) meta.append(el('span', 'tag ' + item.type, item.type));
         if (item.frequency) meta.append(el('span', 'none', item.frequency));
 
         if (item.due) {
@@ -1895,6 +1910,18 @@
       // title so two rows of the same age do not swap places between paints.
       const byNeglect = (a, b) => b.days - a.days || a.title.localeCompare(b.title);
 
+      // A list each. The three are different commitments — a project is a body
+      // of work, a habit is a cadence, a task is one thing to do — and mixed
+      // together the person had to sort them by eye every time they looked.
+      //
+      // Projects first: they are the things that carry, and a screen opens on
+      // what it wants read first.
+      const TYPE_LISTS = [
+        ['project', 'Projects'],
+        ['habit', 'Habits'],
+        ['task', 'Tasks'],
+      ];
+
       function paintStale() {
         const list = $('stale');
         list.replaceChildren();
@@ -1903,17 +1930,31 @@
           list.append(el('div', 'empty', 'Nothing here yet. Add a habit, project or task.'));
         }
 
-        // The bar reads across the whole list, which is the only list there is.
+        // One scale across every row on the screen, not one per list. The
+        // colour has to mean the same thing wherever it appears: scaled per
+        // list, a habit left three days would burn as cold as a project left
+        // three months, and the panel would be lying about which is worse.
         const ages = staleItems.map((i) => i.days);
         const range = ages.length
           ? { min: Math.min(...ages), max: Math.max(...ages) }
           : null;
 
-        // Longest left, first. Across all three types together: a task left
-        // three weeks is the same problem as a project left three weeks, and
-        // the list says so by putting them next to each other.
-        for (const item of staleItems.slice().sort(byNeglect)) {
-          list.append(itemCard(item, { range }));
+        for (const [type, heading] of TYPE_LISTS) {
+          const items = staleItems.filter((i) => i.type === type);
+          // A list with nothing in it is left out rather than shown empty.
+          // Three headings over nothing is a screen describing its own
+          // structure to someone who has not filled it in yet.
+          if (!items.length) continue;
+
+          const group = el('div', 'type-group');
+          group.append(el('div', 'kind-head', heading));
+          // Longest left, first, within each list.
+          for (const item of items.sort(byNeglect)) {
+            // The type is the heading now. Repeating it on every row under it
+            // is a word that says nothing the eye did not already have.
+            group.append(itemCard(item, { range, showType: false }));
+          }
+          list.append(group);
         }
 
         // The interview is offered only while there is nothing at all. Once one

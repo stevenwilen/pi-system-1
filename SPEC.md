@@ -135,28 +135,46 @@ Yesterday's blocks, listed. Each has a one-tap **didn't happen**.
 Blocks are **assumed done** unless tapped. The posture is trust. An optional
 short reason can be attached to a miss.
 
-### 3.2 STALE — one list, ordered by how long each thing has been left
+### 3.2 STALE — a list per type, each ordered by how long each thing has been left
 
-Everything the user cares about, in **one list**: habits, projects, and tasks
-together. A task left three weeks is the same problem as a project left three
-weeks, so they share a list rather than being filed apart.
+**Three lists: Projects, Habits, Tasks**, in that order. They are different
+commitments — a project is a body of work, a habit is a cadence, a task is one
+thing to do — and mixed into a single run of cards the person had to sort them
+by eye every time they looked. Projects lead because they are the things that
+carry.
 
-**Longest left, first.** The order is arithmetic on the days-since figure and
-nothing else, across all three types. Ties break on title so two rows of the
-same age do not swap places between paints.
+A list with nothing in it is **left out entirely** rather than shown empty.
+Three headings over nothing is a screen describing its own structure to someone
+who has not filled it in yet.
+
+**Longest left, first, within each list.** The order is arithmetic on the
+days-since figure and nothing else. Ties break on title so two rows of the same
+age do not swap places between paints. The oldest thing on the screen is
+therefore no longer necessarily the top row on it: a habit left eleven days sits
+under Habits, below a project left four.
+
+**The temperature bar is scaled across every row on the screen, not per list.**
+The colour has to mean the same thing wherever it appears. Scaled per list, a
+habit left three days would burn as cold as a project left three months, and the
+panel would be lying about which is worse.
 
 **There is no ranking.** Nothing is dragged, nothing carries a position, and no
 row shows a number. Ordering these against each other by hand was a question
 nobody was asking; the useful one is which has been left longest, and that is
 something the list can work out for itself.
 
-Each row carries a **quiet type mark** — one muted character, not a label — so a
-habit is tellable from a project at a glance. That distinction matters because
-eleven days means something different for a daily habit than for a monthly one.
+Each row keeps its **quiet type mark** — one muted character, not a label. It is
+redundant with the heading above it and kept anyway: it is the left gutter the
+titles align to, and it is the only thing saying what a row is down in Paused.
+
+The row does **not** repeat its heading as a tag. A row under Projects that also
+says "project" is a word for something the eye already had.
 
 Every row also carries the days-since label, the temperature bar, the cold
-outline and its reason, and pause, edit and delete. Paused items are listed
-separately below, as before.
+outline and its reason, and pause, edit and delete. **Paused items stay in one
+list below**, holding all three types together — there are usually few of them,
+and splitting a short list into three shorter ones buys nothing. That is why the
+type tag survives there.
 
 **The why is not shown on the row.** It is a paragraph per item, and a list of
 paragraphs cannot be scanned, which is the one thing this panel has to be. It is

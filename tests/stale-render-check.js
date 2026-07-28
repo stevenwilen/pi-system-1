@@ -127,29 +127,54 @@ const dueOf = (row) => { const d = row.querySelector('.due'); return d ? d.textC
   const { ctx, byId } = boot(payload(ITEMS));
   await ctx.load();
 
-  console.log('one list, holding all three types');
-  const rows = byId['stale'].children;
+  console.log('a list for each type');
+  const groups = byId['stale'].children;
+  const headOf = (g) => g.children[0].textContent;
+  const rowsOf = (g) => g.children.filter((c) => c._class.has('item'));
+  // Rows are a level deeper than they were, so they are found rather than read
+  // off the panel's own children.
+  const rows = byId['stale'].findAll((n) => n._class.has('item'));
 
   const rowsByTitle = Object.fromEntries(rows.map((r) => [titleOf(r), r]));
   byTitleAll = (t) => rowsByTitle[t];
 
-  check('every item is in it', rows.length === ITEMS.length, `${rows.length}`);
-  check('habits among them', rows.some((r) => titleOf(r) === 'Gym'));
-  check('and there is no second list', byId['habits'] === undefined || !byId['habits'].children.length);
+  check('three lists', groups.length === 3, `${groups.length}`);
+  check('headed Projects, Habits, Tasks',
+    groups.map(headOf).join(',') === 'Projects,Habits,Tasks', groups.map(headOf).join(','));
+  check('every item is on the screen', rows.length === ITEMS.length, `${rows.length}`);
 
-  console.log('\nlongest left, first');
+  check('projects in the projects list',
+    rowsOf(groups[0]).map(titleOf).join(',') === 'Thesis', rowsOf(groups[0]).map(titleOf).join(','));
+  check('habits in the habits list',
+    rowsOf(groups[1]).map(titleOf).slice().sort().join(',') === 'Gym,Piano,Reading',
+    rowsOf(groups[1]).map(titleOf).join(','));
+  check('tasks in the tasks list',
+    rowsOf(groups[2]).map(titleOf).slice().sort().join(',') === 'Call bank,Passport',
+    rowsOf(groups[2]).map(titleOf).join(','));
+  check('and nothing is listed twice', new Set(rows.map(titleOf)).size === rows.length);
+
+  console.log('\nlongest left, first, inside each list');
   {
     // Ages are 4, 2, 9, 11, 1, 5 in the order the server sent them.
-    check('sorted by days, coldest first',
-      rows.map(titleOf).join(',') === 'Reading,Passport,Piano,Thesis,Gym,Call bank',
-      rows.map(titleOf).join(','));
+    check('habits ordered by neglect',
+      rowsOf(groups[1]).map(titleOf).join(',') === 'Reading,Piano,Gym',
+      rowsOf(groups[1]).map(titleOf).join(','));
+    check('tasks ordered by neglect',
+      rowsOf(groups[2]).map(titleOf).join(',') === 'Passport,Call bank',
+      rowsOf(groups[2]).map(titleOf).join(','));
 
-    const days = rows.map((r) => Number(r.text().match(/(\d+) days?/)[1]));
-    check('and the days descend', days.every((d, i) => i === 0 || days[i - 1] >= d), days.join(','));
+    for (const g of groups) {
+      const days = rowsOf(g).map((r) => Number(r.text().match(/(\d+) days?/)[1]));
+      check(`${headOf(g).toLowerCase()}: the days descend`,
+        days.every((d, i) => i === 0 || days[i - 1] >= d), days.join(','));
+    }
 
-    // The old panel put whatever the server sent first at the top. It does not
-    // any more, and a row that has been left longest wins wherever it sat.
-    check('the server order is not preserved', titleOf(rows[0]) !== 'Thesis', titleOf(rows[0]));
+    // Sorting is per list now. The oldest thing on the screen is not the first
+    // row on it any more, and that is the point of the split rather than a
+    // regression: Reading at 11 days sits under Habits, below a project at 4.
+    check('the oldest row is not necessarily the top row',
+      titleOf(rows[0]) === 'Thesis' && titleOf(byTitleAll('Reading')) === 'Reading',
+      titleOf(rows[0]));
   }
 
   console.log('\nnothing is ranked and nothing is dragged');
@@ -170,6 +195,12 @@ const dueOf = (row) => { const d = row.querySelector('.due'); return d ? d.textC
       rows.every((r) => (markOf(r) || '').length === 1), rows.map(markOf).join(''));
     check('nothing spells the type out in full',
       !rows.some((r) => /TASK|PROJECT|HABIT/.test(r.text())), rows[0].text().slice(0, 50));
+
+    // The heading says it. A tag under it repeating the same word is a label
+    // for something the eye already has.
+    check('and no row repeats its list heading',
+      rows.every((r) => !r.querySelector('.tag')),
+      rows.map((r) => (r.querySelector('.tag') || {}).textContent).filter(Boolean).join(','));
   }
 
   console.log('\nthe why is not on the row');
@@ -289,11 +320,18 @@ const dueOf = (row) => { const d = row.querySelector('.due'); return d ? d.textC
       b2['stale'].text().includes('Add a habit, project or task'), b2['stale'].text());
   }
 
-  console.log('\na list of only habits is still just the list');
+  console.log('\nonly habits means only a habits list');
   {
     const { ctx: c3, byId: b3 } = boot(payload([{ id: 'h9', type: 'habit', title: 'Gym', frequency: 'daily', days: 1 }]));
     await c3.load();
-    check('the habit is in the one list', b3['stale'].children.length === 1);
+    check('one list is shown', b3['stale'].children.length === 1, `${b3['stale'].children.length}`);
+    check('and it is the habits one', b3['stale'].children[0].children[0].textContent === 'Habits',
+      b3['stale'].children[0].children[0].textContent);
+    // Empty headings would be the screen describing its own structure to
+    // someone who has not filled it in yet.
+    check('the empty lists are left out entirely',
+      !b3['stale'].text().includes('Projects') && !b3['stale'].text().includes('Tasks'),
+      b3['stale'].text());
     check('and no empty note is shown', !b3['stale'].text().includes('Nothing here yet'));
   }
 
@@ -311,6 +349,11 @@ const dueOf = (row) => { const d = row.querySelector('.due'); return d ? d.textC
     await c4.load();
     check('both paused rows listed', b4['paused'].children.length === 2);
     check('paused section shown', !b4['paused-group']._class.has('hidden'));
+    // Paused is one list holding every type, so here the tag is the only thing
+    // saying what a row is, and it stays.
+    check('a paused row still says what it is',
+      b4['paused'].children.every((r) => Boolean(r.querySelector('.tag'))),
+      b4['paused'].children.map((r) => (r.querySelector('.tag') || {}).textContent).join(','));
     check('no rank on a paused row', b4['paused'].children.every((r) => !r.querySelector('.rank')));
     check('neither paused row is in the main list',
       !b4['stale'].text().includes('Visa') && !b4['stale'].text().includes('Piano'));
