@@ -394,8 +394,12 @@ async function update_entry(user_id, id, fields) {
     .eq('id', id)
     .eq('user_id', user_id);
 
-  // A deleted entry is a tombstone: it can never be brought back.
-  if (patch.status === 'active') q = q.neq('status', 'deleted');
+  // A deleted entry is a tombstone: it can never be brought back, whatever it
+  // would be brought back as. This guarded only the flip to 'active', which was
+  // the only one that existed when it was written; 'done' is a real state now,
+  // and resurrecting a tombstone as finished work is the same move wearing a
+  // different word.
+  if (patch.status && patch.status !== 'deleted') q = q.neq('status', 'deleted');
 
   const { data, error } = await q.select().maybeSingle();
 

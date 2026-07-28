@@ -109,6 +109,7 @@ const SUITES = [
   ['due-test.js', 180],
   ['plan-intent-test.js', 180],
   ['nudge-test.js', 180],
+  ['done-test.js', 180],
   ['step1-verify.js', 150],
   ['intent-test.js', 180],
   ['setup-test.js', 180],

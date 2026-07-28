@@ -98,11 +98,29 @@ rows read by a schedule that is itself the same for all.
 
 ### 2.5 Deleting takes something off the list
 Deletion is soft: `status = 'deleted'` leaves a tombstone. Deleted rows are
-never returned to the brain and can never be flipped back to active.
+never returned to the brain and can never be flipped back to **anything** — not
+active, and not done. Resurrecting a tombstone as finished work is the same move
+wearing a different word.
 
 Delete is not a blocklist. If the same thing legitimately arises again it will be
 recorded again as a new row. Delete means "take this off my list", not "never
 learn this about me".
+
+### 2.5.1 Finishing is not deleting
+`status = 'done'` is a third state, and it means the opposite of `deleted`: one
+is work that happened, the other is a row that should not have existed. Both
+drop out of every read — everything filters on `status = 'active'` — so the
+difference is not what the screen shows but what the data says happened.
+
+**Tasks only.** A task is one thing to do, so there has to be a way to say it is
+finished that is not Delete. A habit recurring is the whole point of a habit,
+and a project is not finished by one session of work on it; Done on either would
+offer to retire something that has not ended. The route refuses both.
+
+Without this the only exit from the list was a destructive button, and a
+finished task stayed on it: its clock reset when it was scheduled, it sank to
+the bottom, then climbed back to the top over the following weeks asking to be
+done again.
 
 ### 2.6 Pausing is not deleting
 Pause is a separate, reversible state. A paused entry is still active and still
@@ -152,6 +170,23 @@ days-since figure and nothing else. Ties break on title so two rows of the same
 age do not swap places between paints. The oldest thing on the screen is
 therefore no longer necessarily the top row on it: a habit left eleven days sits
 under Habits, below a project left four.
+
+**The clock counts the doing, not the writing down.** Days-since is measured
+from the last plan in which the thing appeared **and was not marked missed**.
+This used to count any block at all, which meant planning something and skipping
+it reset its clock exactly as much as doing it: something dodged four weeks
+running read as fresh every Monday. The panel, the temperature bar, the cold
+verdict and the evening nudge all inherited that, because all four read the same
+figure.
+
+The number claims to say how long something has been neglected. Counting the
+writing-down made it say how long since it was last *mentioned*, and those two
+agree right up until someone skips something — which is exactly when it has to
+be right.
+
+A block is assumed done and the review only corrects it (3.5), so this excludes
+what was explicitly marked missed and nothing else. A plan nobody has reviewed
+yet still counts, which is the same assumption the review screen makes.
 
 **The temperature bar is scaled across every row on the screen, not per list.**
 The colour has to mean the same thing wherever it appears. Scaled per list, a
@@ -238,7 +273,12 @@ Each item has these actions:
   requires one, and the due date where the type allows one. The same rules apply
   as at creation, so editing cannot empty a field that was required to create
   it — but a due date was never required, so clearing one is always allowed.
+- Mark it **Done**, on a task, per 2.5.1. It leaves the list and stays in the
+  data. Not offered on a habit or a project, nor on anything paused.
 - **Delete** it, softly, per 2.5.
+
+Done sits next to Edit rather than next to Delete. They are one tap each and
+only one of them asks first.
 
 Paused items are listed separately, out of the way but not hidden, so unpausing
 is always one tap and nothing disappears silently.

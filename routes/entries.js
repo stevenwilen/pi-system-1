@@ -360,6 +360,43 @@ router.post('/entries/:id/pause', async (req, res) => {
   res.json({ id: data.id, paused: Boolean(data.paused_at) });
 });
 
+/**
+ * Finished. Off the list, still in the data.
+ *
+ * A task is one thing to do, so there has to be a way to say it is done that is
+ * not Delete. Without one the only exit was a destructive button, and a
+ * finished task stayed on the list, sank to the bottom as its clock reset, then
+ * climbed back to the top over the following weeks asking to be done again.
+ *
+ * Tasks only. A habit recurring is the whole point of a habit, and a project is
+ * not finished by one session of work on it; offering Done on either would be
+ * offering to retire something that has not ended.
+ *
+ * `done` is a separate state from `deleted` because they mean opposite things:
+ * one is work that happened, the other is a row that should not have existed.
+ * Both drop out of every read, which all filter on status = 'active'.
+ */
+router.post('/entries/:id/done', async (req, res) => {
+  const { data: entry, error: readErr } = await supabase
+    .from('entries')
+    .select('id, type')
+    .eq('id', req.params.id)
+    .eq('user_id', CURRENT_USER)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (readErr) return res.status(400).json({ error: readErr.message });
+  if (!entry) return res.status(404).json({ error: 'entry not found' });
+
+  if (entry.type !== 'task') {
+    return res.status(400).json({ error: `a ${entry.type} is not finished in one go` });
+  }
+
+  const row = await update_entry(CURRENT_USER, req.params.id, { status: 'done' });
+  if (row.error) return res.status(400).json({ error: row.error });
+  res.json({ done: row.id });
+});
+
 router.post('/entries/:id/delete', async (req, res) => {
   const row = await update_entry(CURRENT_USER, req.params.id, { status: 'deleted' });
   if (row.error) return res.status(400).json({ error: row.error });

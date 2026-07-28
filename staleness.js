@@ -1,4 +1,4 @@
-// How long since something was last put in a plan.
+// How long since something was last actually done.
 //
 // Shared by the stale panel and by block message generation. They ask the same
 // question and must not answer it differently, which is what two copies of
@@ -7,7 +7,23 @@
 const supabase = require('./db');
 
 /**
- * entry_id -> the most recent plan date it appeared in.
+ * entry_id -> the most recent plan date it was done on.
+ *
+ * **A block that was missed does not count.** This used to count any block at
+ * all, which meant planning something and not doing it reset its clock exactly
+ * as much as doing it did: something dodged four weeks running read as fresh
+ * every Monday, and the panel, the temperature bar, the cold verdict and the
+ * evening nudge all inherited that, because all four read this map.
+ *
+ * The number claims to say how long something has been neglected. Counting the
+ * writing-down rather than the doing made it say how long since it was last
+ * mentioned, and those two agree right up until the moment someone skips
+ * something, which is exactly when it needs to be right.
+ *
+ * `completed` defaults to true — a day is assumed to have gone as planned and
+ * the review only corrects it (SPEC 3.5) — so this excludes what was explicitly
+ * marked missed and nothing else. A block in a plan nobody has reviewed yet
+ * still counts, which is the same assumption the review screen makes.
  *
  * `excludePlanId` matters more than it looks. At confirm time the plan has
  * already been written, so including it would report every entry as scheduled
@@ -19,7 +35,8 @@ async function lastScheduled(user_id, { excludePlanId = null } = {}) {
     .from('blocks')
     .select('entry_id, plan_id')
     .eq('user_id', user_id)
-    .not('entry_id', 'is', null);
+    .not('entry_id', 'is', null)
+    .eq('completed', true);
 
   if (blockErr) throw new Error(`could not read blocks: ${blockErr.message}`);
   if (!blocks || !blocks.length) return new Map();

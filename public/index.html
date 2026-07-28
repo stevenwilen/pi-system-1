@@ -1726,6 +1726,18 @@
         edit.onclick = () => openEntry(item);
         actions.append(edit);
 
+        // Tasks only, and not while paused. A habit recurring is the whole
+        // point of a habit and a project is not finished by one session of work
+        // on it, so Done on either would offer to retire something that has not
+        // ended. Sat next to Edit rather than next to Delete: they are one tap
+        // each and only one of them asks first.
+        if (item.type === 'task' && !item.paused) {
+          const done = el('button', 'linkbtn', 'Done');
+          done.type = 'button';
+          done.onclick = () => act(`/entries/${item.id}/done`, {});
+          actions.append(done);
+        }
+
         const pause = el('button', 'linkbtn', item.paused ? 'Resume' : 'Not now');
         pause.type = 'button';
         pause.onclick = () => act(`/entries/${item.id}/pause`, { paused: !item.paused });
