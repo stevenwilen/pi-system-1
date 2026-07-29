@@ -309,8 +309,10 @@ A block is the only thing on this page you handle rather than press. It carries
 no `···` the way a row in Things does; the card itself is the target.
 
 **Tap the duration.** The chip on the right shows the length and is the control:
-each tap adds half an hour, `30m → 1h → 1h 30m → … → 4h`, and at four hours it
-wraps back to thirty minutes. It wraps because nothing shortens a block, so
+each tap adds half an hour, `30m → 1h → 1.5h → 2h → 2.5h → … → 4h`, and at four
+hours it wraps back to thirty minutes. A half hour reads as a fraction rather
+than as two numbers — `1.5h`, not `1h 30m` — because one number is quicker on a
+chip and every length the chip produces has a half or nothing. It wraps because nothing shortens a block, so
 every length is at most seven taps away and none is a dead end. New blocks start
 at thirty minutes. A length saved off the grid by an older build is floored onto
 it by the first tap rather than cycling `45 → 75 → 105` for ever.

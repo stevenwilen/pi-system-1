@@ -796,12 +796,24 @@
       /** Minutes past midnight as a clock time, wrapping past midnight. */
       const clock = (mins) => `${pad(Math.floor((mins % 1440) / 60))}:${pad(mins % 60)}`;
 
-      /** A duration as a person says it: 30m, 1h, 1h 30m. */
+      /**
+       * A duration as a person says it: 30m, 1h, 1.5h, 2h, 2.5h.
+       *
+       * Everything the chip and the start stepper produce is a multiple of
+       * half an hour, so the only fraction that ever comes up is .5 — and one
+       * number reads faster on a chip than two.
+       *
+       * The last line is for a length from an older grid, where the step was
+       * fifteen minutes. 1h 15m has no half to write, so it is said plainly
+       * rather than rounded into something the row is not.
+       */
       function span(mins) {
         const h = Math.floor(mins / 60);
         const m = mins % 60;
         if (!h) return `${m}m`;
-        return m ? `${h}h ${m}m` : `${h}h`;
+        if (!m) return `${h}h`;
+        if (m === 30) return `${h}.5h`;
+        return `${h}h ${m}m`;
       }
 
       const toMinutes = (t) => {

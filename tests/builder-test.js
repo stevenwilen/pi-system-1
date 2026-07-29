@@ -156,8 +156,10 @@ const SETTLED = 220; // past SETTLE_MS
       chipOf(slots()[0]).onclick();
       seen.push(chipOf(slots()[0]).textContent);
     }
+    // Half hours read as a fraction rather than as two numbers: 1.5h, not
+    // 1h 30m. One number is quicker on a chip.
     check('it climbs by half hours to four, then wraps',
-      seen.join(' ') === '1h 1h 30m 2h 2h 30m 3h 3h 30m 4h 30m 1h', seen.join(' '));
+      seen.join(' ') === '1h 1.5h 2h 2.5h 3h 3.5h 4h 30m 1h', seen.join(' '));
 
     check('the end time follows', byId['end-time'].textContent === '09:00',
       byId['end-time'].textContent);
@@ -177,6 +179,16 @@ const SETTLED = 220; // past SETTLE_MS
     chipOf(slots()[0]).onclick();
     check('and one tap lands on the grid', chipOf(slots()[0]).textContent === '1h',
       chipOf(slots()[0]).textContent);
+
+    // An odd length with an hour in it has no half to write, so it is said
+    // plainly rather than rounded into something it is not.
+    check('1h 15m is not dressed up as 1.25h or 1.5h',
+      ctx.span(75) === '1h 15m', ctx.span(75));
+    check('and 2h 45m likewise', ctx.span(165) === '2h 45m', ctx.span(165));
+    check('but every length the chip makes is a fraction or a whole',
+      [30, 60, 90, 120, 150, 180, 210, 240].map((m) => ctx.span(m)).join(' ') ===
+        '30m 1h 1.5h 2h 2.5h 3h 3.5h 4h',
+      [30, 60, 90, 120, 150, 180, 210, 240].map((m) => ctx.span(m)).join(' '));
   }
 
   console.log('\nthe steppers and the keep/remove confirm are gone');
