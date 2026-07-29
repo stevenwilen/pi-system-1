@@ -106,6 +106,15 @@
   .backing.right{background:var(--line);color:var(--text);justify-content:flex-start}
   .slot .block{position:relative;margin-bottom:0}
 
+  /* the block's own line, so a note can sit under it rather than beside it */
+  .brow{display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .block{display:block}
+
+  /* what they said they were doing in this session */
+  .note{font-size:12px;color:var(--muted);line-height:1.45;margin-top:9px}
+  .noteedit{font-size:13px;color:var(--faint);line-height:1.45;margin-top:9px;
+            border-bottom:1px solid var(--line);padding:2px 0 5px}
+
   /* picked up: lighter, raised, and everything else steps back */
   .block.lifted{background:#2A2620;box-shadow:0 10px 24px rgba(0,0,0,.45);
                 transform:scale(1.03)}
@@ -242,20 +251,52 @@
     </div>
 
     <p style="font-size:12px;color:var(--muted);line-height:1.6;margin:16px 0">
-      Right drops a 30&nbsp;minute buffer in after it. Neutral, not the miss
-      colour: adding a gap is not a warning.
+      Right opens a note on it. Neutral, not the miss colour: writing something
+      down is not a warning.
     </p>
 
     <div class="slot">
-      <div class="backing right">+ Buffer</div>
+      <div class="backing right">Note</div>
       <div class="block" style="transform:translateX(56px)">
-        <div><div class="t">Email</div><div class="time">11:00 &ndash; 11:30</div></div>
-        <div class="dur">30m</div>
+        <div class="brow">
+          <div><div class="t">Email</div><div class="time">11:00 &ndash; 11:30</div></div>
+          <div class="dur">30m</div>
+        </div>
       </div>
     </div>
 
     <div style="height:18px"></div>
     <div class="undo">Removed &middot; <b>Undo</b></div>
+  </div>
+
+  <div class="section">
+    <div class="label">The note</div>
+
+    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:16px">
+      Open for writing: a rule under it and nothing else. It saves when you
+      leave the field, and clearing the text removes it.
+    </p>
+
+    <div class="block">
+      <div class="brow">
+        <div><div class="t">UF application</div><div class="time">09:00 &ndash; 11:00</div></div>
+        <div class="dur">2h</div>
+      </div>
+      <div class="noteedit">What are you doing in this block?</div>
+    </div>
+
+    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin:16px 0">
+      Written. Small and muted under the title, so a glance down the day shows
+      which blocks carry one.
+    </p>
+
+    <div class="block">
+      <div class="brow">
+        <div><div class="t">UF application</div><div class="time">09:00 &ndash; 11:00</div></div>
+        <div class="dur">2h</div>
+      </div>
+      <div class="note">Finish the essay draft, then the two short answers</div>
+    </div>
   </div>
 
   <div class="section">

@@ -142,11 +142,17 @@ function boot({ calendar = [], plan = null, failed = [], reduced = false } = {})
   const slots = () => byId.builder.children.filter((c) => c._class.has('slot'));
   const cardOf = (s) => s.children.find((c) => c._class.has('block'));
   const backingOf = (s) => s.children.find((c) => c._class.has('backing'));
-  const chipOf = (s) => cardOf(s).children.find((c) => c._class.has('dur'));
+  const rowOf = (s) => cardOf(s).children.find((c) => c._class.has('brow'));
+  const chipOf = (s) => rowOf(s).children.find((c) => c._class.has('dur'));
+  const noteOf = (s) => cardOf(s).children.find((c) => c._class.has('note'));
+  const editorOf = (s) => cardOf(s).children.find((c) => c._class.has('noteedit'));
 
   const touchmoves = () => listeners.filter((l) => l.type === 'touchmove');
 
-  return { ctx, byId, slots, cardOf, backingOf, chipOf, listeners, touchmoves, win };
+  return {
+    ctx, byId, slots, cardOf, backingOf, rowOf, chipOf, noteOf, editorOf,
+    listeners, touchmoves, win,
+  };
 }
 
 const cancel = (card) => card.onpointercancel({ pointerId: 1 });
@@ -215,14 +221,14 @@ const SETTLED = 220; // past SETTLE_MS
 
   console.log('\nthe steppers and the keep/remove confirm are gone');
   {
-    const { ctx, slots, cardOf } = boot();
+    const { ctx, slots, cardOf, rowOf } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     const card = cardOf(slots()[0]);
-    check('no stepper on a block', !card.children.some((c) => c._class.has('stepper')));
+    check('no stepper on a block', !rowOf(slots()[0]).children.some((c) => c._class.has('stepper')));
     check('no keep/remove', !card.children.some((c) => c._class.has('confirming')));
     check('one chip, and that is the whole control',
-      card.children.filter((c) => c._class.has('dur')).length === 1);
+      rowOf(slots()[0]).children.filter((c) => c._class.has('dur')).length === 1);
   }
 
   console.log('\nchanging one duration shifts every block below it');
@@ -284,9 +290,9 @@ const SETTLED = 220; // past SETTLE_MS
     check('and the bar goes', byId['undo-host'].children.length === 0);
   }
 
-  console.log('\nswipe right inserts a buffer after it');
+  console.log('\nswipe right opens a note on that block');
   {
-    const { ctx, slots, cardOf, backingOf } = boot();
+    const { ctx, slots, cardOf, backingOf, noteOf, editorOf } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -296,18 +302,141 @@ const SETTLED = 220; // past SETTLE_MS
     move(card, 130, 100);
     check('the backing is neutral, not the miss colour',
       backingOf(slots()[0])._class.has('right') && !backingOf(slots()[0])._class.has('left'));
-    check('and says what it will do', backingOf(slots()[0]).textContent === '+ Buffer',
+    check('and says what it will do', backingOf(slots()[0]).textContent === 'Note',
       backingOf(slots()[0]).textContent);
 
     move(card, 180, 100); // +80
     up(card, 180, 100);
 
-    check('three blocks now', slots().length === 3, `${slots().length}`);
-    check('the buffer is immediately after', slots()[1].text().includes('Buffer'),
-      slots()[1].text().trim());
-    check('it is half an hour', slots()[1].text().includes('30m'), slots()[1].text().trim());
-    check('and everything below shifted', slots()[2].text().includes('09:00 – 09:30'),
-      slots()[2].text().trim());
+    check('no block was added', slots().length === 2, `${slots().length}`);
+    check('and none was called Buffer', !slots().some((s) => s.text().includes('Buffer')));
+
+    const area = editorOf(slots()[0]);
+    check('a field opened on that block', Boolean(area));
+    check('it is a textarea, so two lines are visible', area.tagName === 'textarea');
+    check('with the placeholder asked for',
+      area.placeholder === 'What are you doing in this block?', area.placeholder);
+    check('capitalised by sentence, for dictation',
+      area.getAttribute('autocapitalize') === 'sentences');
+    check('spellchecked', area.getAttribute('spellcheck') === 'true');
+    check('and not autocompleted at', area.getAttribute('autocomplete') === 'off');
+    check('the other block has none', !editorOf(slots()[1]));
+
+    area.value = 'Finish the pricing page';
+    area.onblur();
+
+    check('leaving the field saves it', Boolean(noteOf(slots()[0])));
+    check('under the title', noteOf(slots()[0]).textContent === 'Finish the pricing page',
+      noteOf(slots()[0]).textContent);
+    check('and the editor closed', !editorOf(slots()[0]));
+    check('the block is otherwise unchanged',
+      slots()[0].text().includes('08:00 – 08:30'), slots()[0].text().trim());
+  }
+
+  console.log('\nswiping a block that has a note reopens it');
+  {
+    const { ctx, slots, cardOf, noteOf, editorOf } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+
+    const swipeRight = () => {
+      const card = cardOf(slots()[0]);
+      down(card, 100, 100);
+      move(card, 190, 100);
+      up(card, 190, 100);
+    };
+
+    swipeRight();
+    editorOf(slots()[0]).value = 'first';
+    editorOf(slots()[0]).onblur();
+    check('a note is there', noteOf(slots()[0]).textContent === 'first');
+
+    swipeRight();
+    check('swiping again reopens it', Boolean(editorOf(slots()[0])));
+    check('with the text already in it', editorOf(slots()[0]).value === 'first',
+      editorOf(slots()[0]).value);
+
+    editorOf(slots()[0]).value = 'second';
+    editorOf(slots()[0]).onblur();
+    check('and it can be rewritten', noteOf(slots()[0]).textContent === 'second',
+      noteOf(slots()[0]).textContent);
+
+    swipeRight();
+    editorOf(slots()[0]).value = '   ';
+    editorOf(slots()[0]).onblur();
+    check('clearing it removes the note', !noteOf(slots()[0]));
+    check('the block itself survives', slots().length === 1, `${slots().length}`);
+
+    // Whitespace was not stored as a note that happens to look empty.
+    swipeRight();
+    check('and it really is gone, not stored as blank',
+      editorOf(slots()[0]).value === '', JSON.stringify(editorOf(slots()[0]).value));
+  }
+
+  console.log('\na block being written in takes no gestures');
+  {
+    const { ctx, slots, cardOf, editorOf } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+
+    const card = cardOf(slots()[0]);
+    down(card, 100, 100);
+    move(card, 190, 100);
+    up(card, 190, 100);
+    check('the note is open', Boolean(editorOf(slots()[0])));
+
+    // A press to place the cursor must not start a hold that lifts the card
+    // out from under the keyboard.
+    const open = cardOf(slots()[0]);
+    down(open, 100, 100);
+    await wait(HELD);
+    check('holding it does not pick it up', !open._class.has('lifted'));
+    up(open, 100, 100);
+
+    down(open, 200, 100);
+    move(open, 100, 100);
+    up(open, 100, 100);
+    check('and it cannot be swiped away', slots().length === 2, `${slots().length}`);
+    check('the note is still open', Boolean(editorOf(slots()[0])));
+  }
+
+  console.log('\na note is a change to the day');
+  {
+    const { ctx, byId, slots, editorOf } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.setSaved(true);
+    check('the day starts saved', byId['confirm'].textContent === 'Confirmed');
+
+    ctx.openNote(0);
+    editorOf(slots()[0]).value = 'a note';
+    editorOf(slots()[0]).onblur();
+    check('writing one un-saves it', byId['confirm'].textContent === 'Confirm',
+      byId['confirm'].textContent);
+
+    ctx.setSaved(true);
+    ctx.openNote(0);
+    editorOf(slots()[0]).onblur(); // closed without changing anything
+    check('but opening and closing without a change does not',
+      byId['confirm'].textContent === 'Confirmed', byId['confirm'].textContent);
+  }
+
+  console.log('\na note survives a reload of a confirmed day');
+  {
+    const { ctx, slots, noteOf } = boot({
+      plan: {
+        plan: { date: '2026-07-28', status: 'confirmed', wake_minutes: 480 },
+        blocks: [
+          { title: 'Reading', entryId: null, start_minutes: 480, duration_minutes: 30, note: 'ch. 4' },
+          { title: 'Email', entryId: null, start_minutes: 510, duration_minutes: 30, note: null },
+        ],
+      },
+    });
+    await ctx.load();
+    check('it comes back with the block', noteOf(slots()[0]).textContent === 'ch. 4',
+      noteOf(slots()[0]).textContent);
+    check('and a block without one shows none', !noteOf(slots()[1]));
   }
 
   console.log('\na swipe short of the threshold does nothing');

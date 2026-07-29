@@ -332,13 +332,47 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
   console.log('   the swipes');
   check('a real distance is required', /SWIPE_COMMIT = \d\d/.test(code));
   check('left removes', /dx <= -SWIPE_COMMIT\) return removeBlock/.test(code));
-  check('right inserts a buffer', /dx >= SWIPE_COMMIT\) return insertBuffer/.test(code));
-  check('the buffer lands after, not before', /splice\(i \+ 1, 0, \{ title: BUFFER_TITLE/.test(code));
+  check('right opens a note', /dx >= SWIPE_COMMIT\) return openNote/.test(code));
   check('the card follows the finger', /translateX\(\$\{dx\}px\)/.test(code));
   check('and the backing says which it is',
-    /dx < 0 \? 'Remove' : '\+ Buffer'/.test(code));
+    /dx < 0 \? 'Remove' : 'Note'/.test(code));
   check('removal offers an undo rather than a confirm', /offerUndo\(gone, i\)/.test(code));
   check('and nothing asks first', !/confirm\(`Remove/.test(code));
+
+  // The buffer insert is gone. Buffer is a title you type into + Block.
+  check('nothing inserts a buffer on a swipe', !/insertBuffer/.test(code));
+  check('and there is no buffer constant left', !/BUFFER_TITLE/.test(code));
+
+  console.log('   the note');
+  check('it opens whether or not there is one, so a swipe edits',
+    /openNote\(index\)/.test(code));
+  check('it is a textarea, for two lines', /createElement\('textarea'\)/.test(code));
+  check('with the placeholder asked for',
+    /What are you doing in this block\?/.test(code));
+  check('capitalised by sentence for dictation',
+    /'autocapitalize', 'sentences'/.test(code));
+  check('and not autocompleted at', /'autocomplete', 'off'/.test(code));
+  check('leaving the field saves it', /area\.onblur = \(\) => saveNote/.test(code));
+  check('an empty one is no note', /blocks\[i\]\.note = clean \|\| null/.test(code));
+  // On the block, never on the entry. "Finish the pricing page" is true of
+  // Tuesday morning and not of the project, and putting it on the entry would
+  // make it a claim that outlives the session it describes.
+  check('the page never sends a note to /entries', !/body\.note/.test(code));
+  check('nor to the update route',
+    !/entries\/\$\{editingId\}\/update[\s\S]{0,400}note/.test(code));
+  check('and the entries write path has no note in it', (() => {
+    const entries = fs.readFileSync(ROOT + '/routes/entries.js', 'utf8');
+    const tools = fs.readFileSync(ROOT + '/tools.js', 'utf8');
+    return !/\bnote\b/.test(entries) && !/'note'/.test(tools);
+  })());
+  check('a block with one shows it under the title', /className = 'note'/.test(code));
+  check('and it rides with the block through a confirm',
+    /note: b\.note \|\| null/.test(code));
+
+  // A press to place a cursor must not lift the card out from under the
+  // keyboard, so a block being written in takes no gestures at all.
+  check('a block being written in takes no gestures',
+    /if \(noting === index\) return;/.test(code));
 
   console.log('   the reorder');
   check('held, not dragged from a handle', /setTimeout\(startReorder, HOLD_MS\)/.test(code));
@@ -435,7 +469,9 @@ console.log('\n17. the mockup still describes the page');
   for (const [what, klass] of [
     ['the row hint', 'hint'],
     ['the revealed actions', 'rowacts'],
-    ['the swipe backing', 'backing'],
+    ["the swipe backing", "backing"],
+    ["a note", "note"],
+    ["the note editor", "noteedit"],
     ['the duration chip', 'dur'],
     ['a lifted block', 'lifted'],
     ['the dimmed others', 'dimmed'],

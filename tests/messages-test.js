@@ -53,6 +53,37 @@ const made = [];
       m.composeMessage(past).includes('23:00 to 01:00'), m.composeMessage(past));
   }
 
+  console.log('\nthe note, verbatim, on its own line');
+  {
+    const base = { title: 'UF application', start_time: '09:00:00', duration_minutes: 120 };
+
+    const noted = m.composeMessage({ ...base, note: 'Finish the essay draft', message_text: null });
+    check('it follows the header', noted === '<b>UF application</b>\n09:00 to 11:00\n\nFinish the essay draft',
+      JSON.stringify(noted));
+
+    const both = m.composeMessage({
+      ...base, note: 'Finish the essay draft', message_text: 'Due in 3 days.',
+    });
+    check('their words come before ours',
+      both.indexOf('Finish the essay draft') < both.indexOf('Due in 3 days.'), both);
+    check('and each gets its own line',
+      both === '<b>UF application</b>\n09:00 to 11:00\n\nFinish the essay draft\n\nDue in 3 days.',
+      JSON.stringify(both));
+
+    check('no note is no line', m.composeMessage({ ...base, note: null, message_text: 'Due in 3 days.' }) ===
+      '<b>UF application</b>\n09:00 to 11:00\n\nDue in 3 days.');
+    check('an empty note is no line either',
+      !m.composeMessage({ ...base, note: '', message_text: null }).includes('\n\n'));
+
+    // Verbatim means verbatim. Nothing here trims, truncates or rewrites.
+    const odd = m.composeMessage({ ...base, note: '  a <b>bold</b> claim  ', message_text: null });
+    check('it is not trimmed or escaped here', odd.includes('  a <b>bold</b> claim  '), JSON.stringify(odd));
+    check('escaping is telegram.js\'s job, and it does it', (() => {
+      const src = require('fs').readFileSync(ROOT + '/telegram.js', 'utf8');
+      return /replace\(\/</.test(src) && /toTelegramHtml/.test(src);
+    })());
+  }
+
   console.log('\nthe deadline line, measured against the day being planned');
   {
     // Written the evening before and read the following morning, so every one
@@ -145,7 +176,8 @@ const made = [];
         date: DATE,
         wake_minutes: 480,
         blocks: [
-          { title: habit.title, entryId: habit.id, start_minutes: 480, duration_minutes: 60 },
+          { title: habit.title, entryId: habit.id, start_minutes: 480, duration_minutes: 60,
+            note: 'twenty pages, no phone' },
           { title: task.title, entryId: task.id, start_minutes: 540, duration_minutes: 60 },
           { title: 'Buffer', entryId: null, start_minutes: 600, duration_minutes: 30 },
         ],
@@ -160,11 +192,20 @@ const made = [];
 
     const { data: written } = await supabase
       .from('blocks')
-      .select('title, message_text, start_time, duration_minutes')
+      .select('title, message_text, note, start_time, duration_minutes')
       .eq('plan_id', plan.id)
       .order('sort_order');
 
     for (const b of written) console.log(`    ${b.title}: ${JSON.stringify(b.message_text)}`);
+
+    check('the note reached the row', written[0].note === 'twenty pages, no phone',
+      String(written[0].note));
+    check('and a block without one stored null', written[1].note === null,
+      String(written[1].note));
+    check('the message carries both the note and the gap',
+      m.composeMessage(written[0]).includes('twenty pages, no phone') &&
+        m.composeMessage(written[0]).includes('11 days since'),
+      m.composeMessage(written[0]).replace(/\n/g, ' / '));
 
     check('the habit carries its gap',
       written[0].message_text === '11 days since you last did this.', String(written[0].message_text));

@@ -383,15 +383,22 @@
         border-radius: 11px;
         padding: 14px 15px;
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
+        flex-direction: column;
+        align-items: stretch;
         /* Vertical pans belong to the page, horizontal ones are ours. This one
            line is what lets a swipe and a scroll live on the same element
            without arbitrating between them in script. */
         touch-action: pan-y;
         user-select: none;
         -webkit-user-select: none;
+      }
+      /* The block's own line: what it is, and how long. A note, when there is
+         one, sits under this rather than beside it. */
+      .brow {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
       }
       .block .t {
         font-size: 15px;
@@ -401,6 +408,44 @@
         color: var(--muted);
         margin-top: 4px;
         font-variant-numeric: tabular-nums;
+      }
+
+      /* What they said they were doing. Small and muted, so a glance down the
+         day shows which blocks carry one without any of them shouting. */
+      .note {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.45;
+        margin-top: 9px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      /* The same line, open for writing. A rule under it and nothing else: it
+         is a note on a card, not a form on one. */
+      .noteedit {
+        margin-top: 9px;
+        width: 100%;
+        background: none;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        color: var(--text);
+        font: inherit;
+        font-size: 13px;
+        line-height: 1.45;
+        padding: 2px 0 5px;
+        resize: none;
+        /* Typing is not a gesture. The card above is pan-y; this is not. */
+        touch-action: auto;
+        user-select: text;
+        -webkit-user-select: text;
+      }
+      .noteedit::placeholder {
+        color: var(--faint);
+      }
+      .noteedit:focus {
+        outline: none;
+        border-bottom-color: var(--muted);
       }
 
       /* Picked up. Bigger, lighter, casting a shadow: it has to be obvious
@@ -770,8 +815,6 @@
 
       // Settling a swipe back, and dropping a reorder.
       const SETTLE_MS = 180;
-
-      const BUFFER_TITLE = 'Buffer';
 
       // Read each time rather than cached, so changing it in the OS takes
       // effect without a reload. Guarded because the suite runs this script in
@@ -1188,6 +1231,7 @@
           title: b.title,
           entryId: b.entryId,
           duration: b.duration_minutes,
+          note: b.note || null,
         }));
         saved = data.plan.status === 'confirmed';
         renderWake();
@@ -1295,9 +1339,38 @@
         renderBuilder();
       }
 
-      function insertBuffer(i) {
-        blocks.splice(i + 1, 0, { title: BUFFER_TITLE, entryId: null, duration: STEP });
-        saved = false;
+      // The block whose note is open for writing, or null.
+      //
+      // While it is set, that block takes no gestures at all: placing a cursor
+      // in a note is not handling the block, and a hold that lifted the card
+      // out from under the keyboard would be the worst of both.
+      let noting = null;
+
+      function openNote(i) {
+        if (!blocks[i]) return;
+        noting = i;
+        renderBuilder();
+      }
+
+      /**
+       * Saved on the block, not on the entry.
+       *
+       * "Finish the pricing page" is true of Tuesday morning, not of the
+       * project. Writing it onto the entry would make it a claim that outlives
+       * the session it describes, and the next block for the same project
+       * would inherit a sentence about a different day.
+       *
+       * Empty is not a note. Clearing the field is how one is removed.
+       */
+      function saveNote(i, text) {
+        noting = null;
+        if (!blocks[i]) return renderBuilder();
+
+        const clean = String(text || '').trim();
+        const before = blocks[i].note || null;
+        blocks[i].note = clean || null;
+
+        if (blocks[i].note !== before) saved = false;
         renderBuilder();
       }
 
@@ -1427,6 +1500,9 @@
         const card = document.createElement('div');
         card.className = 'block';
 
+        const row = document.createElement('div');
+        row.className = 'brow';
+
         const left = document.createElement('div');
         const t = document.createElement('div');
         t.className = 't';
@@ -1452,11 +1528,56 @@
           cycleDuration(i);
         };
 
-        card.append(left, dur);
+        row.append(left, dur);
+        card.append(row);
+
+        if (i === noting) card.append(noteEditor(b, i));
+        else if (b.note) card.append(noteLine(b.note));
+
         slot.append(backing, card);
 
         attach({ slot, card, backing, index: i });
         return slot;
+      }
+
+      function noteLine(text) {
+        const note = document.createElement('div');
+        note.className = 'note';
+        note.textContent = text;
+        return note;
+      }
+
+      /**
+       * The note, open for writing.
+       *
+       * A textarea rather than an input because it is a line or two and both
+       * should be visible. Set up for dictation: capitalised by sentence,
+       * spellchecked, and with autocomplete off — a field that guesses at the
+       * next word gets in the way of someone talking at it.
+       */
+      function noteEditor(b, i) {
+        const area = document.createElement('textarea');
+        area.className = 'noteedit';
+        area.rows = 2;
+        area.value = b.note || '';
+        area.placeholder = 'What are you doing in this block?';
+        area.setAttribute('autocapitalize', 'sentences');
+        area.setAttribute('autocomplete', 'off');
+        area.setAttribute('spellcheck', 'true');
+        area.setAttribute('aria-label', `Note for ${b.title}`);
+
+        // Leaving the field is what saves it. There is no button because there
+        // is nothing to decide: the text is either there or it is not.
+        area.onblur = () => saveNote(i, area.value);
+
+        // Belt and braces with the `noting` guard in the pointer handler: a
+        // press inside the field is never a press on the block.
+        area.onpointerdown = (e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+        };
+
+        setTimeout(() => area.focus(), 0);
+        return area;
       }
 
       function attach({ slot, card, backing, index }) {
@@ -1534,6 +1655,10 @@
           // One at a time. A second finger is not a second gesture.
           if (gesture) return;
           if (e.button !== undefined && e.button !== 0) return;
+          // A block with its note open is being written in, not handled. No
+          // hold, no swipe: placing a cursor must not lift the card out from
+          // under the keyboard.
+          if (noting === index) return;
 
           gesture = {
             id: e.pointerId,
@@ -1577,7 +1702,7 @@
             gesture.dx = dx;
             card.style.transform = `translateX(${dx}px)`;
             backing.className = `backing ${dx < 0 ? 'left' : 'right'}`;
-            backing.textContent = dx < 0 ? 'Remove' : '+ Buffer';
+            backing.textContent = dx < 0 ? 'Remove' : 'Note';
             // Fades in with the travel, so the colour arrives before the
             // commit does and the action is readable before release.
             backing.style.opacity = String(Math.min(1, Math.abs(dx) / SWIPE_COMMIT));
@@ -1615,7 +1740,9 @@
 
           if (mode === 'swipe') {
             if (dx <= -SWIPE_COMMIT) return removeBlock(index);
-            if (dx >= SWIPE_COMMIT) return insertBuffer(index);
+            // Opens whether or not there is one already, so swiping a block
+            // that has a note is how you edit it.
+            if (dx >= SWIPE_COMMIT) return openNote(index);
 
             // Short of it. Settle back and leave the day alone.
             if (!reduceMotion()) card.style.transition = `transform ${SETTLE_MS}ms ease-out`;
@@ -1698,6 +1825,7 @@
                   entryId: b.entryId,
                   start_minutes: b.start,
                   duration_minutes: b.duration,
+                  note: b.note || null,
                 })),
               }),
             })

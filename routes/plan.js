@@ -19,6 +19,10 @@ const { contextLine } = require('../messages');
 
 const router = express.Router();
 
+// How long a note may be. It is described as a line or two and it is sent
+// verbatim in a message, so this is a ceiling rather than a target.
+const NOTE_MAX = 500;
+
 /**
  * Everything on both calendar feeds for one date.
  *
@@ -97,7 +101,7 @@ router.get('/plan/:date', async (req, res) => {
 
   const { data: rows, error: blockErr } = await supabase
     .from('blocks')
-    .select('id, title, entry_id, start_time, duration_minutes, sort_order')
+    .select('id, title, entry_id, start_time, duration_minutes, note, sort_order')
     .eq('plan_id', plan.id)
     .order('sort_order');
 
@@ -114,6 +118,7 @@ router.get('/plan/:date', async (req, res) => {
       entryId: b.entry_id,
       start_minutes: toMinutes(b.start_time),
       duration_minutes: b.duration_minutes,
+      note: b.note,
     })),
   });
 });
@@ -151,11 +156,21 @@ function validatePlan(date, blocks, wakeMinutes) {
     if (!Number.isInteger(duration) || duration < 30) {
       return `${b.title}: duration must be at least 30 minutes`;
     }
-    // Every block is built with the steppers now — nothing arrives from a
+    // Every block is built in the builder now — nothing arrives from a
     // calendar at whatever length the calendar said — so every block lands on
     // the step.
     if (duration % 30 !== 0) {
       return `${b.title}: duration must be a multiple of 30 minutes`;
+    }
+
+    // The note is free text and stays free text. The only rule is a ceiling,
+    // because it goes out verbatim in a message and an unbounded field
+    // eventually meets Telegram's own limit somewhere less helpful than here.
+    if (b.note !== undefined && b.note !== null && typeof b.note !== 'string') {
+      return `${b.title}: a note must be text`;
+    }
+    if (String(b.note || '').length > NOTE_MAX) {
+      return `${b.title}: a note is a line or two, not ${String(b.note).length} characters`;
     }
   }
   return null;
@@ -272,6 +287,9 @@ router.post('/plan', async (req, res) => {
       start_time: hhmmss(Number(b.start_minutes)),
       duration_minutes: Number(b.duration_minutes),
       sort_order: i,
+      // Trimmed, and an empty one is no note rather than an empty string —
+      // clearing the field is how a note is removed.
+      note: String(b.note || '').trim() || null,
       // Null for a buffer block, and for anything whose entry had nothing
       // worth saying. Delivery sends the title and times on their own.
       message_text: (b.entryId && lines.get(b.entryId)) || null,

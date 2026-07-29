@@ -27,14 +27,30 @@ const GAP_WORTH_NAMING = 3;
 /**
  * What Telegram sends for a block.
  *
- * The header is always facts from the row. `message_text` is the context line,
- * and when there is none the header goes out alone — which is the normal case
- * for a buffer block and not a degraded one.
+ * Three parts, and each may be absent but the first:
+ *
+ *   the header       title and both times, always, straight from the row
+ *   the note         what they said they were doing in this session, verbatim
+ *   the context line the deadline or the gap, composed at confirm time
+ *
+ * The note comes first because it is the person's own sentence about this
+ * particular hour, and the context line is a fact derived about the thing in
+ * general. Their words before ours.
+ *
+ * Verbatim really is verbatim: nothing here parses, trims or reasons about a
+ * note. It is escaped on the way out by telegram.js, along with everything
+ * else, so a note containing a `<` renders as a `<`.
  */
 function composeMessage(block) {
   const start = toMinutes(block.start_time);
-  const header = `<b>${block.title}</b>\n${clock(start)} to ${clock(start + block.duration_minutes)}`;
-  return block.message_text ? `${header}\n\n${block.message_text}` : header;
+  const parts = [
+    `<b>${block.title}</b>\n${clock(start)} to ${clock(start + block.duration_minutes)}`,
+  ];
+
+  if (block.note) parts.push(block.note);
+  if (block.message_text) parts.push(block.message_text);
+
+  return parts.join('\n\n');
 }
 
 /**

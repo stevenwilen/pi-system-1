@@ -327,13 +327,45 @@ confirmation, and offers **Removed · Undo** for six seconds. That is a better
 trade than a confirm: a confirm interrupts every removal to catch the rare wrong
 one, and the undo interrupts none of them and still catches it.
 
-**Swipe right to insert a buffer.** A thirty-minute block titled *Buffer* lands
-immediately after, and everything below shifts. The backing is neutral, not the
-miss colour — adding a gap is not a warning, and the miss colour there would say
-it was.
+**Swipe right to write a note.** A field opens on that block. The backing is
+neutral, not the miss colour — writing something down is not a warning.
 
 Both swipes need real travel before they commit, far enough that a hand doing
 something else cannot reach it by accident.
+
+#### The note
+
+Free text, a line or two, saved **on the block and not on the entry**. That is
+the whole point of it: *"finish the pricing page"* is true of Tuesday morning,
+not of the project. Put it on the entry and it becomes a claim that outlives the
+session it describes, and the next block for the same project inherits a sentence
+about a different day.
+
+It follows from that. Change the plan and the note goes with the day.
+Re-confirm without it and it is cleared, like everything else on the block.
+
+A block that has one shows it under the title, small and muted, so a glance down
+the day shows which blocks carry one without any of them shouting. Swiping right
+again reopens it for editing; clearing the text removes it. It saves when you
+leave the field — there is no button, because there is nothing to decide.
+
+Set up to be talked at: a textarea so both lines are visible, capitalised by
+sentence, spellchecked, and with autocomplete off, because a field guessing at
+the next word gets in the way of dictation.
+
+A block with its note open **takes no gestures at all**. Placing a cursor is not
+handling the block, and a hold that lifted the card out from under the keyboard
+would be the worst of both.
+
+**The note goes into that block's Telegram message**, on its own line after the
+title and time and before the context line — their words before ours. Composed
+in code and used verbatim: nothing parses it, trims it or reasons about it.
+Escaping is `telegram.js`'s job, which it already does for every message, so a
+note containing a `<` arrives as a `<`.
+
+Capped at 500 characters. It is described as a line or two and it is sent
+verbatim, so the ceiling exists to stop an unbounded field meeting Telegram's
+own limit somewhere less helpful.
 
 **Press and hold to reorder.** No drag handle: 400ms anywhere on the block,
 including on the duration chip. It vibrates if the device can, then lifts —
@@ -427,18 +459,31 @@ One message per block, at its start time.
 Due in 3 days.
 ```
 
-The header is always facts from the row. The line under it is composed **in
-code** when the day is confirmed and stored on the block, because delivery
-happens hours later in a different process and has to survive a restart.
+Three parts, and each may be absent but the first:
 
-Which line a block gets:
+| | |
+|---|---|
+| the header | title and both times, always, straight from the row |
+| the note | what they said they were doing, verbatim. See 3.3 |
+| the context line | the deadline or the gap, composed at confirm time |
+
+The note comes first because it is the person's own sentence about this
+particular hour, and the context line is a fact derived about the thing in
+general. Their words before ours.
+
+The context line is composed **in code** when the day is confirmed and stored on
+the block, because delivery happens hours later in a different process and has to
+survive a restart.
+
+Which context line a block gets:
 
 - If the entry has a due date → the deadline, measured against the day being
   planned rather than today. Written on Monday evening, "Due tomorrow" has to
   mean Wednesday.
 - Otherwise, if it was last done three or more days ago → the gap.
-- Otherwise nothing, and the header goes out alone. That is the normal case for
-  a buffer block, not a degraded one.
+- Otherwise none, and the header goes out with whatever note there is, or alone.
+  That is the normal case for a block typed straight into the builder, not a
+  degraded one.
 
 A deadline beats a gap: if something is due in two days, how long it has been
 sitting there is the less useful of the two facts.
@@ -543,6 +588,7 @@ Run once each, by hand, in the Supabase SQL editor. All are safe to run twice.
 | `migration-due.sql` | `entries.due` |
 | `migration-nudge.sql` | `profile.nudge_hour` |
 | `migration-size.sql` | `entries.size`, and the check constraint on its five buckets |
+| `migration-note.sql` | `blocks.note` |
 
 **No column or table has ever been dropped.** The strip retired
 `entries.why`, `entries.body`, `entries.priority`, `entries.sort_order`,
