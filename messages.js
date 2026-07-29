@@ -74,4 +74,4 @@ function contextLine({ entry, lastSeen, date }) {
   return null;
 }
 
-module.exports = { composeMessage, contextLine, dueLine, GAP_WORTH_NAMING };
+module.exports = { composeMessage, contextLine, dueLine };

@@ -52,22 +52,33 @@ const DATE = '2031-03-09';
   console.log(`  using entry: "${target.title}" (${target.type}), currently ${target.days} days\n`);
 
   console.log('validation');
-  check('rejects a bad date', (await call('/plan', { date: 'nope', blocks: [] })).status === 400);
-  check('rejects an empty plan', (await call('/plan', { date: DATE, blocks: [] })).status === 400);
-  const offStep = await call('/plan', { date: DATE, blocks: [{ title: 'x', start_minutes: 480, duration_minutes: 45 }] });
+
+  // wake_minutes is required, and it is checked before the per-block rules.
+  // So every case below sends a valid one: without it they would all come back
+  // 400 for the missing wake time and pass while proving nothing about the
+  // rule each one names.
+  const WAKE = 8 * 60;
+  const withWake = (body) => call('/plan', { wake_minutes: WAKE, ...body });
+
+  check('rejects a bad date', (await withWake({ date: 'nope', blocks: [] })).status === 400);
+  check('rejects an empty plan', (await withWake({ date: DATE, blocks: [] })).status === 400);
+  const offStep = await withWake({ date: DATE, blocks: [{ title: 'x', start_minutes: 480, duration_minutes: 45 }] });
   check('rejects a duration off the 30 minute step', offStep.status === 400, offStep.data.error);
+  check('and says so, rather than complaining about the wake time',
+    /multiple of 30/.test(offStep.data.error || ''), offStep.data.error);
   // Nothing arrives from a calendar any more, so nothing is exempt from the
   // step. Every block is built with the steppers, so every block lands on it.
-  const pinnedOdd = await call('/plan', { date: DATE, blocks: [{ title: 'x', start_minutes: 480, duration_minutes: 45, pinned: true }] });
+  const pinnedOdd = await withWake({ date: DATE, blocks: [{ title: 'x', start_minutes: 480, duration_minutes: 45, pinned: true }] });
   check('and the old exemption for pinned events is gone', pinnedOdd.status === 400, pinnedOdd.data.error);
-  const tooShort = await call('/plan', { date: DATE, blocks: [{ title: 'x', start_minutes: 480, duration_minutes: 15 }] });
+  const tooShort = await withWake({ date: DATE, blocks: [{ title: 'x', start_minutes: 480, duration_minutes: 15 }] });
   check('rejects a duration under one step', tooShort.status === 400, tooShort.data.error);
-  check('rejects a start outside the day', (await call('/plan', { date: DATE, blocks: [{ title: 'x', start_minutes: 1500, duration_minutes: 30 }] })).status === 400);
-  check('rejects a blank title', (await call('/plan', { date: DATE, blocks: [{ title: '  ', start_minutes: 480, duration_minutes: 30 }] })).status === 400);
+  check('rejects a start outside the day', (await withWake({ date: DATE, blocks: [{ title: 'x', start_minutes: 1500, duration_minutes: 30 }] })).status === 400);
+  check('rejects a blank title', (await withWake({ date: DATE, blocks: [{ title: '  ', start_minutes: 480, duration_minutes: 30 }] })).status === 400);
 
   console.log('\nconfirm writes plans and blocks');
   const plan = {
     date: DATE,
+    wake_minutes: WAKE,
     blocks: [
       { title: target.title, entryId: target.id, start_minutes: 480, duration_minutes: 60 },
       { title: 'Dentist', entryId: null, start_minutes: 600, duration_minutes: 60 },
@@ -136,16 +147,33 @@ const DATE = '2031-03-09';
       check(`rejects a wake time ${label}`, r.status === 400, `${r.status} ${r.data.error || ''}`);
     }
 
-    // Older clients send no wake time at all and must keep working.
-    const legacy = await call('/plan', { date: DATE, blocks: [{ title: 'x', start_minutes: 600, duration_minutes: 30 }] });
-    check('omitting it still saves', legacy.status === 200);
-    const { data: fell } = await supabase
+    // It used to fall back to the earliest block when nothing was sent, for
+    // the sake of an older client. There are no older clients: the page is
+    // served by this same process from this same deploy and cannot be a
+    // version behind. So the fallback was unreachable, and the behaviour it
+    // fell back to is the exact inference this field exists to replace.
+    const { data: before } = await supabase
       .from('plans').select('wake_time').eq('user_id', U).eq('date', DATE).maybeSingle();
-    check('and falls back to the first block', fell.wake_time.startsWith('10:00'), fell.wake_time);
+
+    const omitted = await call('/plan', { date: DATE, blocks: [{ title: 'x', start_minutes: 600, duration_minutes: 30 }] });
+    check('omitting it is refused', omitted.status === 400, `${omitted.status} ${omitted.data.error || ''}`);
+    check('and the message says why', /required/.test(omitted.data.error || ''), omitted.data.error);
+
+    const nulled = await call('/plan', { date: DATE, wake_minutes: null, blocks: [{ title: 'x', start_minutes: 600, duration_minutes: 30 }] });
+    check('null is refused too', nulled.status === 400, `${nulled.status}`);
+
+    // The refusal must not have half-written the day on its way out.
+    const { data: after } = await supabase
+      .from('plans').select('wake_time').eq('user_id', U).eq('date', DATE).maybeSingle();
+    check('the refused request changed nothing',
+      (before && before.wake_time) === (after && after.wake_time),
+      `${before && before.wake_time} -> ${after && after.wake_time}`);
+    check('and it certainly did not infer 10:00 from the first block',
+      !(after && after.wake_time.startsWith('10:00')), after && after.wake_time);
   }
 
   console.log('\nre-confirming replaces, never appends');
-  const again = await call('/plan', { date: DATE, blocks: [{ title: 'Only this', start_minutes: 540, duration_minutes: 30 }] });
+  const again = await call('/plan', { date: DATE, wake_minutes: WAKE, blocks: [{ title: 'Only this', start_minutes: 540, duration_minutes: 30 }] });
   check('second confirm succeeds', again.status === 200);
   const { data: after } = await supabase.from('blocks').select('id, title').eq('plan_id', planRow.id);
   check('one block, not four', after.length === 1, `${after.length}`);
@@ -165,6 +193,7 @@ const DATE = '2031-03-09';
 
   await call('/plan', {
     date: past,
+    wake_minutes: WAKE,
     blocks: [{ title: target.title, entryId: target.id, start_minutes: 480, duration_minutes: 60 }],
   });
 
@@ -179,6 +208,7 @@ const DATE = '2031-03-09';
   const recentDate = recent.toISOString().slice(0, 10);
   await call('/plan', {
     date: recentDate,
+    wake_minutes: WAKE,
     blocks: [{ title: target.title, entryId: target.id, start_minutes: 480, duration_minutes: 60 }],
   });
 

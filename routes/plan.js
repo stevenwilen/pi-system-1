@@ -122,11 +122,21 @@ function validatePlan(date, blocks, wakeMinutes) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return 'date must be YYYY-MM-DD';
   if (!Array.isArray(blocks) || !blocks.length) return 'a plan needs at least one block';
 
-  if (wakeMinutes !== undefined && wakeMinutes !== null) {
-    const w = Number(wakeMinutes);
-    if (!Number.isInteger(w) || w < 0 || w > 1439) {
-      return 'wake_minutes must be inside the day';
-    }
+  // Required, not optional.
+  //
+  // This used to fall back to the earliest block when nothing was sent, for
+  // the sake of an older client. There are no older clients: the page is
+  // served by this same process from this same deploy, so it cannot be a
+  // version behind. The fallback was unreachable code, and worse, the
+  // behaviour it fell back to is the exact inference this field exists to
+  // replace — a 06:00 block does not mean anyone got up at 06:00.
+  if (wakeMinutes === undefined || wakeMinutes === null) {
+    return 'wake_minutes is required: the hour the day starts is a fact, not something to infer from the first block';
+  }
+
+  const w = Number(wakeMinutes);
+  if (!Number.isInteger(w) || w < 0 || w > 1439) {
+    return 'wake_minutes must be inside the day';
   }
 
   for (const b of blocks) {
@@ -204,13 +214,10 @@ router.post('/plan', async (req, res) => {
   const problem = validatePlan(date, blocks, wake_minutes);
   if (problem) return res.status(400).json({ error: problem });
 
-  // The hour the person set for this day, stored as the fact it is. Falls back
-  // to the first block only when nothing was sent, so an older client still
-  // works.
-  const wake =
-    wake_minutes === undefined || wake_minutes === null
-      ? hhmmss(Math.min(...blocks.map((b) => Number(b.start_minutes))))
-      : hhmmss(Number(wake_minutes));
+  // The hour the person set for this day, stored as the fact it is. Never
+  // inferred from the blocks: validatePlan has already refused a request that
+  // did not say.
+  const wake = hhmmss(Number(wake_minutes));
 
   try {
     const { data: existing } = await supabase

@@ -367,10 +367,17 @@ A deadline beats a gap: if something is due in two days, how long it has been
 sitting there is the less useful of the two facts.
 
 **Delivery.** The scheduler ticks every 15 minutes and asks which blocks of
-today's confirmed plan have started and not been sent. Only a confirmed plan
-delivers; a day left pending was built and never agreed to. A block more than 30
+today's confirmed plan have started and not been sent. A block more than 30
 minutes late is marked sent without being sent and logged under `[EXPIRED]`,
 because "Gym, 08:00" arriving at 14:00 is worse than nothing.
+
+Delivery is gated on `status = 'confirmed'`, and that gate is **defensive
+rather than descriptive**. `plans.status` allows `'pending'` and the column
+defaults to it, but nothing in this system writes that value: there is no draft,
+no autosave, and the builder holds the whole day in memory until Confirm. So a
+pending row can only arrive by hand, through SQL. The gate stays because a plan
+nobody agreed to must never generate messages, and the cheapest way to guarantee
+that is to check rather than to rely on no such row ever existing.
 
 There is no grace window for a block whose text has not been written yet. The
 line is composed in code and inserted with the block, so a block that exists has
@@ -460,12 +467,15 @@ Run once each, by hand, in the Supabase SQL editor. All are safe to run twice.
 | `migration-nudge.sql` | `profile.nudge_hour` |
 | `migration-size.sql` | `entries.size`, and the check constraint on its five buckets |
 
-**No column or table has ever been dropped.** `entries.why`, `entries.body`,
-`entries.priority`, `entries.sort_order`, `entries.cold`, `entries.cold_reason`,
-`entries.paused_at`, `blocks.pinned`, the `messages` table and the whole finance
-side are all still there, still holding whatever they last held, and read by
-nothing. Dropping a column is the one move that cannot be undone, and an unread
-column costs nothing.
+**No column or table has ever been dropped.** The strip retired
+`entries.why`, `entries.body`, `entries.priority`, `entries.sort_order`,
+`entries.cold`, `entries.cold_reason`, `entries.paused_at`, `blocks.pinned` and
+the whole finance side. All of it is still there, still holding whatever it last
+held, and read by nothing. Dropping a column is the one move that cannot be
+undone, and an unread column costs nothing.
+
+The `messages` table is in the same state and was not part of this: it stopped
+being read when the chat was removed, well before any of the above.
 
 What stops anything writing to them is the whitelist in `tools.js`, which is a
 short explicit list rather than a filter of things to exclude.
