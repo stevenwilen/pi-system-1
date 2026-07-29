@@ -2149,7 +2149,7 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                date: planDate,
+                date: planDate(),
                 wake_minutes: wake,
                 blocks: blocks.map((b) => ({
                   // Null on anything built in this session. The server reads

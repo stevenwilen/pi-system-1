@@ -61,6 +61,17 @@ const DATE = '2031-03-09';
   const withWake = (body) => call('/plan', { wake_minutes: WAKE, ...body });
 
   check('rejects a bad date', (await withWake({ date: 'nope', blocks: [] })).status === 400);
+
+  // A MISSING date, which is not the same case and is the one that shipped.
+  // The page posted `date: planDate` — the function rather than its result —
+  // and JSON.stringify drops a function-valued key without a word, so the body
+  // arrived with no date at all. This is the message that came back, and it
+  // named a format rather than an absence, which is why it read as a locale
+  // problem on the phone that received it.
+  const noDate = await withWake({ blocks: [{ title: 'x', start_minutes: 480, duration_minutes: 30 }] });
+  check('rejects a missing date too', noDate.status === 400, `${noDate.status}`);
+  check('with the message the phone showed', noDate.data.error === 'date must be YYYY-MM-DD',
+    noDate.data.error);
   check('rejects an empty plan', (await withWake({ date: DATE, blocks: [] })).status === 400);
   const offStep = await withWake({ date: DATE, blocks: [{ title: 'x', start_minutes: 480, duration_minutes: 45 }] });
   check('rejects a duration off the 30 minute step', offStep.status === 400, offStep.data.error);

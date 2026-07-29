@@ -901,6 +901,45 @@ const SETTLED = 220; // past SETTLE_MS
     check('with Starts shown again', !byId.starts._class.has('hidden'));
   }
 
+  console.log('\nconfirm sends the date of the day on screen');
+  {
+    // THE BUG THIS EXISTS FOR. The confirm posted `date: planDate` — the
+    // function, not its result. JSON.stringify drops a function-valued key
+    // silently, so the body went out with no date at all and the server
+    // answered "date must be YYYY-MM-DD" on every confirm, on every platform.
+    //
+    // It survived because the suite confirmed days and then read the BLOCKS
+    // out of the body. Nothing ever looked at the date, so the one field that
+    // was missing was the one field never asserted.
+    const TOMORROW = new Date(Date.UTC(2026, 6, 28)).toISOString().slice(0, 10);
+
+    const { ctx, byId, posted } = boot({
+      plan: twoDays(), entries: utcEntries(), now: '11:00',
+    });
+    await ctx.load();
+
+    posted.length = 0;
+    await byId['confirm'].onclick();
+    const body = posted.find((p) => p.url === '/plan').body;
+
+    check('the date is there at all', 'date' in body, JSON.stringify(Object.keys(body)));
+    check('and it is a string, not a dropped function', typeof body.date === 'string',
+      typeof body.date);
+    check('in the shape the server accepts', /^\d{4}-\d{2}-\d{2}$/.test(String(body.date)),
+      String(body.date));
+    check("and it is tomorrow's date, the day on screen", body.date === TOMORROW,
+      `${body.date} vs ${TOMORROW}`);
+
+    // The switch has to carry through to the payload too, or a confirm on one
+    // day would save over the other.
+    await byId['pick-today'].onclick();
+    posted.length = 0;
+    await byId['confirm'].onclick();
+    const todayBody = posted.find((p) => p.url === '/plan').body;
+    check('switching to Today sends today instead', todayBody.date === TODAY,
+      `${todayBody.date} vs ${TODAY}`);
+  }
+
   console.log('\na morning planner opens on today');
   {
     const { ctx, byId } = boot({
