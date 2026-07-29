@@ -343,6 +343,24 @@ retime or resize it anyway — so offering any of those was offering something t
 would be rejected on the way out. *Begun* is read off the block's **stored**
 start, the same question the reflow asks when it decides what to hold in place.
 
+**The lock is asked of the clock, not of the last render.** Nothing on this page
+re-renders on a timer, so a page left open across a block's start time is showing
+a drawing of a moment that has passed. Rendering is allowed to go stale — it is a
+picture. What a press is allowed to *do* is not, so each gesture asks again at the
+moment it fires rather than trusting the flag it was handed when the card was
+drawn.
+
+That held for an hour at a time in practice: a page opened at 09:59 went on
+offering the chip, the hold and the note swipe on a block that started at 10:00,
+and only said **active** after the edit, on the render the edit itself caused.
+The chip is the sharp one, because it only ever grows and wraps 4h back to 30m —
+one press on a four-hour block an hour in ends it before the current time and
+slides it bodily into the past.
+
+Pressing a stale chip **redraws** rather than doing nothing quietly. The chip
+disappears, the block says *active*, and the press has a visible answer; a
+control that swallows presses reads as broken.
+
 **It can still be removed.** That is the one thing on this list that is not
 locked, and it is deliberate: taking a block out is how you say it did not
 happen (§2.5), so a rule that allowed it only before the block started would be

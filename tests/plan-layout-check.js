@@ -394,7 +394,7 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
   // stop a delivered block being swiped away; removal is one rule now, and it
   // is the NOTE swipe that has nowhere to go on a block already under way.
   check('a begun block clamps the note swipe',
-    /begun \? Math\.min\(0, raw\) : raw/.test(code));
+    /isBegun\(\) \? Math\.min\(0, raw\) : raw/.test(code));
   check('and shows no backing when it does', /if \(!dx\) \{/.test(code));
   check('the screen no longer keeps the sent flag', !/sent: Boolean\(b\.sent\)/.test(code));
 
@@ -545,7 +545,24 @@ console.log('\n17. today and tomorrow');
     /const blockBegun = \(b\) => onToday\(\) && hasBegun\(b, nowMinutes\(\)\)/.test(code));
   check('and there is one definition of it', (code.match(/hasBegun\(/g) || []).length === 2,
     `${(code.match(/hasBegun\(/g) || []).length} uses`);
-  check('and a begun block cannot be picked up', /if \(begun\) return;/.test(code));
+  check('and a begun block cannot be picked up', /if \(isBegun\(\)\) return;/.test(code));
+
+  // WHAT A PRESS MAY DO IS ASKED OF THE CLOCK, NOT OF THE LAST RENDER.
+  //
+  // The lock was a boolean captured when the card was drawn. Nothing
+  // re-renders on a clock tick, so a page left open across a block's start
+  // time went on offering the chip, the hold and the note swipe on a block
+  // that had begun — and the chip only grows, wrapping 4h back to 30m, so one
+  // press could end a running block before the current time.
+  check('the gesture handlers read it live',
+    /const isBegun = \(\) => blockBegun\(blocks\[index\]\)/.test(code));
+  check('and none of them keep a captured copy',
+    !/function attach\(\{[^}]*begun/.test(code),
+    (code.match(/function attach\(\{[^}]*\}/) || [''])[0]);
+  check('the chip refuses at the press, not only at the draw',
+    /if \(blockBegun\(blocks\[i\]\)\) return renderBuilder\(\);/.test(code));
+  check('and answers by redrawing, so a dead control does not sit there',
+    /blockBegun\(blocks\[i\]\)\) return renderBuilder/.test(code));
 
   // THE MISS MECHANISM IS GONE, not hidden. Nothing asks whether a block
   // happened, nothing records that it did not, and there is no route left to

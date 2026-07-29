@@ -1557,6 +1557,23 @@
 
       function cycleDuration(i) {
         if (!blocks[i]) return;
+
+        // A block that has begun has no length left to choose. The chip is not
+        // drawn on one — but the drawing is from whenever the page last
+        // rendered, and a page open across the start time still holds a live
+        // chip on a block that has since begun. So the refusal lives here,
+        // where the press lands, rather than only in what was drawn.
+        //
+        // It re-renders rather than returning quietly: the chip that should not
+        // be there goes away, the block says "active", and the press has a
+        // visible answer. Doing nothing at all would read as a dead control.
+        //
+        // The wrap is what makes this more than tidiness. The chip only grows,
+        // 30m through 4h and then back to 30m — so on a four-hour block that
+        // began an hour ago, one press shortens it to thirty minutes, ending it
+        // before the current time and sliding it bodily into the past.
+        if (blockBegun(blocks[i])) return renderBuilder();
+
         blocks[i].duration = nextDuration(blocks[i].duration);
         saved = false;
         renderBuilder();
@@ -1780,7 +1797,7 @@
 
         slot.append(backing, card);
 
-        attach({ slot, card, backing, index: i, begun });
+        attach({ slot, card, backing, index: i });
         return slot;
       }
 
@@ -1840,8 +1857,22 @@
         return area;
       }
 
-      function attach({ slot, card, backing, index, begun = false }) {
+      function attach({ slot, card, backing, index }) {
         const siblings = () => [...$('builder').children];
+
+        // Asked at the moment of the gesture, not at the moment of the render.
+        //
+        // The lock used to be a boolean handed in when the card was drawn, and
+        // nothing re-renders on a clock tick — so a page left open across a
+        // block's start time kept the handlers it was given at 09:59 and let
+        // you resize, reorder and annotate a block that had begun at 10:00.
+        // The screen said "active" only after the edit, on the render the edit
+        // itself triggered.
+        //
+        // Rendering can go stale; it is a picture of a moment. What must not go
+        // stale is what a press is allowed to do, so that question is asked of
+        // the clock every time rather than remembered.
+        const isBegun = () => blockBegun(blocks[index]);
 
         const lift = (on) => {
           const still = reduceMotion();
@@ -1874,7 +1905,7 @@
           // A block that has begun cannot be moved. Picking it up would offer
           // a drop the server refuses, and the day it was carried out of has
           // already happened.
-          if (begun) return;
+          if (isBegun()) return;
 
           const rect = slot.getBoundingClientRect
             ? slot.getBoundingClientRect()
@@ -1953,7 +1984,7 @@
           // the finger the whole way and then doing nothing would be offering
           // an action and taking it back.
           const raw = e.clientX - gesture.x0;
-          const dx = begun ? Math.min(0, raw) : raw;
+          const dx = isBegun() ? Math.min(0, raw) : raw;
           const dy = e.clientY - gesture.y0;
 
           // Which gesture this is gets decided on the RAW movement, never the

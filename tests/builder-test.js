@@ -89,17 +89,30 @@ const SLOT = 49; // one block's height plus the gap, per getBoundingClientRect
 // The clock the page reads. It asks Intl for the hour in the profile's own
 // timezone, so a case that needs "it is 11am" fixes the whole environment to a
 // zone with no offset and freezes Date there.
+//
+// Frozen, but movable. `boot` returns a `setClock` that winds this forward, so
+// a case can hold a rendered page still and let the time pass underneath it —
+// which is the one thing a page open on a phone does that a test otherwise
+// never reproduces.
 function atClock(hhmm) {
-  const [h, m] = hhmm.split(':').map(Number);
+  const at = { h: 0, m: 0 };
+  const set = (s) => {
+    const [h, m] = s.split(':').map(Number);
+    at.h = h;
+    at.m = m;
+  };
+  set(hhmm);
+
   const Frozen = class extends Date {
     constructor(...a) {
       if (a.length) return super(...a);
-      return super(Date.UTC(2026, 6, 27, h, m, 0));
+      return super(Date.UTC(2026, 6, 27, at.h, at.m, 0));
     }
     static now() {
-      return Date.UTC(2026, 6, 27, h, m, 0);
+      return Date.UTC(2026, 6, 27, at.h, at.m, 0);
     }
   };
+  Frozen.moveTo = set;
   return Frozen;
 }
 
@@ -108,6 +121,7 @@ function boot({
   calendar = [], plan = null, failed = [], reduced = false,
   entries = null, now = null,
 } = {}) {
+  const clock = now ? atClock(now) : Date;
   // Every id the markup declares, read from the file rather than listed here.
   const byId = {};
   for (const id of new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]))) {
@@ -143,7 +157,7 @@ function boot({
 
   const sandbox = {
     console, setTimeout, clearTimeout, Intl, Math, JSON,
-    Date: now ? atClock(now) : Date,
+    Date: clock,
     String, Number, Boolean, Array, Object,
     alert: () => {}, confirm: () => true, prompt: () => 'Typed block',
     window: win,
@@ -198,6 +212,9 @@ function boot({
   return {
     ctx, byId, slots, cardOf, backingOf, rowOf, chipOf, noteOf, editorOf,
     titleOf, titles, listeners, touchmoves, win, posted,
+    // Wind the frozen clock on without re-rendering, the way a page left
+    // open on a phone experiences time passing.
+    setClock: (hhmm) => clock.moveTo && clock.moveTo(hhmm),
   };
 }
 
@@ -1363,6 +1380,93 @@ const SETTLED = 220; // past SETTLE_MS
     check('the note swipe does not travel', !card.style.transform, card.style.transform);
     up(card, 190, 100);
     check('and no editor opened', !cardOf(slots()[1]).children.some((c) => c._class.has('noteedit')));
+  }
+
+  console.log('\nthe lock follows the clock, not the last render');
+  {
+    // THE BUG. The lock was a boolean captured when the card was drawn, and
+    // nothing re-renders on a clock tick — so a page left open across a
+    // block's start time went on offering everything it had offered before it
+    // started. Every one of these passed at render time and was wrong a minute
+    // later.
+    // A page drawn at 09:59 and left alone until 11:00. Deep work runs
+    // 10:00–14:00, so at render time it had not started and at press time it
+    // had been running an hour.
+    //
+    // Each case gets its own boot. A gesture leaves swallowClick set so the
+    // click it produced does not also reach the chip — correct, and it means
+    // one case per rendered page or they mask each other.
+    const stale = async () => {
+      const b = boot({
+        entries: utcEntries({ plans_in: 'morning' }),
+        now: '09:59',
+        plan: {
+          [TODAY]: {
+            plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+            blocks: [
+              { id: 's1', title: 'Earlier', entryId: null, start_minutes: 480, duration_minutes: 60, sent: true },
+              { id: 's2', title: 'Deep work', entryId: null, start_minutes: 600, duration_minutes: 240 },
+            ],
+          },
+        },
+      });
+      await b.ctx.load();
+      b.setClock('11:00');
+      return b;
+    };
+
+    {
+      const { slots, chipOf } = await stale();
+      check('the chip drawn before it started is still on screen',
+        Boolean(chipOf(slots()[1])));
+      check('still saying four hours', chipOf(slots()[1]).textContent === '4h',
+        chipOf(slots()[1]).textContent);
+    }
+
+    {
+      // The wrap is the sharp end: 4h goes to 30m, which would end a block
+      // that began at 10:00 at 10:30 — half an hour ago — sliding it bodily
+      // into the past.
+      const { slots, rowOf, chipOf } = await stale();
+      chipOf(slots()[1]).onclick();
+      check('pressing it does not resize the block',
+        slots()[1].text().includes('10:00 AM – 2:00 PM'), slots()[1].text().trim());
+      check('it clears the chip instead', !chipOf(slots()[1]));
+      check('and the block says it is active',
+        Boolean(rowOf(slots()[1]).children.find((c) => c._class.has('running'))));
+    }
+
+    {
+      const { slots, cardOf } = await stale();
+      const card = cardOf(slots()[1]);
+      down(card, 100, 100);
+      await wait(HELD);
+      check('holding the stale card does not pick it up', !card._class.has('lifted'));
+      up(card, 100, 100);
+    }
+
+    {
+      const { slots, cardOf } = await stale();
+      const card = cardOf(slots()[1]);
+      down(card, 100, 100);
+      move(card, 190, 100);
+      check('the note swipe does not travel', !card.style.transform,
+        card.style.transform);
+      up(card, 190, 100);
+      check('so no editor opened',
+        !cardOf(slots()[1]).children.some((c) => c._class.has('noteedit')));
+    }
+
+    {
+      // Removal is the one thing still allowed, at any hour.
+      const { byId, slots, cardOf, titles } = await stale();
+      const card = cardOf(slots()[1]);
+      down(card, 200, 100);
+      move(card, 100, 100);
+      up(card, 100, 100);
+      check('but it can still be removed', titles().join() === 'Earlier', titles().join());
+      check('with an undo', byId['undo-host'].children.length > 0);
+    }
   }
 
   console.log('\nswiping left on a begun block removes it, like every other block');
