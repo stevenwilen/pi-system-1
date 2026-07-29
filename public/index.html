@@ -24,10 +24,11 @@
 
          The rules the whole page is built on:
 
-         - A row is a row. Yesterday and Things are plain rows with hairline
-           dividers between them. Only a builder block is a card, because a
-           card says "this is an object you move", and those are the only
-           objects here that move.
+         - A row is a row. Things is plain rows with hairline dividers between
+           them. Only a builder block is a card, because a card says "this is
+           an object you move", and those are the only objects here that move
+           — and a block that has already happened drops back to an outline,
+           because it has stopped being one.
          - Sections are separated by space, not by borders or boxes. 36px is
            the separator.
          - One label style, everywhere. Actions sit on its baseline and are
@@ -246,7 +247,7 @@
          Faint rather than muted: it sits at the right edge of every row in
          the list, so at muted it would draw a second vertical line of
          emphasis down the page and compete with the titles. Same weight as
-         "didn't happen" in Yesterday, which is the other right-edge action. */
+         "didn't happen?" on a past block, the other right-edge action. */
       .hint {
         font-size: 13px;
         color: var(--faint);
