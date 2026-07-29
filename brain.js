@@ -335,6 +335,19 @@ async function runBrain(user_id, task, { data = null, source = 'reasoning' } = {
       const result = await runTool(user_id, block.name, block.input);
       logResult(result);
 
+      // NOT FENCED, and it should be. See SPEC 1, the box at the top of "The
+      // brain is wired and unused".
+      //
+      // These rows are the person's own words, and over a multi-turn loop
+      // there are more of them here than there will ever be in `data` — which
+      // is the argument that IS fenced. What stops a title reading as an
+      // instruction on this path is a paragraph of the system prompt, and that
+      // is the same kind of guarantee that already failed once: prose, holding
+      // until someone who never read it writes the next caller.
+      //
+      // The fix is one call — wrap `content` the way composeTask wraps data —
+      // and it is left undone rather than done quietly because it changes what
+      // the model sees on every turn of every call.
       results.push({
         type: 'tool_result',
         tool_use_id: block.id,

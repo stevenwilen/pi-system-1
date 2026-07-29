@@ -28,10 +28,31 @@ Telegram bot that only ever sends.
 
 ### The brain is wired and unused
 
-`brain.js`, `tools.js`, `usage.js`, the Anthropic API key and all the API wiring
-are still here and still functional. **Nothing calls them.**
+> ### ⚠ Read this before writing the next caller
+>
+> **Tool results are not fenced.** Rows come back from `search_entries` and
+> `get_calendar` as bare JSON in the tool-result block, and the only thing
+> standing between "a row the person wrote" and "an instruction to the model"
+> is a paragraph of the system prompt. There is no marker in the text.
+>
+> In an agent loop the tool results are the *main* channel by which a person's
+> own words reach the model — far more of them, over more turns, than anything
+> handed in as `data`. So the half of the guarantee that is enforced
+> structurally is the smaller half.
+>
+> The `data` argument is safe (see below). The tool path is not. **Close this
+> before anything calls the brain in anger**, by fencing each result in the
+> loop the same way `composeTask` fences `data`.
 
-They are kept deliberately. Reasoning was removed from this system because every
+`brain.js`, `usage.js`, `untrusted.js`, the Anthropic API key and all the API
+wiring are still here and still functional. **Nothing calls them.**
+
+`tools.js` is the exception. Its brain-facing tools are idle, but `readCalendar`,
+`create_entry` and `update_entry` are the live write path the routes go through,
+and the whitelist at the top of it is what keeps the retired columns unwritten.
+It is a runtime file that the brain also happens to use.
+
+The rest are kept deliberately. Reasoning was removed from this system because every
 place it was used turned out to be a place where arithmetic on a row said the
 same thing more reliably: a daily verdict on what had gone cold, a line of
 context on each block, a rewrite of a text field. None of those needed a model,
@@ -74,11 +95,10 @@ was left sitting in the tree with zero importers, including from `brain.js`. The
 next caller will be written weeks from now by someone reading the signature
 rather than this paragraph, so the guarantee now lives in the signature.
 
-**Still an open hole:** tool results are not fenced. Rows come back from
-`search_entries` and `get_calendar` as bare JSON, and what stops them reading as
-instructions is a paragraph of the system prompt rather than a marker in the
-text. That is weaker than the `data` path and should be closed before anything
-calls the brain in anger.
+That is also why the tool-result hole at the top of this section matters more
+than it looks. It is the same failure in a different place: a rule held up by
+prose rather than by structure, which stays true right up until someone who
+never read the prose writes the next caller.
 
 ---
 
