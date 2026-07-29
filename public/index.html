@@ -215,14 +215,9 @@
         letter-spacing: 1px;
       }
 
-      /* Already in the day on screen. It stands where the warning mark would,
-         because it answers the same question — what about this needs my
-         attention — with "nothing, you have already dealt with it". */
-      .inplan {
-        font-size: 12px;
-        color: var(--accent);
-        white-space: nowrap;
-      }
+      /* Already in the day on screen. Greying is the whole signal: it said
+         "in today's plan" beside this as well, which was a second way of
+         saying what the colour already says. */
       .row.locked .title {
         color: var(--faint);
       }
@@ -1118,6 +1113,33 @@
       const inShownPlan = (entryId) =>
         Boolean(entryId) && blocks.some((b) => b.entryId === entryId);
 
+      /** The last block this thing has in the day, or -1. */
+      const lastBlockFor = (entryId) => {
+        for (let i = blocks.length - 1; i >= 0; i--) {
+          if (blocks[i].entryId === entryId) return i;
+        }
+        return -1;
+      };
+
+      /** Has this block started? The one definition, used everywhere. */
+      const blockBegun = (b) => onToday() && hasBegun(b, nowMinutes());
+
+      /**
+       * Take a thing back out of the day.
+       *
+       * The last of its blocks, so a thing scheduled twice loses one tap at a
+       * time and stays greyed until none are left. A block that has begun
+       * cannot go — it is the day that happened, the server refuses to remove
+       * it, and the row stays as it is rather than pretending otherwise.
+       *
+       * It goes through removeBlock, so it is undoable like any other removal.
+       */
+      function unschedule(entryId) {
+        const at = lastBlockFor(entryId);
+        if (at === -1 || blockBegun(blocks[at])) return;
+        removeBlock(at);
+      }
+
       function renderThings() {
         const box = $('things');
         box.replaceChildren();
@@ -1161,16 +1183,13 @@
         title.textContent = item.title;
         top.append(title);
 
-        if (locked) {
-          // Where the warning mark would be, and instead of it. Both answer
-          // "does this need me", and this one answers no.
-          const where = document.createElement('div');
-          where.className = 'inplan';
-          where.textContent = `in ${showing === 'today' ? "today's" : "tomorrow's"} plan`;
-          top.append(where);
-        } else if (item.mark) {
-          // '!!!', '!!' or '!'. Computed on the server and arithmetic all the
-          // way down: the days the size needs against the days that are left.
+        // '!!!', '!!' or '!'. Computed on the server and arithmetic all the
+        // way down: the days the size needs against the days that are left.
+        //
+        // Not on a row already in the day. The mark asks "does this need your
+        // attention" and being scheduled answers it, so a greyed row still
+        // shouting a deadline would be arguing with itself.
+        if (!locked && item.mark) {
           const mark = document.createElement('div');
           mark.className = 'mark';
           mark.textContent = item.mark;
@@ -1243,10 +1262,9 @@
             acts.classList.add('hidden');
             return;
           }
-          // Already in the day on screen, so there is nothing a tap could add.
-          // The menu above still works: this is locked against being scheduled
-          // twice, not against being edited, finished or deleted.
-          if (locked) return;
+          // Already in the day, so a tap takes it back out rather than putting
+          // it in twice. The menu above is unaffected either way.
+          if (locked) return unschedule(item.id);
           addBlock({ title: item.title, entryId: item.id });
         };
 
@@ -1456,7 +1474,7 @@
           // then lock itself the moment it arrived — a block that has never
           // been anywhere near the past becoming unremovable because the clock
           // caught up with where it was moved to.
-          const begun = onToday() && hasBegun(b, now);
+          const begun = blockBegun(b);
           const past = begun && b.start + b.duration <= now;
 
           // Once, between the last thing that has finished and the first that
@@ -1796,8 +1814,12 @@
 
         card.append(row);
 
+        // A note says what you are going to do in a block. Once the block is
+        // over it is not answering that any more, so it stops being shown —
+        // and only shown. The row still holds it, the confirm still sends it,
+        // and the message that already went out carried it.
         if (i === noting) card.append(noteEditor(b, i));
-        else if (b.note) card.append(noteLine(b.note));
+        else if (b.note && !past) card.append(noteLine(b.note));
 
         slot.append(backing, card);
 

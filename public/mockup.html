@@ -144,10 +144,9 @@
   .now .txt{font-size:10px;letter-spacing:.12em;color:var(--accent)}
   .now .ln{flex:1;height:1px;background:#2B3646}
 
-  /* already in the day on screen */
+  /* already in the day on screen — greying is the whole signal */
   .locked .title{color:var(--faint)}
   .locked .meta{color:var(--faint);opacity:.7}
-  .inplan{font-size:12px;color:var(--accent)}
 
   .ends{display:flex;justify-content:space-between;align-items:baseline;
         margin-top:28px;padding-bottom:20px}
@@ -192,10 +191,11 @@
       <div class="meta">project &middot; due in 6 days &middot; a few days</div>
     </div>
 
-    <!-- already a block in the day on screen: it cannot be added twice, so the
-         row says where it is instead of offering to put it there again -->
+    <!-- already a block in the day on screen. Greying is the whole signal: no
+         badge, and no warning mark either, because being scheduled answers the
+         question the mark asks. Tapping it takes it back out. -->
     <div class="row locked">
-      <div class="row-top"><div class="title">Spanish</div><div class="inplan">in tomorrow's plan</div><div class="hint">&middot;&middot;&middot;</div></div>
+      <div class="row-top"><div class="title">Spanish</div><div class="hint">&middot;&middot;&middot;</div></div>
       <div class="meta">habit &middot; 4 days since scheduled</div>
     </div>
 

@@ -233,18 +233,27 @@ There is no why, no note about where something stands, and no free-text size.
 
 #### Already in the day
 
-A thing that already has a block in the day on screen is **locked**. Its row
-dims, and where the warning mark would sit it says **in today's plan** or **in
-tomorrow's plan** in the accent colour — both answer "does this need me", and
-this one answers no.
+A thing that already has a block in the day on screen is **greyed**, and that is
+the whole signal. No badge beside it: it said *in today's plan* for a while,
+which was a second way of saying what the colour already said.
 
-Tapping it does nothing: it cannot be added twice. The `···` menu is unaffected —
-edit, done and delete all work. It is locked against being scheduled again, not
-against being changed.
+Its **warning mark is held back** too. The mark asks "does this need your
+attention" and being scheduled answers it, so a greyed row still shouting a
+deadline would be arguing with itself.
+
+**Tapping it takes it back out of the day.** The last of its blocks, so a thing
+scheduled twice comes out one tap at a time and the row stays grey until none
+remain. It goes through the ordinary removal, so it is undoable like any other.
+
+**Unless that block has begun**, in which case nothing happens and the row stays
+grey. It is the day that happened, and the server refuses to remove it — see
+3.2. The row does not pretend otherwise.
+
+The `···` menu is unaffected throughout: edit, done and delete all work.
 
 Read off the blocks the builder is holding rather than anything stored, so
-removing its block unlocks the row on the same render, and so the answer follows
-the switch: a thing in tomorrow is not locked while you are looking at today.
+removing its block frees the row on the same render, and so the answer follows
+the switch: a thing in tomorrow is not greyed while you are looking at today.
 
 #### 3.1.1 Warning marks
 
@@ -327,6 +336,11 @@ in place.
 - A block that has **begun but not ended** is still a card, and says nothing on
   its right-hand side unless it has already been marked missed. It has not failed
   to happen; it is happening, and asking would be premature.
+- A **past** block no longer shows its note. A note says what you are going to do
+  in a block, and once the block is over it is not answering that any more. It is
+  **hidden, not lost**: the row still holds it, the confirm still sends it, and
+  the message that already went out carried it. Blocks in progress and still to
+  come show theirs as before.
 - A **NOW divider** sits between what has been and what is left: a dot, the word,
   and a hairline. It is drawn once, and not at all on a day entirely behind or
   entirely ahead, where it would be marking the edge of the list rather than a
@@ -860,16 +874,15 @@ The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
   `+ Add` sit on its baseline and are **quieter** than it, never louder.
 - **Two text sizes per row:** 15px title, 12px muted meta on its own line with
   real space between them.
-- **Blue is actionable, or it orients.** It appears on the Starts steppers, the
-  duration chip, Undo, Confirm and Save — everything a press acts on — and on
-  two things no press acts on: the **NOW** divider, and the *in today's / in
-  tomorrow's plan* badge. Both say *here is where you are*, which is the nearest
-  thing to an action that is not one. That is the whole list, enforced by name in
-  the layout check; nothing decorative is ever blue.
+- **Blue is actionable, with one exception.** It appears on the Starts steppers,
+  the duration chip, Undo, Confirm and Save — everything a press acts on — and on
+  the **NOW** divider, which no press acts on and which says *here is where you
+  are*. That is the whole list, enforced by name in the layout check; nothing
+  decorative is ever blue.
 
-  This rule used to be stricter — steppers and Confirm, full stop. It was relaxed
-  deliberately when the day switch arrived, and the two exceptions are named so a
-  third has to be argued for.
+  The rule was relaxed to two exceptions when the day switch arrived and is back
+  to one: the *in today's plan* badge was the other, and removing it narrowed the
+  rule again rather than widening it further.
 - **The miss colour is for misses and warnings**, and nothing else.
 - **The calendar aside is a left rule with indented text**, in neutral warm grey.
   Reference material: not a card, not blue, not a warning.

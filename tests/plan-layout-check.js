@@ -149,20 +149,19 @@ console.log('\n6. blue is actionable, and nothing else is blue');
 {
   const blue = selectorsUsing('var(--accent)').filter((s) => !/^:root/.test(s));
 
-  // THE RULE WIDENED. It used to be "blue is actionable, and nothing else is
-  // blue" — the steppers and Confirm, full stop. Two things now carry it that
-  // no press acts on:
+  // THE RULE WIDENED, THEN NARROWED AGAIN. It used to be "blue is actionable,
+  // and nothing else is blue" — the steppers and Confirm, full stop. The day
+  // switch brought two exceptions; one of them, the "in today's plan" badge,
+  // has since gone. What is left is:
   //
-  //   .now      the divider marking where the day has got to
-  //   .inplan   a thing that is already in the day on screen
+  //   .now   the divider marking where the day has got to
   //
-  // Both say "here is where you are", which is the nearest thing to an action
-  // that is not one. They are listed by name so a third has to be argued for
-  // here rather than added quietly, and so anyone reading this knows the
-  // stricter rule was relaxed on purpose.
+  // It says "here is where you are", which is the nearest thing to an action
+  // that is not one. It is listed by name so a second has to be argued for
+  // here rather than added quietly.
   const acts = /\.step|\.dur|\.undo button|\.confirm|\.sheet-actions \.save/;
-  const orients = /\.now \.dot|\.now \.txt|\.inplan/;
-  check('blue appears only on the controls that act, or the two that orient',
+  const orients = /\.now \.dot|\.now \.txt/;
+  check('blue appears only on the controls that act, or the one that orients',
     blue.every((s) => acts.test(s) || orients.test(s)), blue.join(' | '));
   check('and nothing decorative has it',
     !blue.some((s) => /\.cal|\.backing|\.block\b|\.row\b/.test(s)), blue.join(' | '));
@@ -519,7 +518,9 @@ console.log('\n17. today and tomorrow');
   check('a block that has begun gets no chip', /\} else if \(begun\) \{/.test(code));
   check('and one that is over asks instead', /past \|\| \(begun && b\.missed\)/.test(code));
   check('begun is read off the stored start, the same as the reflow',
-    /const begun = onToday\(\) && hasBegun\(b, now\)/.test(code));
+    /const blockBegun = \(b\) => onToday\(\) && hasBegun\(b, nowMinutes\(\)\)/.test(code));
+  check('and there is one definition of it', (code.match(/hasBegun\(/g) || []).length === 2,
+    `${(code.match(/hasBegun\(/g) || []).length} uses`);
   check('and a begun block cannot be picked up', /if \(begun\) return;/.test(code));
   check('it asks instead', /didn't happen\?/.test(code));
   check('and marking it posts to the miss route', /\/blocks\/\$\{b\.id\}\/miss/.test(code));
@@ -538,11 +539,22 @@ console.log('\n17. today and tomorrow');
   check('and there is no settings UI for it', !/plans_in/.test(body));
 
   console.log('   a thing already in the day');
-  check('locked against being added twice', /if \(locked\) return;/.test(code));
-  check('it says which day it is in',
-    /in \$\{showing === 'today' \? "today's" : "tomorrow's"\} plan/.test(code));
+  // Greying is the whole signal. It used to also say "in today's plan" beside
+  // the row, which was a second way of saying what the colour already said.
+  check('there is no badge left', !/inplan/.test(code) && !/inplan/.test(css));
+  check('nor the words it carried', !/today's\} plan|tomorrow's\} plan/.test(code));
+
+  check('a tap on a greyed row takes it back out', /if \(locked\) return unschedule/.test(code));
+  check('the last of its blocks, so twice in a day comes out one at a time',
+    /const lastBlockFor = /.test(code));
+  check('and one that has begun does not go at all',
+    /at === -1 \|\| blockBegun\(blocks\[at\]\)\) return/.test(code));
+  check('it goes through the ordinary removal, so it is undoable',
+    /removeBlock\(at\)/.test(code));
+
   check('read off the blocks on screen, so removing one unlocks it',
     /blocks\.some\(\(b\) => b\.entryId === entryId\)/.test(code));
+  check('a greyed row holds its warning mark back', /if \(!locked && item\.mark\)/.test(code));
   check('and the row is dimmed', /color: var\(--faint\)/.test(rule('.row.locked .title')));
   check('the menu is not locked with it', !/if \(locked\)[\s\S]{0,200}acts\.classList/.test(code));
 }

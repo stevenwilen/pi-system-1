@@ -1006,56 +1006,188 @@ const SETTLED = 220; // past SETTLE_MS
       slots()[1].text().trim());
   }
 
-  console.log('\na thing already in the shown day is locked');
+  console.log('\na thing already in the shown day is greyed, and nothing else');
   {
     const things = [
       { id: 'e-uf', type: 'project', title: 'UF application', days: 6, mark: '!!!', due: null, size: null, last_scheduled: null },
       { id: 'e-spanish', type: 'habit', title: 'Spanish', days: 3, mark: null, due: null, size: null, last_scheduled: null },
-      { id: 'e-free', type: 'task', title: 'Return the router', days: 1, mark: null, due: null, size: null, last_scheduled: null },
+      { id: 'e-free', type: 'task', title: 'Return the router', days: 1, mark: '!', due: null, size: null, last_scheduled: null },
     ];
-    const { ctx, byId, slots, cardOf } = boot({
-      plan: twoDays(), entries: utcEntries({ plans_in: 'morning', items: things }), now: '11:00',
+    const { ctx, byId, slots, titles } = boot({
+      plan: twoDays(), entries: utcEntries({ plans_in: 'morning', items: things }), now: '10:45',
     });
     await ctx.load();
 
     const rows = () => byId.things.children.filter((c) => c._class.has('row'));
     const rowFor = (title) => rows().find((r) => r.text().includes(title));
-    const badge = (r) => r.children[0].children.find((c) => c._class.has('inplan'));
+    const markOf = (r) => r.children[0].children.find((c) => c._class.has('mark'));
 
-    check('the one in today is locked', rowFor('UF application')._class.has('locked'));
-    check('and says where it is', badge(rowFor('UF application')).textContent === "in today's plan",
-      badge(rowFor('UF application')) && badge(rowFor('UF application')).textContent);
-    check('in place of its warning mark',
-      !rowFor('UF application').children[0].children.some((c) => c._class.has('mark')));
+    check('the one in today is greyed', rowFor('UF application')._class.has('locked'));
+    check('and says nothing beside it', !rows().some((r) => r.text().includes('plan')),
+      rowFor('UF application').text().trim());
+    check('there is no badge left anywhere',
+      !rows().some((r) => r.children[0].children.some((c) => c._class.has('inplan'))));
+    check('its warning mark is held back too, because being scheduled answers it',
+      !markOf(rowFor('UF application')));
 
-    check('one in tomorrow is not locked while today is shown',
+    check('one in tomorrow is not greyed while today is shown',
       !rowFor('Spanish')._class.has('locked'));
     check('nor is one in no plan at all', !rowFor('Return the router')._class.has('locked'));
-
-    const before = slots().length;
-    rowFor('UF application').onclick();
-    check('tapping it adds nothing', slots().length === before, `${slots().length}`);
-
-    rowFor('Return the router').onclick();
-    check('but an unlocked row still schedules', slots().length === before + 1,
-      `${slots().length}`);
-    check('and locks itself immediately', rowFor('Return the router')._class.has('locked'));
-
-    // Removing the block puts the row back on the same render.
-    const added = slots()[slots().length - 1];
-    const card = cardOf(added);
-    down(card, 200, 100);
-    move(card, 100, 100);
-    up(card, 100, 100);
-    check('removing its block unlocks it', !rowFor('Return the router')._class.has('locked'));
-    check('and its mark comes back if it had one', true);
+    check('and an unscheduled thing keeps its mark',
+      Boolean(markOf(rowFor('Return the router'))));
 
     await byId['pick-tomorrow'].onclick();
-    check('the badge follows the switch',
-      badge(rowFor('Spanish')).textContent === "in tomorrow's plan",
-      badge(rowFor('Spanish')) && badge(rowFor('Spanish')).textContent);
-    check('and what was locked on today is free on tomorrow',
+    check('the greying follows the switch', rowFor('Spanish')._class.has('locked'));
+    check('and what was greyed on today is free on tomorrow',
       !rowFor('UF application')._class.has('locked'));
+    check('with its mark back', Boolean(markOf(rowFor('UF application'))));
+  }
+
+  console.log('\ntapping a greyed thing takes it back out of the day');
+  {
+    const things = [
+      { id: 'e-spanish', type: 'habit', title: 'Spanish', days: 3, mark: null, due: null, size: null, last_scheduled: null },
+      { id: 'e-free', type: 'task', title: 'Return the router', days: 1, mark: null, due: null, size: null, last_scheduled: null },
+    ];
+    const { ctx, byId, slots, titles } = boot({
+      plan: twoDays(), entries: utcEntries({ items: things }), now: '10:45',
+    });
+    await ctx.load();
+
+    const rows = () => byId.things.children.filter((c) => c._class.has('row'));
+    const rowFor = (t) => rows().find((r) => r.text().includes(t));
+
+    check('tomorrow holds one block', titles().join() === 'Spanish', titles().join());
+    check('and its row is greyed', rowFor('Spanish')._class.has('locked'));
+
+    rowFor('Spanish').onclick();
+    check('tapping it removes the block', titles().join() === '', `"${titles().join()}"`);
+    check('and the row comes back to normal', !rowFor('Spanish')._class.has('locked'));
+    check('undoably, like any other removal', byId['undo-host'].children.length === 1);
+
+    // Put it back and add it twice, to check one tap takes one block.
+    byId['undo-host'].children[0].children.find((c) => c.tagName === 'button').onclick();
+    check('undo restores it', titles().join() === 'Spanish', titles().join());
+    check('and greys the row again', rowFor('Spanish')._class.has('locked'));
+
+    // One tap in, one tap out. It never adds a second block for the same
+    // thing, because after the first tap the row is greyed and a tap on a
+    // greyed row means take it out.
+    rowFor('Return the router').onclick();
+    check('a tap on a free row puts it in',
+      titles().join() === 'Spanish,Return the router', titles().join());
+    rowFor('Return the router').onclick();
+    check('and the next tap takes it straight back out',
+      titles().join() === 'Spanish', titles().join());
+  }
+
+  console.log('\ntwice in one day comes out one tap at a time');
+  {
+    const things = [
+      { id: 'e-uf', type: 'project', title: 'UF application', days: 6, mark: null, due: null, size: null, last_scheduled: null },
+    ];
+    const { ctx, byId, titles } = boot({
+      entries: utcEntries({ items: things }),
+      now: '10:45',
+      plan: {
+        [TOMORROW]: {
+          plan: { date: TOMORROW, status: 'confirmed', wake_minutes: 480 },
+          blocks: [
+            { id: 'd1', title: 'UF application', entryId: 'e-uf', start_minutes: 480, duration_minutes: 60 },
+            { id: 'd2', title: 'Email', entryId: null, start_minutes: 540, duration_minutes: 30 },
+            { id: 'd3', title: 'UF application', entryId: 'e-uf', start_minutes: 570, duration_minutes: 60 },
+          ],
+        },
+      },
+    });
+    await ctx.load();
+
+    const rowFor = (t) => byId.things.children.filter((c) => c._class.has('row'))
+      .find((r) => r.text().includes(t));
+
+    check('three blocks, two of them the same thing',
+      titles().join() === 'UF application,Email,UF application', titles().join());
+    check('the row is greyed', rowFor('UF application')._class.has('locked'));
+
+    rowFor('UF application').onclick();
+    check('one tap takes the last of them',
+      titles().join() === 'UF application,Email', titles().join());
+    check('and the row stays greyed while one remains',
+      rowFor('UF application')._class.has('locked'));
+
+    rowFor('UF application').onclick();
+    check('the next tap takes the other', titles().join() === 'Email', titles().join());
+    check('and now the row is free', !rowFor('UF application')._class.has('locked'));
+  }
+
+  console.log('\na thing whose block has begun stays put');
+  {
+    const things = [
+      { id: 'e-read', type: 'habit', title: 'Reading', days: 3, mark: null, due: null, size: null, last_scheduled: null },
+      { id: 'e-uf', type: 'project', title: 'UF application', days: 6, mark: null, due: null, size: null, last_scheduled: null },
+    ];
+    // Reading ran 08:00–09:00 and is over; UF application starts at 11:00 and
+    // has not begun. It is 10:45.
+    const { ctx, byId, titles } = boot({
+      plan: twoDays(), entries: utcEntries({ plans_in: 'morning', items: things }), now: '10:45',
+    });
+    await ctx.load();
+
+    const rowFor = (t) => byId.things.children.filter((c) => c._class.has('row'))
+      .find((r) => r.text().includes(t));
+
+    check('both rows are greyed', rowFor('Reading')._class.has('locked') &&
+      rowFor('UF application')._class.has('locked'));
+
+    const before = titles().join();
+    rowFor('Reading').onclick();
+    check('tapping the one that has begun does nothing', titles().join() === before,
+      titles().join());
+    check('and it stays greyed', rowFor('Reading')._class.has('locked'));
+    check('nothing was offered to undo', byId['undo-host'].children.length === 0);
+
+    rowFor('UF application').onclick();
+    check('but the one still to come comes out',
+      titles().join() === 'Reading,Gym', titles().join());
+    check('and its row frees up', !rowFor('UF application')._class.has('locked'));
+  }
+
+  console.log('\na note is hidden once its block is over');
+  {
+    const { ctx, slots, cardOf, byId, posted } = boot({
+      entries: utcEntries({ plans_in: 'morning' }),
+      now: '10:45',
+      plan: {
+        [TODAY]: {
+          plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+          blocks: [
+            { id: 'n1', title: 'Reading', entryId: null, start_minutes: 480, duration_minutes: 60, sent: true, note: 'chapter four' },
+            { id: 'n2', title: 'Deep work', entryId: null, start_minutes: 600, duration_minutes: 60, sent: true, note: 'pricing page' },
+            { id: 'n3', title: 'Errands', entryId: null, start_minutes: 720, duration_minutes: 60, note: 'router, then bank' },
+          ],
+        },
+      },
+    });
+    await ctx.load();
+
+    const noteIn = (s) => cardOf(s).children.find((c) => c._class.has('note'));
+
+    check('the block that is over does not show its note', !noteIn(slots()[0]));
+    check('the one in progress still does',
+      noteIn(slots()[1]) && noteIn(slots()[1]).textContent === 'pricing page',
+      noteIn(slots()[1]) && noteIn(slots()[1]).textContent);
+    check('and so does the one still to come',
+      noteIn(slots()[2]) && noteIn(slots()[2]).textContent === 'router, then bank',
+      noteIn(slots()[2]) && noteIn(slots()[2]).textContent);
+
+    // Hidden, not lost. The confirm still carries it.
+    posted.length = 0;
+    await byId['confirm'].onclick();
+    const sentBody = posted.find((p) => p.url === '/plan').body;
+    check('the hidden note is still sent', sentBody.blocks[0].note === 'chapter four',
+      String(sentBody.blocks[0].note));
+    check('along with the others',
+      sentBody.blocks[1].note === 'pricing page' && sentBody.blocks[2].note === 'router, then bank');
   }
 
   console.log('\na late day moves what is left, and only what is left');
