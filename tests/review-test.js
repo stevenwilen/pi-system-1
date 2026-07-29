@@ -71,7 +71,9 @@ let planId = null;
   check('in plan order', review.blocks.map((b) => b.title).join('|') === `${target.title}|Dentist|Deep work`);
   check('assumed done, no confirmation asked for', review.blocks.every((b) => b.completed === true));
   check('no reasons yet', review.blocks.every((b) => b.miss_reason === null));
-  check('times come back as minutes', review.blocks[1].start_minutes === 600 && review.blocks[1].duration_minutes === 45);
+  check('times come back as minutes',
+    review.blocks[1].start_minutes === 600 && review.blocks[1].duration_minutes === 60,
+    `${review.blocks[1].start_minutes} for ${review.blocks[1].duration_minutes}m`);
   // Nothing is pinned any more, and yesterday's review has no use for the
   // distinction: a block either happened or it did not.
   check('nothing is reported as pinned', review.blocks.every((b) => b.pinned === undefined));

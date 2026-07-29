@@ -362,6 +362,31 @@
         text-align: center;
       }
 
+      /* The removal confirm, in place of the stepper.
+         Keep sits where minus was. A block is removed by pressing minus at the
+         30-minute floor, so the press that opens this is a press on the left
+         of the stepper — and the next one, if the person is going fast, lands
+         in the same place. That place has to be the harmless one. */
+      .confirming {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      .confirming button {
+        font-size: 13px;
+        background: none;
+        border: 0;
+        font-family: inherit;
+        padding: 2px 0;
+        cursor: pointer;
+      }
+      .confirming .keep {
+        color: var(--muted);
+      }
+      .confirming .remove {
+        color: var(--warn);
+      }
+
       .addblock {
         font-size: 12px;
         color: var(--faint);
@@ -679,6 +704,11 @@
       let wake = 8 * 60;
       let planDate = null;
       let saved = false;
+
+      // Index of the block asking whether it should be removed, or null. Only
+      // ever one: arming a second question cancels the first, so there is
+      // never more than one pending destructive answer on screen.
+      let removing = null;
 
       // Test seam: a suite needs to put the page into the state a saved day
       // leaves it in without driving a real confirm through the network.
@@ -1026,6 +1056,7 @@
           entryId: b.entryId,
           duration: b.duration_minutes,
         }));
+        removing = null;
         saved = data.plan.status === 'confirmed';
         renderWake();
         renderBuilder();
@@ -1048,14 +1079,19 @@
         return cursor;
       }
 
+      // Any other action answers the pending question by dropping it. A
+      // confirm left standing while the day is edited around it would be a
+      // Remove button pointing at a block that has since moved.
       function addBlock({ title, entryId = null, duration = 60 }) {
         blocks.push({ title, entryId, duration });
+        removing = null;
         saved = false;
         renderBuilder();
       }
 
       function setWake(mins) {
         wake = mins;
+        removing = null;
         renderWake();
         renderBuilder();
       }
@@ -1098,7 +1134,16 @@
         renderConfirm();
       }
 
-      /** A block: the one kind of object on this page you manipulate, so a card. */
+      /**
+       * A block: the one kind of object on this page you manipulate, so a card.
+       *
+       * Removal is the minus stepper carried past its floor. Shrinking a block
+       * to nothing and removing it are the same intention, so they are the same
+       * control — and the stepper already owns this edge of the card, which is
+       * why a block gets no `···` the way a row in Things does.
+       *
+       * It used to be a long press, with nothing to suggest it.
+       */
       function blockCard(b, i) {
         const card = document.createElement('div');
         card.className = 'block';
@@ -1112,6 +1157,11 @@
         time.textContent = `${clock(b.start)} – ${clock(b.start + b.duration)}`;
         left.append(t, time);
 
+        card.append(left, i === removing ? confirmRemove(i) : durationStepper(b, i));
+        return card;
+      }
+
+      function durationStepper(b, i) {
         const stepper = document.createElement('div');
         stepper.className = 'stepper';
 
@@ -1119,15 +1169,21 @@
         minus.type = 'button';
         minus.className = 'step';
         minus.textContent = '−';
-        minus.disabled = b.duration <= STEP;
+        minus.setAttribute(
+          'aria-label',
+          b.duration <= STEP ? `Remove ${b.title}` : `Shorten ${b.title}`
+        );
         minus.onclick = () => {
-          // The floor is one step. Below that it has stopped being a block,
-          // and removing it is what the person means.
           if (b.duration > STEP) {
             b.duration -= STEP;
+            removing = null;
             saved = false;
-            renderBuilder();
+            return renderBuilder();
           }
+          // At the floor. One more press is how you say you meant to remove
+          // it, and it only arms the question — nothing is lost yet.
+          removing = i;
+          renderBuilder();
         };
 
         const dur = document.createElement('div');
@@ -1138,30 +1194,53 @@
         plus.type = 'button';
         plus.className = 'step';
         plus.textContent = '+';
+        plus.setAttribute('aria-label', `Lengthen ${b.title}`);
         plus.onclick = () => {
           b.duration += STEP;
+          removing = null;
           saved = false;
           renderBuilder();
         };
 
         stepper.append(minus, dur, plus);
-        card.append(left, stepper);
+        return stepper;
+      }
 
-        // Removing a block is a long press, the same gesture as the actions on
-        // a thing, so there is one way to reach the destructive move.
-        let timer = null;
-        card.onpointerdown = () => {
-          timer = setTimeout(() => {
-            blocks.splice(i, 1);
-            saved = false;
-            renderBuilder();
-          }, 550);
+      /**
+       * Keep, then Remove.
+       *
+       * That order is the whole safety of this. The press that opens this
+       * confirm is a press on the left of the stepper, and a second fast press
+       * lands in the same place — so the left position has to be the harmless
+       * one. Putting Remove there would make a double-tap on minus delete a
+       * block silently, which is exactly what the confirm is here to stop.
+       */
+      function confirmRemove(i) {
+        const box = document.createElement('div');
+        box.className = 'confirming';
+
+        const keep = document.createElement('button');
+        keep.type = 'button';
+        keep.className = 'keep';
+        keep.textContent = 'Keep';
+        keep.onclick = () => {
+          removing = null;
+          renderBuilder();
         };
-        card.onpointerup = () => clearTimeout(timer);
-        card.onpointercancel = () => clearTimeout(timer);
-        card.onpointerleave = () => clearTimeout(timer);
 
-        return card;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'remove';
+        remove.textContent = 'Remove';
+        remove.onclick = () => {
+          blocks.splice(i, 1);
+          removing = null;
+          saved = false;
+          renderBuilder();
+        };
+
+        box.append(keep, remove);
+        return box;
       }
 
       $('add-block').onclick = () => {

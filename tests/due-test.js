@@ -13,10 +13,17 @@ const check = (label, ok, detail = '') => {
   if (!ok) bad++;
 };
 
-// Relative to the real today, because the marks are arithmetic against the
-// server's idea of now and a fixed date would drift out of every band.
+// The server's idea of today, read from it rather than assumed.
+//
+// This used to count from the UTC date. The server counts from the profile
+// timezone — America/New_York for the test user — and for the hours where
+// those two disagree every offset here was out by one, so a deadline built as
+// "six days out" arrived as seven and landed in the wrong band. The suite
+// failed in the evening and passed in the morning.
+let TODAY = null;
+
 const day = (n) => {
-  const d = new Date();
+  const d = new Date(`${TODAY}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 };
@@ -50,6 +57,13 @@ const get = async (path) => {
 
   server = H.spawnServer(PORT);
   if (!(await H.waitFor(BASE))) throw new Error('server never came up');
+
+  const opening = await get('/entries');
+  TODAY = opening.body.today;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(TODAY))) {
+    throw new Error(`the server did not report a date: ${JSON.stringify(opening.body).slice(0, 120)}`);
+  }
+  console.log(`  the server's today is ${TODAY} (${opening.body.timezone})\n`);
 
   console.log('who may carry a date');
   {

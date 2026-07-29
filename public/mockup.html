@@ -3,37 +3,44 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Planner — stripped layout</title>
+<title>Planner — layout reference</title>
+<!--
+  The reference the real page is built against. Static: no script, no data, no
+  behaviour. It exists so the layout can be argued about without reading the
+  app, and it is kept in step with public/index.html — a reference artifact
+  that no longer matches is worse than none.
+
+  Everything here has a counterpart in index.html. Where the app has states
+  this cannot show at once (a menu open, a block being removed), the state is
+  drawn below the resting one and labelled.
+-->
 <style>
   :root{
     --bg:#16130F; --card:#211D18; --line:#2C2721;
-    --text:#EDE7DE; --dim:#8B8177; --faint:#6B6459;
-    --accent:#6E8CB8; --warn:#C4694A; --cal:#9A8F80;
+    --text:#EDE7DE; --muted:#8B8177; --faint:#6B6459;
+    --accent:#6E8CB8; --warn:#C4694A;
+    --cal-rule:#4A423A; --cal-head:#9A8F80; --cal-text:#B0A79A;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{
     background:#0a0908;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    display:flex;justify-content:center;padding:28px 12px;
+    display:flex;justify-content:center;flex-wrap:wrap;gap:20px;padding:28px 12px;
   }
   .phone{
     width:360px;background:var(--bg);color:var(--text);
     border-radius:28px;padding:24px 20px 30px;
   }
 
-  /* tabs */
-  .tabs{display:flex;gap:16px;margin-bottom:32px}
-  .tab{font-size:16px;color:var(--faint)}
-  .tab.on{color:var(--text);font-weight:600}
-
   /* section label — one style everywhere */
   .label{
-    font-size:10px;letter-spacing:.14em;color:var(--dim);
+    font-size:10px;letter-spacing:.14em;color:var(--muted);
     text-transform:uppercase;margin-bottom:14px;
     display:flex;justify-content:space-between;align-items:baseline;
   }
   .label .date{letter-spacing:0;text-transform:none;font-size:11px;color:var(--faint)}
-  .label .act{letter-spacing:0;text-transform:none;font-size:12px;color:var(--dim)}
+  /* quieter than the label: no uppercase, no tracking, no weight */
+  .label .act{letter-spacing:0;text-transform:none;font-size:12px;color:var(--muted)}
 
   .section{margin-bottom:36px}
 
@@ -42,26 +49,39 @@
   .row + .row{border-top:1px solid var(--line)}
   .row-top{display:flex;align-items:baseline;gap:8px}
   .title{font-size:15px;flex:1;line-height:1.35}
-  .meta{font-size:12px;color:var(--dim);margin-top:5px;line-height:1.4}
+  .meta{font-size:12px;color:var(--muted);margin-top:5px;line-height:1.4}
   .mark{font-size:14px;color:var(--warn);letter-spacing:1px}
   .done{color:var(--faint);text-decoration:line-through}
   .right{font-size:12px;color:var(--faint)}
   .missed{font-size:12px;color:var(--warn)}
   .between{display:flex;justify-content:space-between;align-items:center}
 
+  /* the hint that a row has more actions. Faint, not muted: it repeats down
+     every row, and at muted it draws a second column of emphasis against the
+     titles. Same weight as "didn't happen" above. */
+  .hint{font-size:13px;color:var(--faint);line-height:1;padding:0 2px}
+
+  /* revealed by the hint, hidden at rest */
+  .rowacts{display:flex;gap:18px;margin-top:9px;font-size:12px;color:var(--muted)}
+  .rowacts .danger{color:var(--warn)}
+
+  /* the optional reason on a missed block — a line, not a box */
+  .reason{margin-top:8px;font-size:13px;color:var(--faint);
+          border-bottom:1px solid var(--line);padding:3px 0}
+
   /* calendar: a quiet aside, not a card */
-  .cal{
-    border-left:2px solid #4A423A;padding:8px 0 8px 13px;margin-bottom:22px;
-  }
-  .cal h4{font-size:12px;color:var(--cal);font-weight:500}
-  .cal p{font-size:13px;color:#B0A79A;margin-top:6px;line-height:1.6}
+  .cal{border-left:2px solid var(--cal-rule);padding:8px 0 8px 13px;margin-bottom:22px}
+  .cal h4{font-size:12px;color:var(--cal-head);font-weight:500}
+  .cal p{font-size:13px;color:var(--cal-text);margin-top:6px;line-height:1.6;
+         font-variant-numeric:tabular-nums}
 
   /* inline control, not a card */
   .inline{display:flex;justify-content:space-between;align-items:center;padding:10px 0}
-  .inline span{font-size:13px;color:var(--dim)}
+  .inline > span{font-size:13px;color:var(--muted)}
   .stepper{display:flex;align-items:center;gap:14px}
   .step{color:var(--accent);font-size:18px;line-height:1}
-  .num{font-size:15px;font-variant-numeric:tabular-nums}
+  .step.off{color:var(--faint)}
+  .num{font-size:15px;font-variant-numeric:tabular-nums;min-width:46px;text-align:center}
 
   /* blocks ARE cards — they're objects you manipulate */
   .block{
@@ -69,53 +89,84 @@
     margin-bottom:9px;display:flex;justify-content:space-between;align-items:center;
   }
   .block .t{font-size:15px}
-  .block .time{font-size:12px;color:var(--dim);margin-top:4px;font-variant-numeric:tabular-nums}
-  .dur{font-size:13px;color:var(--dim)}
+  .block .time{font-size:12px;color:var(--muted);margin-top:4px;font-variant-numeric:tabular-nums}
+  .dur{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;
+       min-width:40px;text-align:center}
   .addblock{font-size:12px;color:var(--faint);padding-top:8px}
+
+  /* the removal confirm, in place of the stepper. Keep sits where minus was,
+     so a fast double-press on minus lands on Keep and nothing is lost. */
+  .confirming{display:flex;align-items:center;gap:18px;font-size:13px}
+  .confirming .keep{color:var(--muted)}
+  .confirming .remove{color:var(--warn)}
 
   .ends{display:flex;justify-content:space-between;align-items:baseline;
         margin-top:28px;padding-bottom:20px}
-  .ends span{font-size:13px;color:var(--dim)}
+  .ends span{font-size:13px;color:var(--muted)}
   .ends b{font-size:17px;font-weight:500;font-variant-numeric:tabular-nums}
 
   .confirm{
     background:var(--accent);color:var(--bg);text-align:center;
     padding:14px;border-radius:11px;font-size:14px;font-weight:600;
   }
+
+  /* the add / edit sheet */
+  .sheet{background:var(--bg);border-radius:18px;padding:22px 20px 24px;
+         border:1px solid var(--line)}
+  .field{margin-bottom:20px}
+  .field > .flabel{display:block;font-size:10px;letter-spacing:.14em;
+                   text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+  .field .input{border-bottom:1px solid var(--line);padding:6px 0;font-size:15px}
+  .field .input.empty{color:var(--faint)}
+  .choices{display:flex;flex-wrap:wrap;gap:8px}
+  .choices span{font-size:13px;color:var(--faint);border:1px solid var(--line);
+                border-radius:999px;padding:6px 13px}
+  .choices span.on{color:var(--text);border-color:var(--muted)}
+  .sheet-actions{display:flex;justify-content:space-between;align-items:center;margin-top:26px}
+  .sheet-actions .cancel{font-size:13px;color:var(--muted)}
+  .sheet-actions .save{background:var(--accent);color:var(--bg);border-radius:11px;
+                       padding:12px 26px;font-size:14px;font-weight:600}
+
+  .caption{width:360px;font-size:11px;color:#5c554c;text-align:center;margin-top:-8px}
 </style>
 </head>
 <body>
+
+<!-- ================= the screen ================= -->
 <div class="phone">
 
-  <div class="tabs"><div class="tab on">Plan</div><div class="tab">Money</div></div>
-
   <div class="section">
-    <div class="label">Yesterday</div>
+    <div class="label">Yesterday <span class="date">Mon 27 Jul</span></div>
     <div class="row between"><span class="title">Reading</span><span class="right">didn't happen</span></div>
-    <div class="row between"><span class="title done">Web services</span><span class="missed">missed</span></div>
+    <div class="row">
+      <div class="between"><span class="title done">Web services</span><span class="missed">missed</span></div>
+      <div class="reason">ran out of evening</div>
+    </div>
   </div>
 
   <div class="section">
     <div class="label">Things <span class="act">+ Add</span></div>
 
     <div class="row">
-      <div class="row-top"><div class="title">UF application</div><div class="mark">!!!</div></div>
+      <div class="row-top"><div class="title">UF application</div><div class="mark">!!!</div><div class="hint">&middot;&middot;&middot;</div></div>
       <div class="meta">project &middot; due in 6 days &middot; a few days</div>
     </div>
 
     <div class="row">
-      <div class="row-top"><div class="title">Web services business</div><div class="mark">!</div></div>
+      <div class="row-top"><div class="title">Web services business</div><div class="mark">!</div><div class="hint">&middot;&middot;&middot;</div></div>
       <div class="meta">project &middot; due in 22 days &middot; a few weeks</div>
     </div>
 
+    <!-- the hint tapped, on a task: the only type that offers Done -->
     <div class="row">
-      <div class="row-top"><div class="title">Reading</div></div>
-      <div class="meta">habit &middot; 11 days since scheduled</div>
+      <div class="row-top"><div class="title">Return the router</div><div class="hint">&middot;&middot;&middot;</div></div>
+      <div class="meta">task &middot; 3 days since added</div>
+      <div class="rowacts"><span>Done</span><span>Edit</span><span class="danger">Delete</span></div>
     </div>
 
     <div class="row">
-      <div class="row-top"><div class="title">Return the router</div></div>
-      <div class="meta">task &middot; 3 days since added</div>
+      <div class="row-top"><div class="title">Reading</div><div class="hint">&middot;&middot;&middot;</div></div>
+      <div class="meta">habit &middot; 11 days since scheduled</div>
     </div>
   </div>
 
@@ -124,7 +175,7 @@
 
     <div class="cal">
       <h4>On your calendar</h4>
-      <p>Dentist, 1:00 PM<br>Cancel Paramount</p>
+      <p>Dentist, 13:00<br>Cancel Paramount</p>
     </div>
 
     <div class="inline">
@@ -152,5 +203,80 @@
   </div>
 
 </div>
+
+<!-- ================= states the screen above cannot show at once ================= -->
+<div class="phone">
+
+  <div class="section">
+    <div class="label">Removing a block</div>
+
+    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:16px">
+      A block at the 30&nbsp;minute floor. Minus stays live rather than going
+      dead, because one more press is how you say you meant to remove it.
+    </p>
+
+    <div class="block">
+      <div><div class="t">Email</div><div class="time">11:00 &ndash; 11:30</div></div>
+      <div class="stepper"><div class="step">&minus;</div><div class="dur">30m</div><div class="step">+</div></div>
+    </div>
+
+    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin:16px 0">
+      Pressed. Keep sits where minus was, so a fast double-press on minus lands
+      on Keep and nothing is lost.
+    </p>
+
+    <div class="block">
+      <div><div class="t">Email</div><div class="time">11:00 &ndash; 11:30</div></div>
+      <div class="confirming"><span class="keep">Keep</span><span class="remove">Remove</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="label">A day that runs past midnight</div>
+    <div class="ends" style="margin-top:0"><span>Day ends</span><b style="color:var(--warn)">00:30 next day</b></div>
+  </div>
+
+  <div>
+    <div class="label">Add &middot; Edit</div>
+
+    <div class="sheet">
+      <div class="label">Edit</div>
+
+      <div class="field">
+        <span class="flabel">Type</span>
+        <!-- on an edit the type collapses to what the row already is: the
+             server refuses to change it, and a greyed control still invites
+             the press. On an add, all three show and one is chosen. -->
+        <div class="choices"><span class="on" style="border-color:transparent;padding-left:0">project</span></div>
+      </div>
+
+      <div class="field">
+        <span class="flabel">Title</span>
+        <div class="input">UF application</div>
+      </div>
+
+      <div class="field">
+        <span class="flabel">Due date</span>
+        <div class="input">2026-08-03</div>
+      </div>
+
+      <!-- only once there is a due date: a size with no deadline to be
+           measured against has nothing to say -->
+      <div class="field">
+        <span class="flabel">Size</span>
+        <div class="choices">
+          <span>a day</span><span class="on">a few days</span><span>a week</span>
+          <span>a few weeks</span><span>months</span>
+        </div>
+      </div>
+
+      <div class="sheet-actions"><span class="cancel">Cancel</span><span class="save">Save</span></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="caption">public/mockup.html &mdash; the reference. Kept in step with index.html.</div>
+
 </body>
 </html>

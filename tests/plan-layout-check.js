@@ -165,11 +165,16 @@ console.log('\n6. blue is actionable, and nothing else is blue');
     /color: var\(--faint\)/.test(rule('.step:disabled')));
 }
 
-console.log('\n7. the miss colour is for misses and warnings only');
+console.log('\n7. the miss colour is for misses, warnings and destruction only');
 {
+  // Three jobs, and they are the same job: this is the colour of something
+  // having gone wrong, being about to, or being about to be thrown away. The
+  // destructive-action use (Delete, Remove) is the one extension of "misses
+  // and warnings", and it is listed rather than assumed so a fourth use has
+  // to be argued for here before it can ship.
   const warn = selectorsUsing('var(--warn)').filter((s) => !/^:root/.test(s));
-  const allowed = /\.mark|\.missed|\.ends\.late|\.failed|\.danger|\.problem/;
-  check('used only on marks, misses and failures',
+  const allowed = /\.mark|\.missed|\.ends\.late|\.failed|\.danger|\.problem|\.confirming \.remove/;
+  check('used only on marks, misses, failures and destructive actions',
     warn.every((s) => allowed.test(s)), warn.join(' | '));
 
   check('the warning mark carries it', /color: var\(--warn\)/.test(rule('.mark')));
@@ -295,7 +300,32 @@ console.log('\n13. a row says it has more actions, rather than hiding them');
   check('the type cannot be changed on an edit', /b\.disabled = editingId !== null/.test(code));
 }
 
-console.log('\n14. the shape of the day');
+console.log('\n14. a block is removed by the control that shrinks it');
+{
+  // No `···` on a block: the stepper already owns that edge of the card, and
+  // shrinking a block to nothing and removing it are the same intention.
+  check('a block carries no hint', !/block[\s\S]{0,600}className = 'hint'/.test(code));
+  check('minus is not disabled at the floor', !/minus\.disabled/.test(code));
+  check('the floor arms the question instead', /removing = i;/.test(code));
+  check('and only the confirm splices', /remove\.onclick[\s\S]{0,120}blocks\.splice/.test(code));
+
+  // The order is the safety. The press that opens the confirm is on the left
+  // of the stepper, so a fast second press lands there too — and Keep has to
+  // be what is waiting.
+  check('Keep is built before Remove',
+    code.indexOf("keep.textContent = 'Keep'") < code.indexOf("remove.textContent = 'Remove'"));
+  check('and appended in that order', /box\.append\(keep, remove\)/.test(code));
+
+  check('an edit elsewhere drops the pending question',
+    (code.match(/removing = null;/g) || []).length >= 5,
+    `${(code.match(/removing = null;/g) || []).length} places`);
+
+  check('no long press left on a block',
+    !/card\.onpointerdown/.test(code));
+  check('and none anywhere else either', !/onpointerdown/.test(code));
+}
+
+console.log('\n15. the shape of the day');
 {
   check('a Starts control', /id="wake-time"/.test(body));
   check('with steppers', /id="wake-minus"/.test(body) && /id="wake-plus"/.test(body));
@@ -309,6 +339,42 @@ console.log('\n14. the shape of the day');
   // starting point ever appears, blocks have stopped flowing in sequence.
   check('blocks flow from one cursor', /let cursor = wake;/.test(code));
   check('and each starts where the last ended', /cursor \+= b\.duration/.test(code));
+}
+
+console.log('\n16. the mockup still describes the page');
+{
+  // A reference artifact that no longer matches is worse than none: it is a
+  // second answer to "what should this look like", and the wrong one.
+  //
+  // Not a pixel comparison — it is a static file with no script and cannot
+  // show a live day. What is checked is that the two agree on the palette,
+  // and that every element the page grew has a counterpart there.
+  const mock = fs.readFileSync(ROOT + '/public/mockup.html', 'utf8');
+
+  for (const value of ['#16130F', '#211D18', '#2C2721', '#EDE7DE', '#8B8177', '#6B6459', '#6E8CB8', '#C4694A']) {
+    check(`${value} is in both`,
+      new RegExp(value, 'i').test(mock) && new RegExp(value, 'i').test(css));
+  }
+
+  for (const [what, klass] of [
+    ['the row hint', 'hint'],
+    ['the revealed actions', 'rowacts'],
+    ['the removal confirm', 'confirming'],
+    ['the calendar aside', 'cal'],
+    ['block cards', 'block'],
+    ['the add sheet', 'sheet'],
+  ]) {
+    check(`${what} is drawn in the mockup`, new RegExp(`class="[^"]*\\b${klass}\\b`).test(mock), klass);
+  }
+
+  check('Keep before Remove there too', mock.indexOf('Keep') < mock.indexOf('Remove'));
+  check('and it shows all three row actions',
+    /Done/.test(mock) && /Edit/.test(mock) && /Delete/.test(mock));
+
+  // What the strip took out must not survive in the reference either.
+  check('no tab bar', !/class="tabs"/.test(mock));
+  check('no Money', !/Money/.test(mock));
+  check('and no script, because it is a drawing', !/<script/.test(mock));
 }
 
 console.log(bad === 0 ? '\nLayout clean' : `\n${bad} FAILURE(S)`);

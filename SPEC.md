@@ -246,10 +246,29 @@ endpoint and no `placed:` rows.
 - 30-minute duration steppers on every block. The floor is one step; below that
   it has stopped being a block, and removing it is what the person means.
 - **+ Block** adds a manual or buffer block.
-- A long press on a block removes it.
 - **Day ends** is live, and reads `HH:MM next day` in the miss colour past
   midnight.
 - **Confirm** saves the plan. Any edit afterwards un-saves it.
+
+#### Removing a block
+
+**Minus, carried past the floor.** Shrinking a block to nothing and removing it
+are the same intention, so they are the same control — and the stepper already
+owns that edge of the card, which is why a block gets no `···` the way a row in
+Things does.
+
+At 30 minutes minus stays live rather than going dead. Pressing it there does
+not remove anything: it replaces the stepper with **Keep · Remove**.
+
+**Keep sits where minus was.** That order is the whole safety of it. The press
+that opens the question is a press on the left of the stepper, and a second fast
+press lands in the same place, so the left position has to be the harmless one.
+Remove where minus was would make a double-tap delete a block silently, which is
+exactly what the confirm exists to stop.
+
+Only one block can be asking at a time, and any other edit — adding a block,
+changing a duration, moving the start — drops the pending question. A Remove
+button must never end up pointing at a block that has since moved.
 
 Re-confirming replaces the day rather than appending to it. The builder holds the
 whole plan, so what it sends is the plan, and merging two versions of the same

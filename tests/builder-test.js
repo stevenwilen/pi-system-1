@@ -227,10 +227,15 @@ const stepperOf = (row) => row.children.find((c) => c._class.has('stepper'));
     check('minus removes exactly 30', rows()[0].text().includes('08:00 – 09:00'), rows()[0].text().trim());
     step().children[0].onclick();
     check('floor is 30', rows()[0].text().includes('08:00 – 08:30'), rows()[0].text().trim());
-    check('minus disabled at the floor', step().children[0].disabled === true);
+
+    // Minus stays live at the floor rather than going dead: carrying it one
+    // step further is how a block is removed. It does not shorten below 30,
+    // and it does not remove on its own either — see the removal case below.
+    check('minus is not disabled at the floor', step().children[0].disabled !== true);
     step().children[0].onclick();
-    check('and pressing it there changes nothing', rows()[0].text().includes('08:00 – 08:30'),
-      rows()[0].text().trim());
+    check('and pressing it there does not shorten it further',
+      rows()[0].text().includes('08:00 – 08:30'), rows()[0].text().trim());
+    check('nor remove it', rows().length === 1, `${rows().length}`);
   }
 
   console.log('\nchanging one duration shifts everything below it');
@@ -250,21 +255,72 @@ const stepperOf = (row) => row.children.find((c) => c._class.has('stepper'));
     check('the end time followed', byId['end-time'].textContent === '11:30', byId['end-time'].textContent);
   }
 
-  console.log('\nremoving a block reflows the rest');
+  console.log('\nremoving a block: minus, carried past the floor');
   {
     const { ctx, byId, rows } = boot();
     await ctx.load();
-    ctx.addBlock({ title: 'A', duration: 60 });
+    ctx.addBlock({ title: 'A', duration: 30 });
     ctx.addBlock({ title: 'B', duration: 60 });
 
-    // Removal is the long press on the card.
-    rows()[0].onpointerdown();
-    await new Promise((r) => setTimeout(r, 700));
+    const stepper = () => rows()[0].children.find((c) => c._class.has('stepper'));
+    const confirm = () => rows()[0].children.find((c) => c._class.has('confirming'));
 
-    check('one block left', rows().length === 1, `${rows().length}`);
+    check('at the floor, minus is still live', stepper().children[0].disabled !== true);
+
+    stepper().children[0].onclick();
+    check('one press asks rather than removing', rows().length === 2, `${rows().length}`);
+    check('and the stepper becomes the question', Boolean(confirm()) && !stepper());
+    check('Keep first, Remove second',
+      confirm().children.map((c) => c.textContent).join(',') === 'Keep,Remove',
+      confirm().children.map((c) => c.textContent).join(','));
+
+    // The whole safety of this. The press that opened the question was on the
+    // left of the stepper, and a fast second press lands in the same place.
+    confirm().children[0].onclick();
+    check('a second press in the same place keeps the block', rows().length === 2, `${rows().length}`);
+    check('and the stepper comes back', Boolean(stepper()));
+
+    stepper().children[0].onclick();
+    confirm().children[1].onclick();
+    check('Remove is what removes it', rows().length === 1, `${rows().length}`);
     check('it moved up to the start time', rows()[0].text().includes('08:00 – 09:00'),
       rows()[0].text().trim());
     check('end time followed', byId['end-time'].textContent === '09:00', byId['end-time'].textContent);
+  }
+
+  console.log('\nonly one block can be asking at a time');
+  {
+    const { ctx, rows } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A', duration: 30 });
+    ctx.addBlock({ title: 'B', duration: 30 });
+
+    const stepperOn = (n) => rows()[n].children.find((c) => c._class.has('stepper'));
+    const confirmOn = (n) => rows()[n].children.find((c) => c._class.has('confirming'));
+
+    stepperOn(0).children[0].onclick();
+    check('the first is asking', Boolean(confirmOn(0)));
+
+    stepperOn(1).children[0].onclick();
+    check('asking the second drops the first', !confirmOn(0), 'two pending questions');
+    check('and the second is the one asking', Boolean(confirmOn(1)));
+
+    // An edit elsewhere answers the question by dropping it, so a Remove
+    // button can never point at a block that has since moved. The second is
+    // still asking at this point.
+    ctx.addBlock({ title: 'C', duration: 30 });
+    check('adding a block drops it too', !confirmOn(1) && rows().length === 3, `${rows().length}`);
+    check('and nothing was removed on the way', rows().length === 3, `${rows().length}`);
+  }
+
+  console.log('\nnothing on a block is removed by a long press any more');
+  {
+    const { ctx, rows } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A', duration: 60 });
+    rows()[0].onpointerdown && rows()[0].onpointerdown();
+    await new Promise((r) => setTimeout(r, 700));
+    check('holding it does nothing', rows().length === 1, `${rows().length}`);
   }
 
   console.log('\nrunning end time past midnight');
