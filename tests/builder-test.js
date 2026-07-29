@@ -99,10 +99,20 @@ function boot({ calendar = [], plan = null, failed = [], reduced = false } = {})
     byId['type-seg'].append(b);
   }
 
+  // Every document-level listener, recorded with the options it was given.
+  // The reorder bug was a missing one of these, and "it is registered, and it
+  // is registered non-passive" is the whole of the fix — so it is worth being
+  // able to assert rather than read.
+  const listeners = [];
+
+  // A page that can be scrolled out from under a drag.
+  const win = { scrollY: 0 };
+
   const sandbox = {
     console, setTimeout, clearTimeout, Intl, Date, Math, JSON,
     String, Number, Boolean, Array, Object,
     alert: () => {}, confirm: () => true, prompt: () => 'Typed block',
+    window: win,
     fetch: async (url) => ({
       ok: true,
       json: async () => {
@@ -112,7 +122,15 @@ function boot({ calendar = [], plan = null, failed = [], reduced = false } = {})
         return ENTRIES;
       },
     }),
-    document: { getElementById: (id) => byId[id], createElement: (t) => new El(t) },
+    document: {
+      getElementById: (id) => byId[id],
+      createElement: (t) => new El(t),
+      addEventListener: (type, fn, opts) => listeners.push({ type, fn, opts }),
+      removeEventListener: (type, fn) => {
+        const at = listeners.findIndex((l) => l.type === type && l.fn === fn);
+        if (at !== -1) listeners.splice(at, 1);
+      },
+    },
   };
   // Only defined when the case is about reduced motion, so every other case
   // exercises the animated path the way a default device would.
@@ -126,8 +144,12 @@ function boot({ calendar = [], plan = null, failed = [], reduced = false } = {})
   const backingOf = (s) => s.children.find((c) => c._class.has('backing'));
   const chipOf = (s) => cardOf(s).children.find((c) => c._class.has('dur'));
 
-  return { ctx, byId, slots, cardOf, backingOf, chipOf };
+  const touchmoves = () => listeners.filter((l) => l.type === 'touchmove');
+
+  return { ctx, byId, slots, cardOf, backingOf, chipOf, listeners, touchmoves, win };
 }
+
+const cancel = (card) => card.onpointercancel({ pointerId: 1 });
 
 // Synthetic pointer sequence. One finger, id 1.
 const down = (card, x = 0, y = 0) =>
@@ -350,6 +372,141 @@ const SETTLED = 220; // past SETTLE_MS
     check('dropping it where it was changes nothing', slots()[0].text().includes('A'),
       slots()[0].text().trim());
     check('and puts everything back', !slots()[1]._class.has('dimmed'));
+  }
+
+  console.log('\na carried block stops the page scrolling under it');
+  {
+    // The bug this pins: the drag activated and animated, then the browser
+    // claimed the gesture as a scroll and fired pointercancel, which tore the
+    // drag down. preventDefault on a pointermove cannot stop that and
+    // setPointerCapture does not try to. A non-passive touchmove listener is
+    // the only thing that does.
+    const { ctx, slots, cardOf, touchmoves } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+
+    const card = cardOf(slots()[0]);
+    check('nothing is held before the press', touchmoves().length === 0);
+
+    down(card, 100, 100);
+    check('nor while it is only pending', touchmoves().length === 0);
+
+    await wait(HELD);
+    check('the hold installs one', touchmoves().length === 1, `${touchmoves().length}`);
+    check('and it is NON-PASSIVE, or preventDefault is ignored',
+      touchmoves()[0].opts && touchmoves()[0].opts.passive === false,
+      JSON.stringify(touchmoves()[0].opts));
+    check('it actually calls preventDefault', (() => {
+      let called = false;
+      touchmoves()[0].fn({ cancelable: true, preventDefault: () => (called = true) });
+      return called;
+    })());
+    check('and does not on an event that cannot be cancelled', (() => {
+      let called = false;
+      touchmoves()[0].fn({ cancelable: false, preventDefault: () => (called = true) });
+      return !called;
+    })());
+
+    check('the card is also taken off pan-y', card.style.touchAction === 'none',
+      String(card.style.touchAction));
+
+    move(card, 100, 140);
+    check('and the drag survives a move', card._class.has('lifted'));
+
+    up(card, 100, 140);
+    check('release lets the page go immediately', touchmoves().length === 0,
+      `${touchmoves().length} still installed`);
+    check('and restores pan-y', !card.style.touchAction, String(card.style.touchAction));
+  }
+
+  console.log('\nand it lets go even if the browser takes the gesture anyway');
+  {
+    const { ctx, slots, cardOf, touchmoves } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+
+    const card = cardOf(slots()[0]);
+    down(card, 100, 100);
+    await wait(HELD);
+    check('held', touchmoves().length === 1);
+
+    cancel(card);
+    check('a cancelled gesture releases the page', touchmoves().length === 0,
+      `${touchmoves().length} left installed`);
+    check('restores pan-y', !card.style.touchAction, String(card.style.touchAction));
+    check('and drops the lift', !card._class.has('lifted'));
+  }
+
+  console.log('\na drag is measured against where the page is now');
+  {
+    // Nothing should scroll while a block is carried. If something does
+    // anyway, the block has to stay under the finger rather than drift by
+    // however far the page moved.
+    const { ctx, slots, cardOf, win } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+    ctx.addBlock({ title: 'C' });
+
+    const card = cardOf(slots()[0]);
+    down(card, 100, 100);
+    await wait(HELD);
+
+    // The finger has not moved, but the page has by one whole slot.
+    win.scrollY = SLOT;
+    move(card, 100, 100);
+    check('the block follows the content, not the viewport',
+      card.style.transform.startsWith(`translateY(${SLOT}px)`), card.style.transform);
+    check('and the target moved with it',
+      slots()[1].style.transform === `translateY(-${SLOT}px)`,
+      slots()[1].style.transform);
+
+    up(card, 100, 100);
+    await wait(SETTLED);
+    check('so it lands where it looked like it would',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'B A C',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
+  }
+
+  console.log('\nstarting a drag on an already-scrolled page');
+  {
+    const { ctx, slots, cardOf, win } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+    ctx.addBlock({ title: 'C' });
+
+    win.scrollY = 640; // the person scrolled down before touching anything
+
+    const card = cardOf(slots()[0]);
+    down(card, 100, 100);
+    await wait(HELD);
+    move(card, 100, 100 + SLOT);
+    check('the drag reads from the delta, not the absolute offset',
+      card.style.transform.startsWith(`translateY(${SLOT}px)`), card.style.transform);
+    up(card, 100, 100 + SLOT);
+    await wait(SETTLED);
+    check('and it still reorders correctly',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'B A C',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
+  }
+
+  console.log('\na swipe and a tap never hold the page');
+  {
+    const { ctx, slots, cardOf, chipOf, touchmoves } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+
+    chipOf(slots()[0]).onclick();
+    check('a tap does not', touchmoves().length === 0);
+
+    const card = cardOf(slots()[0]);
+    down(card, 200, 100);
+    move(card, 120, 100);
+    check('nor a swipe in flight', touchmoves().length === 0, `${touchmoves().length}`);
+    up(card, 120, 100);
+    check('nor after it commits', touchmoves().length === 0, `${touchmoves().length}`);
   }
 
   console.log('\nheld, then dragged to a new place');

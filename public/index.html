@@ -1373,6 +1373,50 @@
       // lengthen the block on its way out.
       let swallowClick = false;
 
+      /**
+       * Stop the page scrolling under a block being carried.
+       *
+       * This is the whole reason reorder used to die the moment you moved.
+       * The sequence was: hold fires, the block lifts, the finger moves
+       * vertically, `touch-action: pan-y` tells the browser a vertical pan is
+       * allowed, the browser takes the gesture, and taking it means firing
+       * `pointercancel` — which tore the drag down. From the outside that reads
+       * exactly as "the drag stops and scrolling takes over".
+       *
+       * Three things that look like the fix and are not:
+       *
+       * - `preventDefault()` on a `pointermove`. Pointer events cannot cancel
+       *   a scroll at all, whatever the listener's passivity. Only a touch
+       *   event can, which is why the call that used to be here did nothing.
+       * - `setPointerCapture`. It routes later events to this element. It does
+       *   not stop the browser competing for the gesture, so the drag was
+       *   already captured and still lost.
+       * - Setting `touch-action` when the hold fires. The value is read when
+       *   the pointer goes down and latched for that gesture, so changing it
+       *   400ms later does not affect the gesture in flight. It is set below
+       *   anyway, because it is correct for anything that starts afterwards
+       *   and costs nothing, but it cannot be the mechanism.
+       *
+       * What does work is a non-passive `touchmove` listener that calls
+       * `preventDefault()`. It has to be non-passive or the call is ignored,
+       * and it works here specifically because the hold requires the finger to
+       * be still: no scroll has begun yet, so there is still one to prevent.
+       */
+      const blockScroll = (e) => {
+        if (e.cancelable) e.preventDefault();
+      };
+
+      function holdPage(on) {
+        // The suite runs this script against a stub document. Nothing to hold.
+        if (typeof document.addEventListener !== 'function') return;
+        if (on) document.addEventListener('touchmove', blockScroll, { passive: false });
+        else document.removeEventListener('touchmove', blockScroll, { passive: false });
+      }
+
+      /** How far the page has scrolled, for a drag to correct against. */
+      const pageY = () =>
+        (typeof window !== 'undefined' && window.scrollY) || 0;
+
       function blockCard(b, i) {
         const slot = document.createElement('div');
         slot.className = 'slot';
@@ -1455,11 +1499,35 @@
           gesture.from = index;
           gesture.to = index;
           gesture.step = (rect.height || 64) + 9;
+          // Where the page stood when this began, so a drag stays under the
+          // finger even if something scrolls the page out from under it.
+          gesture.scroll0 = pageY();
           swallowClick = true;
+
+          // Stop the browser competing for this gesture. The listener is what
+          // actually does it; the touch-action is for anything that starts
+          // after. See holdPage.
+          holdPage(true);
+          card.style.touchAction = 'none';
 
           if (card.setPointerCapture) card.setPointerCapture(gesture.id);
           if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(10);
           lift(true);
+        };
+
+        // Everything a carried block set, put back. Called on release and on
+        // the browser taking the gesture away, because a page left unable to
+        // scroll is a worse bug than the one this fixes.
+        const releasePage = () => {
+          holdPage(false);
+          card.style.touchAction = '';
+          if (card.releasePointerCapture && gesture && gesture.id !== undefined) {
+            try {
+              card.releasePointerCapture(gesture.id);
+            } catch {
+              // Already released, which is fine.
+            }
+          }
         };
 
         card.onpointerdown = (e) => {
@@ -1517,15 +1585,16 @@
           }
 
           if (gesture.mode === 'reorder') {
-            // The page must not scroll under a block being carried. This is
-            // why the hold has to be still: nothing has started scrolling yet,
-            // so there is still something to prevent.
-            if (e.preventDefault) e.preventDefault();
+            // Read against where the page is now, not where it was when the
+            // hold fired. holdPage should mean this never differs, and if it
+            // ever does the block must stay under the finger rather than
+            // drifting by however far the page moved.
+            const carried = dy + (pageY() - gesture.scroll0);
 
             card.style.transform =
-              `translateY(${dy}px)` + (reduceMotion() ? '' : ' scale(1.03)');
+              `translateY(${carried}px)` + (reduceMotion() ? '' : ' scale(1.03)');
 
-            const to = targetIndex(gesture.from, dy, gesture.step, blocks.length);
+            const to = targetIndex(gesture.from, carried, gesture.step, blocks.length);
             if (to !== gesture.to) {
               gesture.to = to;
               part(gesture.from, to, gesture.step);
@@ -1559,6 +1628,10 @@
           }
 
           if (mode === 'reorder') {
+            // Before the settle, not after: the page must be scrollable again
+            // the moment the finger is off, however long the animation runs.
+            releasePage();
+
             const settle = () => {
               lift(false);
               if (from !== to) {
@@ -1580,9 +1653,15 @@
           }
         };
 
+        // The browser taking the gesture, a call arriving, the pointer leaving
+        // the screen. This used to be how a reorder died: `touch-action:
+        // pan-y` let the browser claim the drag as a scroll, and claiming it
+        // means firing this. With holdPage installed it should no longer be
+        // reachable mid-reorder, but it has to leave the page usable if it is.
         card.onpointercancel = () => {
           if (!gesture) return;
           clearTimeout(gesture.hold);
+          releasePage();
           gesture = null;
           lift(false);
           card.style.transform = '';

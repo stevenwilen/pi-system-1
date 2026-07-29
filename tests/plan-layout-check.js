@@ -365,6 +365,28 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
   check('on the card', /touch-action: pan-y/.test(rule('.block')));
   check('and on the chip, so a swipe can start there too',
     /touch-action: pan-y/.test(rule('.dur')));
+
+  console.log('   and a carried block takes it back');
+  // The reorder died here once: pan-y let the browser claim the drag as a
+  // scroll, and claiming it fires pointercancel, which tore the drag down.
+  check('a non-passive touchmove listener holds the page',
+    /addEventListener\('touchmove', blockScroll, \{ passive: false \}\)/.test(code));
+  check('and it is removed again',
+    /removeEventListener\('touchmove', blockScroll/.test(code));
+  check('installed when the hold fires', /holdPage\(true\)/.test(code));
+  check('released on drop', /releasePage\(\);/.test(code));
+  check('and released if the browser takes the gesture anyway',
+    /onpointercancel[\s\S]{0,200}releasePage\(\)/.test(code));
+
+  // Each of these looks like the fix and is not. If one ever comes back as
+  // the only thing holding the page, the reorder is broken again.
+  check('preventDefault is not called on a pointermove, where it does nothing',
+    !/pointermove[\s\S]{0,400}e\.preventDefault\(\)/.test(code));
+  check('touch-action is still set on the element, but is not the mechanism',
+    /card\.style\.touchAction = 'none'/.test(code));
+
+  check('the drag corrects for the page moving under it',
+    /pageY\(\) - gesture\.scroll0/.test(code));
 }
 
 console.log('\n15. reduced motion keeps the function and drops the movement');

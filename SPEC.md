@@ -362,6 +362,40 @@ what the script does. Movement past the threshold cancels the hold timer, and a
 gesture that commits swallows the click that follows it — otherwise a swipe
 begun on the chip would also lengthen the block on its way out.
 
+#### A carried block takes the page back
+
+`pan-y` is right for tapping and swiping and wrong for carrying: the browser is
+entitled to claim a vertical drag as a scroll, and claiming it means firing
+`pointercancel`, which tears the reorder down. That is what "the drag activates
+and then scrolling takes over" is.
+
+So while a block is held, a **non-passive `touchmove` listener** is installed on
+the document and calls `preventDefault()` on every move. It is removed the
+moment the finger lifts, and also if the gesture is cancelled — a page left
+unable to scroll would be a worse bug than the one this fixes.
+
+Three things that look like the fix and are not, recorded because each is worth
+not trying again:
+
+- **`preventDefault()` on a `pointermove`.** Pointer events cannot cancel a
+  scroll at all, whatever the listener's passivity. A call there does nothing.
+- **`setPointerCapture`.** It routes later events to the element. It does not
+  stop the browser competing for the gesture, so the drag was already captured
+  and still lost.
+- **Setting `touch-action` when the hold fires.** The value is read when the
+  pointer goes down and latched for that gesture, so changing it 400ms later
+  cannot affect the gesture in flight. It is set anyway, because it is correct
+  for anything starting afterwards and costs nothing, but it is not what does
+  the work.
+
+The listener works here specifically because the hold requires stillness: no
+scroll has begun by the time it is installed, so there is still one to prevent.
+
+The drag is measured against where the page is now rather than where it was when
+the hold fired. Holding the page should mean those never differ; if they ever do,
+the block stays under the finger instead of drifting by however far the page
+moved.
+
 Re-confirming replaces the day rather than appending to it. The builder holds the
 whole plan, so what it sends is the plan, and merging two versions of the same
 day would only invent a third nobody asked for.
