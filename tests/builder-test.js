@@ -922,13 +922,15 @@ const SETTLED = 220; // past SETTLE_MS
     check('in the warn colour', askIn(slots()[1])._class.has('was'));
 
     const divider = byId.builder.children.filter((c) => c._class.has('now'));
-    check('one NOW divider', divider.length === 1, `${divider.length}`);
+    check('one divider', divider.length === 1, `${divider.length}`);
     check('between the past and what is left',
       byId.builder.children.indexOf(divider[0]) === 2,
       String(byId.builder.children.indexOf(divider[0])));
     check('it carries a dot and the word',
       divider[0].children.some((c) => c._class.has('dot')) &&
-        divider[0].text().includes('NOW'));
+        divider[0].text().includes('Next'));
+    check('and the word is not NOW any more', !divider[0].text().includes('NOW'),
+      divider[0].text());
 
     check('a past block keeps the hour it happened at',
       slots()[0].text().includes('8:00 AM – 9:00 AM'), slots()[0].text().trim());
@@ -1298,7 +1300,7 @@ const SETTLED = 220; // past SETTLE_MS
     });
     const opts = { plan: inProgress(), entries: utcEntries({ plans_in: 'morning' }), now: '09:30' };
 
-    const { ctx, slots, cardOf, rowOf, chipOf, titles } = boot(opts);
+    const { ctx, byId, slots, cardOf, rowOf, chipOf, titles } = boot(opts);
     await ctx.load();
 
     check('three blocks', titles().join() === 'Reading,Deep work,Errands', titles().join());
@@ -1308,11 +1310,29 @@ const SETTLED = 220; // past SETTLE_MS
     check('it has no duration chip', !chipOf(slots()[1]));
     check('the one still to come does', Boolean(chipOf(slots()[2])));
 
-    // Nothing to say about it yet: it has not failed to happen, it is
-    // happening. The question belongs on a block that is over.
+    // No question yet: it has not failed to happen, it is happening. The
+    // question belongs on a block that is over.
     const askIn = (s) => rowOf(s).children.find((c) => c._class.has('askmiss'));
     check('and it asks nothing yet', !askIn(slots()[1]));
     check('while the one that is over does', Boolean(askIn(slots()[0])));
+
+    // It says what it is instead. The slot the chip vacated was reading as a
+    // block that had failed to render one.
+    const actIn = (s) => rowOf(s).children.find((c) => c._class.has('running'));
+    check('it says it is active', actIn(slots()[1]) && actIn(slots()[1]).textContent === 'active',
+      actIn(slots()[1]) && actIn(slots()[1]).textContent);
+    check('the one that is over does not', !actIn(slots()[0]));
+    check('nor does the one still to come', !actIn(slots()[2]));
+
+    // And the divider clears it. The word is "Next", which is a claim about
+    // the block underneath — so it has to sit below the one in progress, not
+    // above it. Above, it would be calling the running block the next one
+    // while the block's own right edge said "active".
+    const kids = byId.builder.children;
+    const line = kids.filter((c) => c._class.has('now'));
+    check('there is one divider', line.length === 1, String(line.length));
+    check('and it sits below the block in progress, not above it',
+      kids.indexOf(line[0]) === 2, String(kids.indexOf(line[0])));
 
     // Holding it must not pick it up.
     const card = cardOf(slots()[1]);
@@ -1347,6 +1367,9 @@ const SETTLED = 220; // past SETTLE_MS
     await ctx.load();
 
     const askIn = (s) => rowOf(s).children.find((c) => c._class.has('askmiss'));
+    const actIn = (s) => rowOf(s).children.find((c) => c._class.has('running'));
+
+    check('it starts out saying active', Boolean(actIn(slots()[1])));
 
     // The backing has to say which of the three things this swipe is, before
     // the finger comes off.
@@ -1367,6 +1390,10 @@ const SETTLED = 220; // past SETTLE_MS
       titles().join());
     check('and now reads as missed', askIn(slots()[1]).textContent === 'missed',
       askIn(slots()[1]) && askIn(slots()[1]).textContent);
+
+    // One or the other, never both: "active" over the top of the answer you
+    // just gave would be arguing with you.
+    check('and stops saying active', !actIn(slots()[1]));
     check('it posted the miss', posted.some((p) => /\/blocks\/i2\/miss/.test(p.url)),
       JSON.stringify(posted.map((p) => p.url)));
     check('as missed, not unmissed', posted[0].body.missed === true,
@@ -1385,6 +1412,7 @@ const SETTLED = 220; // past SETTLE_MS
     move(again, 100, 100);
     up(again, 100, 100);
     check('it is unmarked', !askIn(slots()[1]), askIn(slots()[1]) && askIn(slots()[1]).textContent);
+    check('and says active again', Boolean(actIn(slots()[1])));
     check('and that was posted too', posted[0].body.missed === false,
       JSON.stringify(posted[0].body));
   }

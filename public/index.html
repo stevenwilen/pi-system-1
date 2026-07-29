@@ -487,6 +487,20 @@
         color: var(--warn);
       }
 
+      /* The block you are in, in the slot the duration chip has vacated.
+         Muted rather than faint: it is the one block on the page that is
+         happening, so it should not sit in the same register as "didn't
+         happen?" on a block that is over. No border and no background, so
+         nothing about it suggests a press.
+
+         Named .running, not .act: .act is already the "+ Add" affordance in a
+         section label, and an unscoped .act here bled onto it. */
+      .running {
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
       /* Where the day is now: a dot, the word, and a rule running out to the
          edge. It sits between what has been and what is left. */
       .now {
@@ -1477,11 +1491,20 @@
           const begun = blockBegun(b);
           const past = begun && b.start + b.duration <= now;
 
-          // Once, between the last thing that has finished and the first that
-          // has not. A day entirely behind or entirely ahead gets no divider,
-          // because it would be marking the edge of the list rather than a
-          // place in the day.
-          if (onToday() && !past && !markedNow && i > 0) {
+          // Once, above the first block that has not STARTED — not the first
+          // that has not finished. The two differ by exactly one block, the one
+          // in progress, and the word decides which is right: it used to read
+          // NOW, which was true of the moment either way, and it now reads
+          // Next, which is a claim about the block underneath it. A block you
+          // are in the middle of is not next, and it says "active" on its own
+          // right-hand edge, so the divider sitting above it would be
+          // contradicting the line below it.
+          //
+          // A day entirely behind or entirely ahead gets no divider, because it
+          // would be marking the edge of the list rather than a place in the
+          // day. Nothing begun yet means the first block is already the next
+          // one, and the whole list is what is left.
+          if (onToday() && !begun && !markedNow && i > 0) {
             box.append(nowDivider());
             markedNow = true;
           }
@@ -1516,7 +1539,7 @@
         dot.className = 'dot';
         const txt = document.createElement('div');
         txt.className = 'txt';
-        txt.textContent = 'NOW';
+        txt.textContent = 'Next';
         const ln = document.createElement('div');
         ln.className = 'ln';
 
@@ -1784,13 +1807,15 @@
         // would refuse the change anyway.
         //
         // What it carries instead depends on whether there is anything to say
-        // yet. Over, and it asks. Still running, and it says nothing unless it
-        // has already been marked — a block you are in the middle of has not
-        // failed to happen yet, and asking would be premature.
+        // yet. Over, and it asks. Still running, and it says so — not a
+        // question, because a block you are in the middle of has not failed to
+        // happen yet and asking would be premature. Unless it has already been
+        // marked missed, in which case it says that instead: "active" over the
+        // top of your own answer would be arguing with you.
         if (past || (begun && b.missed)) {
           row.append(left, missToggle(b, i));
         } else if (begun) {
-          row.append(left);
+          row.append(left, activeLabel());
         } else {
           const dur = document.createElement('button');
           dur.type = 'button';
@@ -1825,6 +1850,22 @@
 
         attach({ slot, card, backing, index: i, begun });
         return slot;
+      }
+
+      /**
+       * The word on the block you are in. It fills the slot the duration chip
+       * left empty, which is the only reason it reads as a label rather than
+       * as a control: a gap there looked like something had failed to render.
+       *
+       * Deliberately not the accent colour. This slot has held a tappable blue
+       * pill on every block above it, so blue here would be inviting a press
+       * that does nothing.
+       */
+      function activeLabel() {
+        const tag = document.createElement('div');
+        tag.className = 'running';
+        tag.textContent = 'active';
+        return tag;
       }
 
       function noteLine(text) {

@@ -333,18 +333,38 @@ in place.
   about a day already gone; asking in place means the question arrives while the
   answer is still obvious. The ordinary case is still no question at all — a
   block is assumed done unless someone says otherwise.
-- A block that has **begun but not ended** is still a card, and says nothing on
-  its right-hand side unless it has already been marked missed. It has not failed
-  to happen; it is happening, and asking would be premature.
+- A block that has **begun but not ended** is still a card, and says **active**
+  where the chip would be. It is not asked about — it has not failed to happen,
+  it is happening, and the question belongs on a block that is over. But the slot
+  cannot be left empty either: a gap there reads as a chip that failed to render
+  rather than one deliberately withheld.
+
+  The label is **muted, not the accent colour**, and this is the point worth
+  keeping. That slot holds a tappable blue pill on every block above it, so a
+  blue word in it invites a press that does nothing. Muted rather than faint
+  because this block outranks one that is already over.
+
+  Unless it has already been **marked missed**, in which case it says that
+  instead. One or the other, never both: *active* over the top of the answer you
+  just gave would be arguing with you.
 - A **past** block no longer shows its note. A note says what you are going to do
   in a block, and once the block is over it is not answering that any more. It is
   **hidden, not lost**: the row still holds it, the confirm still sends it, and
   the message that already went out carried it. Blocks in progress and still to
   come show theirs as before.
-- A **NOW divider** sits between what has been and what is left: a dot, the word,
-  and a hairline. It is drawn once, and not at all on a day entirely behind or
-  entirely ahead, where it would be marking the edge of the list rather than a
+- A **Next divider** sits between what has been and what is left: a dot, the
+  word, and a hairline. It is drawn once, and not at all on a day entirely behind
+  or entirely ahead, where it would be marking the edge of the list rather than a
   place in the day.
+
+  It reads **Next**, and it used to read **NOW**. The word changed where it
+  sits. *NOW* named the moment, and was true wherever the line fell; *Next* is a
+  claim about the block directly underneath it. So the line moved down by one:
+  it is drawn above the first block that **has not started**, where it used to
+  be drawn above the first that **had not finished**. Those differ by exactly
+  one block — the one in progress — and with the old placement the divider would
+  have called a running block the next one while that block's own right edge
+  said *active*.
 - The **Starts control is hidden.** The day has already started, so there is
   nothing to decide about when it does.
 
@@ -876,9 +896,15 @@ The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
   real space between them.
 - **Blue is actionable, with one exception.** It appears on the Starts steppers,
   the duration chip, Undo, Confirm and Save — everything a press acts on — and on
-  the **NOW** divider, which no press acts on and which says *here is where you
+  the **Next** divider, which no press acts on and which says *here is where you
   are*. That is the whole list, enforced by name in the layout check; nothing
   decorative is ever blue.
+
+  The near miss is the **active** label. It says much the same thing as the
+  divider a line above it, so blue is the obvious reach — and it is wrong,
+  because it sits in the slot the duration chip occupies on every other block.
+  Blue there is an invitation to press something that does nothing. Pinned by
+  name in the layout check so it cannot drift back.
 
   The rule was relaxed to two exceptions when the day switch arrived and is back
   to one: the *in today's plan* badge was the other, and removing it narrowed the

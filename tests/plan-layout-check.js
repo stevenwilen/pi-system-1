@@ -181,6 +181,13 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   check('nor when chosen', !/--accent/.test(rule('.choices button[aria-pressed="true"]')));
   check('a disabled stepper goes faint, not pale blue',
     /color: var\(--faint\)/.test(rule('.step:disabled')));
+
+  // The near miss. "active" sits in the slot the duration chip vacates, and
+  // the NOW divider right above it is blue for saying the same thing — so
+  // blue is the obvious reach. It is wrong here: that slot has held a
+  // tappable pill on every block above this one, and a blue word in it is an
+  // invitation to press something that does nothing.
+  check('the active label is not blue', !/--accent/.test(rule('.running')));
 }
 
 console.log('\n7. the miss colour is for misses, warnings and destruction only');
@@ -213,6 +220,32 @@ console.log('\n7. the miss colour is for misses, warnings and destruction only')
     /color: var\(--faint\)/.test(rule('.askmiss')));
   check('an ordinary row does not', !/--warn/.test(rule('.row')));
   check('nor an ordinary meta line', !/--warn/.test(rule('.row .meta')));
+  check('nor the block you are in — it is running, not failing',
+    !/--warn/.test(rule('.running')));
+}
+
+console.log('\n7b. the right edge of a block says one thing per state');
+{
+  // Three states, three things in the same slot, and the whole point is that
+  // no state leaves it empty. A gap there read as a chip that had failed to
+  // render rather than as a chip that was deliberately withheld.
+  const act = rule('.running');
+  check('the block in progress has a label', act.length > 0);
+  check('it is muted, outranking a block that is over', /color: var\(--muted\)/.test(act));
+  check('and "didn\'t happen?" stays faint below it',
+    /color: var\(--faint\)/.test(rule('.askmiss')));
+  check('it is 12px, like the other two', /font-size: 12px/.test(act));
+  check('it does not wrap', /white-space: nowrap/.test(act));
+
+  // Not a control: no border, no background, nothing to press.
+  check('it has no pill border, unlike the chip it replaces', !/border/.test(act), act);
+  check('and no background', !/background/.test(act), act);
+
+  check('the word is "active"', /className = 'running';[\s\S]{0,120}textContent = 'active'/.test(code));
+  check('a block that has begun gets it',
+    /\} else if \(begun\) \{\s*row\.append\(left, activeLabel\(\)\);/.test(code));
+  check('and a block already marked missed does not, because it says missed',
+    /if \(past \|\| \(begun && b\.missed\)\) \{\s*row\.append\(left, missToggle/.test(code));
 }
 
 console.log('\n8. the calendar aside is a left rule, not a card');
@@ -607,6 +640,7 @@ console.log('\n17. the mockup still describes the page');
     ['the add sheet', 'sheet'],
     ['the day switch', 'dayswitch'],
     ['a past block', 'past'],
+    ['the block in progress', 'running'],
     ['the NOW divider', 'now'],
     ['a locked row', 'locked'],
   ]) {

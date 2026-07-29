@@ -137,6 +137,8 @@
   .past .time{color:#544E46}
   .askmiss{font-size:12px;color:var(--faint)}
   .wasmissed{font-size:12px;color:var(--warn)}
+  /* the block in progress. muted, not faint: it outranks a block that is over */
+  .running{font-size:12px;color:var(--muted);white-space:nowrap}
 
   /* where the day has got to */
   .now{display:flex;align-items:center;gap:10px;margin:4px 0 13px}
@@ -286,7 +288,7 @@
       <div class="wasmissed">missed</div>
     </div>
 
-    <div class="now"><div class="dot"></div><div class="txt">NOW</div><div class="ln"></div></div>
+    <div class="now"><div class="dot"></div><div class="txt">Next</div><div class="ln"></div></div>
 
     <div class="block">
       <div>
@@ -308,6 +310,26 @@
 
 <!-- ================= states the screen above cannot show at once ================= -->
 <div class="phone">
+
+  <div class="section">
+    <div class="label">The block you are in</div>
+
+    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:16px">
+      Between begun and over. It keeps the filled card &mdash; it has not failed
+      to happen, it is happening &mdash; but it has lost its length control,
+      because the length can no longer be changed. The word fills the slot the
+      chip has left, and it is muted rather than blue: that slot has held a
+      tappable pill on every block above it.
+    </p>
+
+    <div class="block">
+      <div class="brow">
+        <div><div class="t">UF application</div><div class="time">10:00 AM &ndash; 12:00 PM</div></div>
+        <div class="running">active</div>
+      </div>
+      <div class="note">personal statement draft</div>
+    </div>
+  </div>
 
   <div class="section">
     <div class="label">Swiping a block</div>
