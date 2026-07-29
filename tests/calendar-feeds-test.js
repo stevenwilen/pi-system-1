@@ -1,8 +1,9 @@
-// Two calendar feeds: things to know, and things to do.
+// Both calendar feeds, read into one list.
 //
-// The rule that matters most is that saying no sticks. An auto-placed block
-// the person deletes must not come back when they reopen the builder, or the
-// feature is one that keeps arguing.
+// The feeds used to mean different things: one was things to know, the other
+// things to do, and the second fed all-day events into the day as blocks. That
+// distinction is gone. Both are now read the same way and shown the same way,
+// and nothing on either is placed, pinned, claimed or stored.
 //
 // Both feeds are served from a local ICS server, so the assertions are about
 // this code rather than about what happens to be in anyone's real calendar.
@@ -35,7 +36,6 @@ let awareness = '';
 let action = '';
 
 const DATE = '2031-03-14';
-const NEXT = '2031-03-15';
 
 const ics = (events) =>
   ['BEGIN:VCALENDAR', 'VERSION:2.0', ...events, 'END:VCALENDAR'].join('\r\n');
@@ -72,10 +72,6 @@ const timed = (uid, summary, date, from, to) =>
 
 const get = async (p) => {
   const r = await fetch(BASE + p);
-  return { status: r.status, body: await r.json() };
-};
-const post = async (p) => {
-  const r = await fetch(BASE + p, { method: 'POST' });
   return { status: r.status, body: await r.json() };
 };
 
@@ -119,71 +115,72 @@ const clearClaims = async () => {
   ]);
   action = ics([
     allDay('do-1', 'Cancel Paramount', DATE),
-    allDay('do-2', 'Book haircut', DATE),
     timed('do-3', 'Standup', DATE, '0900', '0915'),
   ]);
 
-  console.log('which feed a thing is on decides what happens to it');
+  console.log('both feeds read into one list');
   {
     const r = await get(`/calendar/${DATE}`);
     check('the day reads', r.status === 200, JSON.stringify(r.body).slice(0, 100));
 
-    // Timed events are appointments on either feed: the hour is spoken for.
-    const pinned = r.body.events.map((e) => e.title).sort();
-    check('timed events from both feeds are pinned', pinned.join(',') === 'Dentist,Standup', pinned.join(','));
+    const titles = r.body.items.map((e) => e.title);
+    check('everything on both feeds is there', titles.length === 4, titles.join(', '));
+    check('from the awareness feed', titles.includes('Mums birthday') && titles.includes('Dentist'));
+    check('and from the action feed', titles.includes('Cancel Paramount') && titles.includes('Standup'));
 
-    // All-day on the awareness feed is a note and nothing else.
-    check('an all-day thing to know is a note',
-      r.body.all_day.map((a) => a.title).join(',') === 'Mums birthday',
-      JSON.stringify(r.body.all_day));
+    // Which feed a thing is on no longer decides anything about it.
+    check('nothing says which feed anything came from',
+      r.body.items.every((e) => e.source === undefined));
 
-    // All-day on the action feed is work waiting to be placed.
-    const offered = r.body.to_place.map((t) => t.title).sort();
-    check('all-day things to do are offered', offered.join(',') === 'Book haircut,Cancel Paramount', offered.join(','));
-    check('and are not in the note', !JSON.stringify(r.body.all_day).includes('Paramount'));
-    check('nor pinned', !pinned.includes('Cancel Paramount'));
+    const byTitle = Object.fromEntries(r.body.items.map((e) => [e.title, e]));
+
+    // The feed gives instants and the screen wants wall-clock minutes where
+    // the person lives. 09:00Z on 14 March 2031 is 05:00 in New York, which is
+    // the test profile's timezone. Computed rather than written down, so a
+    // daylight saving change does not turn this into a puzzle.
+    const expected = Number(
+      new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+      })
+        .formatToParts(new Date(`${DATE}T09:00:00Z`))
+        .reduce((acc, p) => ({ ...acc, [p.type]: p.value }), {}).hour
+    ) * 60;
+
+    check('a timed event is converted to the local wall clock',
+      byTitle['Standup'].start_minutes === expected,
+      `${byTitle['Standup'].start_minutes}, expected ${expected}`);
+    check('an all-day entry carries none', byTitle['Cancel Paramount'].start_minutes === null,
+      String(byTitle['Cancel Paramount'].start_minutes));
+    check('an all-day entry on either feed reads the same',
+      byTitle['Mums birthday'].start_minutes === null &&
+        byTitle['Cancel Paramount'].start_minutes === null);
+
+    check('timed first, in order, then all-day',
+      titles.slice(0, 2).join(',') === 'Standup,Dentist', titles.join(','));
 
     check('nothing is reported as failed', r.body.failed.length === 0, JSON.stringify(r.body.failed));
   }
 
-  console.log('\nplacing is a claim, and it is made once');
+  console.log('\nreading a day claims nothing');
   {
-    const first = await post(`/calendar/${DATE}/place`);
-    check('the first open is offered both', first.body.placed.length === 2, JSON.stringify(first.body.placed));
-    check('as ordinary half-hour blocks',
-      first.body.placed.every((p) => p.duration_minutes === 30),
-      JSON.stringify(first.body.placed.map((p) => p.duration_minutes)));
+    // This is the change that matters. Reading used to be repeatable and
+    // placing was a separate POST that was not; there is no placing now, so a
+    // read is just a read and it can happen as often as the screen likes.
+    const first = await get(`/calendar/${DATE}`);
+    const second = await get(`/calendar/${DATE}`);
+    const third = await get(`/calendar/${DATE}`);
 
-    // This is the whole feature: reopening must not bring them back.
-    const second = await post(`/calendar/${DATE}/place`);
-    check('reopening the builder places nothing again', second.body.placed.length === 0, JSON.stringify(second.body.placed));
+    check('three reads give three identical answers',
+      JSON.stringify(first.body.items) === JSON.stringify(second.body.items) &&
+        JSON.stringify(second.body.items) === JSON.stringify(third.body.items));
 
-    const third = await post(`/calendar/${DATE}/place`);
-    check('and again', third.body.placed.length === 0);
+    const { data: claims } = await H.db
+      .from('sent_log').select('job').eq('user_id', U);
+    check('and nothing was written to claim any of it', claims.length === 0,
+      JSON.stringify(claims.map((c) => c.job)));
 
-    // The read is unaffected: it still reports what the feed holds.
-    const r = await get(`/calendar/${DATE}`);
-    check('but the day still reports what is on the feed', r.body.to_place.length === 2, `${r.body.to_place.length}`);
-  }
-
-  console.log('\na claim is per date, not per event');
-  {
-    // Same events, different day. The feed server answers for any date, so
-    // this proves the claim is keyed on the date and not only on the uid.
-    awareness = ics([]);
-    action = ics([allDay('do-1', 'Cancel Paramount', NEXT)]);
-
-    // Past the 60s cache.
-    const { data: claimed } = await H.db
-      .from('sent_log').select('job, sent_for_date').eq('user_id', U);
-    check('two claims exist for the first date',
-      claimed.filter((c) => c.sent_for_date === DATE).length === 2,
-      JSON.stringify(claimed.map((c) => c.sent_for_date)));
-    check('and each names its own event',
-      new Set(claimed.map((c) => c.job)).size === claimed.length,
-      claimed.map((c) => c.job.slice(0, 20)).join(' '));
-    check('under a prefix that cannot collide with a real job',
-      claimed.every((c) => c.job.startsWith('placed:')), claimed[0].job.slice(0, 12));
+    const place = await fetch(`${BASE}/calendar/${DATE}/place`, { method: 'POST' });
+    check('the placement endpoint is gone', place.status === 404, `${place.status}`);
   }
 
   console.log('\na broken feed does not look like a quiet day');
@@ -203,14 +200,14 @@ const clearClaims = async () => {
     action = ics([allDay('do-5', 'Still here', '2031-03-20')]);
 
     const r = await (await fetch(`${brokenBase}/calendar/2031-03-20`)).json();
-    check('the request still succeeds', Array.isArray(r.events));
+    check('the request still succeeds', Array.isArray(r.items));
     check('and the dead feed is named', r.failed.length === 1, JSON.stringify(r.failed));
     check('by a name a person would recognise',
       r.failed.length === 1 && r.failed[0].label === 'Dates', JSON.stringify(r.failed));
     check('the working feed is not blamed',
       !r.failed.some((f) => f.source === 'action'), JSON.stringify(r.failed));
     check('and it still returns what it could read',
-      r.to_place.map((t) => t.title).join(',') === 'Still here', JSON.stringify(r.to_place));
+      r.items.map((t) => t.title).join(',') === 'Still here', JSON.stringify(r.items));
 
     broken.kill();
   }
@@ -224,12 +221,9 @@ const clearClaims = async () => {
     awareness = ics([allDay('know-9', 'Anniversary', '2031-04-01')]);
     const r = await (await fetch(`${soloBase}/calendar/2031-04-01`)).json();
 
-    check('the awareness feed still reads', r.all_day.map((a) => a.title).join(',') === 'Anniversary', JSON.stringify(r.all_day));
-    check('nothing is offered for placing', r.to_place.length === 0, JSON.stringify(r.to_place));
+    check('the one feed still reads', r.items.map((a) => a.title).join(',') === 'Anniversary',
+      JSON.stringify(r.items));
     check('and nothing is reported broken', r.failed.length === 0, JSON.stringify(r.failed));
-
-    const placed = await (await fetch(`${soloBase}/calendar/2031-04-01/place`, { method: 'POST' })).json();
-    check('placing is a no-op', placed.placed.length === 0, JSON.stringify(placed.placed));
 
     solo.kill();
   }
@@ -238,12 +232,9 @@ const clearClaims = async () => {
   {
     const fs = require('fs');
     const html = fs.readFileSync(ROOT + '/public/index.html', 'utf8');
-    check('it says it could not reach the calendar', /Couldn't reach \$\{names\}/.test(html));
-    check('in the miss colour', /el\('div', 'err', `Couldn't reach/.test(html));
-    check('the note shows even with nothing all-day',
-      /!allDay\.length && !failed\.length/.test(html));
-    check('and placing only happens on a day with no saved plan',
-      /await loadCalendar\(date\);\s*\n\s*await placeActionItems\(date\)/.test(html));
+    check('it says which feed it could not read', /could not be read/.test(html));
+    check('in the miss colour', /\.cal \.failed \{[^}]*var\(--warn\)/.test(html));
+    check('and an empty calendar says so plainly', /Nothing on it/.test(html));
   }
 
   console.log('\ncleanup');

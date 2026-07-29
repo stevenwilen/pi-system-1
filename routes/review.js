@@ -40,7 +40,7 @@ router.get('/review', async (req, res) => {
 
     const { data: rows, error } = await supabase
       .from('blocks')
-      .select('id, title, start_time, duration_minutes, pinned, completed, miss_reason')
+      .select('id, title, start_time, duration_minutes, completed, miss_reason')
       .eq('plan_id', plan.id)
       .order('sort_order');
 
@@ -53,7 +53,6 @@ router.get('/review', async (req, res) => {
         title: b.title,
         start_minutes: toMinutes(b.start_time),
         duration_minutes: b.duration_minutes,
-        pinned: b.pinned,
         completed: b.completed,
         miss_reason: b.miss_reason,
       })),

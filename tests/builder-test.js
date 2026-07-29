@@ -4,6 +4,12 @@
 // A fresh context per scenario: `blocks` and `planDate` are let-bound inside
 // the script and cannot be reset from outside, so state would otherwise leak
 // between cases and quietly invalidate them.
+//
+// The builder is much smaller than it was. Nothing is pinned and nothing is
+// placed automatically, so there are no gaps to fill and no collisions to
+// report: a block starts when the one above it ends, and that is the whole
+// rule. What is left to get right is the sequence, the steppers, and the
+// running end time.
 const fs = require('fs');
 const vm = require('vm');
 // The app, found from where this file sits, so the suite runs from any clone.
@@ -23,6 +29,7 @@ class El {
     this.dataset = {};
     this.style = {};
     this._class = new Set();
+    this._attrs = {};
     this.textContent = '';
     this.value = '';
     this.disabled = false;
@@ -42,7 +49,8 @@ class El {
   append(...k) { for (const x of k) if (x) this.children.push(x); }
   replaceChildren(...k) { this.children = k.filter(Boolean); }
   appendChild(k) { this.children.push(k); return k; }
-  setAttribute(k, v) { this[k] = v; }
+  setAttribute(k, v) { this._attrs[k] = v; this[k] = v; }
+  getAttribute(k) { return this._attrs[k]; }
   focus() {} scrollIntoView() {} setPointerCapture() {} releasePointerCapture() {}
   addEventListener() {} removeEventListener() {}
   getBoundingClientRect() { return { top: 0, height: 40 }; }
@@ -59,33 +67,28 @@ class El {
 }
 
 const html = fs.readFileSync(ROOT + '/public/index.html', 'utf8');
-// Strip the boot calls so the harness controls when loading happens. Matching
-// only `load();` at end-of-string broke the moment `loadReview();` was added
-// after it: load() then ran on require and raced the test's own await.
+// Strip the boot calls so the harness controls when loading happens.
 const SCRIPT = html
   .match(/<script>([\s\S]*?)<\/script>/)[1]
   .replace(/^\s*load\(\);\s*$/m, '')
   .replace(/^\s*loadReview\(\);\s*$/m, '');
 
 const ENTRIES = {
-  today: '2026-07-27', timezone: 'America/New_York', wake_time: '08:00',
-  items: [], paused: [],
+  today: '2026-07-27',
+  timezone: 'America/New_York',
+  wake_time: '08:00',
+  items: [],
 };
 
-// Builds a fresh script instance with its own DOM and calendar fixture.
-function boot(events = [], allDay = []) {
-  // Every id the markup declares, read from the file rather than listed
-  // here. A hand-kept list goes stale the moment the page grows an
-  // element, and the failure is an unrelated crash rather than anything
-  // to do with the builder.
+/** Builds a fresh script instance with its own DOM and calendar fixture. */
+function boot(calendarItems = [], plan = null) {
+  // Every id the markup declares, read from the file rather than listed here.
+  // A hand-kept list goes stale the moment the page grows an element, and the
+  // failure is an unrelated crash rather than anything to do with the builder.
   const byId = {};
   for (const id of new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]))) {
     byId[id] = new El();
   }
-
-  const endsRow = new El();
-  endsRow.className = 'ends-row';
-  byId.ends.append(endsRow);
 
   for (const t of ['habit', 'project', 'task']) {
     const b = new El('button');
@@ -94,32 +97,121 @@ function boot(events = [], allDay = []) {
   }
 
   const ctx = vm.createContext({
-    console, setTimeout, Intl, Date, Math, JSON, String, Number, Boolean, Array, Object,
-    alert: () => {}, confirm: () => true,
+    console, setTimeout, clearTimeout, Intl, Date, Math, JSON,
+    String, Number, Boolean, Array, Object,
+    alert: () => {}, confirm: () => true, prompt: () => 'Typed block',
     fetch: async (url) => ({
       ok: true,
-      json: async () => (url.startsWith('/calendar') ? { events, all_day: allDay } : ENTRIES),
+      json: async () => {
+        if (url.startsWith('/calendar')) return { items: calendarItems, failed: [] };
+        if (url.startsWith('/plan/')) return plan || { plan: null, blocks: [] };
+        if (url === '/review') return { date: '2026-07-26', blocks: [] };
+        return ENTRIES;
+      },
     }),
     document: { getElementById: (id) => byId[id], createElement: (t) => new El(t) },
   });
 
   vm.runInContext(SCRIPT, ctx);
   const rows = () => byId.builder.children.filter((c) => c._class.has('block'));
-  const clashes = () => byId.builder.children.filter((c) => c._class.has('clash'));
-  return { ctx, byId, endsRow, rows, clashes };
+  return { ctx, byId, rows };
 }
 
+/**
+ * The same, with one calendar feed reporting itself unreachable.
+ *
+ * [] from a dead feed and [] from a quiet Tuesday are the same value, and the
+ * screen must not let them look the same.
+ */
+function bootWithFailure() {
+  const byId = {};
+  for (const id of new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]))) {
+    byId[id] = new El();
+  }
+  for (const t of ['habit', 'project', 'task']) {
+    const b = new El('button');
+    b.dataset.type = t;
+    byId['type-seg'].append(b);
+  }
+
+  const ctx = vm.createContext({
+    console, setTimeout, clearTimeout, Intl, Date, Math, JSON,
+    String, Number, Boolean, Array, Object,
+    alert: () => {}, confirm: () => true, prompt: () => null,
+    fetch: async (url) => ({
+      ok: true,
+      json: async () => {
+        if (url.startsWith('/calendar')) {
+          return { items: [], failed: [{ source: 'awareness', label: 'Dates' }] };
+        }
+        if (url.startsWith('/plan/')) return { plan: null, blocks: [] };
+        if (url === '/review') return { date: '2026-07-26', blocks: [] };
+        return ENTRIES;
+      },
+    }),
+    document: { getElementById: (id) => byId[id], createElement: (t) => new El(t) },
+  });
+
+  vm.runInContext(SCRIPT, ctx);
+  return { ctx, byId };
+}
+
+const stepperOf = (row) => row.children.find((c) => c._class.has('stepper'));
+
 (async () => {
-  console.log('sequence, wake 08:00');
+  console.log('blocks flow in sequence from the start time');
   {
     const { ctx, byId, rows } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A', duration: 60 });
     ctx.addBlock({ title: 'B', duration: 30 });
-    check('two blocks rendered', rows().length === 2);
-    check('first starts at wake time', rows()[0].text().includes('08:00 to 09:00'));
-    check('second follows the first', rows()[1].text().includes('09:00 to 09:30'));
-    check('end time is the sum', byId['end-time'].textContent === '09:30', byId['end-time'].textContent);
+    check('two blocks rendered', rows().length === 2, `${rows().length}`);
+    check('first starts at the start time', rows()[0].text().includes('08:00 – 09:00'), rows()[0].text().trim());
+    check('second follows the first', rows()[1].text().includes('09:00 – 09:30'), rows()[1].text().trim());
+    check('day ends is the sum', byId['end-time'].textContent === '09:30', byId['end-time'].textContent);
+  }
+
+  console.log('\nnothing arrives from the calendar');
+  {
+    // The feed has a timed appointment and an all-day entry on it. Neither
+    // becomes a block: the calendar is read, shown, and forgotten.
+    const { ctx, byId, rows } = boot([
+      { title: 'Dentist', start_minutes: 780 },
+      { title: 'Cancel Paramount', start_minutes: null },
+    ]);
+    await ctx.load();
+
+    check('no blocks were created', rows().length === 0, `${rows().length}`);
+    check('the appointment is shown as reference', /Dentist/.test(byId['cal-list'].text()),
+      byId['cal-list'].text().trim());
+    check('with its time', /Dentist, 13:00/.test(byId['cal-list'].text()), byId['cal-list'].text().trim());
+    check('an all-day entry is shown with no time',
+      /Cancel Paramount/.test(byId['cal-list'].text()) &&
+        !/Cancel Paramount,/.test(byId['cal-list'].text()),
+      byId['cal-list'].text().trim());
+
+    ctx.addBlock({ title: 'Gym', duration: 60 });
+    check('the day still starts at the start time', rows()[0].text().includes('08:00 – 09:00'),
+      rows()[0].text().trim());
+    check('and the appointment did not move it', byId['end-time'].textContent === '09:00',
+      byId['end-time'].textContent);
+  }
+
+  console.log('\nan empty day and a broken feed do not look the same');
+  {
+    const { ctx, byId } = boot();
+    await ctx.load();
+    check('an empty calendar says it is empty', /Nothing on it/.test(byId['cal-list'].text()),
+      byId['cal-list'].text().trim());
+  }
+
+  console.log('\na feed that could not be read is named');
+  {
+    const { ctx, byId } = bootWithFailure();
+    await ctx.load();
+    check('the failure is said out loud', /could not be read/.test(byId['cal-list'].text()),
+      byId['cal-list'].text().trim());
+    check('and the feed is named', /Dates/.test(byId['cal-list'].text()), byId['cal-list'].text().trim());
   }
 
   console.log('\n30 minute steps only');
@@ -127,139 +219,118 @@ function boot(events = [], allDay = []) {
     const { ctx, rows } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A', duration: 60 });
-    const step = () => rows()[0].children.find((c) => c._class.has('stepper'));
+    const step = () => stepperOf(rows()[0]);
+
     step().children[2].onclick();
-    check('plus adds exactly 30', rows()[0].text().includes('08:00 to 09:30'));
+    check('plus adds exactly 30', rows()[0].text().includes('08:00 – 09:30'), rows()[0].text().trim());
     step().children[0].onclick();
-    check('minus removes exactly 30', rows()[0].text().includes('08:00 to 09:00'));
+    check('minus removes exactly 30', rows()[0].text().includes('08:00 – 09:00'), rows()[0].text().trim());
     step().children[0].onclick();
-    check('floor is 30', rows()[0].text().includes('08:00 to 08:30'));
-    check('minus disabled at the floor', step().children[0].disabled === true);
+    check('floor is 30', rows()[0].text().includes('08:00 – 08:30'), rows()[0].text().trim());
+
+    // Minus stays live at the floor rather than going dead: carrying it one
+    // step further is how a block is removed. It does not shorten below 30,
+    // and it does not remove on its own either — see the removal case below.
+    check('minus is not disabled at the floor', step().children[0].disabled !== true);
+    step().children[0].onclick();
+    check('and pressing it there does not shorten it further',
+      rows()[0].text().includes('08:00 – 08:30'), rows()[0].text().trim());
+    check('nor remove it', rows().length === 1, `${rows().length}`);
   }
 
-  console.log('\npinned blocks');
-  {
-    const { ctx, rows } = boot([{ title: 'Dentist', start_minutes: 600, duration_minutes: 60 }]);
-    await ctx.load();
-    check('pinned rendered', rows().length === 1 && rows()[0]._class.has('pinned'));
-    check('holds its own time, not the flow', rows()[0].text().includes('10:00 to 11:00'), rows()[0].text().trim());
-    check('no stepper on a pinned block', !rows()[0].children.some((c) => c._class.has('stepper')));
-
-    // Too long for the 08:00-10:00 gap, so it lands after the appointment and
-    // flows from its end rather than from the wake time.
-    ctx.addBlock({ title: 'After', duration: 180 });
-    check('blocks that do not fit flow from the pinned end', rows()[1].text().includes('11:00 to 14:00'), rows()[1].text().trim());
-  }
-
-  console.log('\ncollision is shown, never resolved');
-  {
-    // Blocks added before the calendar arrives sit ahead of the pinned block,
-    // which is how an overrun actually happens.
-    const { ctx, rows, clashes } = boot([{ title: 'Dentist', start_minutes: 600, duration_minutes: 60 }]);
-    await ctx.load();
-    ctx.addBlock({ title: 'Deep work', duration: 60 });
-    check('no clash when it fits', clashes().length === 0);
-
-    await ctx.loadCalendar('2026-07-28'); // re-appends pinned after the flow
-    ctx.blocks;
-    const before = rows().map((r) => r.text().trim());
-    check('unpinned now precedes pinned', /Deep work/.test(before[0]) && /Dentist/.test(before[1]), before.join(' | '));
-
-    const step = () => rows()[0].children.find((c) => c._class.has('stepper'));
-    for (let i = 0; i < 6; i++) step().children[2].onclick(); // 60 -> 240, ends 12:00
-    check('clash reported', clashes().length === 1, clashes()[0] ? clashes()[0].text().trim() : 'none');
-    check('clash names it and quantifies it', clashes().length === 1 && /Overlaps Dentist by 2h/.test(clashes()[0].text()));
-
-    const pinned = rows().find((r) => r._class.has('pinned'));
-    check('pinned was NOT moved', pinned.text().includes('10:00 to 11:00'), pinned.text().trim());
-    check('nothing was shortened', rows()[0].text().includes('08:00 to 12:00'));
-  }
-
-  console.log('\nrunning end time past midnight');
-  {
-    const { ctx, byId, endsRow } = boot();
-    await ctx.load();
-    for (let i = 0; i < 16; i++) ctx.addBlock({ title: `x${i}`, duration: 60 });
-    check('spelled out, not just a smaller clock', /next day/.test(byId['end-time'].textContent), byId['end-time'].textContent);
-    check('flagged late', endsRow._class.has('late'));
-  }
-
-  console.log('\nall-day entries claim no time');
-  {
-    const { ctx, byId, rows } = boot([], [{ title: 'Book Haircut' }]);
-    await ctx.load();
-    check('no pinned block created', rows().length === 0);
-    check('shown as a note instead', /Book Haircut/.test(byId['all-day'].text()), byId['all-day'].text().trim());
-    check('note is visible', !byId['all-day']._class.has('hidden'));
-
-    ctx.addBlock({ title: 'Gym', duration: 60 });
-    check('the day still starts at the wake time', rows()[0].text().includes('08:00 to 09:00'));
-    check('end time unaffected by the reminder', byId['end-time'].textContent === '09:00');
-  }
-
-  console.log('\nnew blocks fill the first gap that fits');
-  {
-    // Dentist 10:00-11:00, wake 08:00, so a two hour morning gap.
-    const { ctx, rows } = boot([{ title: 'Dentist', start_minutes: 600, duration_minutes: 60 }]);
-    await ctx.load();
-
-    ctx.addBlock({ title: 'Gym', duration: 60 });
-    check('goes into the morning, not after the appointment', rows()[0].text().includes('Gym') && rows()[0].text().includes('08:00 to 09:00'), rows()[0].text().trim());
-
-    ctx.addBlock({ title: 'Email', duration: 60 });
-    check('second fills the rest of the gap', rows()[1].text().includes('Email') && rows()[1].text().includes('09:00 to 10:00'));
-    check('appointment still at its own time', rows()[2].text().includes('Dentist') && rows()[2].text().includes('10:00 to 11:00'));
-
-    ctx.addBlock({ title: 'Overflow', duration: 60 });
-    check('gap full, so it appends', rows()[3].text().includes('Overflow') && rows()[3].text().includes('11:00 to 12:00'));
-    check('nothing was shifted to make room', rows()[0].text().includes('08:00 to 09:00') && rows()[2].text().includes('10:00 to 11:00'));
-    check('no clash created', ctx.blocks === undefined || true);
-  }
-
-  console.log('\na block too big for the gap appends instead');
-  {
-    const { ctx, rows } = boot([{ title: 'Dentist', start_minutes: 600, duration_minutes: 60 }]);
-    await ctx.load();
-    ctx.addBlock({ title: 'Long haul', duration: 180 }); // 3h into a 2h gap
-    check('appended after the appointment', rows()[1].text().includes('Long haul') && rows()[1].text().includes('11:00 to 14:00'), rows()[1].text().trim());
-    check('appointment untouched', rows()[0].text().includes('10:00 to 11:00'));
-  }
-
-  console.log('\ngaps are filled in clock order');
-  {
-    const { ctx, rows } = boot([
-      { title: 'Standup', start_minutes: 540, duration_minutes: 30 }, // 09:00
-      { title: 'Dentist', start_minutes: 780, duration_minutes: 60 }, // 13:00
-    ]);
-    await ctx.load();
-    ctx.addBlock({ title: 'First', duration: 60 }); // 08:00-09:00 fits before standup
-    check('earliest gap wins', rows()[0].text().includes('First') && rows()[0].text().includes('08:00 to 09:00'), rows()[0].text().trim());
-    ctx.addBlock({ title: 'Second', duration: 60 }); // morning full, next gap 09:30-13:00
-    check('then the next gap along', rows()[2].text().includes('Second') && rows()[2].text().includes('09:30 to 10:30'), rows()[2].text().trim());
-  }
-
-  console.log('\nthe cursor never travels backwards after an overrun');
-  {
-    const { ctx, rows } = boot([{ title: 'Dentist', start_minutes: 600, duration_minutes: 60 }]);
-    await ctx.load();
-    ctx.addBlock({ title: 'Runs long', duration: 60 });
-    const step = () => rows()[0].children.find((c) => c._class.has('stepper'));
-    for (let i = 0; i < 6; i++) step().children[2].onclick(); // 08:00 to 12:00, overruns
-    ctx.addBlock({ title: 'After', duration: 30 });
-    const after = rows().find((r) => r.text().includes('After'));
-    check('placed after the overrun, not inside it', after.text().includes('12:00 to 12:30'), after.text().trim());
-  }
-
-  console.log('\nremoving a block reflows the rest');
+  console.log('\nchanging one duration shifts everything below it');
   {
     const { ctx, byId, rows } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A', duration: 60 });
     ctx.addBlock({ title: 'B', duration: 60 });
-    rows()[0].children.find((c) => c._class.has('linkbtn')).onclick();
-    check('one block left', rows().length === 1);
-    check('it moved up to the wake time', rows()[0].text().includes('08:00 to 09:00'));
-    check('end time followed', byId['end-time'].textContent === '09:00');
+    ctx.addBlock({ title: 'C', duration: 60 });
+    check('laid out in sequence',
+      rows()[2].text().includes('10:00 – 11:00'), rows()[2].text().trim());
+
+    stepperOf(rows()[0]).children[2].onclick(); // A: 60 -> 90
+    check('the one below moved', rows()[1].text().includes('09:30 – 10:30'), rows()[1].text().trim());
+    check('and the one below that', rows()[2].text().includes('10:30 – 11:30'), rows()[2].text().trim());
+    check('the one above did not', rows()[0].text().includes('08:00 – 09:30'), rows()[0].text().trim());
+    check('the end time followed', byId['end-time'].textContent === '11:30', byId['end-time'].textContent);
+  }
+
+  console.log('\nremoving a block: minus, carried past the floor');
+  {
+    const { ctx, byId, rows } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A', duration: 30 });
+    ctx.addBlock({ title: 'B', duration: 60 });
+
+    const stepper = () => rows()[0].children.find((c) => c._class.has('stepper'));
+    const confirm = () => rows()[0].children.find((c) => c._class.has('confirming'));
+
+    check('at the floor, minus is still live', stepper().children[0].disabled !== true);
+
+    stepper().children[0].onclick();
+    check('one press asks rather than removing', rows().length === 2, `${rows().length}`);
+    check('and the stepper becomes the question', Boolean(confirm()) && !stepper());
+    check('Keep first, Remove second',
+      confirm().children.map((c) => c.textContent).join(',') === 'Keep,Remove',
+      confirm().children.map((c) => c.textContent).join(','));
+
+    // The whole safety of this. The press that opened the question was on the
+    // left of the stepper, and a fast second press lands in the same place.
+    confirm().children[0].onclick();
+    check('a second press in the same place keeps the block', rows().length === 2, `${rows().length}`);
+    check('and the stepper comes back', Boolean(stepper()));
+
+    stepper().children[0].onclick();
+    confirm().children[1].onclick();
+    check('Remove is what removes it', rows().length === 1, `${rows().length}`);
+    check('it moved up to the start time', rows()[0].text().includes('08:00 – 09:00'),
+      rows()[0].text().trim());
+    check('end time followed', byId['end-time'].textContent === '09:00', byId['end-time'].textContent);
+  }
+
+  console.log('\nonly one block can be asking at a time');
+  {
+    const { ctx, rows } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A', duration: 30 });
+    ctx.addBlock({ title: 'B', duration: 30 });
+
+    const stepperOn = (n) => rows()[n].children.find((c) => c._class.has('stepper'));
+    const confirmOn = (n) => rows()[n].children.find((c) => c._class.has('confirming'));
+
+    stepperOn(0).children[0].onclick();
+    check('the first is asking', Boolean(confirmOn(0)));
+
+    stepperOn(1).children[0].onclick();
+    check('asking the second drops the first', !confirmOn(0), 'two pending questions');
+    check('and the second is the one asking', Boolean(confirmOn(1)));
+
+    // An edit elsewhere answers the question by dropping it, so a Remove
+    // button can never point at a block that has since moved. The second is
+    // still asking at this point.
+    ctx.addBlock({ title: 'C', duration: 30 });
+    check('adding a block drops it too', !confirmOn(1) && rows().length === 3, `${rows().length}`);
+    check('and nothing was removed on the way', rows().length === 3, `${rows().length}`);
+  }
+
+  console.log('\nnothing on a block is removed by a long press any more');
+  {
+    const { ctx, rows } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A', duration: 60 });
+    rows()[0].onpointerdown && rows()[0].onpointerdown();
+    await new Promise((r) => setTimeout(r, 700));
+    check('holding it does nothing', rows().length === 1, `${rows().length}`);
+  }
+
+  console.log('\nrunning end time past midnight');
+  {
+    const { ctx, byId } = boot();
+    await ctx.load();
+    for (let i = 0; i < 16; i++) ctx.addBlock({ title: `x${i}`, duration: 60 });
+    check('spelled out, not just a smaller clock', /next day/.test(byId['end-time'].textContent),
+      byId['end-time'].textContent);
+    check('flagged late', byId.ends._class.has('late'));
   }
 
   console.log('\nthe day can start at a different hour every day');
@@ -267,44 +338,46 @@ function boot(events = [], allDay = []) {
     const { ctx, byId, rows } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A', duration: 60 });
-    check('starts at the profile default', rows()[0].text().includes('08:00 to 09:00'), rows()[0].text());
+    check('starts at the profile default', rows()[0].text().includes('08:00 – 09:00'), rows()[0].text());
     check('and the control shows it', byId['wake-time'].textContent === '08:00', byId['wake-time'].textContent);
 
-    // Half hours, the same step the durations move in.
     byId['wake-plus'].onclick();
     check('one step is half an hour', byId['wake-time'].textContent === '08:30', byId['wake-time'].textContent);
-    check('and the day moved with it', rows()[0].text().includes('08:30 to 09:30'), rows()[0].text());
+    check('and the day moved with it', rows()[0].text().includes('08:30 – 09:30'), rows()[0].text());
     check('the end time followed', byId['end-time'].textContent === '09:30', byId['end-time'].textContent);
 
     byId['wake-minus'].onclick();
     byId['wake-minus'].onclick();
     check('it goes back down', byId['wake-time'].textContent === '07:30', byId['wake-time'].textContent);
-    check('the day came back with it', rows()[0].text().includes('07:30 to 08:30'), rows()[0].text());
+    check('the day came back with it', rows()[0].text().includes('07:30 – 08:30'), rows()[0].text());
 
     // Moving the start is an edit like any other: the day stops being saved.
     ctx.setSaved(true);
     byId['wake-plus'].onclick();
-    check('moving it un-saves the day', byId['confirm'].textContent !== 'Confirmed', byId['confirm'].textContent);
+    check('moving it un-saves the day', byId['confirm'].textContent !== 'Confirmed',
+      byId['confirm'].textContent);
   }
 
   console.log('\na day saved off the half hour is corrected by one press');
   {
-    // Days built when the step was fifteen minutes can start at 08:15. Adding
-    // thirty to that would give 08:45, then 09:15, off the grid for ever.
     const { ctx, byId } = boot();
     await ctx.load();
     ctx.setWake(8 * 60 + 15);
-    check('it opens on the odd time it was saved with', byId['wake-time'].textContent === '08:15', byId['wake-time'].textContent);
+    check('it opens on the odd time it was saved with', byId['wake-time'].textContent === '08:15',
+      byId['wake-time'].textContent);
 
     byId['wake-plus'].onclick();
-    check('forward lands on the half hour', byId['wake-time'].textContent === '08:30', byId['wake-time'].textContent);
+    check('forward lands on the half hour', byId['wake-time'].textContent === '08:30',
+      byId['wake-time'].textContent);
 
     ctx.setWake(8 * 60 + 15);
     byId['wake-minus'].onclick();
-    check('and back lands on it too', byId['wake-time'].textContent === '08:00', byId['wake-time'].textContent);
+    check('and back lands on it too', byId['wake-time'].textContent === '08:00',
+      byId['wake-time'].textContent);
 
     byId['wake-minus'].onclick();
-    check('then it steps a full half hour', byId['wake-time'].textContent === '07:30', byId['wake-time'].textContent);
+    check('then it steps a full half hour', byId['wake-time'].textContent === '07:30',
+      byId['wake-time'].textContent);
   }
 
   console.log('\nthe start is clamped to hours a person actually wakes');
@@ -321,22 +394,61 @@ function boot(events = [], allDay = []) {
     check('and that button says so too', byId['wake-plus'].disabled === true);
   }
 
-  console.log('\na pinned event before the start does not drag the day back');
+  console.log('\nconfirm');
   {
-    // 06:00 appointment, day set to start at 08:00. The endpoint has already
-    // turned the feed into minutes, which is the shape the page receives.
-    const { ctx, byId, rows } = boot([{ title: 'Dentist', start_minutes: 360, duration_minutes: 45 }]);
+    const { ctx, byId, rows } = boot();
     await ctx.load();
-    ctx.addBlock({ title: 'Work', duration: 60 });
+    check('nothing to confirm on an empty day', byId['confirm'].disabled === true);
+    check('and the end time says nothing', byId['end-time'].textContent === '—', byId['end-time'].textContent);
 
-    check('the day still starts where it was set', byId['wake-time'].textContent === '08:00', byId['wake-time'].textContent);
+    ctx.addBlock({ title: 'A', duration: 60 });
+    check('a block enables it', byId['confirm'].disabled === false);
+    check('and it reads Confirm', byId['confirm'].textContent === 'Confirm', byId['confirm'].textContent);
 
-    const work = rows().find((r) => r.text().includes('Work'));
-    check('the unpinned block flows from the wake time, not the appointment',
-      work.text().includes('08:00 to 09:00'), work.text().trim());
+    ctx.setSaved(true);
+    check('once saved it reads Confirmed', byId['confirm'].textContent === 'Confirmed');
+    check('and cannot be pressed again', byId['confirm'].disabled === true);
 
-    const dentist = rows().find((r) => r.text().includes('Dentist'));
-    check('and the appointment keeps its own hour', dentist.text().includes('06:00 to 06:45'), dentist.text().trim());
+    ctx.addBlock({ title: 'B', duration: 30 });
+    check('adding a block un-saves it', byId['confirm'].textContent === 'Confirm');
+    check('and both blocks are there', rows().length === 2);
+  }
+
+  console.log('\na confirmed day comes back on reload');
+  {
+    const { ctx, byId, rows } = boot([], {
+      plan: { date: '2026-07-28', status: 'confirmed', wake_minutes: 9 * 60 },
+      blocks: [
+        { title: 'Reading', entryId: 'e1', start_minutes: 540, duration_minutes: 60 },
+        { title: 'UF application', entryId: 'e2', start_minutes: 600, duration_minutes: 120 },
+      ],
+    });
+    await ctx.load();
+
+    check('the blocks came back', rows().length === 2, `${rows().length}`);
+    check('the start hour came back too', byId['wake-time'].textContent === '09:00',
+      byId['wake-time'].textContent);
+    check('laid out from it', rows()[0].text().includes('09:00 – 10:00'), rows()[0].text().trim());
+    check('and the second follows', rows()[1].text().includes('10:00 – 12:00'), rows()[1].text().trim());
+    check('it opens as already confirmed', byId['confirm'].textContent === 'Confirmed',
+      byId['confirm'].textContent);
+  }
+
+  console.log('\n+ Block adds a manual one');
+  {
+    const { ctx, byId, rows } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A', duration: 60 });
+
+    // Driven through the real control. The stub prompt() answers 'Typed block'.
+    byId['add-block'].onclick();
+
+    check('it was added', rows().length === 2, `${rows().length}`);
+    check('with the title that was typed', rows()[1].text().includes('Typed block'),
+      rows()[1].text().trim());
+    check('it lands after the last block', rows()[1].text().includes('09:00 – 09:30'),
+      rows()[1].text().trim());
+    check('and starts at one step', rows()[1].text().includes('30m'), rows()[1].text().trim());
   }
 
   console.log(bad === 0 ? '\nBuilder clean' : `\n${bad} FAILURE(S)`);

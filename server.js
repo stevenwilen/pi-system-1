@@ -1,9 +1,8 @@
 // The web server. Serves the page, mounts the routes, and starts delivery.
 //
-// Nothing is handled here. Every route lives in routes/, one file per part of
-// the screen. One of them calls the model — routes/summarize.js, which rewrites
-// the text of a single field on request — and it is the only one. Everything
-// that draws the screen is a database read.
+// Nothing is handled here. Every route lives in routes/, one file per section
+// of the screen. None of them calls the model, and neither does anything they
+// reach: every value on the screen is a database read or arithmetic on one.
 
 require('dotenv').config();
 
@@ -39,12 +38,11 @@ app.use(
 app.use(require('./routes/entries'));
 app.use(require('./routes/plan'));
 app.use(require('./routes/review'));
-app.use(require('./routes/finance'));
-app.use(require('./routes/summarize'));
 
-// The `messages` table is no longer read or written. It is deliberately left
-// in place with its rows: dropping a table is the one move that cannot be
-// undone, and an unread table costs nothing.
+// Several tables are no longer read or written: `messages`, and everything the
+// finance lane used. They are deliberately left in place with their rows.
+// Dropping a table is the one move that cannot be undone, and an unread table
+// costs nothing.
 
 // --- which build is this ----------------------------------------------------
 
@@ -65,7 +63,7 @@ app.get('/version', (req, res) => {
     started_at: STARTED_AT,
     node: process.version,
     // Named so a stale build is obvious without knowing any commit hash.
-    lanes: ['planner', 'money'],
+    lanes: ['planner'],
     scheduler: process.env.SCHEDULER_DISABLED === '1' ? 'DISABLED' : 'running',
   });
 });

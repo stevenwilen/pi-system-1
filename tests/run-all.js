@@ -16,8 +16,8 @@ const APP = require('path').join(__dirname, '..').replace(/\\/g, '/');
 /**
  * Does importing this app module put a database client in reach?
  *
- * Resolved rather than assumed. sheet.js and money.js are arithmetic and HTTP
- * and cannot touch a row however they are called; coldness.js reaches db.js
+ * Resolved rather than assumed. warning.js and clock.js are arithmetic and
+ * cannot touch a row however they are called; routes/entries.js reaches db.js
  * through two hops. A hardcoded list of "dangerous files" would be wrong the
  * first time one of them grew an import, so the answer is computed.
  */
@@ -85,43 +85,39 @@ function refuseUnguarded(names) {
   }
 }
 
-// Four files were deleted rather than skipped: schema-test.js and
-// finance-test.js required a finance.js removed in the rebuild, api-test.js hit
-// an endpoint that no longer exists, and guard-test.js predated the test user
-// and wrote against the real id. A suite that cannot run still reads as
-// coverage, which is worse than having no file there at all.
+// Suites are deleted rather than skipped when the thing they covered is
+// removed. A suite that cannot run still reads as coverage, which is worse
+// than having no file there at all.
+//
+// Thirteen went in the strip. sheet-contract, money-test, money-order-test,
+// intent-test and insight-test were the finance lane. order-cold-test and
+// injection-test drove the coldness call, no-repeat-test the finance one, and
+// there are no model calls left for any of them to make. setup-test and
+// plan-intent-test were the two setup interviews, summarize-test the
+// Summarize endpoint, stale-render-check the temperature bar, and
+// tasks-render-test a Monday digest that had already stopped existing.
+//
+// There is no "these call the model for real" group any longer. Nothing in
+// this system calls it.
 const SUITES = [
   // read-only, fast
-  ['sheet-contract.js', 90],
-  ['money-test.js', 60],
+  ['warning-test.js', 60],
+  ['builder-test.js', 120],
+  ['plan-layout-check.js', 120],
+  ['icons-check.js', 60],
   ['calendar-endpoint-test.js', 120],
   ['calendar-feeds-test.js', 180],
-  ['builder-test.js', 120],
   ['task-test.js', 120],
-  ['tasks-render-test.js', 120],
-  ['money-order-test.js', 120],
-  ['stale-render-check.js', 120],
-  ['plan-layout-check.js', 120],
-  ['summarize-test.js', 120],
-  ['icons-check.js', 60],
   // guarded writers
   ['verify-isolation.js', 120],
   ['due-test.js', 180],
-  ['plan-intent-test.js', 180],
   ['nudge-test.js', 180],
   ['done-test.js', 180],
   ['step1-verify.js', 150],
-  ['intent-test.js', 180],
-  ['setup-test.js', 180],
   ['plan-test.js', 180],
   ['review-test.js', 180],
+  ['messages-test.js', 180],
   ['delivery-test.js', 240],
-  // these call the model for real
-  ['messages-test.js', 300],
-  ['order-cold-test.js', 300],
-  ['no-repeat-test.js', 300],
-  ['insight-test.js', 300],
-  ['injection-test.js', 300],
 ];
 
 const only = process.argv.slice(2);

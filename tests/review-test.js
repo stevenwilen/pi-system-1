@@ -60,7 +60,7 @@ let planId = null;
   const target = { title: 'Morning block' };
   const rows = [
     { title: target.title, entry_id: null, start_time: '08:00:00', duration_minutes: 60, pinned: false },
-    { title: 'Dentist', entry_id: null, start_time: '10:00:00', duration_minutes: 45, pinned: true },
+    { title: 'Dentist', entry_id: null, start_time: '10:00:00', duration_minutes: 60, pinned: false },
     { title: 'Deep work', entry_id: null, start_time: '11:00:00', duration_minutes: 120, pinned: false },
   ].map((r, i) => ({ user_id: U, plan_id: planId, sort_order: i, message_text: null, message_sent_at: null, ...r }));
   const { error: insErr } = await supabase.from('blocks').insert(rows);
@@ -71,8 +71,12 @@ let planId = null;
   check('in plan order', review.blocks.map((b) => b.title).join('|') === `${target.title}|Dentist|Deep work`);
   check('assumed done, no confirmation asked for', review.blocks.every((b) => b.completed === true));
   check('no reasons yet', review.blocks.every((b) => b.miss_reason === null));
-  check('times come back as minutes', review.blocks[1].start_minutes === 600 && review.blocks[1].duration_minutes === 45);
-  check('pinned survives', review.blocks[1].pinned === true);
+  check('times come back as minutes',
+    review.blocks[1].start_minutes === 600 && review.blocks[1].duration_minutes === 60,
+    `${review.blocks[1].start_minutes} for ${review.blocks[1].duration_minutes}m`);
+  // Nothing is pinned any more, and yesterday's review has no use for the
+  // distinction: a block either happened or it did not.
+  check('nothing is reported as pinned', review.blocks.every((b) => b.pinned === undefined));
 
   console.log('\nmarking one missed, with a reason');
   const deep = review.blocks[2];

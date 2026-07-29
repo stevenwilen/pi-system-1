@@ -1,5 +1,18 @@
 # Planning rules
 
+> **Archive. Written 27 July 2026, superseded 28 July 2026.**
+>
+> This describes a version of the system that no longer exists. It was written
+> when there was a finance lane, a coldness verdict, and a builder that placed
+> things into the day on its own. All of that was stripped out; see `SPEC.md`
+> for what actually runs.
+>
+> Nothing in here has been updated to match, deliberately — the point of the
+> file is what was true when it was recorded. Read every claim about the system
+> below, including the closing paragraph, as a claim about the old one. The
+> observations about the *person* may well still hold; they were never verified
+> against anything and are not now.
+
 Notes, not data. Nothing reads this file: the system holds no observations any
 more, and under the current design it never infers how someone works. These are
 kept because they were learned once and would otherwise be lost.

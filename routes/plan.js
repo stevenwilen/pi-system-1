@@ -1,8 +1,12 @@
-// Building a day: the hours already claimed, and the plan laid out around them.
+// Building a day: what is already on the calendar, and the plan built beside it.
 //
-// The calendar route says which hours are gone. The plan routes save and read
-// back what the person built in the remaining ones. All arithmetic; the one
-// model call this triggers is fired and forgotten after the answer is sent.
+// The calendar is reference material and nothing more. It is read, shown, and
+// forgotten: nothing on it is placed into the day, nothing is pinned, and
+// nothing about it is stored. The person reads what is already happening and
+// decides what to do about it, which is the one decision this system does not
+// make for them.
+//
+// All arithmetic. No model call anywhere behind these routes.
 
 const express = require('express');
 
@@ -10,27 +14,18 @@ const supabase = require('../db');
 const { CURRENT_USER } = require('../user');
 const { minutesOfDay, toMinutes, hhmmss } = require('../clock');
 const { readCalendar } = require('../tools');
-const { generateForPlan } = require('../messages');
+const { lastScheduled } = require('../staleness');
+const { contextLine } = require('../messages');
 
 const router = express.Router();
 
-// How long an auto-placed block is, before the person changes it. Half an hour
-// is the smallest thing the steppers can express, so it is the least the
-// system can assume on someone's behalf.
-const AUTO_BLOCK_MINUTES = 30;
-
-// The sent_log job name for "this event has been offered to this day".
-//
-// Prefixed so it cannot collide with a real job, and carrying the event's own
-// id so two things on the same date are tracked apart. sent_log is keyed
-// (user_id, job, sent_for_date), which is exactly this question.
-const placementJob = (eventId) => `placed:${eventId}`;
-
 /**
- * The day's fixed commitments, as pinned blocks.
+ * Everything on both calendar feeds for one date.
  *
- * These hours are already gone. The builder lays everything else out around
- * them and never moves them.
+ * Both feeds together, undifferentiated. They used to mean different things —
+ * one was things to know and the other things to do, and the second fed events
+ * into the day automatically — and now they are one list of what is already
+ * happening. A timed event carries its time; an all-day entry carries none.
  */
 router.get('/calendar/:date', async (req, res) => {
   const date = String(req.params.date);
@@ -51,97 +46,30 @@ router.get('/calendar/:date', async (req, res) => {
   // the failure travels with the answer instead of looking like a quiet day.
   const { events, failed } = await readCalendar(CURRENT_USER, date);
 
-  const timed = [];
-  const allDay = [];
-  const toPlace = [];
+  const items = events.map((e) => ({
+    title: e.title,
+    // Null for an all-day entry, which claims no hour. The screen shows the
+    // title alone rather than inventing a time for it.
+    start_minutes: e.all_day ? null : minutesOfDay(e.start, timeZone),
+  }));
 
-  for (const e of events) {
-    // An all-day entry claims no hours. What happens to it depends entirely on
-    // which calendar it is on: a thing to know is shown, a thing to do is
-    // offered to the day as a block.
-    if (e.all_day) {
-      if (e.source === 'action') toPlace.push({ id: e.id, title: e.title });
-      else allDay.push({ title: e.title });
-      continue;
-    }
-
-    // A timed event is an appointment on either feed. It is pinned and it
-    // cannot move, because the hour is already spoken for either way.
-    const start = minutesOfDay(e.start, timeZone);
-    const length = Math.round((new Date(e.end) - new Date(e.start)) / 60000);
-
-    timed.push({
-      title: e.title,
-      start_minutes: start,
-      // Clamped to the end of the day: an event running past midnight would
-      // otherwise push the running end time into nonsense.
-      duration_minutes: Math.max(15, Math.min(length, 1440 - start)),
-    });
-  }
-
-  timed.sort((a, b) => a.start_minutes - b.start_minutes);
+  // Timed first, in order, then the all-day entries. Something happening at a
+  // particular hour is the more useful thing to read first when the question
+  // being asked is what the day already looks like.
+  items.sort((a, b) => {
+    if (a.start_minutes === null && b.start_minutes === null) return 0;
+    if (a.start_minutes === null) return 1;
+    if (b.start_minutes === null) return -1;
+    return a.start_minutes - b.start_minutes;
+  });
 
   res.json({
     date,
-    events: timed,
-    all_day: allDay,
-    // What the action feed is offering for this day. Reported here so the
-    // builder can show it; nothing is claimed until the placement route is
-    // called, because reporting must stay repeatable and placing must not.
-    to_place: toPlace,
+    items,
     // Named feeds, so the screen can say which calendar it could not reach
     // rather than leaving an empty day to speak for itself.
     failed,
   });
-});
-
-/**
- * Claim the action feed's all-day events for this date, and hand them back.
- *
- * Separate from the read above, and a POST, because it has a side effect: each
- * event it returns is recorded as placed and will never be returned again for
- * this date. That is the whole point. Without it, deleting an auto-added block
- * and reopening the builder would put it straight back, and the person would
- * have no way to say no.
- *
- * sent_log already holds exactly this shape — a thing that happened once, for
- * one user, on one date — and its unique constraint is the lock, so two
- * builders opening at once cannot both place the same event.
- */
-router.post('/calendar/:date/place', async (req, res) => {
-  const date = String(req.params.date);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
-  }
-
-  const { events, failed } = await readCalendar(CURRENT_USER, date);
-  const candidates = events.filter((e) => e.source === 'action' && e.all_day);
-
-  const placed = [];
-
-  for (const e of candidates) {
-    const job = placementJob(e.id);
-
-    // The insert is the claim. Asking first and writing after would leave a
-    // gap two requests could both pass through; letting the constraint refuse
-    // the second one cannot.
-    const { error } = await supabase
-      .from('sent_log')
-      .insert({ user_id: CURRENT_USER, job, sent_for_date: date });
-
-    // 23505 is unique_violation: already placed, on a previous open. Not a
-    // failure, and the reason this route is safe to call every time.
-    if (error) {
-      if (error.code !== '23505') {
-        console.error(`[CALENDAR] could not claim "${e.title}": ${error.message}`);
-      }
-      continue;
-    }
-
-    placed.push({ title: e.title, duration_minutes: AUTO_BLOCK_MINUTES });
-  }
-
-  res.json({ date, placed, failed });
 });
 
 /**
@@ -169,16 +97,13 @@ router.get('/plan/:date', async (req, res) => {
 
   const { data: rows, error: blockErr } = await supabase
     .from('blocks')
-    .select('id, title, entry_id, start_time, duration_minutes, pinned, sort_order')
+    .select('id, title, entry_id, start_time, duration_minutes, sort_order')
     .eq('plan_id', plan.id)
     .order('sort_order');
 
   if (blockErr) return res.status(500).json({ error: blockErr.message });
 
   res.json({
-    // The hour this day was actually built to start at, which is not the same
-    // as the profile default and not the same as the first block either: a
-    // calendar event at 6am does not mean anyone got up then.
     plan: {
       date: plan.date,
       status: plan.status,
@@ -189,7 +114,6 @@ router.get('/plan/:date', async (req, res) => {
       entryId: b.entry_id,
       start_minutes: toMinutes(b.start_time),
       duration_minutes: b.duration_minutes,
-      pinned: b.pinned,
     })),
   });
 });
@@ -198,7 +122,6 @@ function validatePlan(date, blocks, wakeMinutes) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return 'date must be YYYY-MM-DD';
   if (!Array.isArray(blocks) || !blocks.length) return 'a plan needs at least one block';
 
-  // Optional: a client that does not send one gets the old behaviour below.
   if (wakeMinutes !== undefined && wakeMinutes !== null) {
     const w = Number(wakeMinutes);
     if (!Number.isInteger(w) || w < 0 || w > 1439) {
@@ -215,16 +138,57 @@ function validatePlan(date, blocks, wakeMinutes) {
     if (!Number.isInteger(start) || start < 0 || start > 1439) {
       return `${b.title}: start must be inside the day`;
     }
-    if (!Number.isInteger(duration) || duration < 15) {
-      return `${b.title}: duration must be at least 15 minutes`;
+    if (!Number.isInteger(duration) || duration < 30) {
+      return `${b.title}: duration must be at least 30 minutes`;
     }
-    // Pinned blocks are calendar events and are whatever length the calendar
-    // says. Only what the person built with steppers has to land on the step.
-    if (!b.pinned && duration % 30 !== 0) {
+    // Every block is built with the steppers now — nothing arrives from a
+    // calendar at whatever length the calendar said — so every block lands on
+    // the step.
+    if (duration % 30 !== 0) {
       return `${b.title}: duration must be a multiple of 30 minutes`;
     }
   }
   return null;
+}
+
+/**
+ * The context line for each block, composed in code.
+ *
+ * Written at confirm time and stored on the block, because delivery happens
+ * hours later in a different process and has to survive a restart. This used to
+ * be a model call fired and forgotten after the response went out; it is now
+ * subtraction on two dates, so it happens inline and the plan is not saved
+ * until it has.
+ */
+async function linesFor(user_id, planId, date, blocks) {
+  const ids = [...new Set(blocks.map((b) => b.entryId).filter(Boolean))];
+  if (!ids.length) return new Map();
+
+  const { data: rows, error } = await supabase
+    .from('entries')
+    .select('id, due')
+    .eq('user_id', user_id)
+    .in('id', ids);
+
+  if (error) throw new Error(error.message);
+
+  const entries = new Map((rows || []).map((r) => [r.id, r]));
+
+  // Excluding this plan matters: its old blocks are deleted by the time this
+  // runs, but a re-confirm that failed halfway could leave some behind, and
+  // counting them would report every entry as scheduled today.
+  const latest = await lastScheduled(user_id, { excludePlanId: planId });
+
+  const lines = new Map();
+  for (const id of ids) {
+    const line = contextLine({
+      entry: entries.get(id),
+      lastSeen: latest.get(id) || null,
+      date,
+    });
+    if (line) lines.set(id, line);
+  }
+  return lines;
 }
 
 /**
@@ -240,12 +204,9 @@ router.post('/plan', async (req, res) => {
   const problem = validatePlan(date, blocks, wake_minutes);
   if (problem) return res.status(400).json({ error: problem });
 
-  // The hour the person set for this day, stored as the fact it is.
-  //
-  // It used to be inferred from the earliest block, which is wrong whenever a
-  // pinned calendar event sits before the day is meant to start: a 6am
-  // appointment would have this day on record as a 6am start. Falling back to
-  // that inference only when nothing was sent, so an older client still works.
+  // The hour the person set for this day, stored as the fact it is. Falls back
+  // to the first block only when nothing was sent, so an older client still
+  // works.
   const wake =
     wake_minutes === undefined || wake_minutes === null
       ? hhmmss(Math.min(...blocks.map((b) => Number(b.start_minutes))))
@@ -283,6 +244,8 @@ router.post('/plan', async (req, res) => {
       planId = made.id;
     }
 
+    const lines = await linesFor(CURRENT_USER, planId, date, blocks);
+
     const rows = blocks.map((b, i) => ({
       user_id: CURRENT_USER,
       plan_id: planId,
@@ -290,24 +253,16 @@ router.post('/plan', async (req, res) => {
       entry_id: b.entryId || null,
       start_time: hhmmss(Number(b.start_minutes)),
       duration_minutes: Number(b.duration_minutes),
-      pinned: Boolean(b.pinned),
       sort_order: i,
+      // Null for a buffer block, and for anything whose entry had nothing
+      // worth saying. Delivery sends the title and times on their own.
+      message_text: (b.entryId && lines.get(b.entryId)) || null,
     }));
 
     const { error: blockErr } = await supabase.from('blocks').insert(rows);
     if (blockErr) throw new Error(blockErr.message);
 
-    // The plan is saved. Answer now.
     res.json({ date, blocks: rows.length, status: 'confirmed' });
-
-    // Then write the block messages, which takes a model call and the better
-    // part of a minute. Deliberately not awaited: the person confirmed a day
-    // and should not watch a spinner while a language model composes, and the
-    // plan does not depend on this succeeding. If it fails, message_text stays
-    // null and delivery sends the block title and time on its own.
-    generateForPlan(CURRENT_USER, planId).catch((err) =>
-      console.error(`[MESSAGES] unexpected: ${err.message}`)
-    );
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
