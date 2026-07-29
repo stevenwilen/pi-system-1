@@ -1237,6 +1237,10 @@
           entryId: b.entryId,
           duration: b.duration_minutes,
           note: b.note || null,
+          // Its message has gone out, so the block is part of the day that
+          // happened. It cannot be removed, and the swipe that would do it is
+          // not offered.
+          sent: Boolean(b.sent),
         }));
         saved = data.plan.status === 'confirmed';
         renderWake();
@@ -1682,16 +1686,27 @@
         card.onpointermove = (e) => {
           if (!gesture || gesture.id !== e.pointerId) return;
 
-          const dx = e.clientX - gesture.x0;
+          // A block whose message has gone out cannot be removed, so the swipe
+          // that would remove it does not travel: leftward movement is clamped
+          // to nothing and the miss-coloured backing never appears. Refusing on
+          // release, after the card had followed the finger the whole way,
+          // would be offering the action and then taking it back.
+          const held = blocks[index];
+          const raw = e.clientX - gesture.x0;
+          const dx = held && held.sent ? Math.max(0, raw) : raw;
           const dy = e.clientY - gesture.y0;
 
+          // Which gesture this is gets decided on the RAW movement, never the
+          // clamped one. A finger dragging left on a sent block has moved, and
+          // reading it as stillness would leave the hold timer running and turn
+          // a refused swipe into a pick-up.
           if (gesture.mode === 'pending') {
-            if (Math.abs(dx) < SLOP && Math.abs(dy) < SLOP) return;
+            if (Math.abs(raw) < SLOP && Math.abs(dy) < SLOP) return;
 
             // Moved, so this is not a hold.
             clearTimeout(gesture.hold);
 
-            if (Math.abs(dy) >= Math.abs(dx)) {
+            if (Math.abs(dy) >= Math.abs(raw)) {
               // Vertical and not held: the page is scrolling. Step out of the
               // way entirely rather than competing with it.
               gesture.mode = 'scroll';
@@ -1705,6 +1720,16 @@
 
           if (gesture.mode === 'swipe') {
             gesture.dx = dx;
+
+            // Nowhere to go: a removing swipe on a block that has already gone
+            // out. Nothing moves and no backing is shown, so the action is not
+            // offered rather than offered and then refused.
+            if (!dx) {
+              card.style.transform = '';
+              backing.style.opacity = '0';
+              return;
+            }
+
             card.style.transform = `translateX(${dx}px)`;
             backing.className = `backing ${dx < 0 ? 'left' : 'right'}`;
             backing.textContent = dx < 0 ? 'Remove' : 'Note';

@@ -339,6 +339,14 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
   check('removal offers an undo rather than a confirm', /offerUndo\(gone, i\)/.test(code));
   check('and nothing asks first', !/confirm\(`Remove/.test(code));
 
+  // A block whose message has gone out is part of the day that happened. The
+  // swipe that would remove it does not travel at all, rather than travelling
+  // and then being refused on release.
+  check('a delivered block clamps the removing swipe',
+    /held && held\.sent \? Math\.max\(0, raw\) : raw/.test(code));
+  check('and shows no backing when it does', /if \(!dx\) \{/.test(code));
+  check('the sent flag comes from the server', /sent: Boolean\(b\.sent\)/.test(code));
+
   // The buffer insert is gone. Buffer is a title you type into + Block.
   check('nothing inserts a buffer on a swipe', !/insertBuffer/.test(code));
   check('and there is no buffer constant left', !/BUFFER_TITLE/.test(code));
@@ -385,7 +393,12 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
 
   console.log('   arbitration');
   check('one gesture at a time', /if \(gesture\) return;/.test(code));
-  check('a move past the slop decides it', /Math\.abs\(dx\) < SLOP && Math\.abs\(dy\) < SLOP/.test(code));
+  check('a move past the slop decides it', /Math\.abs\(raw\) < SLOP && Math\.abs\(dy\) < SLOP/.test(code));
+  // On the raw movement, never the clamped one. A finger dragging left on a
+  // delivered block has moved, and reading that as stillness would leave the
+  // hold timer running and turn a refused swipe into a pick-up.
+  check('and it is decided on raw movement, not clamped',
+    /Math\.abs\(dy\) >= Math\.abs\(raw\)/.test(code));
   check('vertical is the page scrolling and nothing else',
     /gesture\.mode = 'scroll';/.test(code));
   check('and movement cancels the hold', /clearTimeout\(gesture\.hold\)/.test(code));

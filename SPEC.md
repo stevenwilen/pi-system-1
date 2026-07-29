@@ -472,12 +472,25 @@ nothing to carry: those three columns are simply not in the update.
 
 #### A delivered block is history
 
-Once `message_sent_at` is set, that block's **start time and duration cannot
-change**. The message named both and both were true when it went out. The
-attempt is refused server-side, naming the block and the time it was sent at.
+Once `message_sent_at` is set, that block **cannot be moved, resized or
+removed**. The message named a start time and a length and both were true when
+it went out, and removing the row would destroy the record that it went out at
+all and whether the block was missed. Both attempts are refused server-side,
+naming the block and the time it was sent at.
 
 Its title and its note can still be edited, and the review can still mark it
 missed.
+
+The screen does not offer the removal either. `GET /plan/:date` returns a `sent`
+flag per block, and on a block carrying it the removing swipe **does not
+travel**: the card stays put and no backing appears. Letting it follow the
+finger the whole way and then refusing on release would be offering the action
+and taking it back.
+
+The gesture decision is still made on the raw movement, not the clamped one —
+a finger dragging left on a delivered block has moved, and reading that as
+stillness would leave the hold timer running and turn a refused swipe into a
+pick-up.
 
 The start hour is stored as the fact it is, not inferred from the first block. A
 block placed at 06:00 does not mean anyone got up then.

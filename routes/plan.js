@@ -293,6 +293,22 @@ router.post('/plan', async (req, res) => {
       }
     }
 
+    // Rows the day no longer mentions. Computed here, with the rest of the
+    // refusals, so a request that cannot go through has not written anything
+    // by the time it is turned away.
+    const dropped = stored.filter((b) => !claimed.has(b.id));
+
+    for (const b of dropped) {
+      // Same reasoning as retiming, and the stronger case for it: removing a
+      // delivered block destroys the record that the message went out and
+      // whether the block was missed. The day that happened is not editable.
+      if (b.message_sent_at) {
+        return res.status(400).json({
+          error: `"${b.title}" was already sent at ${String(b.start_time).slice(0, 5)} and cannot be removed. A block that has gone out is part of the day that happened.`,
+        });
+      }
+    }
+
     // --- writes ------------------------------------------------------------
 
     if (planId) {
@@ -312,14 +328,12 @@ router.post('/plan', async (req, res) => {
       planId = made.id;
     }
 
-    // Rows the day no longer mentions.
-    const dropped = stored.filter((b) => !claimed.has(b.id)).map((b) => b.id);
     if (dropped.length) {
       const { error } = await supabase
         .from('blocks')
         .delete()
         .eq('user_id', CURRENT_USER)
-        .in('id', dropped);
+        .in('id', dropped.map((b) => b.id));
       if (error) throw new Error(error.message);
     }
 

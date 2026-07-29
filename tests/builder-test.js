@@ -439,6 +439,59 @@ const SETTLED = 220; // past SETTLE_MS
     check('and a block without one shows none', !noteOf(slots()[1]));
   }
 
+  console.log('\na block that has already gone out cannot be swiped away');
+  {
+    const { ctx, slots, cardOf, backingOf, editorOf } = boot({
+      plan: {
+        plan: { date: '2026-07-28', status: 'confirmed', wake_minutes: 480 },
+        blocks: [
+          { id: 'a1', title: 'Sent', entryId: null, start_minutes: 480, duration_minutes: 30, sent: true },
+          { id: 'b2', title: 'Unsent', entryId: null, start_minutes: 510, duration_minutes: 30, sent: false },
+        ],
+      },
+    });
+    await ctx.load();
+
+    const sent = cardOf(slots()[0]);
+    down(sent, 200, 100);
+    move(sent, 100, 100); // a full removing swipe, and then some
+    check('the card does not travel left', !sent.style.transform, sent.style.transform);
+    check('and the miss colour never appears', !backingOf(slots()[0])._class.has('left'));
+    up(sent, 100, 100);
+    check('nothing was removed', slots().length === 2, `${slots().length}`);
+
+    // Refusing on release, after the card had followed the finger the whole
+    // way, would be offering the action and then taking it back.
+    check('so it was never offered', !backingOf(slots()[0]).textContent,
+      backingOf(slots()[0]).textContent);
+
+    // The right-hand swipe is a note, which a delivered block may still have.
+    down(sent, 100, 100);
+    move(sent, 190, 100);
+    check('but it can still be swiped the other way',
+      backingOf(slots()[0])._class.has('right'));
+    up(sent, 190, 100);
+    check('and the note opens', Boolean(editorOf(slots()[0])));
+    editorOf(slots()[0]).onblur();
+
+    // A leftward drag has still moved the finger, so it must not be read as
+    // stillness and leave the hold timer running.
+    down(cardOf(slots()[0]), 200, 100);
+    move(cardOf(slots()[0]), 100, 100);
+    await wait(HELD);
+    check('a refused swipe does not become a pick-up',
+      !cardOf(slots()[0])._class.has('lifted'));
+    up(cardOf(slots()[0]), 100, 100);
+
+    const unsent = cardOf(slots()[1]);
+    down(unsent, 200, 100);
+    move(unsent, 100, 100);
+    check('an undelivered block still swipes away', unsent.style.transform === 'translateX(-100px)',
+      unsent.style.transform);
+    up(unsent, 100, 100);
+    check('and goes', slots().length === 1, `${slots().length}`);
+  }
+
   console.log('\na swipe short of the threshold does nothing');
   {
     const { ctx, slots, cardOf } = boot();

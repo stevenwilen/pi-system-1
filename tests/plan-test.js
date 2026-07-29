@@ -240,6 +240,16 @@ const DATE = '2031-03-09';
     // missed reverted to done, which reset that entry's staleness clock.
     const RD = '2031-04-02';
 
+    // From a known state. A run that aborted partway through this section
+    // leaves delivered blocks behind, and the rule below refuses to replace
+    // them — so without this the suite would fail for ever afterwards on a
+    // row it wrote itself.
+    for (const d of [RD, '2031-04-03']) {
+      const { data: old } = await supabase
+        .from('plans').select('id').eq('user_id', U).eq('date', d).maybeSingle();
+      if (old) await supabase.from('plans').delete().eq('user_id', U).eq('id', old.id);
+    }
+
     const first = await call('/plan', {
       date: RD, wake_minutes: WAKE,
       blocks: [
@@ -310,61 +320,93 @@ const DATE = '2031-03-09';
     check('while it is still delivered and still missed',
       afterEdit[0].message_sent_at !== null && afterEdit[0].completed === false);
 
-    console.log('  removing one block');
-    const dropped = await call('/plan', payload([same[0], same[2]]));
+    // Alpha and Beta have gone out; only Gamma is still editable and
+    // removable, so it is the one the removal cases use.
+    console.log('  removing an undelivered block');
+    const dropped = await call('/plan', payload([same[0], same[1]]));
     check('is accepted', dropped.status === 200, JSON.stringify(dropped.data));
     const afterDrop = await read();
     check('only that row is gone', afterDrop.length === 2, `${afterDrop.length}`);
     check('and it is the right one',
-      !afterDrop.some((b) => b.id === beta.id) &&
-        afterDrop.some((b) => b.id === alpha.id) && afterDrop.some((b) => b.id === gamma.id));
-    check('the survivors kept their history', afterDrop.find((b) => b.id === alpha.id).completed === false);
+      !afterDrop.some((b) => b.id === gamma.id) &&
+        afterDrop.some((b) => b.id === alpha.id) && afterDrop.some((b) => b.id === beta.id));
+    check('the survivors kept their history',
+      afterDrop.find((b) => b.id === alpha.id).completed === false);
 
     console.log('  adding one');
     const added = await call('/plan', payload([
-      same[0], same[2], { title: 'Delta', start_minutes: 570, duration_minutes: 30 },
+      same[0], same[1], { title: 'Delta', start_minutes: 570, duration_minutes: 30 },
     ]));
     check('is accepted', added.status === 200, JSON.stringify(added.data));
     const afterAdd = await read();
     check('three rows now', afterAdd.length === 3, `${afterAdd.length}`);
     check('the existing ids are unchanged',
-      afterAdd.some((b) => b.id === alpha.id) && afterAdd.some((b) => b.id === gamma.id));
-    check('the new one got a fresh id',
-      afterAdd.some((b) => b.id !== alpha.id && b.id !== gamma.id && b.title === 'Delta'));
+      afterAdd.some((b) => b.id === alpha.id) && afterAdd.some((b) => b.id === beta.id));
     check('and it is reported back', added.data.ids.length === 3 && added.data.ids.every(Boolean),
       JSON.stringify(added.data.ids));
     check('with the existing ones in place',
-      added.data.ids[0] === alpha.id && added.data.ids[1] === gamma.id);
+      added.data.ids[0] === alpha.id && added.data.ids[1] === beta.id);
+    check('the new one got a fresh id',
+      added.data.ids[2] !== alpha.id && added.data.ids[2] !== beta.id);
     check('the delivered one is STILL delivered after all that',
       afterAdd.find((b) => b.id === alpha.id).message_sent_at !== null);
 
-    console.log('  a delivered block is history');
-    const moved = await call('/plan', payload([
-      { ...same[0], start_minutes: 600 }, same[2],
-    ]));
+    // Undelivered, so it is the block the "can still be edited" cases use.
+    const delta = { id: added.data.ids[2], title: 'Delta', start_minutes: 570, duration_minutes: 30 };
+
+    console.log('  a delivered block cannot be retimed');
+    const moved = await call('/plan', payload([{ ...same[0], start_minutes: 600 }, same[1], delta]));
     check('retiming it is refused', moved.status === 400, `${moved.status}`);
     check('and the message says why',
-      /already sent/.test(moved.data.error || ''), moved.data.error);
+      /already sent.*cannot be moved or resized/.test(moved.data.error || ''), moved.data.error);
 
-    const resized = await call('/plan', payload([
-      { ...same[0], duration_minutes: 60 }, same[2],
-    ]));
+    const resized = await call('/plan', payload([{ ...same[0], duration_minutes: 60 }, same[1], delta]));
     check('resizing it is refused too', resized.status === 400, `${resized.status}`);
 
     const stillThere = await read();
     check('and the refusal wrote nothing at all',
-      stillThere.length === 3 && stillThere.find((b) => b.id === alpha.id).start_time.startsWith('08:00'),
+      stillThere.length === 3 &&
+        stillThere.find((b) => b.id === alpha.id).start_time.startsWith('08:00'),
       `${stillThere.length} rows`);
 
     const undeliveredMove = await call('/plan', payload([
-      same[0], { ...same[2], start_minutes: 660 },
+      same[0], same[1], { ...delta, start_minutes: 660 },
     ]));
-    check('but an undelivered block can be moved freely',
-      undeliveredMove.status === 200, JSON.stringify(undeliveredMove.data));
+    check('but an undelivered block moves freely', undeliveredMove.status === 200,
+      JSON.stringify(undeliveredMove.data));
+
+    console.log('  nor removed');
+    {
+      // Leaving a block out of the payload is how it is removed. Removing a
+      // delivered one would destroy the record that the message went out and
+      // whether the block was missed.
+      const removed = await call('/plan', payload([same[1], { ...delta, start_minutes: 660 }]));
+      check('leaving a delivered block out is refused', removed.status === 400, `${removed.status}`);
+      check('and the message says why',
+        /already sent.*cannot be removed/.test(removed.data.error || ''), removed.data.error);
+
+      const survived = await read();
+      check('it is still there', survived.some((b) => b.id === alpha.id), `${survived.length} rows`);
+      check('still delivered', survived.find((b) => b.id === alpha.id).message_sent_at !== null);
+      check('and still missed', survived.find((b) => b.id === alpha.id).completed === false);
+
+      // Both of them at once is refused on the first one it reaches.
+      const bothOut = await call('/plan', payload([{ ...delta, start_minutes: 660 }]));
+      check('removing two delivered blocks is refused as well', bothOut.status === 400,
+        `${bothOut.status}`);
+      check('nothing was written on the way to the refusal', (await read()).length === 3,
+        `${(await read()).length} rows`);
+
+      // Delta never delivered, so it goes without argument.
+      const fine = await call('/plan', payload([same[0], same[1]]));
+      check('an undelivered block still removes cleanly', fine.status === 200,
+        JSON.stringify(fine.data));
+      check('and only it went', (await read()).length === 2, `${(await read()).length}`);
+    }
 
     console.log('  an id that is not this plan\'s');
     const foreign = await call('/plan', payload([
-      { ...same[0], id: '00000000-0000-0000-0000-0000000000ff' },
+      { ...same[0], id: '00000000-0000-0000-0000-0000000000ff' }, same[1],
     ]));
     check('is refused', foreign.status === 400, `${foreign.status}`);
     check('naming the block', /is not part of the plan/.test(foreign.data.error || ''),
