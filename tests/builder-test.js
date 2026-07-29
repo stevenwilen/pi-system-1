@@ -1019,8 +1019,12 @@ const SETTLED = 220; // past SETTLE_MS
     move(card, 150, 100);
     check('but the swipe says Remove, not "didn\'t happen"',
       backingOf(slots()[0]).textContent === 'Remove', backingOf(slots()[0]).textContent);
-    check('in the warn colour, like every other removal',
-      backingOf(slots()[0])._class.has('hot'));
+    // One surface. The removing side used to be the warn colour across the
+    // whole card, which was loudest exactly here — on a block that is over,
+    // where taking it out is how the day gets recorded rather than damage.
+    check('on the same quiet backing as every other swipe',
+      !backingOf(slots()[0])._class.has('hot') && !backingOf(slots()[0])._class.has('calm'),
+      [...backingOf(slots()[0])._class].join(' '));
 
     move(card, 100, 100);
     up(card, 100, 100);
@@ -1536,7 +1540,8 @@ const SETTLED = 220; // past SETTLE_MS
     move(card, 150, 100);
     check('the label is Remove', backingOf(slots()[1]).textContent === 'Remove',
       backingOf(slots()[1]).textContent);
-    check('in the warn colour', backingOf(slots()[1])._class.has('hot'));
+    check('on the one backing, carrying no tone', !backingOf(slots()[1])._class.has('hot'),
+      [...backingOf(slots()[1])._class].join(' '));
 
     posted.length = 0;
     move(card, 100, 100);

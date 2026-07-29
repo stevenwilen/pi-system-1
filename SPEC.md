@@ -480,16 +480,31 @@ IS how you say it did not happen.
 block that has begun: a note says what you are about to do in a block, so it is
 fixed once the block starts, along with its length and its place in the day.
 
-The backing says which of the two the finger is on before it comes off, so
-**side and colour are separate**:
+The backing says which of the two the finger is on before it comes off. **One
+surface, and the word is the whole difference:**
 
-| swipe | label | backing |
+| swipe | label | edge |
 |---|---|---|
-| left | `Remove` | warn colour |
-| right | `Note` | neutral |
+| left | `Remove` | right, the edge being uncovered |
+| right | `Note` | left, likewise |
 
-Writing something down is not a warning, so it does not get the warning colour. A
-swipe with nowhere to go does not travel at all — the card stays put and no
+**The removing side is not the warn colour.** It was — the full card filled with
+it while a finger was on the block — and it is now the same quiet surface as the
+note swipe. Three reasons, in order of weight:
+
+- A removal already has a six-second undo. The colour was never what made it
+  safe, so all it added was volume.
+- It was loudest on a **past** block, which is exactly where it should have been
+  quietest: taking one of those out is not damage, it is how the day gets
+  recorded (§2.5).
+- The warn colour is for warnings. A removal you can undo is not one.
+
+There was a **loudness axis** here as well as a side, from when left meant two
+different things depending on the clock. Left means one thing now and neither
+swipe is loud, so the axis is gone rather than left in place holding a single
+value.
+
+A swipe with nowhere to go does not travel at all — the card stays put and no
 backing appears, rather than following the finger and then doing nothing. That is
 now the note swipe on a begun block; it used to be the removing swipe on a
 delivered one.
@@ -933,8 +948,11 @@ The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
   The rule was relaxed to two exceptions when the day switch arrived and is back
   to one: the *in today's plan* badge was the other, and removing it narrowed the
   rule again rather than widening it further.
-- **The warn colour is for warnings and for destruction**, and nothing else. It
-  had a third job — a missed block — and that concept is gone entirely.
+- **The warn colour warns; it does not narrate.** The deadline mark, a day
+  running past midnight, a feed that failed, and Delete in the row menu. That is
+  the list. It has lost two other jobs: a missed block, a concept that no longer
+  exists, and the swipe backing, which filled the whole card under a finger for
+  an action that carries an undo.
 - **The calendar aside is a left rule with indented text**, in neutral warm grey.
   Reference material: not a card, not blue, not a warning.
 - **Tabular figures on every time.**

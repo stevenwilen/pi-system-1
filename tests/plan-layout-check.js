@@ -190,25 +190,34 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   check('the active label is not blue', !/--accent/.test(rule('.running')));
 }
 
-console.log('\n7. the warn colour is for warnings and destruction only');
+console.log('\n7. the warn colour warns; it does not narrate');
 {
-  // Two jobs, and they are the same job: this is the colour of something
-  // having gone wrong, or being about to be thrown away. It used to have a
-  // third — a missed block — and that concept is gone entirely.
+  // It marks a deadline running out, a day running past midnight, a feed that
+  // failed, and Delete in the row menu. It had two other jobs and has lost
+  // both: a missed block, which is a concept that no longer exists, and the
+  // swipe backing, which filled the whole card while a finger was on it.
   const warn = selectorsUsing('var(--warn)').filter((s) => !/^:root/.test(s));
-  const allowed = /\.mark|\.ends\.late|\.failed|\.danger|\.problem|\.backing\.hot/;
-  check('used only on marks, failures and destructive actions',
+  const allowed = /\.mark|\.ends\.late|\.failed|\.danger|\.problem/;
+  check('used only on marks, failures and Delete',
     warn.every((s) => allowed.test(s)), warn.join(' | '));
   check('and nothing is left claiming a miss', !/askmiss|wasmissed/.test(css));
 
-  // The two swipes must not look alike. Left throws a block away and is the
-  // warn colour; right writes a note and is neutral, because the warn colour
-  // there would call writing something down a warning.
-  check('the loud backing is the warn colour', /var\(--warn\)/.test(rule('.backing.hot')));
-  check('the quiet one is not', !/var\(--warn\)/.test(rule('.backing.calm')));
-  check('nor is it blue', !/var\(--accent\)/.test(rule('.backing.calm')));
-  check('and side carries no colour of its own',
+  // ONE SURFACE FOR BOTH SWIPES. The removing side used to be the warn colour
+  // across the whole card. A removal carries a six-second undo, so the colour
+  // was not what made it safe — it was just loud, and loudest on a past block,
+  // where taking the block out is how the day is recorded rather than damage.
+  const backing = rule('.backing');
+  check('the backing is the neutral surface', /background: var\(--line\)/.test(backing));
+  check('not the warn colour', !/--warn/.test(backing), backing);
+  check('nor blue', !/--accent/.test(backing), backing);
+  check('and the loud variant is gone, not merely unused',
+    !rule('.backing.hot') && !/backing\.hot/.test(css));
+  check('with no tone left in the markup it writes', !/backing \$\{side\} \$\{tone\}/.test(code));
+  check('side is the only thing that varies',
     !/background/.test(rule('.backing.left')) && !/background/.test(rule('.backing.right')));
+  check('and it is which edge the label sits at',
+    /justify-content: flex-end/.test(rule('.backing.left')) &&
+      /justify-content: flex-start/.test(rule('.backing.right')));
 
   check('the warning mark carries it', /color: var\(--warn\)/.test(rule('.mark')));
   check('an ordinary row does not', !/--warn/.test(rule('.row')));
@@ -669,13 +678,14 @@ console.log('\n17. the mockup still describes the page');
   check('both swipe directions are shown',
     /backing left/.test(mock) && /backing right/.test(mock));
   check('and the left one means one thing',
-    /left hot">Remove/.test(mock) && !/didn't happen<\/div>/.test(mock) &&
+    /left">Remove/.test(mock) && !/didn't happen<\/div>/.test(mock) &&
       !/left calm">happened/.test(mock));
   check('including on a block that is over',
-    /left hot">Remove[\s\S]{0,200}block past/.test(mock));
-  check('side and colour are separate there too',
-    /\.backing\.hot\{background:var\(--warn\)/.test(mock.replace(/\s/g, '')) &&
-      /\.backing\.left\{justify-content:flex-end\}/.test(mock.replace(/\s/g, '')));
+    /left">Remove[\s\S]{0,200}block past/.test(mock));
+  check('one surface there too, with no tone classes left',
+    !/backing[^"]*\b(hot|calm)\b/.test(mock), (mock.match(/class="backing[^"]*"/g) || []).join(' | '));
+  check('and side is still only the edge',
+    /\.backing\.left\{justify-content:flex-end\}/.test(mock.replace(/\s/g, '')));
   check('it shows all three row actions',
     /Done/.test(mock) && /Edit/.test(mock) && /Delete/.test(mock));
 

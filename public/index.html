@@ -352,6 +352,19 @@
         overflow: hidden;
       }
 
+      /* One surface for both swipes, and the edge the label sits at is the
+         only thing that differs.
+
+         The removing side used to fill with the warn colour, which turned the
+         whole card red under the finger. That was a lot of shouting for
+         something that carries a six-second undo, and it shouted loudest on a
+         past block — where taking a block out is not destruction at all, it is
+         how you record that the thing did not happen.
+
+         There was a loudness axis here as well as a side, from when left meant
+         two different things depending on the clock. Left means one thing now
+         and neither swipe is loud, so the axis is gone rather than left in
+         place holding a single value. */
       .backing {
         position: absolute;
         inset: 0;
@@ -360,27 +373,14 @@
         padding: 0 18px;
         font-size: 13px;
         opacity: 0;
+        background: var(--line);
+        color: var(--text);
       }
-      /* Two independent things: which edge the label sits at, and how loud the
-         backing is. They used to be one class each, which worked while left
-         always meant remove — and stopped working when left came to mean two
-         different things depending on whether the block had started. */
       .backing.left {
         justify-content: flex-end;
       }
       .backing.right {
         justify-content: flex-start;
-      }
-      /* Throwing something away, or recording that it did not happen. */
-      .backing.hot {
-        background: var(--warn);
-        color: var(--bg);
-      }
-      /* Writing a note. Not a warning and not a removal, and the warn colour
-         on it would say it was one or the other. */
-      .backing.calm {
-        background: var(--line);
-        color: var(--text);
       }
 
       .block {
@@ -2027,13 +2027,16 @@
             // Left used to mean "didn't happen" on a block that had begun and
             // "Remove" on one that had not, so the label had to be worked out
             // from the time before the finger came off. It is one rule now.
-            const [side, tone, label] =
-              dx > 0 ? ['right', 'calm', 'Note'] : ['left', 'hot', 'Remove'];
+            //
+            // The word is the whole difference. There was a loudness here too,
+            // and the removing side wore the warn colour across the entire
+            // card; the undo is the safety net for a removal, not the colour.
+            const [side, label] = dx > 0 ? ['right', 'Note'] : ['left', 'Remove'];
 
-            backing.className = `backing ${side} ${tone}`;
+            backing.className = `backing ${side}`;
             backing.textContent = label;
-            // Fades in with the travel, so the colour arrives before the
-            // commit does and the action is readable before release.
+            // Fades in with the travel, so the label arrives before the commit
+            // does and the action is readable before release.
             backing.style.opacity = String(Math.min(1, Math.abs(dx) / SWIPE_COMMIT));
             return;
           }

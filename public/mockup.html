@@ -92,14 +92,13 @@
   /* a block mid-swipe: the card rides the finger and uncovers a backing that
      says what letting go will do */
   .slot{position:relative;border-radius:11px;overflow:hidden;margin-bottom:9px}
+  /* one surface for both swipes, and the edge the label sits at is the only
+     difference. left is remove, on any block; right is the note. the removing
+     side used to fill with the warn colour, which turned the whole card red */
   .backing{position:absolute;inset:0;display:flex;align-items:center;
-           padding:0 18px;font-size:13px}
-  /* side and colour are separate: left is remove, on any block, and right is
-     the note */
+           padding:0 18px;font-size:13px;background:var(--line);color:var(--text)}
   .backing.left{justify-content:flex-end}
   .backing.right{justify-content:flex-start}
-  .backing.hot{background:var(--warn);color:var(--bg)}
-  .backing.calm{background:var(--line);color:var(--text)}
   .slot .block{position:relative;margin-bottom:0}
 
   /* the block's own line, so a note can sit under it rather than beside it */
@@ -332,13 +331,15 @@
     <div class="label">Swiping a block</div>
 
     <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:16px">
-      Left throws it away. The card rides the finger and uncovers the warn
-      colour, and the label sits at the edge being uncovered. It commits on
-      release with no confirm &mdash; the undo below is the safety net.
+      Left throws it away. The card rides the finger and uncovers a quiet
+      surface, with the label at the edge being uncovered. It commits on release
+      with no confirm &mdash; the undo below is the safety net, and it is the
+      reason the backing does not need to shout. It used to fill with the warn
+      colour, turning the whole card red under the finger.
     </p>
 
     <div class="slot">
-      <div class="backing left hot">Remove</div>
+      <div class="backing left">Remove</div>
       <div class="block" style="transform:translateX(-56px)">
         <div><div class="t">Email</div><div class="time">11:00 &ndash; 11:30</div></div>
         <div class="dur">30m</div>
@@ -354,7 +355,7 @@
     </p>
 
     <div class="slot">
-      <div class="backing left hot">Remove</div>
+      <div class="backing left">Remove</div>
       <div class="block past" style="transform:translateX(-56px)">
         <div class="brow">
           <div><div class="t">Gym</div><div class="time">9:00 AM &ndash; 10:00 AM</div></div>
@@ -363,13 +364,13 @@
     </div>
 
     <p style="font-size:12px;color:var(--muted);line-height:1.6;margin:16px 0">
-      Right opens a note on it. Neutral, not the warn colour: writing something
-      down is not a warning. Not offered on a block that has begun — its note is
+      Right opens a note on it. The same surface &mdash; only the word and the
+      edge it sits at differ. Not offered on a block that has begun: its note is
       fixed with the rest of it.
     </p>
 
     <div class="slot">
-      <div class="backing right calm">Note</div>
+      <div class="backing right">Note</div>
       <div class="block" style="transform:translateX(56px)">
         <div class="brow">
           <div><div class="t">Email</div><div class="time">11:00 &ndash; 11:30</div></div>
