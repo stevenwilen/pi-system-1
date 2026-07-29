@@ -128,6 +128,10 @@ function boot({
   // A page that can be scrolled out from under a drag.
   const win = { scrollY: 0 };
 
+  // Every request that carried a body, so a case can read what the page sent
+  // rather than infer it from what the page shows.
+  const posted = [];
+
   // A plan per date, so a case can hand back different days and the switch
   // has something to switch between.
   const plans = plan && plan.plan === undefined ? plan : null;
@@ -143,14 +147,18 @@ function boot({
     String, Number, Boolean, Array, Object,
     alert: () => {}, confirm: () => true, prompt: () => 'Typed block',
     window: win,
-    fetch: async (url) => ({
-      ok: true,
-      json: async () => {
-        if (url.startsWith('/calendar')) return { items: calendar, failed };
-        if (url.startsWith('/plan/')) return planFor(url);
-        return entries || ENTRIES;
-      },
-    }),
+    fetch: async (url, opts) => {
+      if (opts && opts.body) posted.push({ url, body: JSON.parse(opts.body) });
+      return {
+        ok: true,
+        json: async () => {
+          if (url.startsWith('/calendar')) return { items: calendar, failed };
+          if (url.startsWith('/plan/')) return planFor(url);
+          if (url === '/plan') return { date: 'x', blocks: 0, status: 'confirmed', ids: [] };
+          return entries || ENTRIES;
+        },
+      };
+    },
     document: {
       getElementById: (id) => byId[id],
       createElement: (t) => new El(t),
@@ -189,7 +197,7 @@ function boot({
 
   return {
     ctx, byId, slots, cardOf, backingOf, rowOf, chipOf, noteOf, editorOf,
-    titleOf, titles, listeners, touchmoves, win,
+    titleOf, titles, listeners, touchmoves, win, posted,
   };
 }
 
@@ -1098,6 +1106,96 @@ const SETTLED = 220; // past SETTLE_MS
       badge(rowFor('Spanish')) && badge(rowFor('Spanish')).textContent);
     check('and what was locked on today is free on tomorrow',
       !rowFor('UF application')._class.has('locked'));
+  }
+
+  console.log('\na late day moves what is left, and only what is left');
+  {
+    // 08:00–09:00 has been and gone and its message went out. The next block
+    // is stored at 10:00 and has not begun. It is 09:15, so the next half hour
+    // is 09:30 and the block still to come moves up to meet it.
+    //
+    // The one thing that must not happen is the first block moving with it. It
+    // is history: the message named 08:00, and the server refuses to retime a
+    // delivered block anyway, so a payload that tried would be rejected whole
+    // and the day would silently fail to save.
+    const { ctx, slots, byId, posted } = boot({
+      entries: utcEntries({ plans_in: 'morning' }),
+      now: '09:15',
+      plan: {
+        [TODAY]: {
+          plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+          blocks: [
+            { id: 'g1', title: 'Reading', entryId: null, start_minutes: 480, duration_minutes: 60, sent: true },
+            { id: 'g2', title: 'Deep work', entryId: null, start_minutes: 600, duration_minutes: 60 },
+          ],
+        },
+      },
+    });
+    await ctx.load();
+
+    check('the delivered block is where it always was',
+      slots()[0].text().includes('8:00 AM – 9:00 AM'), slots()[0].text().trim());
+    check('and reads as past', slots()[0].children[1]._class.has('past'));
+    check('what is left moved up to the next half hour',
+      slots()[1].text().includes('9:30 AM – 10:30 AM'), slots()[1].text().trim());
+    check('so the day no longer matches what is stored, and says so',
+      byId['confirm'].textContent === 'Confirm', byId['confirm'].textContent);
+
+    posted.length = 0;
+    await byId['confirm'].onclick();
+
+    const sentBody = posted.find((p) => p.url === '/plan');
+    check('confirm sent the day', Boolean(sentBody));
+
+    const [first, second] = sentBody.body.blocks;
+    check('the delivered block is sent at the hour it was stored at',
+      first.start_minutes === 480, String(first.start_minutes));
+    check('with the duration it was stored with', first.duration_minutes === 60,
+      String(first.duration_minutes));
+    check('and its id, so the server updates rather than replaces', first.id === 'g1',
+      String(first.id));
+
+    check('only the upcoming one carries a new time', second.start_minutes === 570,
+      String(second.start_minutes));
+    check('and it keeps its id too', second.id === 'g2', String(second.id));
+
+    // The server refuses a delivered block whose time changed, so sending the
+    // stored value is not a nicety: sending anything else would reject the
+    // whole request.
+    check('nothing a delivered block owns was touched',
+      first.start_minutes === 480 && first.duration_minutes === 60);
+  }
+
+  console.log('\nan expired block is history too, not just a delivered one');
+  {
+    // Started but never delivered — the scheduler was down, or the block was
+    // past its grace window. `sent` is false, so the server would allow a
+    // retime. The page must still not offer one: it began, so it is the day
+    // that happened.
+    const { ctx, slots, byId, posted } = boot({
+      entries: utcEntries({ plans_in: 'morning' }),
+      now: '09:15',
+      plan: {
+        [TODAY]: {
+          plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+          blocks: [
+            { id: 'x1', title: 'Missed by the scheduler', entryId: null, start_minutes: 480, duration_minutes: 60, sent: false },
+            { id: 'x2', title: 'Deep work', entryId: null, start_minutes: 600, duration_minutes: 60 },
+          ],
+        },
+      },
+    });
+    await ctx.load();
+
+    check('it stayed where it was stored', slots()[0].text().includes('8:00 AM – 9:00 AM'),
+      slots()[0].text().trim());
+    check('and still reads as past', slots()[0].children[1]._class.has('past'));
+
+    posted.length = 0;
+    await byId['confirm'].onclick();
+    const body = posted.find((p) => p.url === '/plan').body;
+    check('and is sent unchanged', body.blocks[0].start_minutes === 480,
+      String(body.blocks[0].start_minutes));
   }
 
   console.log('\nthe menu still works on a locked row');

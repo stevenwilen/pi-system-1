@@ -113,8 +113,18 @@ const statusOf = async (planId) => {
   check('does not send a block long past its time', !titles.includes('Long past'), titles.join(', '));
   check('exactly two went out', sent.length === 2, `${sent.length}`);
 
+  // Twelve hour, the way it arrives on a phone. Built here rather than taken
+  // from messages.js, so this is a second opinion on the format rather than
+  // the same function agreeing with itself.
+  const ampm = (mins) => {
+    const at12 = ((mins % 1440) + 1440) % 1440;
+    const h = Math.floor(at12 / 60);
+    return `${h % 12 === 0 ? 12 : h % 12}:${String(at12 % 60).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+  };
+
   const withLine = sent.find((s) => s.text.includes('Started with a note'));
-  check('message carries header then note', withLine.text === '<b>Started with a note</b>\n' + scheduler.hhmm(at(-5)) + ' to ' + scheduler.hhmm(hhmmss(nowMinutes + 55)) + '\n\ntwenty pages, no phone',
+  check('message carries header then note',
+    withLine.text === `<b>Started with a note</b>\n${ampm(nowMinutes - 5)} to ${ampm(nowMinutes + 55)}\n\ntwenty pages, no phone`,
     JSON.stringify(withLine.text));
 
   const bare = sent.find((s) => s.text.includes('no note'));
