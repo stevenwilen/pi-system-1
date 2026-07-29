@@ -3,9 +3,9 @@
 // Run: node make-icons.js
 //
 // There is no rasteriser on this machine and adding one would be a build
-// dependency for two files that change once a year. The icon is three flat
-// shapes, so they are drawn here directly and encoded as PNG with the zlib that
-// ships with Node.
+// dependency for two files that change once a year. The icon is a ground and
+// two capsules, so they are drawn here directly and encoded as PNG with the
+// zlib that ships with Node.
 //
 // This exists so the PNGs are reproducible. Without it they are two binaries
 // nobody can explain or regenerate, and the SVG beside them slowly stops being
@@ -17,22 +17,37 @@ const zlib = require('zlib');
 // The same values as the SVG, on its 512 grid, scaled to whatever size is
 // asked for. Keep the two in step: this file is the SVG's twin, not its source.
 const GROUND = [0x16, 0x13, 0x0f]; // --bg
-const LINE = [0x8b, 0x81, 0x77]; //   --muted
-const MARK = [0x8f, 0xa0, 0x7a]; //   --accent
 
-const BAR = { x0: 112, x1: 400, cy: 256, half: 9 };
-const DOT = { cx: 256, cy: 256, r: 44 };
+// Every shape is a capsule: "within `half` of the segment from (x0,y) to
+// (x1,y)". One primitive covers the whole drawing, and a circle is just this
+// with x0 === x1 — which is what the old dot was, written out longhand.
+//
+// (x0, x1) are the SEGMENT's ends, so the drawn shape runs from x0-half to
+// x1+half. The SVG's rects are derived from exactly that: x = x0 - half and
+// width = (x1 - x0) + 2*half.
+//
+// Those two disagreed until now. The SVG read (x0, x1) as the outer edges of
+// its rect and this file read them as the segment, so the PNG's bar was 18px
+// longer at each end than the drawing it claims to be. Nothing caught it: the
+// icon check samples at a quarter across, and both versions cover that.
+//
+// Painted in order, so a later shape sits over an earlier one.
+const SHAPES = [
+  // The day.
+  { x0: 112, x1: 400, y: 256, half: 8, rgb: [0x8b, 0x81, 0x77] }, // --muted
+  // A block sitting in it.
+  { x0: 224, x1: 312, y: 256, half: 22, rgb: [0x6e, 0x8c, 0xb8] }, // --accent
+];
 
-// Four samples a side. The shapes are a capsule and a circle, so the only
-// visible aliasing is on their curves, and 16 samples clears it at both sizes.
+// Four samples a side. Every shape is a capsule, so the only visible aliasing
+// is on their curves, and 16 samples clears it at both sizes.
 const SS = 4;
 
 const mix = (under, over, a) => under.map((c, i) => Math.round(c + (over[i] - c) * a));
 
-/** Coverage of one device pixel by the two shapes, supersampled. */
+/** Coverage of one device pixel by each shape, supersampled. */
 function sample(px, py, scale) {
-  let inBar = 0;
-  let inDot = 0;
+  const hits = SHAPES.map(() => 0);
 
   for (let sy = 0; sy < SS; sy++) {
     for (let sx = 0; sx < SS; sx++) {
@@ -40,24 +55,21 @@ function sample(px, py, scale) {
       const x = ((px + (sx + 0.5) / SS) / scale) * 512;
       const y = ((py + (sy + 0.5) / SS) / scale) * 512;
 
-      // The bar is a capsule: a rectangle with a half-disc at each end, which
-      // is the same as "within `half` of the segment between its two ends".
-      const cx = Math.min(Math.max(x, BAR.x0), BAR.x1);
-      const dx = x - cx;
-      const dy = y - BAR.cy;
-      if (dx * dx + dy * dy <= BAR.half * BAR.half) inBar++;
-
-      const ex = x - DOT.cx;
-      const ey = y - DOT.cy;
-      if (ex * ex + ey * ey <= DOT.r * DOT.r) inDot++;
+      SHAPES.forEach((s, i) => {
+        // The nearest point on the segment, then the distance to it.
+        const cx = Math.min(Math.max(x, s.x0), s.x1);
+        const dx = x - cx;
+        const dy = y - s.y;
+        if (dx * dx + dy * dy <= s.half * s.half) hits[i]++;
+      });
     }
   }
 
   const total = SS * SS;
   let rgb = GROUND;
-  if (inBar) rgb = mix(rgb, LINE, inBar / total);
-  // The mark sits over the line, so it is composited last.
-  if (inDot) rgb = mix(rgb, MARK, inDot / total);
+  SHAPES.forEach((s, i) => {
+    if (hits[i]) rgb = mix(rgb, s.rgb, hits[i] / total);
+  });
   return rgb;
 }
 

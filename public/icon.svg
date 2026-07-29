@@ -1,5 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- A day, and a block sitting in it.
+
+       Every shape is a capsule described by the segment it is built on:
+       (x0,y) to (x1,y), extending `half` beyond each end. The rects below are
+       derived from those numbers, x = x0 - half and width = (x1 - x0) + 2*half,
+       and make-icons.js holds the same three lines. Keep them in step.
+
+         day    112 -> 400  at y 256, half  8
+         block  224 -> 312  at y 256, half 22
+
+       Everything stays within 200px of the centre, which is what survives the
+       maskable crop to the middle 80%. -->
   <rect width="512" height="512" fill="#16130F"/>
-  <rect x="112" y="247" width="288" height="18" rx="9" fill="#8B8177"/>
-  <circle cx="256" cy="256" r="44" fill="#8FA07A"/>
+  <rect x="104" y="248" width="304" height="16" rx="8" fill="#8B8177"/>
+  <rect x="202" y="234" width="132" height="44" rx="22" fill="#6E8CB8"/>
 </svg>
