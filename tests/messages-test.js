@@ -178,6 +178,43 @@ const made = [];
     check('the day being saved did not reset the clock',
       !/0 days/.test(written[0].message_text), written[0].message_text);
 
+    // A deleted thing says nothing, even while a block for it survives.
+    //
+    // This is reachable in four taps: schedule a thing, delete the thing, keep
+    // the block, confirm. It used to compose a line from the deleted row and
+    // send a deadline the next morning for something thrown away the night
+    // before, because this was the one read of `entries` with no status
+    // filter on it.
+    await supabase.from('entries').update({ status: 'deleted' }).eq('user_id', U).eq('id', task.id);
+
+    const res2 = await fetch(`${BASE}/plan`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        date: DATE,
+        wake_minutes: 480,
+        blocks: [
+          { title: habit.title, entryId: habit.id, start_minutes: 480, duration_minutes: 60 },
+          { title: task.title, entryId: task.id, start_minutes: 540, duration_minutes: 60 },
+        ],
+      }),
+    });
+    check('the day still saves with a block for a deleted thing', res2.status === 200, `${res2.status}`);
+
+    const { data: after } = await supabase
+      .from('blocks')
+      .select('title, message_text')
+      .eq('plan_id', plan.id)
+      .order('sort_order');
+
+    check('the deleted thing gets no line', after[1].message_text === null,
+      String(after[1].message_text));
+    check('and certainly not its deadline', !/Due in/.test(after[1].message_text || ''),
+      String(after[1].message_text));
+    check('the block itself survives', after[1].title === task.title, after[1].title);
+    check('and the thing still on the list is unaffected',
+      after[0].message_text === '11 days since you last did this.', String(after[0].message_text));
+
     console.log('\n    as Telegram would receive them:');
     for (const b of written) {
       console.log('    ' + m.composeMessage(b).replace(/\n/g, '\n    ') + '\n');

@@ -174,10 +174,21 @@ async function linesFor(user_id, planId, date, blocks) {
   const ids = [...new Set(blocks.map((b) => b.entryId).filter(Boolean))];
   if (!ids.length) return new Map();
 
+  // Active only, like every other read of this table.
+  //
+  // Without this, deleting a thing and then confirming a day that still holds
+  // a block for it composed a line from the deleted row: "Due in 3 days" about
+  // something the person threw away last night. Four taps to reach, and the
+  // message arrived the next morning.
+  //
+  // A block whose entry is gone gets no line at all rather than a gap line.
+  // The person deleted the thing and kept the block, so what is left is a
+  // block: a title and two times, and nothing to say about it.
   const { data: rows, error } = await supabase
     .from('entries')
     .select('id, due')
     .eq('user_id', user_id)
+    .eq('status', 'active')
     .in('id', ids);
 
   if (error) throw new Error(error.message);

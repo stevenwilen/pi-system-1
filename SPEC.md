@@ -165,8 +165,13 @@ problem as a project left three weeks, so they share a list rather than being
 filed apart.
 
 **Ordered by how long each thing has been left, coldest first.** The order is
-arithmetic on the days, not anything the person arranged: there is no ranking, no
-drag, no `sort_order`.
+arithmetic on the days, not anything the person arranged: there is no ranking and
+no drag, and `entries.sort_order` is retired — written by nothing, read by
+nothing, kept only because dropping a column cannot be undone.
+
+`blocks.sort_order` is a different column and is load-bearing. It is what holds
+the order of blocks within a plan, written on every confirm and read back by both
+`GET /plan/:date` and `/review`. The two share a name and nothing else.
 
 Each row is two lines:
 
