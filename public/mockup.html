@@ -90,15 +90,32 @@
   }
   .block .t{font-size:15px}
   .block .time{font-size:12px;color:var(--muted);margin-top:4px;font-variant-numeric:tabular-nums}
-  .dur{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;
-       min-width:40px;text-align:center}
+  /* the duration is the control now, not a readout: tap to grow it, and it
+     wraps at 4h because there is nothing else to shorten with */
+  .dur{font-size:13px;color:var(--accent);font-variant-numeric:tabular-nums;
+       border:1px solid var(--line);border-radius:999px;padding:8px 15px;
+       min-width:66px;text-align:center}
   .addblock{font-size:12px;color:var(--faint);padding-top:8px}
 
-  /* the removal confirm, in place of the stepper. Keep sits where minus was,
-     so a fast double-press on minus lands on Keep and nothing is lost. */
-  .confirming{display:flex;align-items:center;gap:18px;font-size:13px}
-  .confirming .keep{color:var(--muted)}
-  .confirming .remove{color:var(--warn)}
+  /* a block mid-swipe: the card rides the finger and uncovers a backing that
+     says what letting go will do */
+  .slot{position:relative;border-radius:11px;overflow:hidden;margin-bottom:9px}
+  .backing{position:absolute;inset:0;display:flex;align-items:center;
+           padding:0 18px;font-size:13px}
+  .backing.left{background:var(--warn);color:var(--bg);justify-content:flex-end}
+  .backing.right{background:var(--line);color:var(--text);justify-content:flex-start}
+  .slot .block{position:relative;margin-bottom:0}
+
+  /* picked up: lighter, raised, and everything else steps back */
+  .block.lifted{background:#2A2620;box-shadow:0 10px 24px rgba(0,0,0,.45);
+                transform:scale(1.03)}
+  .dimmed{opacity:.55}
+
+  /* the safety net for a swipe, which commits with no confirm */
+  .undo{display:inline-flex;align-items:center;gap:14px;background:var(--card);
+        border:1px solid var(--line);border-radius:11px;padding:11px 16px;
+        font-size:13px;color:var(--muted)}
+  .undo b{color:var(--accent);font-weight:400}
 
   .ends{display:flex;justify-content:space-between;align-items:baseline;
         margin-top:28px;padding-bottom:20px}
@@ -187,12 +204,12 @@
 
     <div class="block">
       <div><div class="t">Reading</div><div class="time">08:00 &ndash; 09:00</div></div>
-      <div class="stepper"><div class="step">&minus;</div><div class="dur">1h</div><div class="step">+</div></div>
+      <div class="dur">1h</div>
     </div>
 
     <div class="block">
       <div><div class="t">UF application</div><div class="time">09:00 &ndash; 11:00</div></div>
-      <div class="stepper"><div class="step">&minus;</div><div class="dur">2h</div><div class="step">+</div></div>
+      <div class="dur">2h</div>
     </div>
 
     <div class="addblock">+ Block</div>
@@ -208,26 +225,61 @@
 <div class="phone">
 
   <div class="section">
-    <div class="label">Removing a block</div>
+    <div class="label">Swiping a block</div>
 
     <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:16px">
-      A block at the 30&nbsp;minute floor. Minus stays live rather than going
-      dead, because one more press is how you say you meant to remove it.
+      Left throws it away. The card rides the finger and uncovers the miss
+      colour, and the label sits at the edge being uncovered. It commits on
+      release with no confirm &mdash; the undo below is the safety net.
     </p>
 
-    <div class="block">
-      <div><div class="t">Email</div><div class="time">11:00 &ndash; 11:30</div></div>
-      <div class="stepper"><div class="step">&minus;</div><div class="dur">30m</div><div class="step">+</div></div>
+    <div class="slot">
+      <div class="backing left">Remove</div>
+      <div class="block" style="transform:translateX(-56px)">
+        <div><div class="t">Email</div><div class="time">11:00 &ndash; 11:30</div></div>
+        <div class="dur">30m</div>
+      </div>
     </div>
 
     <p style="font-size:12px;color:var(--muted);line-height:1.6;margin:16px 0">
-      Pressed. Keep sits where minus was, so a fast double-press on minus lands
-      on Keep and nothing is lost.
+      Right drops a 30&nbsp;minute buffer in after it. Neutral, not the miss
+      colour: adding a gap is not a warning.
     </p>
 
-    <div class="block">
+    <div class="slot">
+      <div class="backing right">+ Buffer</div>
+      <div class="block" style="transform:translateX(56px)">
+        <div><div class="t">Email</div><div class="time">11:00 &ndash; 11:30</div></div>
+        <div class="dur">30m</div>
+      </div>
+    </div>
+
+    <div style="height:18px"></div>
+    <div class="undo">Removed &middot; <b>Undo</b></div>
+  </div>
+
+  <div class="section">
+    <div class="label">Holding a block</div>
+
+    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:16px">
+      Press anywhere on it for 400ms and it comes up: lighter, raised, casting
+      a shadow, while everything else steps back. Then drag it and the others
+      part to show where it lands.
+    </p>
+
+    <div class="block dimmed">
+      <div><div class="t">Reading</div><div class="time">08:00 &ndash; 09:00</div></div>
+      <div class="dur">1h</div>
+    </div>
+
+    <div class="block lifted">
+      <div><div class="t">UF application</div><div class="time">09:00 &ndash; 11:00</div></div>
+      <div class="dur">2h</div>
+    </div>
+
+    <div class="block dimmed">
       <div><div class="t">Email</div><div class="time">11:00 &ndash; 11:30</div></div>
-      <div class="confirming"><span class="keep">Keep</span><span class="remove">Remove</span></div>
+      <div class="dur">30m</div>
     </div>
   </div>
 

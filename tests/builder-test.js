@@ -1,15 +1,17 @@
 // Runs the real <script> from index.html in a VM against a stub DOM, so the
-// builder's arithmetic is tested as shipped rather than as a copy.
+// builder's arithmetic and its gesture arbitration are tested as shipped
+// rather than as a copy.
 //
 // A fresh context per scenario: `blocks` and `planDate` are let-bound inside
 // the script and cannot be reset from outside, so state would otherwise leak
 // between cases and quietly invalidate them.
 //
-// The builder is much smaller than it was. Nothing is pinned and nothing is
-// placed automatically, so there are no gaps to fill and no collisions to
-// report: a block starts when the one above it ends, and that is the whole
-// rule. What is left to get right is the sequence, the steppers, and the
-// running end time.
+// WHAT THIS CANNOT TELL YOU. These are synthetic pointer events dispatched at
+// handlers. They cover the state machine — which gesture wins, what commits at
+// what distance, what the array looks like afterwards — and they cover nothing
+// about touch itself: not `touch-action`, not whether the browser has already
+// claimed a scroll before preventDefault lands, not what a thumb actually
+// does. That needs a real device and it is not verified here.
 const fs = require('fs');
 const vm = require('vm');
 // The app, found from where this file sits, so the suite runs from any clone.
@@ -53,6 +55,8 @@ class El {
   getAttribute(k) { return this._attrs[k]; }
   focus() {} scrollIntoView() {} setPointerCapture() {} releasePointerCapture() {}
   addEventListener() {} removeEventListener() {}
+  // A real, consistent height, because the reorder maths divides by it.
+  // 40 + the 9px gap makes one slot 49px, so a drag of 49 is exactly one place.
   getBoundingClientRect() { return { top: 0, height: 40 }; }
   querySelector(s) { return this._find(s)[0] || new El(); }
   querySelectorAll(s) { return this._find(s); }
@@ -80,375 +84,404 @@ const ENTRIES = {
   items: [],
 };
 
-/** Builds a fresh script instance with its own DOM and calendar fixture. */
-function boot(calendarItems = [], plan = null) {
+const SLOT = 49; // one block's height plus the gap, per getBoundingClientRect
+
+/** Builds a fresh script instance with its own DOM. */
+function boot({ calendar = [], plan = null, failed = [], reduced = false } = {}) {
   // Every id the markup declares, read from the file rather than listed here.
-  // A hand-kept list goes stale the moment the page grows an element, and the
-  // failure is an unrelated crash rather than anything to do with the builder.
   const byId = {};
   for (const id of new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]))) {
     byId[id] = new El();
   }
-
   for (const t of ['habit', 'project', 'task']) {
     const b = new El('button');
     b.dataset.type = t;
     byId['type-seg'].append(b);
   }
 
-  const ctx = vm.createContext({
+  const sandbox = {
     console, setTimeout, clearTimeout, Intl, Date, Math, JSON,
     String, Number, Boolean, Array, Object,
     alert: () => {}, confirm: () => true, prompt: () => 'Typed block',
     fetch: async (url) => ({
       ok: true,
       json: async () => {
-        if (url.startsWith('/calendar')) return { items: calendarItems, failed: [] };
+        if (url.startsWith('/calendar')) return { items: calendar, failed };
         if (url.startsWith('/plan/')) return plan || { plan: null, blocks: [] };
         if (url === '/review') return { date: '2026-07-26', blocks: [] };
         return ENTRIES;
       },
     }),
     document: { getElementById: (id) => byId[id], createElement: (t) => new El(t) },
-  });
+  };
+  // Only defined when the case is about reduced motion, so every other case
+  // exercises the animated path the way a default device would.
+  if (reduced) sandbox.matchMedia = () => ({ matches: true });
 
+  const ctx = vm.createContext(sandbox);
   vm.runInContext(SCRIPT, ctx);
-  const rows = () => byId.builder.children.filter((c) => c._class.has('block'));
-  return { ctx, byId, rows };
+
+  const slots = () => byId.builder.children.filter((c) => c._class.has('slot'));
+  const cardOf = (s) => s.children.find((c) => c._class.has('block'));
+  const backingOf = (s) => s.children.find((c) => c._class.has('backing'));
+  const chipOf = (s) => cardOf(s).children.find((c) => c._class.has('dur'));
+
+  return { ctx, byId, slots, cardOf, backingOf, chipOf };
 }
 
-/**
- * The same, with one calendar feed reporting itself unreachable.
- *
- * [] from a dead feed and [] from a quiet Tuesday are the same value, and the
- * screen must not let them look the same.
- */
-function bootWithFailure() {
-  const byId = {};
-  for (const id of new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]))) {
-    byId[id] = new El();
-  }
-  for (const t of ['habit', 'project', 'task']) {
-    const b = new El('button');
-    b.dataset.type = t;
-    byId['type-seg'].append(b);
-  }
+// Synthetic pointer sequence. One finger, id 1.
+const down = (card, x = 0, y = 0) =>
+  card.onpointerdown({ pointerId: 1, button: 0, clientX: x, clientY: y });
+const move = (card, x, y) =>
+  card.onpointermove({ pointerId: 1, clientX: x, clientY: y, preventDefault() {} });
+const up = (card, x = 0, y = 0) =>
+  card.onpointerup({ pointerId: 1, clientX: x, clientY: y });
 
-  const ctx = vm.createContext({
-    console, setTimeout, clearTimeout, Intl, Date, Math, JSON,
-    String, Number, Boolean, Array, Object,
-    alert: () => {}, confirm: () => true, prompt: () => null,
-    fetch: async (url) => ({
-      ok: true,
-      json: async () => {
-        if (url.startsWith('/calendar')) {
-          return { items: [], failed: [{ source: 'awareness', label: 'Dates' }] };
-        }
-        if (url.startsWith('/plan/')) return { plan: null, blocks: [] };
-        if (url === '/review') return { date: '2026-07-26', blocks: [] };
-        return ENTRIES;
-      },
-    }),
-    document: { getElementById: (id) => byId[id], createElement: (t) => new El(t) },
-  });
-
-  vm.runInContext(SCRIPT, ctx);
-  return { ctx, byId };
-}
-
-const stepperOf = (row) => row.children.find((c) => c._class.has('stepper'));
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const HELD = 460; // past HOLD_MS
+const SETTLED = 220; // past SETTLE_MS
 
 (async () => {
-  console.log('blocks flow in sequence from the start time');
+  console.log('duration: tap the chip to cycle');
   {
-    const { ctx, byId, rows } = boot();
+    const { ctx, byId, slots, chipOf } = boot();
     await ctx.load();
-    ctx.addBlock({ title: 'A', duration: 60 });
-    ctx.addBlock({ title: 'B', duration: 30 });
-    check('two blocks rendered', rows().length === 2, `${rows().length}`);
-    check('first starts at the start time', rows()[0].text().includes('08:00 – 09:00'), rows()[0].text().trim());
-    check('second follows the first', rows()[1].text().includes('09:00 – 09:30'), rows()[1].text().trim());
-    check('day ends is the sum', byId['end-time'].textContent === '09:30', byId['end-time'].textContent);
-  }
+    ctx.addBlock({ title: 'A' });
 
-  console.log('\nnothing arrives from the calendar');
-  {
-    // The feed has a timed appointment and an all-day entry on it. Neither
-    // becomes a block: the calendar is read, shown, and forgotten.
-    const { ctx, byId, rows } = boot([
-      { title: 'Dentist', start_minutes: 780 },
-      { title: 'Cancel Paramount', start_minutes: null },
-    ]);
-    await ctx.load();
+    check('a new block is 30m', chipOf(slots()[0]).textContent === '30m',
+      chipOf(slots()[0]).textContent);
 
-    check('no blocks were created', rows().length === 0, `${rows().length}`);
-    check('the appointment is shown as reference', /Dentist/.test(byId['cal-list'].text()),
-      byId['cal-list'].text().trim());
-    check('with its time', /Dentist, 13:00/.test(byId['cal-list'].text()), byId['cal-list'].text().trim());
-    check('an all-day entry is shown with no time',
-      /Cancel Paramount/.test(byId['cal-list'].text()) &&
-        !/Cancel Paramount,/.test(byId['cal-list'].text()),
-      byId['cal-list'].text().trim());
+    const seen = [];
+    for (let i = 0; i < 9; i++) {
+      chipOf(slots()[0]).onclick();
+      seen.push(chipOf(slots()[0]).textContent);
+    }
+    check('it climbs by half hours to four, then wraps',
+      seen.join(' ') === '1h 1h 30m 2h 2h 30m 3h 3h 30m 4h 30m 1h', seen.join(' '));
 
-    ctx.addBlock({ title: 'Gym', duration: 60 });
-    check('the day still starts at the start time', rows()[0].text().includes('08:00 – 09:00'),
-      rows()[0].text().trim());
-    check('and the appointment did not move it', byId['end-time'].textContent === '09:00',
+    check('the end time follows', byId['end-time'].textContent === '09:00',
       byId['end-time'].textContent);
   }
 
-  console.log('\nan empty day and a broken feed do not look the same');
+  console.log('\nan odd length from an older grid is pulled back onto it');
   {
-    const { ctx, byId } = boot();
-    await ctx.load();
-    check('an empty calendar says it is empty', /Nothing on it/.test(byId['cal-list'].text()),
-      byId['cal-list'].text().trim());
-  }
-
-  console.log('\na feed that could not be read is named');
-  {
-    const { ctx, byId } = bootWithFailure();
-    await ctx.load();
-    check('the failure is said out loud', /could not be read/.test(byId['cal-list'].text()),
-      byId['cal-list'].text().trim());
-    check('and the feed is named', /Dates/.test(byId['cal-list'].text()), byId['cal-list'].text().trim());
-  }
-
-  console.log('\n30 minute steps only');
-  {
-    const { ctx, rows } = boot();
-    await ctx.load();
-    ctx.addBlock({ title: 'A', duration: 60 });
-    const step = () => stepperOf(rows()[0]);
-
-    step().children[2].onclick();
-    check('plus adds exactly 30', rows()[0].text().includes('08:00 – 09:30'), rows()[0].text().trim());
-    step().children[0].onclick();
-    check('minus removes exactly 30', rows()[0].text().includes('08:00 – 09:00'), rows()[0].text().trim());
-    step().children[0].onclick();
-    check('floor is 30', rows()[0].text().includes('08:00 – 08:30'), rows()[0].text().trim());
-
-    // Minus stays live at the floor rather than going dead: carrying it one
-    // step further is how a block is removed. It does not shorten below 30,
-    // and it does not remove on its own either — see the removal case below.
-    check('minus is not disabled at the floor', step().children[0].disabled !== true);
-    step().children[0].onclick();
-    check('and pressing it there does not shorten it further',
-      rows()[0].text().includes('08:00 – 08:30'), rows()[0].text().trim());
-    check('nor remove it', rows().length === 1, `${rows().length}`);
-  }
-
-  console.log('\nchanging one duration shifts everything below it');
-  {
-    const { ctx, byId, rows } = boot();
-    await ctx.load();
-    ctx.addBlock({ title: 'A', duration: 60 });
-    ctx.addBlock({ title: 'B', duration: 60 });
-    ctx.addBlock({ title: 'C', duration: 60 });
-    check('laid out in sequence',
-      rows()[2].text().includes('10:00 – 11:00'), rows()[2].text().trim());
-
-    stepperOf(rows()[0]).children[2].onclick(); // A: 60 -> 90
-    check('the one below moved', rows()[1].text().includes('09:30 – 10:30'), rows()[1].text().trim());
-    check('and the one below that', rows()[2].text().includes('10:30 – 11:30'), rows()[2].text().trim());
-    check('the one above did not', rows()[0].text().includes('08:00 – 09:30'), rows()[0].text().trim());
-    check('the end time followed', byId['end-time'].textContent === '11:30', byId['end-time'].textContent);
-  }
-
-  console.log('\nremoving a block: minus, carried past the floor');
-  {
-    const { ctx, byId, rows } = boot();
-    await ctx.load();
-    ctx.addBlock({ title: 'A', duration: 30 });
-    ctx.addBlock({ title: 'B', duration: 60 });
-
-    const stepper = () => rows()[0].children.find((c) => c._class.has('stepper'));
-    const confirm = () => rows()[0].children.find((c) => c._class.has('confirming'));
-
-    check('at the floor, minus is still live', stepper().children[0].disabled !== true);
-
-    stepper().children[0].onclick();
-    check('one press asks rather than removing', rows().length === 2, `${rows().length}`);
-    check('and the stepper becomes the question', Boolean(confirm()) && !stepper());
-    check('Keep first, Remove second',
-      confirm().children.map((c) => c.textContent).join(',') === 'Keep,Remove',
-      confirm().children.map((c) => c.textContent).join(','));
-
-    // The whole safety of this. The press that opened the question was on the
-    // left of the stepper, and a fast second press lands in the same place.
-    confirm().children[0].onclick();
-    check('a second press in the same place keeps the block', rows().length === 2, `${rows().length}`);
-    check('and the stepper comes back', Boolean(stepper()));
-
-    stepper().children[0].onclick();
-    confirm().children[1].onclick();
-    check('Remove is what removes it', rows().length === 1, `${rows().length}`);
-    check('it moved up to the start time', rows()[0].text().includes('08:00 – 09:00'),
-      rows()[0].text().trim());
-    check('end time followed', byId['end-time'].textContent === '09:00', byId['end-time'].textContent);
-  }
-
-  console.log('\nonly one block can be asking at a time');
-  {
-    const { ctx, rows } = boot();
-    await ctx.load();
-    ctx.addBlock({ title: 'A', duration: 30 });
-    ctx.addBlock({ title: 'B', duration: 30 });
-
-    const stepperOn = (n) => rows()[n].children.find((c) => c._class.has('stepper'));
-    const confirmOn = (n) => rows()[n].children.find((c) => c._class.has('confirming'));
-
-    stepperOn(0).children[0].onclick();
-    check('the first is asking', Boolean(confirmOn(0)));
-
-    stepperOn(1).children[0].onclick();
-    check('asking the second drops the first', !confirmOn(0), 'two pending questions');
-    check('and the second is the one asking', Boolean(confirmOn(1)));
-
-    // An edit elsewhere answers the question by dropping it, so a Remove
-    // button can never point at a block that has since moved. The second is
-    // still asking at this point.
-    ctx.addBlock({ title: 'C', duration: 30 });
-    check('adding a block drops it too', !confirmOn(1) && rows().length === 3, `${rows().length}`);
-    check('and nothing was removed on the way', rows().length === 3, `${rows().length}`);
-  }
-
-  console.log('\nnothing on a block is removed by a long press any more');
-  {
-    const { ctx, rows } = boot();
-    await ctx.load();
-    ctx.addBlock({ title: 'A', duration: 60 });
-    rows()[0].onpointerdown && rows()[0].onpointerdown();
-    await new Promise((r) => setTimeout(r, 700));
-    check('holding it does nothing', rows().length === 1, `${rows().length}`);
-  }
-
-  console.log('\nrunning end time past midnight');
-  {
-    const { ctx, byId } = boot();
-    await ctx.load();
-    for (let i = 0; i < 16; i++) ctx.addBlock({ title: `x${i}`, duration: 60 });
-    check('spelled out, not just a smaller clock', /next day/.test(byId['end-time'].textContent),
-      byId['end-time'].textContent);
-    check('flagged late', byId.ends._class.has('late'));
-  }
-
-  console.log('\nthe day can start at a different hour every day');
-  {
-    const { ctx, byId, rows } = boot();
-    await ctx.load();
-    ctx.addBlock({ title: 'A', duration: 60 });
-    check('starts at the profile default', rows()[0].text().includes('08:00 – 09:00'), rows()[0].text());
-    check('and the control shows it', byId['wake-time'].textContent === '08:00', byId['wake-time'].textContent);
-
-    byId['wake-plus'].onclick();
-    check('one step is half an hour', byId['wake-time'].textContent === '08:30', byId['wake-time'].textContent);
-    check('and the day moved with it', rows()[0].text().includes('08:30 – 09:30'), rows()[0].text());
-    check('the end time followed', byId['end-time'].textContent === '09:30', byId['end-time'].textContent);
-
-    byId['wake-minus'].onclick();
-    byId['wake-minus'].onclick();
-    check('it goes back down', byId['wake-time'].textContent === '07:30', byId['wake-time'].textContent);
-    check('the day came back with it', rows()[0].text().includes('07:30 – 08:30'), rows()[0].text());
-
-    // Moving the start is an edit like any other: the day stops being saved.
-    ctx.setSaved(true);
-    byId['wake-plus'].onclick();
-    check('moving it un-saves the day', byId['confirm'].textContent !== 'Confirmed',
-      byId['confirm'].textContent);
-  }
-
-  console.log('\na day saved off the half hour is corrected by one press');
-  {
-    const { ctx, byId } = boot();
-    await ctx.load();
-    ctx.setWake(8 * 60 + 15);
-    check('it opens on the odd time it was saved with', byId['wake-time'].textContent === '08:15',
-      byId['wake-time'].textContent);
-
-    byId['wake-plus'].onclick();
-    check('forward lands on the half hour', byId['wake-time'].textContent === '08:30',
-      byId['wake-time'].textContent);
-
-    ctx.setWake(8 * 60 + 15);
-    byId['wake-minus'].onclick();
-    check('and back lands on it too', byId['wake-time'].textContent === '08:00',
-      byId['wake-time'].textContent);
-
-    byId['wake-minus'].onclick();
-    check('then it steps a full half hour', byId['wake-time'].textContent === '07:30',
-      byId['wake-time'].textContent);
-  }
-
-  console.log('\nthe start is clamped to hours a person actually wakes');
-  {
-    const { ctx, byId } = boot();
-    await ctx.load();
-
-    for (let i = 0; i < 40; i++) byId['wake-minus'].onclick();
-    check('cannot go before 04:00', byId['wake-time'].textContent === '04:00', byId['wake-time'].textContent);
-    check('and the button says so', byId['wake-minus'].disabled === true);
-
-    for (let i = 0; i < 80; i++) byId['wake-plus'].onclick();
-    check('cannot go past 12:00', byId['wake-time'].textContent === '12:00', byId['wake-time'].textContent);
-    check('and that button says so too', byId['wake-plus'].disabled === true);
-  }
-
-  console.log('\nconfirm');
-  {
-    const { ctx, byId, rows } = boot();
-    await ctx.load();
-    check('nothing to confirm on an empty day', byId['confirm'].disabled === true);
-    check('and the end time says nothing', byId['end-time'].textContent === '—', byId['end-time'].textContent);
-
-    ctx.addBlock({ title: 'A', duration: 60 });
-    check('a block enables it', byId['confirm'].disabled === false);
-    check('and it reads Confirm', byId['confirm'].textContent === 'Confirm', byId['confirm'].textContent);
-
-    ctx.setSaved(true);
-    check('once saved it reads Confirmed', byId['confirm'].textContent === 'Confirmed');
-    check('and cannot be pressed again', byId['confirm'].disabled === true);
-
-    ctx.addBlock({ title: 'B', duration: 30 });
-    check('adding a block un-saves it', byId['confirm'].textContent === 'Confirm');
-    check('and both blocks are there', rows().length === 2);
-  }
-
-  console.log('\na confirmed day comes back on reload');
-  {
-    const { ctx, byId, rows } = boot([], {
-      plan: { date: '2026-07-28', status: 'confirmed', wake_minutes: 9 * 60 },
-      blocks: [
-        { title: 'Reading', entryId: 'e1', start_minutes: 540, duration_minutes: 60 },
-        { title: 'UF application', entryId: 'e2', start_minutes: 600, duration_minutes: 120 },
-      ],
+    const { ctx, slots, chipOf } = boot({
+      plan: {
+        plan: { date: '2026-07-28', status: 'confirmed', wake_minutes: 480 },
+        blocks: [{ title: 'Legacy', entryId: null, start_minutes: 480, duration_minutes: 45 }],
+      },
     });
     await ctx.load();
-
-    check('the blocks came back', rows().length === 2, `${rows().length}`);
-    check('the start hour came back too', byId['wake-time'].textContent === '09:00',
-      byId['wake-time'].textContent);
-    check('laid out from it', rows()[0].text().includes('09:00 – 10:00'), rows()[0].text().trim());
-    check('and the second follows', rows()[1].text().includes('10:00 – 12:00'), rows()[1].text().trim());
-    check('it opens as already confirmed', byId['confirm'].textContent === 'Confirmed',
-      byId['confirm'].textContent);
+    check('it opens on the odd length it was saved with',
+      chipOf(slots()[0]).textContent === '45m', chipOf(slots()[0]).textContent);
+    chipOf(slots()[0]).onclick();
+    check('and one tap lands on the grid', chipOf(slots()[0]).textContent === '1h',
+      chipOf(slots()[0]).textContent);
   }
 
-  console.log('\n+ Block adds a manual one');
+  console.log('\nthe steppers and the keep/remove confirm are gone');
   {
-    const { ctx, byId, rows } = boot();
+    const { ctx, slots, cardOf } = boot();
     await ctx.load();
-    ctx.addBlock({ title: 'A', duration: 60 });
+    ctx.addBlock({ title: 'A' });
+    const card = cardOf(slots()[0]);
+    check('no stepper on a block', !card.children.some((c) => c._class.has('stepper')));
+    check('no keep/remove', !card.children.some((c) => c._class.has('confirming')));
+    check('one chip, and that is the whole control',
+      card.children.filter((c) => c._class.has('dur')).length === 1);
+  }
 
-    // Driven through the real control. The stub prompt() answers 'Typed block'.
-    byId['add-block'].onclick();
+  console.log('\nchanging one duration shifts every block below it');
+  {
+    const { ctx, byId, slots, chipOf } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+    ctx.addBlock({ title: 'C' });
+    check('laid out in sequence', slots()[2].text().includes('09:00 – 09:30'),
+      slots()[2].text().trim());
 
-    check('it was added', rows().length === 2, `${rows().length}`);
-    check('with the title that was typed', rows()[1].text().includes('Typed block'),
-      rows()[1].text().trim());
-    check('it lands after the last block', rows()[1].text().includes('09:00 – 09:30'),
-      rows()[1].text().trim());
-    check('and starts at one step', rows()[1].text().includes('30m'), rows()[1].text().trim());
+    chipOf(slots()[0]).onclick(); // A: 30 -> 60
+    check('the one below moved', slots()[1].text().includes('09:00 – 09:30'),
+      slots()[1].text().trim());
+    check('and the one below that', slots()[2].text().includes('09:30 – 10:00'),
+      slots()[2].text().trim());
+    check('the one above did not', slots()[0].text().includes('08:00 – 09:00'),
+      slots()[0].text().trim());
+    check('the end time followed live', byId['end-time'].textContent === '10:00',
+      byId['end-time'].textContent);
+  }
+
+  console.log('\nswipe left removes, with an undo rather than a confirm');
+  {
+    const { ctx, byId, slots, cardOf, backingOf } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+
+    const card = cardOf(slots()[0]);
+    down(card, 200, 100);
+    move(card, 180, 100);
+    check('the card follows the finger', card.style.transform === 'translateX(-20px)',
+      card.style.transform);
+    check('and reveals the miss colour behind it', backingOf(slots()[0])._class.has('left'));
+    check('saying what it will do', backingOf(slots()[0]).textContent === 'Remove',
+      backingOf(slots()[0]).textContent);
+    check('fading in with the travel',
+      Number(backingOf(slots()[0]).style.opacity) > 0 &&
+        Number(backingOf(slots()[0]).style.opacity) < 1,
+      backingOf(slots()[0]).style.opacity);
+
+    move(card, 110, 100); // -90, past the 72 threshold
+    up(card, 110, 100);
+
+    check('it is gone', slots().length === 1, `${slots().length}`);
+    check('and the one below moved up', slots()[0].text().includes('A') === false &&
+      slots()[0].text().includes('B'), slots()[0].text().trim());
+    check('no confirm was asked for', true);
+
+    const bar = byId['undo-host'].children[0];
+    check('an undo is offered', Boolean(bar) && bar._class.has('undo'));
+    check('and it says what happened', bar.text().includes('Removed'), bar.text().trim());
+
+    bar.children.find((c) => c.tagName === 'button').onclick();
+    check('undo puts it back', slots().length === 2, `${slots().length}`);
+    check('in the place it came from', slots()[0].text().includes('A'), slots()[0].text().trim());
+    check('and the bar goes', byId['undo-host'].children.length === 0);
+  }
+
+  console.log('\nswipe right inserts a buffer after it');
+  {
+    const { ctx, slots, cardOf, backingOf } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+
+    const card = cardOf(slots()[0]);
+    down(card, 100, 100);
+    move(card, 130, 100);
+    check('the backing is neutral, not the miss colour',
+      backingOf(slots()[0])._class.has('right') && !backingOf(slots()[0])._class.has('left'));
+    check('and says what it will do', backingOf(slots()[0]).textContent === '+ Buffer',
+      backingOf(slots()[0]).textContent);
+
+    move(card, 180, 100); // +80
+    up(card, 180, 100);
+
+    check('three blocks now', slots().length === 3, `${slots().length}`);
+    check('the buffer is immediately after', slots()[1].text().includes('Buffer'),
+      slots()[1].text().trim());
+    check('it is half an hour', slots()[1].text().includes('30m'), slots()[1].text().trim());
+    check('and everything below shifted', slots()[2].text().includes('09:00 – 09:30'),
+      slots()[2].text().trim());
+  }
+
+  console.log('\na swipe short of the threshold does nothing');
+  {
+    const { ctx, slots, cardOf } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+
+    const card = cardOf(slots()[0]);
+    down(card, 200, 100);
+    move(card, 150, 100); // -50, short of 72
+    up(card, 150, 100);
+    check('the block survives', slots().length === 1, `${slots().length}`);
+    check('and settles back', card.style.transform === '', card.style.transform);
+
+    down(card, 200, 100);
+    move(card, 250, 100); // +50
+    up(card, 250, 100);
+    check('no buffer either', slots().length === 1, `${slots().length}`);
+  }
+
+  console.log('\nvertical movement is the page scrolling, never a gesture');
+  {
+    const { ctx, slots, cardOf } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+
+    const card = cardOf(slots()[0]);
+    down(card, 200, 100);
+    move(card, 205, 190); // mostly vertical, and far
+    check('the card did not move with it', !card.style.transform, card.style.transform);
+    check('nothing was picked up', !card._class.has('lifted'));
+
+    move(card, 120, 190); // now drag hard sideways in the same pointer
+    check('and it cannot become a swipe afterwards', !card.style.transform, card.style.transform);
+    up(card, 120, 190);
+    check('nothing was removed', slots().length === 2, `${slots().length}`);
+  }
+
+  console.log('\npress and hold picks a block up');
+  {
+    const { ctx, slots, cardOf } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+    ctx.addBlock({ title: 'C' });
+
+    const card = cardOf(slots()[0]);
+    down(card, 100, 100);
+    check('not yet', !card._class.has('lifted'));
+
+    await wait(HELD);
+    check('it lifts', card._class.has('lifted'));
+    check('the slot lifts with it', slots()[0]._class.has('lifted'));
+    check('and it grows', /scale\(1\.03\)/.test(card.style.transform), card.style.transform);
+    check('the others step back', slots()[1]._class.has('dimmed') && slots()[2]._class.has('dimmed'));
+    check('but the held one does not', !slots()[0]._class.has('dimmed'));
+
+    up(card, 100, 100);
+    await wait(SETTLED);
+    check('dropping it where it was changes nothing', slots()[0].text().includes('A'),
+      slots()[0].text().trim());
+    check('and puts everything back', !slots()[1]._class.has('dimmed'));
+  }
+
+  console.log('\nheld, then dragged to a new place');
+  {
+    const { ctx, slots, cardOf } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+    ctx.addBlock({ title: 'C' });
+
+    const card = cardOf(slots()[0]);
+    down(card, 100, 100);
+    await wait(HELD);
+
+    move(card, 100, 100 + SLOT * 2); // down two places
+    check('the blocks it passes part to show the gap',
+      slots()[1].style.transform === `translateY(-${SLOT}px)` &&
+        slots()[2].style.transform === `translateY(-${SLOT}px)`,
+      `${slots()[1].style.transform} / ${slots()[2].style.transform}`);
+
+    up(card, 100, 100 + SLOT * 2);
+    await wait(SETTLED);
+
+    check('it landed last', slots().map((s) => s.text()).join('|').indexOf('A') >
+      slots().map((s) => s.text()).join('|').indexOf('C'));
+    check('the order is B C A',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'B C A',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
+    check('and the times were recomputed from the top',
+      slots()[0].text().includes('08:00 – 08:30'), slots()[0].text().trim());
+    check('every transform was cleared', slots().every((s) => !s.style.transform));
+  }
+
+  console.log('\ndragging up, and off the ends');
+  {
+    const { ctx, slots, cardOf } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+    ctx.addBlock({ title: 'C' });
+
+    const card = cardOf(slots()[2]);
+    down(card, 100, 300);
+    await wait(HELD);
+    move(card, 100, 300 - SLOT * 9); // far past the top
+    up(card, 100, 300 - SLOT * 9);
+    await wait(SETTLED);
+
+    check('it clamps to first rather than falling off',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'C A B',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
+  }
+
+  console.log('\ngesture arbitration');
+  {
+    const { ctx, slots, cardOf, chipOf } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+
+    // A hold that began on the chip is a pick-up, not a tap.
+    const card = cardOf(slots()[0]);
+    const chip = chipOf(slots()[0]);
+    const before = chip.textContent;
+
+    down(card, 100, 100);
+    await wait(HELD);
+    check('a hold on the chip still lifts the block', card._class.has('lifted'));
+    up(card, 100, 100);
+    chip.onclick(); // the click a real tap would fire on the way out
+    await wait(SETTLED);
+    check('and the duration was not cycled by it',
+      chipOf(slots()[0]).textContent === before,
+      `${before} -> ${chipOf(slots()[0]).textContent}`);
+
+    // A committed swipe must not also cycle the duration.
+    const c2 = cardOf(slots()[0]);
+    const chip2 = chipOf(slots()[0]);
+    down(c2, 200, 100);
+    move(c2, 100, 100);
+    up(c2, 100, 100);
+    chip2.onclick();
+    check('a swipe does not also cycle a duration', slots().length === 1, `${slots().length}`);
+  }
+
+  console.log('\nreduced motion keeps the reorder and drops the movement');
+  {
+    const { ctx, slots, cardOf } = boot({ reduced: true });
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+
+    const card = cardOf(slots()[0]);
+    down(card, 100, 100);
+    await wait(HELD);
+
+    check('it is still visibly held', card._class.has('lifted'));
+    check('the others still step back', slots()[1]._class.has('dimmed'));
+    check('but it does not grow', !/scale/.test(card.style.transform || ''),
+      card.style.transform);
+    check('and nothing is given a transition',
+      slots().every((s) => !s.style.transition), 'a transition was set');
+
+    move(card, 100, 100 + SLOT);
+    up(card, 100, 100 + SLOT);
+    // No settle to wait for: reduced motion commits immediately.
+    check('the reorder still happened',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'B A',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
+  }
+
+  console.log('\nthe rest of the builder still holds');
+  {
+    const { ctx, byId, slots } = boot();
+    await ctx.load();
+    check('nothing to confirm on an empty day', byId['confirm'].disabled === true);
+    check('and the end time says nothing', byId['end-time'].textContent === '—');
+
+    ctx.addBlock({ title: 'A' });
+    check('a block enables it', byId['confirm'].disabled === false);
+    ctx.setSaved(true);
+    check('once saved it reads Confirmed', byId['confirm'].textContent === 'Confirmed');
+    ctx.addBlock({ title: 'B' });
+    check('adding a block un-saves it', byId['confirm'].textContent === 'Confirm');
+
+    for (let i = 0; i < 16; i++) ctx.addBlock({ title: `x${i}`, duration: 60 });
+    check('past midnight is spelled out', /next day/.test(byId['end-time'].textContent),
+      byId['end-time'].textContent);
+    check('and flagged late', byId.ends._class.has('late'));
+    check('the blocks are all there', slots().length === 18, `${slots().length}`);
+  }
+
+  console.log('\nthe start control is untouched');
+  {
+    const { ctx, byId, slots } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    check('still a stepper', byId['wake-time'].textContent === '08:00');
+    byId['wake-plus'].onclick();
+    check('one step is half an hour', byId['wake-time'].textContent === '08:30');
+    check('and the day moved with it', slots()[0].text().includes('08:30 – 09:00'),
+      slots()[0].text().trim());
+    for (let i = 0; i < 40; i++) byId['wake-minus'].onclick();
+    check('still clamped at 04:00', byId['wake-time'].textContent === '04:00');
   }
 
   console.log(bad === 0 ? '\nBuilder clean' : `\n${bad} FAILURE(S)`);

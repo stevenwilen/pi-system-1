@@ -295,34 +295,70 @@ endpoint and no `placed:` rows.
 #### The builder
 
 - **Starts** — an inline control, 30-minute steppers, clamped to 04:00–12:00.
+  This is the one stepper left on the screen.
 - **Blocks flow in sequence.** A block begins when the one above it ends, and
   that is the whole rule. Changing one duration shifts everything below it.
-- 30-minute duration steppers on every block. The floor is one step; below that
-  it has stopped being a block, and removing it is what the person means.
-- **+ Block** adds a manual or buffer block.
+- **+ Block** adds a manual block.
 - **Day ends** is live, and reads `HH:MM next day` in the miss colour past
   midnight.
 - **Confirm** saves the plan. Any edit afterwards un-saves it.
 
-#### Removing a block
+#### A block is worked by gesture
 
-**Minus, carried past the floor.** Shrinking a block to nothing and removing it
-are the same intention, so they are the same control — and the stepper already
-owns that edge of the card, which is why a block gets no `···` the way a row in
-Things does.
+A block is the only thing on this page you handle rather than press. It carries
+no `···` the way a row in Things does; the card itself is the target.
 
-At 30 minutes minus stays live rather than going dead. Pressing it there does
-not remove anything: it replaces the stepper with **Keep · Remove**.
+**Tap the duration.** The chip on the right shows the length and is the control:
+each tap adds half an hour, `30m → 1h → 1h 30m → … → 4h`, and at four hours it
+wraps back to thirty minutes. It wraps because nothing shortens a block, so
+every length is at most seven taps away and none is a dead end. New blocks start
+at thirty minutes. A length saved off the grid by an older build is floored onto
+it by the first tap rather than cycling `45 → 75 → 105` for ever.
 
-**Keep sits where minus was.** That order is the whole safety of it. The press
-that opens the question is a press on the left of the stepper, and a second fast
-press lands in the same place, so the left position has to be the harmless one.
-Remove where minus was would make a double-tap delete a block silently, which is
-exactly what the confirm exists to stop.
+The chip is blue, because blue is what you can act on, and it is a real
+`<button>` so a keyboard reaches it. The tap is handled on `click` rather than
+on pointer release for exactly that reason.
 
-Only one block can be asking at a time, and any other edit — adding a block,
-changing a duration, moving the start — drops the pending question. A Remove
-button must never end up pointing at a block that has since moved.
+**Swipe left to remove.** The card follows the finger and uncovers the miss
+colour with *Remove* at the edge it is exposing. It commits on release, with no
+confirmation, and offers **Removed · Undo** for six seconds. That is a better
+trade than a confirm: a confirm interrupts every removal to catch the rare wrong
+one, and the undo interrupts none of them and still catches it.
+
+**Swipe right to insert a buffer.** A thirty-minute block titled *Buffer* lands
+immediately after, and everything below shifts. The backing is neutral, not the
+miss colour — adding a gap is not a warning, and the miss colour there would say
+it was.
+
+Both swipes need real travel before they commit, far enough that a hand doing
+something else cannot reach it by accident.
+
+**Press and hold to reorder.** No drag handle: 400ms anywhere on the block,
+including on the duration chip. It vibrates if the device can, then lifts —
+larger, lighter, shadowed, with every other block stepped back — so there is no
+question which one is in your hand. Drag vertically and the others part to show
+the gap it will drop into. Release settles it into place over 180ms rather than
+snapping.
+
+#### Which gesture wins
+
+Four things share one finger, so which is happening is decided once, early, and
+then held to. Nothing re-decides mid-gesture and only one gesture runs at a time.
+
+| | |
+|---|---|
+| tap the duration | cycle it |
+| tap anywhere else | nothing. A block is not a button |
+| hold 400ms | pick it up. **Beats the tap** |
+| move horizontally past the threshold | swipe |
+| move vertically | the page scrolls, and the block takes no further part |
+
+`touch-action: pan-y` on the card does the hardest part of this, and it is CSS
+rather than script: the browser keeps vertical panning for itself and hands
+horizontal movement over, so **a scroll can never become a swipe** regardless of
+what the script does. Movement past the threshold cancels the hold timer, and a
+gesture that commits swallows the click that follows it — otherwise a swipe
+begun on the chip would also lengthen the block on its way out.
 
 Re-confirming replaces the day rather than appending to it. The builder holds the
 whole plan, so what it sends is the plan, and merging two versions of the same
@@ -574,6 +610,17 @@ The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
 - **The calendar aside is a left rule with indented text**, in neutral warm grey.
   Reference material: not a card, not blue, not a warning.
 - **Tabular figures on every time.**
+
+### Motion
+
+`prefers-reduced-motion: reduce` keeps every gesture working and drops the
+movement. A held block still lightens, still raises its tone and still steps the
+others back — those say *this one is in your hand*, which is information rather
+than decoration. What goes is the growing, the shadow, the parting transitions
+and the 180ms settle; the reorder commits the instant you let go.
+
+The preference is read at the moment it is needed rather than cached at load, so
+changing it in the OS takes effect without a reload.
 
 ---
 

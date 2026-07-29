@@ -49,6 +49,11 @@
         --accent: #6e8cb8;
         --warn: #c4694a;
 
+        /* A card held above the page. Not a new hue — the card tone lifted a
+           step, so a block in your hand reads as raised rather than as a
+           different kind of thing. */
+        --card-raised: #2a2620;
+
         /* The calendar aside. Neutral warm grey: it is reference material,
            so it must read as neither actionable nor wrong. */
         --cal-rule: #4a423a;
@@ -333,17 +338,60 @@
       }
 
       /* --- blocks ARE cards ------------------------------------------------ */
-      /* Because they are objects you manipulate. Nothing else here is. */
+      /* Because they are objects you manipulate — and a block is the only thing
+         on this page you manipulate with a gesture rather than a button. Tap
+         its duration to lengthen it, swipe it away or swipe a buffer in after
+         it, hold it to pick it up and move it. */
+
+      /* The slot holds the card and the backing the card slides off to reveal.
+         Overflow is clipped here so a backing cannot bleed past the corner
+         radius while the card is mid-swipe. */
+      .slot {
+        position: relative;
+        margin-bottom: 9px;
+        border-radius: 11px;
+        overflow: hidden;
+      }
+
+      .backing {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        padding: 0 18px;
+        font-size: 13px;
+        opacity: 0;
+      }
+      /* Left removes, so the backing is the miss colour and its label sits at
+         the right — the edge the card is uncovering as it goes. */
+      .backing.left {
+        background: var(--warn);
+        color: var(--bg);
+        justify-content: flex-end;
+      }
+      /* Right adds thirty minutes of nothing. Neutral: adding a gap is not a
+         warning, and the miss colour here would say it was. */
+      .backing.right {
+        background: var(--line);
+        color: var(--text);
+        justify-content: flex-start;
+      }
 
       .block {
+        position: relative;
         background: var(--card);
         border-radius: 11px;
         padding: 14px 15px;
-        margin-bottom: 9px;
         display: flex;
         justify-content: space-between;
         align-items: center;
         gap: 12px;
+        /* Vertical pans belong to the page, horizontal ones are ours. This one
+           line is what lets a swipe and a scroll live on the same element
+           without arbitrating between them in script. */
+        touch-action: pan-y;
+        user-select: none;
+        -webkit-user-select: none;
       }
       .block .t {
         font-size: 15px;
@@ -354,37 +402,65 @@
         margin-top: 4px;
         font-variant-numeric: tabular-nums;
       }
-      .dur {
-        font-size: 13px;
-        color: var(--muted);
-        font-variant-numeric: tabular-nums;
-        min-width: 40px;
-        text-align: center;
+
+      /* Picked up. Bigger, lighter, casting a shadow: it has to be obvious
+         that this one is in your hand and the rest are not. */
+      .slot.lifted {
+        overflow: visible;
+        z-index: 3;
+      }
+      .block.lifted {
+        background: var(--card-raised);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+      }
+      .slot.dimmed {
+        opacity: 0.55;
       }
 
-      /* The removal confirm, in place of the stepper.
-         Keep sits where minus was. A block is removed by pressing minus at the
-         30-minute floor, so the press that opens this is a press on the left
-         of the stepper — and the next one, if the person is going fast, lands
-         in the same place. That place has to be the harmless one. */
-      .confirming {
+      /* The duration is now the control, not a readout, so it looks pressable
+         and it is blue — the same rule as everywhere else, blue is the thing
+         you can act on. It replaced a pair of steppers that were blue for
+         exactly that reason. */
+      .dur {
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+        color: var(--accent);
+        background: none;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 8px 15px;
+        min-width: 66px;
+        text-align: center;
+        font-family: inherit;
+        cursor: pointer;
+        touch-action: pan-y;
+      }
+
+      /* The safety net for a swipe, which commits with no confirm. */
+      .undo {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(20px + env(safe-area-inset-bottom));
         display: flex;
         align-items: center;
-        gap: 18px;
-      }
-      .confirming button {
+        gap: 14px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        padding: 11px 16px;
         font-size: 13px;
+        color: var(--muted);
+        z-index: 20;
+      }
+      .undo button {
         background: none;
         border: 0;
+        padding: 0;
         font-family: inherit;
-        padding: 2px 0;
+        font-size: 13px;
+        color: var(--accent);
         cursor: pointer;
-      }
-      .confirming .keep {
-        color: var(--muted);
-      }
-      .confirming .remove {
-        color: var(--warn);
       }
 
       .addblock {
@@ -551,6 +627,20 @@
         color: var(--warn);
         margin-top: 14px;
       }
+
+      /* Reorder stays fully functional here — only the motion goes. The card
+         still lightens and the others still step back, because those say
+         "this one is in your hand" and that is information, not decoration.
+         What goes is the growing, the shadow and every transition. */
+      @media (prefers-reduced-motion: reduce) {
+        .slot,
+        .block {
+          transition: none !important;
+        }
+        .block.lifted {
+          box-shadow: none;
+        }
+      }
     </style>
   </head>
 
@@ -604,6 +694,11 @@
       </section>
     </main>
 
+    <!-- Where the "Removed · Undo" bar lives. A fixed element needs somewhere
+         to be appended, and appending to <body> would be the one place the
+         script reaches outside an id it declared. -->
+    <div id="undo-host"></div>
+
     <!-- the add sheet ------------------------------------------------------- -->
     <div class="scrim hidden" id="add-scrim">
       <div class="sheet">
@@ -653,6 +748,37 @@
       // The step everything moves in. Half an hour is the smallest unit this
       // system expresses: block durations, the start time, all of it.
       const STEP = 30;
+
+      // The longest a block can be. Four hours is already a long stretch to
+      // hold, and it is the ceiling the duration cycles back from.
+      const MAX_DURATION = 4 * 60;
+
+      // How long a press has to be still before the block comes up.
+      const HOLD_MS = 400;
+
+      // Movement before a gesture is decided. Below this nothing has been
+      // asked for yet, and a finger resting on a card never travels zero.
+      const SLOP = 8;
+
+      // How far a swipe has to go to mean it. Deliberately most of a thumb's
+      // travel: this commits with no confirmation, so it must not be reachable
+      // by a hand that was doing something else.
+      const SWIPE_COMMIT = 72;
+
+      // How long the undo stays up.
+      const UNDO_MS = 6000;
+
+      // Settling a swipe back, and dropping a reorder.
+      const SETTLE_MS = 180;
+
+      const BUFFER_TITLE = 'Buffer';
+
+      // Read each time rather than cached, so changing it in the OS takes
+      // effect without a reload. Guarded because the suite runs this script in
+      // a VM with no matchMedia.
+      const reduceMotion = () =>
+        typeof matchMedia === 'function' &&
+        matchMedia('(prefers-reduced-motion: reduce)').matches;
 
       // The hours a person actually gets up. Outside these the stepper would
       // be being flexible rather than helpful.
@@ -704,11 +830,6 @@
       let wake = 8 * 60;
       let planDate = null;
       let saved = false;
-
-      // Index of the block asking whether it should be removed, or null. Only
-      // ever one: arming a second question cancels the first, so there is
-      // never more than one pending destructive answer on screen.
-      let removing = null;
 
       // Test seam: a suite needs to put the page into the state a saved day
       // leaves it in without driving a real confirm through the network.
@@ -978,7 +1099,7 @@
             acts.classList.add('hidden');
             return;
           }
-          addBlock({ title: item.title, entryId: item.id, duration: 60 });
+          addBlock({ title: item.title, entryId: item.id });
         };
 
         return row;
@@ -1056,7 +1177,6 @@
           entryId: b.entryId,
           duration: b.duration_minutes,
         }));
-        removing = null;
         saved = data.plan.status === 'confirmed';
         renderWake();
         renderBuilder();
@@ -1079,19 +1199,17 @@
         return cursor;
       }
 
-      // Any other action answers the pending question by dropping it. A
-      // confirm left standing while the day is edited around it would be a
-      // Remove button pointing at a block that has since moved.
-      function addBlock({ title, entryId = null, duration = 60 }) {
+      // Every new block starts at one step. It grows by tapping its duration,
+      // which is one press per half hour and no presses at all for the common
+      // case of a short thing.
+      function addBlock({ title, entryId = null, duration = STEP }) {
         blocks.push({ title, entryId, duration });
-        removing = null;
         saved = false;
         renderBuilder();
       }
 
       function setWake(mins) {
         wake = mins;
-        removing = null;
         renderWake();
         renderBuilder();
       }
@@ -1134,17 +1252,122 @@
         renderConfirm();
       }
 
+      // --- what a block can be told to do -------------------------------------
+
       /**
-       * A block: the one kind of object on this page you manipulate, so a card.
+       * 30m → 1h → … → 4h → 30m.
        *
-       * Removal is the minus stepper carried past its floor. Shrinking a block
-       * to nothing and removing it are the same intention, so they are the same
-       * control — and the stepper already owns this edge of the card, which is
-       * why a block gets no `···` the way a row in Things does.
+       * It wraps because there is nothing else to shorten with. A block only
+       * grows, and at the ceiling the next press takes it back to the floor —
+       * so every length is at most seven presses away and none is a dead end.
        *
-       * It used to be a long press, with nothing to suggest it.
+       * Floored onto the step first, so a day saved when the grid was
+       * fifteen minutes comes back onto it rather than cycling 45, 75, 105 for
+       * ever.
        */
+      function nextDuration(d) {
+        const next = Math.floor(d / STEP) * STEP + STEP;
+        return next > MAX_DURATION ? STEP : next;
+      }
+
+      /** Where a block dragged `dy` from `from` would land. */
+      function targetIndex(from, dy, step, count) {
+        const moved = Math.round(dy / step);
+        return Math.max(0, Math.min(count - 1, from + moved));
+      }
+
+      function cycleDuration(i) {
+        if (!blocks[i]) return;
+        blocks[i].duration = nextDuration(blocks[i].duration);
+        saved = false;
+        renderBuilder();
+      }
+
+      function insertBuffer(i) {
+        blocks.splice(i + 1, 0, { title: BUFFER_TITLE, entryId: null, duration: STEP });
+        saved = false;
+        renderBuilder();
+      }
+
+      /**
+       * Removed on release, with no confirm.
+       *
+       * The undo is the safety net, and it is a better one than a confirm: a
+       * confirm interrupts every removal to catch the rare wrong one, and this
+       * interrupts none of them and still catches it.
+       */
+      function removeBlock(i) {
+        const [gone] = blocks.splice(i, 1);
+        if (!gone) return;
+        saved = false;
+        renderBuilder();
+        offerUndo(gone, i);
+      }
+
+      let undo = null;
+
+      function clearUndo() {
+        if (!undo) return;
+        clearTimeout(undo.timer);
+        $('undo-host').replaceChildren();
+        undo = null;
+      }
+
+      function offerUndo(block, index) {
+        clearUndo();
+
+        const bar = document.createElement('div');
+        bar.className = 'undo';
+
+        const label = document.createElement('span');
+        label.textContent = 'Removed ·';
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = 'Undo';
+        button.onclick = () => {
+          // Back where it was, unless the day has since got shorter than that.
+          blocks.splice(Math.min(index, blocks.length), 0, block);
+          saved = false;
+          clearUndo();
+          renderBuilder();
+        };
+
+        bar.append(label, button);
+        $('undo-host').replaceChildren(bar);
+        undo = { timer: setTimeout(clearUndo, UNDO_MS) };
+      }
+
+      // --- one pointer, one gesture -------------------------------------------
+      //
+      // Four things can happen to a block and they share one finger, so the
+      // decision of which is happening is made once, early, and then held to
+      // for the rest of the pointer. Nothing re-decides mid-gesture.
+      //
+      //   tap the duration   cycle it
+      //   tap anywhere else  nothing. A block is not a button
+      //   hold 400ms         pick it up to reorder. Beats the tap
+      //   horizontal past    swipe: left removes, right inserts a buffer
+      //   vertical past      the page scrolls, and this takes no further part
+      //
+      // `touch-action: pan-y` on the card does the hardest part: the browser
+      // keeps vertical scrolling for itself and hands us horizontal movement,
+      // so a scroll can never become a swipe no matter what this code does.
+
+      let gesture = null;
+
+      // A committed gesture ends with a click on whatever was under the finger.
+      // Swallow exactly one, or a swipe that started on the chip would also
+      // lengthen the block on its way out.
+      let swallowClick = false;
+
       function blockCard(b, i) {
+        const slot = document.createElement('div');
+        slot.className = 'slot';
+
+        const backing = document.createElement('div');
+        backing.className = 'backing';
+
         const card = document.createElement('div');
         card.className = 'block';
 
@@ -1157,90 +1380,202 @@
         time.textContent = `${clock(b.start)} – ${clock(b.start + b.duration)}`;
         left.append(t, time);
 
-        card.append(left, i === removing ? confirmRemove(i) : durationStepper(b, i));
-        return card;
-      }
-
-      function durationStepper(b, i) {
-        const stepper = document.createElement('div');
-        stepper.className = 'stepper';
-
-        const minus = document.createElement('button');
-        minus.type = 'button';
-        minus.className = 'step';
-        minus.textContent = '−';
-        minus.setAttribute(
-          'aria-label',
-          b.duration <= STEP ? `Remove ${b.title}` : `Shorten ${b.title}`
-        );
-        minus.onclick = () => {
-          if (b.duration > STEP) {
-            b.duration -= STEP;
-            removing = null;
-            saved = false;
-            return renderBuilder();
-          }
-          // At the floor. One more press is how you say you meant to remove
-          // it, and it only arms the question — nothing is lost yet.
-          removing = i;
-          renderBuilder();
-        };
-
-        const dur = document.createElement('div');
+        const dur = document.createElement('button');
+        dur.type = 'button';
         dur.className = 'dur';
         dur.textContent = span(b.duration);
+        dur.setAttribute('aria-label', `${b.title}: ${span(b.duration)}. Press to lengthen.`);
 
-        const plus = document.createElement('button');
-        plus.type = 'button';
-        plus.className = 'step';
-        plus.textContent = '+';
-        plus.setAttribute('aria-label', `Lengthen ${b.title}`);
-        plus.onclick = () => {
-          b.duration += STEP;
-          removing = null;
-          saved = false;
-          renderBuilder();
+        // The tap lives on click rather than in the pointer handler below, so
+        // the keyboard reaches it too: this is a real button and Enter works.
+        dur.onclick = () => {
+          if (swallowClick) {
+            swallowClick = false;
+            return;
+          }
+          cycleDuration(i);
         };
 
-        stepper.append(minus, dur, plus);
-        return stepper;
+        card.append(left, dur);
+        slot.append(backing, card);
+
+        attach({ slot, card, backing, index: i });
+        return slot;
       }
 
-      /**
-       * Keep, then Remove.
-       *
-       * That order is the whole safety of this. The press that opens this
-       * confirm is a press on the left of the stepper, and a second fast press
-       * lands in the same place — so the left position has to be the harmless
-       * one. Putting Remove there would make a double-tap on minus delete a
-       * block silently, which is exactly what the confirm is here to stop.
-       */
-      function confirmRemove(i) {
-        const box = document.createElement('div');
-        box.className = 'confirming';
+      function attach({ slot, card, backing, index }) {
+        const siblings = () => [...$('builder').children];
 
-        const keep = document.createElement('button');
-        keep.type = 'button';
-        keep.className = 'keep';
-        keep.textContent = 'Keep';
-        keep.onclick = () => {
-          removing = null;
-          renderBuilder();
+        const lift = (on) => {
+          const still = reduceMotion();
+          card.classList.toggle('lifted', on);
+          slot.classList.toggle('lifted', on);
+          if (on && !still) card.style.transform = 'scale(1.03)';
+
+          for (const other of siblings()) {
+            if (other === slot) continue;
+            other.classList.toggle('dimmed', on);
+            other.style.transition = on && !still ? `transform ${SETTLE_MS}ms ease-out` : '';
+            if (!on) other.style.transform = '';
+          }
         };
 
-        const remove = document.createElement('button');
-        remove.type = 'button';
-        remove.className = 'remove';
-        remove.textContent = 'Remove';
-        remove.onclick = () => {
-          blocks.splice(i, 1);
-          removing = null;
-          saved = false;
-          renderBuilder();
+        // The blocks between where it came from and where it is going step out
+        // of the way, so the gap it will drop into is visible before release.
+        const part = (from, to, step) => {
+          siblings().forEach((el, at) => {
+            if (at === from) return;
+            let shift = 0;
+            if (to > from && at > from && at <= to) shift = -step;
+            if (to < from && at >= to && at < from) shift = step;
+            el.style.transform = shift ? `translateY(${shift}px)` : '';
+          });
         };
 
-        box.append(keep, remove);
-        return box;
+        const startReorder = () => {
+          if (!gesture || gesture.mode !== 'pending') return;
+
+          const rect = slot.getBoundingClientRect
+            ? slot.getBoundingClientRect()
+            : { height: 64 };
+
+          gesture.mode = 'reorder';
+          gesture.from = index;
+          gesture.to = index;
+          gesture.step = (rect.height || 64) + 9;
+          swallowClick = true;
+
+          if (card.setPointerCapture) card.setPointerCapture(gesture.id);
+          if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(10);
+          lift(true);
+        };
+
+        card.onpointerdown = (e) => {
+          // One at a time. A second finger is not a second gesture.
+          if (gesture) return;
+          if (e.button !== undefined && e.button !== 0) return;
+
+          gesture = {
+            id: e.pointerId,
+            mode: 'pending',
+            x0: e.clientX,
+            y0: e.clientY,
+            dx: 0,
+            index,
+            card,
+            slot,
+            backing,
+            hold: setTimeout(startReorder, HOLD_MS),
+          };
+        };
+
+        card.onpointermove = (e) => {
+          if (!gesture || gesture.id !== e.pointerId) return;
+
+          const dx = e.clientX - gesture.x0;
+          const dy = e.clientY - gesture.y0;
+
+          if (gesture.mode === 'pending') {
+            if (Math.abs(dx) < SLOP && Math.abs(dy) < SLOP) return;
+
+            // Moved, so this is not a hold.
+            clearTimeout(gesture.hold);
+
+            if (Math.abs(dy) >= Math.abs(dx)) {
+              // Vertical and not held: the page is scrolling. Step out of the
+              // way entirely rather than competing with it.
+              gesture.mode = 'scroll';
+              return;
+            }
+
+            gesture.mode = 'swipe';
+            swallowClick = true;
+            if (card.setPointerCapture) card.setPointerCapture(e.pointerId);
+          }
+
+          if (gesture.mode === 'swipe') {
+            gesture.dx = dx;
+            card.style.transform = `translateX(${dx}px)`;
+            backing.className = `backing ${dx < 0 ? 'left' : 'right'}`;
+            backing.textContent = dx < 0 ? 'Remove' : '+ Buffer';
+            // Fades in with the travel, so the colour arrives before the
+            // commit does and the action is readable before release.
+            backing.style.opacity = String(Math.min(1, Math.abs(dx) / SWIPE_COMMIT));
+            return;
+          }
+
+          if (gesture.mode === 'reorder') {
+            // The page must not scroll under a block being carried. This is
+            // why the hold has to be still: nothing has started scrolling yet,
+            // so there is still something to prevent.
+            if (e.preventDefault) e.preventDefault();
+
+            card.style.transform =
+              `translateY(${dy}px)` + (reduceMotion() ? '' : ' scale(1.03)');
+
+            const to = targetIndex(gesture.from, dy, gesture.step, blocks.length);
+            if (to !== gesture.to) {
+              gesture.to = to;
+              part(gesture.from, to, gesture.step);
+            }
+          }
+        };
+
+        card.onpointerup = (e) => {
+          if (!gesture || gesture.id !== e.pointerId) return;
+          clearTimeout(gesture.hold);
+
+          const { mode, dx, from, to, step } = gesture;
+          gesture = null;
+
+          // A tap. Only the chip does anything with one, and it does it on
+          // click, which has already fired or is about to.
+          if (mode === 'pending' || mode === 'scroll') return;
+
+          if (mode === 'swipe') {
+            if (dx <= -SWIPE_COMMIT) return removeBlock(index);
+            if (dx >= SWIPE_COMMIT) return insertBuffer(index);
+
+            // Short of it. Settle back and leave the day alone.
+            if (!reduceMotion()) card.style.transition = `transform ${SETTLE_MS}ms ease-out`;
+            card.style.transform = '';
+            backing.style.opacity = '0';
+            setTimeout(() => {
+              card.style.transition = '';
+            }, SETTLE_MS);
+            return;
+          }
+
+          if (mode === 'reorder') {
+            const settle = () => {
+              lift(false);
+              if (from !== to) {
+                const [moved] = blocks.splice(from, 1);
+                blocks.splice(to, 0, moved);
+                saved = false;
+              }
+              // A full re-render, which is also what clears every inline
+              // transform this gesture left behind.
+              renderBuilder();
+            };
+
+            if (reduceMotion()) return settle();
+
+            // Ride to the slot it is landing in rather than snapping there.
+            card.style.transition = `transform ${SETTLE_MS}ms ease-out`;
+            card.style.transform = `translateY(${(to - from) * step}px)`;
+            setTimeout(settle, SETTLE_MS);
+          }
+        };
+
+        card.onpointercancel = () => {
+          if (!gesture) return;
+          clearTimeout(gesture.hold);
+          gesture = null;
+          lift(false);
+          card.style.transform = '';
+          backing.style.opacity = '0';
+        };
       }
 
       $('add-block').onclick = () => {

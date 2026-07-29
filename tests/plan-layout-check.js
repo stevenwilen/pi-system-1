@@ -112,10 +112,11 @@ console.log('\n3. rows are rows; only builder blocks are cards');
   check('with a radius', /border-radius/.test(block));
 
   // Nothing else may take the card background. It is the mark of an object
-  // you manipulate, and there is one of those.
+  // you manipulate — plus the disabled Confirm, and the undo bar, which is a
+  // surface floating over the page rather than a row in it.
   const carded = selectorsUsing('var(--card)').filter((s) => !/^:root/.test(s));
   check('nothing else uses the card background',
-    carded.every((s) => /\.block|\.confirm:disabled/.test(s)), carded.join(' | '));
+    carded.every((s) => /\.block|\.confirm:disabled|\.undo/.test(s)), carded.join(' | '));
 }
 
 console.log('\n4. sections are separated by space, not by boxes');
@@ -146,14 +147,18 @@ console.log('\n6. blue is actionable, and nothing else is blue');
 {
   const blue = selectorsUsing('var(--accent)').filter((s) => !/^:root/.test(s));
 
-  // The steppers, Confirm, and the sheet's save button, which is the same
-  // commit in a different place.
-  const allowed = /\.step|\.confirm|\.sheet-actions \.save/;
-  check('blue appears only on steppers and commits',
+  // The start steppers, the duration chip, Undo, Confirm, and the sheet's
+  // save button. Every one of them is a thing a press acts on.
+  const allowed = /\.step|\.dur|\.undo button|\.confirm|\.sheet-actions \.save/;
+  check('blue appears only on the controls that act',
     blue.every((s) => allowed.test(s)), blue.join(' | '));
 
-  check('the stepper buttons are blue', /color: var\(--accent\)/.test(rule('.step')));
+  check('the start steppers are blue', /color: var\(--accent\)/.test(rule('.step')));
+  check('the duration chip is blue, because it is now the control',
+    /color: var\(--accent\)/.test(rule('.dur')));
   check('confirm is blue', /background: var\(--accent\)/.test(rule('.confirm')));
+  check('undo is blue, because undoing is an action',
+    /color: var\(--accent\)/.test(rule('.undo button')));
 
   // The specific traps: the calendar aside and the type chooser both look
   // like places a designer would reach for an accent, and neither is one.
@@ -173,9 +178,16 @@ console.log('\n7. the miss colour is for misses, warnings and destruction only')
   // and warnings", and it is listed rather than assumed so a fourth use has
   // to be argued for here before it can ship.
   const warn = selectorsUsing('var(--warn)').filter((s) => !/^:root/.test(s));
-  const allowed = /\.mark|\.missed|\.ends\.late|\.failed|\.danger|\.problem|\.confirming \.remove/;
+  const allowed = /\.mark|\.missed|\.ends\.late|\.failed|\.danger|\.problem|\.backing\.left/;
   check('used only on marks, misses, failures and destructive actions',
     warn.every((s) => allowed.test(s)), warn.join(' | '));
+
+  // The two swipes must not look alike. Left throws a block away and is the
+  // miss colour; right adds thirty minutes of nothing and is neutral, because
+  // the miss colour there would call an addition a warning.
+  check('the removing swipe is the miss colour', /var\(--warn\)/.test(rule('.backing.left')));
+  check('the buffer swipe is not', !/var\(--warn\)/.test(rule('.backing.right')));
+  check('nor is it blue', !/var\(--accent\)/.test(rule('.backing.right')));
 
   check('the warning mark carries it', /color: var\(--warn\)/.test(rule('.mark')));
   check('a missed block carries it', /color: var\(--warn\)/.test(rule('.missed')));
@@ -237,7 +249,9 @@ console.log('\n11. everything cut is really cut');
     ['the free-text size field', /f-size-text|state_captured|state_days_old/i],
     ['the temperature bar', /temperature|stale-bar|interpolat/i],
     ['cold flags and reasons', /\bcold\b|cold_reason/i],
-    ['reordering', /reorder|sort_order|draggable|ondrag/i],
+    // The Things list's hand-ordering. Not the builder's reorder gesture,
+    // which is a different thing that happens to share the word.
+    ['hand-ordering the list', /sort_order|draggable|ondragstart|\.sortable/i],
     ['pinned blocks', /\bpinned\b/i],
     ['auto-placement', /to_place|\/place\b|autoPlace/i],
   ]) {
@@ -300,32 +314,72 @@ console.log('\n13. a row says it has more actions, rather than hiding them');
   check('the type cannot be changed on an edit', /b\.disabled = editingId !== null/.test(code));
 }
 
-console.log('\n14. a block is removed by the control that shrinks it');
+console.log('\n14. a block is worked by gesture, and the gestures are arbitrated');
 {
-  // No `···` on a block: the stepper already owns that edge of the card, and
-  // shrinking a block to nothing and removing it are the same intention.
-  check('a block carries no hint', !/block[\s\S]{0,600}className = 'hint'/.test(code));
-  check('minus is not disabled at the floor', !/minus\.disabled/.test(code));
-  check('the floor arms the question instead', /removing = i;/.test(code));
-  check('and only the confirm splices', /remove\.onclick[\s\S]{0,120}blocks\.splice/.test(code));
+  // No `···` on a block. The card itself is the target now.
+  check('a block carries no hint', !/block[\s\S]{0,900}className = 'hint'/.test(code));
 
-  // The order is the safety. The press that opens the confirm is on the left
-  // of the stepper, so a fast second press lands there too — and Keep has to
-  // be what is waiting.
-  check('Keep is built before Remove',
-    code.indexOf("keep.textContent = 'Keep'") < code.indexOf("remove.textContent = 'Remove'"));
-  check('and appended in that order', /box\.append\(keep, remove\)/.test(code));
+  console.log('   the duration');
+  check('no steppers on a block', !/durationStepper/.test(code));
+  check('the chip is a real button, so a keyboard reaches it',
+    /dur = document\.createElement\('button'\)/.test(code));
+  check('and the tap is on click, not on pointerup', /dur\.onclick = /.test(code));
+  check('it cycles', /cycleDuration\(i\)/.test(code));
+  check('wrapping at the ceiling', /next > MAX_DURATION \? STEP : next/.test(code));
+  check('which is four hours', /MAX_DURATION = 4 \* 60/.test(code));
+  check('new blocks start at one step', /duration = STEP/.test(code));
 
-  check('an edit elsewhere drops the pending question',
-    (code.match(/removing = null;/g) || []).length >= 5,
-    `${(code.match(/removing = null;/g) || []).length} places`);
+  console.log('   the swipes');
+  check('a real distance is required', /SWIPE_COMMIT = \d\d/.test(code));
+  check('left removes', /dx <= -SWIPE_COMMIT\) return removeBlock/.test(code));
+  check('right inserts a buffer', /dx >= SWIPE_COMMIT\) return insertBuffer/.test(code));
+  check('the buffer lands after, not before', /splice\(i \+ 1, 0, \{ title: BUFFER_TITLE/.test(code));
+  check('the card follows the finger', /translateX\(\$\{dx\}px\)/.test(code));
+  check('and the backing says which it is',
+    /dx < 0 \? 'Remove' : '\+ Buffer'/.test(code));
+  check('removal offers an undo rather than a confirm', /offerUndo\(gone, i\)/.test(code));
+  check('and nothing asks first', !/confirm\(`Remove/.test(code));
 
-  check('no long press left on a block',
-    !/card\.onpointerdown/.test(code));
-  check('and none anywhere else either', !/onpointerdown/.test(code));
+  console.log('   the reorder');
+  check('held, not dragged from a handle', /setTimeout\(startReorder, HOLD_MS\)/.test(code));
+  check('for 400ms', /HOLD_MS = 400/.test(code));
+  check('it lifts', /lift\(true\)/.test(code));
+  check('haptic if there is one', /navigator\.vibrate/.test(code));
+  check('the others part to show the gap', /part\(gesture\.from, to, gesture\.step\)/.test(code));
+  check('and the drop is animated, not snapped',
+    /transform \$\{SETTLE_MS\}ms ease-out/.test(code) && /SETTLE_MS = 180/.test(code));
+
+  console.log('   arbitration');
+  check('one gesture at a time', /if \(gesture\) return;/.test(code));
+  check('a move past the slop decides it', /Math\.abs\(dx\) < SLOP && Math\.abs\(dy\) < SLOP/.test(code));
+  check('vertical is the page scrolling and nothing else',
+    /gesture\.mode = 'scroll';/.test(code));
+  check('and movement cancels the hold', /clearTimeout\(gesture\.hold\)/.test(code));
+  check('a committed gesture swallows its trailing click', /swallowClick = true/.test(code));
+  check('so a swipe cannot also cycle a duration',
+    /if \(swallowClick\) \{[\s\S]{0,60}return;/.test(code));
+
+  // The one line that keeps a scroll from ever becoming a swipe, whatever
+  // the script does.
+  check('the browser keeps vertical panning', /touch-action: pan-y/.test(css));
+  check('on the card', /touch-action: pan-y/.test(rule('.block')));
+  check('and on the chip, so a swipe can start there too',
+    /touch-action: pan-y/.test(rule('.dur')));
 }
 
-console.log('\n15. the shape of the day');
+console.log('\n15. reduced motion keeps the function and drops the movement');
+{
+  check('the preference is read', /prefers-reduced-motion: reduce/.test(code));
+  check('and read live rather than cached', /const reduceMotion = \(\) =>/.test(code));
+  check('there is a stylesheet rule too', /prefers-reduced-motion: reduce/.test(css));
+
+  check('no growing when it is set', /reduceMotion\(\) \? '' : ' scale\(1\.03\)'/.test(code));
+  check('no transitions', /on && !still \? `transform/.test(code));
+  check('the drop commits straight away', /if \(reduceMotion\(\)\) return settle\(\);/.test(code));
+  check('but the reorder still happens', /blocks\.splice\(to, 0, moved\)/.test(code));
+}
+
+console.log('\n16. the shape of the day');
 {
   check('a Starts control', /id="wake-time"/.test(body));
   check('with steppers', /id="wake-minus"/.test(body) && /id="wake-plus"/.test(body));
@@ -341,7 +395,7 @@ console.log('\n15. the shape of the day');
   check('and each starts where the last ended', /cursor \+= b\.duration/.test(code));
 }
 
-console.log('\n16. the mockup still describes the page');
+console.log('\n17. the mockup still describes the page');
 {
   // A reference artifact that no longer matches is worse than none: it is a
   // second answer to "what should this look like", and the wrong one.
@@ -359,7 +413,11 @@ console.log('\n16. the mockup still describes the page');
   for (const [what, klass] of [
     ['the row hint', 'hint'],
     ['the revealed actions', 'rowacts'],
-    ['the removal confirm', 'confirming'],
+    ['the swipe backing', 'backing'],
+    ['the duration chip', 'dur'],
+    ['a lifted block', 'lifted'],
+    ['the dimmed others', 'dimmed'],
+    ['the undo bar', 'undo'],
     ['the calendar aside', 'cal'],
     ['block cards', 'block'],
     ['the add sheet', 'sheet'],
@@ -367,13 +425,20 @@ console.log('\n16. the mockup still describes the page');
     check(`${what} is drawn in the mockup`, new RegExp(`class="[^"]*\\b${klass}\\b`).test(mock), klass);
   }
 
-  check('Keep before Remove there too', mock.indexOf('Keep') < mock.indexOf('Remove'));
-  check('and it shows all three row actions',
+  check('both swipe directions are shown',
+    /backing left/.test(mock) && /backing right/.test(mock));
+  check('and they are not the same colour',
+    /\.backing\.left\{[^}]*--warn/.test(mock.replace(/\s/g, '')) ||
+      /backing\.left\{background:var\(--warn\)/.test(mock.replace(/\s/g, '')));
+  check('it shows all three row actions',
     /Done/.test(mock) && /Edit/.test(mock) && /Delete/.test(mock));
 
-  // What the strip took out must not survive in the reference either.
+  // What was replaced must not survive in the reference either.
   check('no tab bar', !/class="tabs"/.test(mock));
   check('no Money', !/Money/.test(mock));
+  check('no steppers on a block',
+    !/class="block"[\s\S]{0,200}class="stepper"/.test(mock));
+  check('no keep/remove confirm', !/confirming/.test(mock));
   check('and no script, because it is a drawing', !/<script/.test(mock));
 }
 
