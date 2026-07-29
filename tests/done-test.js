@@ -1,11 +1,18 @@
-// Finishing something, and what a miss is worth.
+// Finishing something, and what a block that stayed in the day is worth.
 //
 // Two holes that were the same hole: the system recorded outcomes and then
 // never read them. A completed task stayed on the list forever, and a block
-// that was missed reset the staleness clock exactly as much as one that was
-// done — so something dodged four weeks running read as fresh every Monday.
+// that never happened reset the staleness clock exactly as much as one that
+// did — so something dodged four weeks running read as fresh every Monday.
 //
-// Both are checked against real rows, because the claim is about what the
+// How you say it did not happen has changed. There was a mark for it once;
+// now you take the block out of the day, and staleness reads the blocks that
+// are left. The `completed` filter in staleness.js survives that change and is
+// still pinned below, because the column is still there and still defaults to
+// true — but nothing in the app sets it any more, so these rows write it
+// directly.
+//
+// All of it is checked against real rows, because the claim is about what the
 // database returns and not about what the code looks like.
 const H = require('./harness');
 const U = H.TEST_USER_ID;
@@ -105,40 +112,58 @@ async function cleanup() {
   server = H.spawnServer(PORT);
   if (!(await H.waitFor(BASE))) throw new Error('server never came up');
 
-  console.log('a missed block does not reset the clock');
+  console.log('a block that stayed in the day counts');
   {
-    const doneOne = await entry('habit', 'Gym done');
-    const missedOne = await entry('habit', 'Gym dodged');
-
-    // Same day, same plan, same shape. One difference: whether it happened.
-    await planWith('2031-01-10', [[doneOne, true], [missedOne, false]]);
+    const kept = await entry('habit', 'Gym done');
+    await planWith('2031-01-10', [[kept, true]]);
 
     const seen = await lastScheduled(U);
-    check('doing it counts', seen.get(doneOne) === '2031-01-10', String(seen.get(doneOne)));
-    check('missing it does not', !seen.has(missedOne), String(seen.get(missedOne)));
-
-    // This is the bug in one line: before, both of these were the same date and
-    // the thing nobody did looked exactly as fresh as the thing they did.
-    check('so the two do not read the same', seen.get(doneOne) !== seen.get(missedOne));
+    check('it counts', seen.get(kept) === '2031-01-10', String(seen.get(kept)));
   }
 
-  console.log('\nand the panel counts from when it was last actually done');
+  console.log('\nand the completed filter still holds, though nothing sets it');
   {
+    // Inert in practice: the app never writes false any more. Pinned anyway,
+    // because the column and the filter both survive, and a query that stopped
+    // meaning what it says is the kind of thing that is noticed years later.
+    const flagged = await entry('habit', 'Gym dodged');
+    await planWith('2031-01-11', [[flagged, false]]);
+
+    const seen = await lastScheduled(U);
+    check('a row marked otherwise is excluded', !seen.has(flagged),
+      String(seen.get(flagged)));
+  }
+
+  console.log('\ntaking a block out of the day is what stops it counting');
+  {
+    // The mechanism that replaced the mark, end to end through the real route.
     const dodged = await entry('task', 'Passport');
-    // Planned twice, recently, and skipped both times.
-    await planWith('2031-02-01', [[dodged, false]]);
-    await planWith('2031-02-08', [[dodged, false]]);
+    const DAY = '2031-02-01';
 
-    const list = await get('/entries');
-    const row = list.items.find((i) => i.id === dodged);
-    check('it is still on the list', Boolean(row));
-    check('and counts from when it was added, not when it was planned',
-      row && row.last_scheduled === null, String(row && row.last_scheduled));
+    const planned = await post('/plan', {
+      date: DAY, wake_minutes: 480,
+      blocks: [{ title: 'Passport', entryId: dodged, start_minutes: 540, duration_minutes: 30 }],
+    });
+    check('the day saves', planned.status === 200, JSON.stringify(planned.body));
+    made.plans.push((await H.db.from('plans').select('id')
+      .eq('user_id', U).eq('date', DAY).single()).data.id);
 
-    // Now it actually happens.
-    await planWith('2031-02-15', [[dodged, true]]);
-    const after = (await get('/entries')).items.find((i) => i.id === dodged);
-    check('doing it moves the clock', after.last_scheduled === '2031-02-15', String(after.last_scheduled));
+    const withIt = (await get('/entries')).items.find((i) => i.id === dodged);
+    check('and it counts while the block is in the day',
+      withIt.last_scheduled === DAY, String(withIt.last_scheduled));
+
+    // The day happens, or does not. Confirming without it is the removal.
+    const emptied = await post('/plan', {
+      date: DAY, wake_minutes: 480,
+      blocks: [{ title: 'Something else', start_minutes: 540, duration_minutes: 30 }],
+    });
+    check('re-confirming without it is accepted', emptied.status === 200,
+      JSON.stringify(emptied.body));
+
+    const without = (await get('/entries')).items.find((i) => i.id === dodged);
+    check('it stops counting', without.last_scheduled === null,
+      String(without.last_scheduled));
+    check('and is still on the list, waiting to be planned again', Boolean(without));
   }
 
   console.log('\na task that is done leaves the list');

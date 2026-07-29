@@ -37,7 +37,8 @@
            between them.
          - Blue is actionable. It is on the steppers and on Confirm, and
            nowhere else. Nothing decorative is ever blue.
-         - The miss colour is for misses and warnings, and nothing else. */
+         - The warn colour is for warnings and for destruction, and nothing
+           else. */
       :root {
         --bg: #16130f;
         --card: #211d18;
@@ -235,14 +236,10 @@
         padding: 2px 0 4px;
       }
 
-      /* The optional reason on a missed block. A bare line, no box: it is a
-         note attached to a row, not a field on a form. */
-
       /* The hint that a row has more than one thing you can do to it.
          Faint rather than muted: it sits at the right edge of every row in
          the list, so at muted it would draw a second vertical line of
-         emphasis down the page and compete with the titles. Same weight as
-         "didn't happen?" on a past block, the other right-edge action. */
+         emphasis down the page and compete with the titles. */
       .hint {
         font-size: 13px;
         color: var(--faint);
@@ -379,8 +376,8 @@
         background: var(--warn);
         color: var(--bg);
       }
-      /* Writing a note, or putting a miss back. Neither is a warning, and the
-         miss colour on either would say it was. */
+      /* Writing a note. Not a warning and not a removal, and the warn colour
+         on it would say it was one or the other. */
       .backing.calm {
         background: var(--line);
         color: var(--text);
@@ -471,27 +468,10 @@
         color: #544e46;
       }
 
-      /* The one thing you can still say about a block that has been and gone.
-         Quiet, because the honest default is that it happened. */
-      .askmiss {
-        font-size: 12px;
-        color: var(--faint);
-        background: none;
-        border: 0;
-        padding: 0;
-        font-family: inherit;
-        white-space: nowrap;
-        cursor: pointer;
-      }
-      .askmiss.was {
-        color: var(--warn);
-      }
-
       /* The block you are in, in the slot the duration chip has vacated.
          Muted rather than faint: it is the one block on the page that is
-         happening, so it should not sit in the same register as "didn't
-         happen?" on a block that is over. No border and no background, so
-         nothing about it suggests a press.
+         happening, and faint is the register of a block that is over. No
+         border and no background, so nothing about it suggests a press.
 
          Named .running, not .act: .act is already the "+ Add" affordance in a
          section label, and an unscoped .act here bled onto it. */
@@ -1142,15 +1122,18 @@
        * Take a thing back out of the day.
        *
        * The last of its blocks, so a thing scheduled twice loses one tap at a
-       * time and stays greyed until none are left. A block that has begun
-       * cannot go — it is the day that happened, the server refuses to remove
-       * it, and the row stays as it is rather than pretending otherwise.
+       * time and stays greyed until none are left.
+       *
+       * Whatever the clock says. A block that had begun used to be exempt,
+       * because the server refused to remove one that had been delivered; it
+       * no longer does, and the row would otherwise be the last place still
+       * enforcing a rule nothing behind it holds.
        *
        * It goes through removeBlock, so it is undoable like any other removal.
        */
       function unschedule(entryId) {
         const at = lastBlockFor(entryId);
-        if (at === -1 || blockBegun(blocks[at])) return;
+        if (at === -1) return;
         removeBlock(at);
       }
 
@@ -1356,17 +1339,18 @@
           // The row's own id, kept so the next confirm can say which block
           // this is. Without it the server has no identity to reconcile
           // against and has to rebuild the day, which loses whether the block
-          // was sent and whether it was missed.
+          // was sent.
           id: b.id || null,
           title: b.title,
           entryId: b.entryId,
           duration: b.duration_minutes,
           note: b.note || null,
-          // Its message has gone out, so the block is part of the day that
-          // happened. It cannot be removed, and the swipe that would do it is
-          // not offered.
-          sent: Boolean(b.sent),
-          missed: Boolean(b.missed),
+          // `sent` is deliberately not kept. The screen used to read it to
+          // decide what to offer on a delivered block, and now decides that
+          // from the clock instead — a block that has begun keeps its hour and
+          // its length whether or not the delivery job has run yet, which is
+          // the stricter of the two and never the wrong way round. The server
+          // still returns it and still enforces its own rule.
           // Where the day says this block is. Only today reads it: a block
           // that has already begun keeps the hour it began at, whatever the
           // blocks above it do afterwards.
@@ -1545,57 +1529,6 @@
 
         bar.append(dot, txt, ln);
         return bar;
-      }
-
-      /**
-       * Yes it happened, or no it did not — asked in place, when it happened.
-       *
-       * This is what the Yesterday section used to be. Asking the next morning
-       * meant asking about a day already gone; asking here means the question
-       * arrives while the answer is still obvious, and the ordinary case is
-       * still no question at all: a block is assumed done unless someone says
-       * otherwise.
-       */
-      function missToggle(b, i) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = b.missed ? 'askmiss was' : 'askmiss';
-        button.textContent = b.missed ? 'missed' : "didn't happen?";
-
-        button.onclick = (e) => {
-          if (e && e.stopPropagation) e.stopPropagation();
-          toggleMissed(i);
-        };
-
-        return button;
-      }
-
-      /**
-       * Yes it happened, or no it did not. Reachable two ways.
-       *
-       * By tapping the question on a block that is over, and by swiping left
-       * on any block that has begun — which is the same gesture that removes
-       * an upcoming one, meaning the other thing, because a block that has
-       * started cannot be removed.
-       */
-      async function toggleMissed(i) {
-        const b = blocks[i];
-        if (!b || !b.id) return; // never saved, so there is no row to mark
-
-        b.missed = !b.missed;
-        renderBuilder();
-
-        try {
-          await fetch(`/blocks/${b.id}/miss`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ missed: b.missed }),
-          });
-        } catch {
-          // The screen already shows the new state. A failed write is
-          // corrected by the next load rather than by an alert in the middle
-          // of a day.
-        }
       }
 
       // --- what a block can be told to do -------------------------------------
@@ -1806,14 +1739,13 @@
         // longer be given is a control that can only mislead, and the server
         // would refuse the change anyway.
         //
-        // What it carries instead depends on whether there is anything to say
-        // yet. Over, and it asks. Still running, and it says so — not a
-        // question, because a block you are in the middle of has not failed to
-        // happen yet and asking would be premature. Unless it has already been
-        // marked missed, in which case it says that instead: "active" over the
-        // top of your own answer would be arguing with you.
-        if (past || (begun && b.missed)) {
-          row.append(left, missToggle(b, i));
+        // Running, and it says "active". Over, and it says nothing at all: it
+        // used to ask "didn't happen?", and there is no longer any such thing
+        // to answer — a block that did not happen is taken out of the day
+        // instead. The outline card and the faint title are what mark it as
+        // done, and they were always doing that work.
+        if (past) {
+          row.append(left);
         } else if (begun) {
           row.append(left, activeLabel());
         } else {
@@ -2011,11 +1943,11 @@
 
           // Which way this block can be swiped at all.
           //
-          // An upcoming block goes both ways: left removes, right writes a
-          // note. A block that has begun goes left only, and left means
-          // something else on it — it cannot be removed, so the same gesture
-          // records that it did not happen. Its note is fixed with the rest of
-          // it, so the rightward swipe does not travel.
+          // Left removes, on every block: that is the one rule and the clock
+          // does not enter into it. Right writes a note, and only on a block
+          // that has not begun — a note says what you are about to do in a
+          // block, so it is fixed once the block starts, along with its length
+          // and its place in the day.
           //
           // Clamped rather than refused on release. Letting the card follow
           // the finger the whole way and then doing nothing would be offering
@@ -2049,9 +1981,9 @@
           if (gesture.mode === 'swipe') {
             gesture.dx = dx;
 
-            // Nowhere to go: a removing swipe on a block that has already gone
-            // out. Nothing moves and no backing is shown, so the action is not
-            // offered rather than offered and then refused.
+            // Nowhere to go: the note swipe on a block that has begun. Nothing
+            // moves and no backing is shown, so the action is not offered
+            // rather than offered and then refused.
             if (!dx) {
               card.style.transform = '';
               backing.style.opacity = '0';
@@ -2060,17 +1992,12 @@
 
             card.style.transform = `translateX(${dx}px)`;
 
-            // The same swipe means three things depending on the block, so the
-            // backing has to say which before the finger comes off.
-            const b = blocks[index];
+            // Two things, and which one is the direction — never the clock.
+            // Left used to mean "didn't happen" on a block that had begun and
+            // "Remove" on one that had not, so the label had to be worked out
+            // from the time before the finger came off. It is one rule now.
             const [side, tone, label] =
-              dx > 0
-                ? ['right', 'calm', 'Note']
-                : !begun
-                  ? ['left', 'hot', 'Remove']
-                  : b && b.missed
-                    ? ['left', 'calm', 'happened']
-                    : ['left', 'hot', "didn't happen"];
+              dx > 0 ? ['right', 'calm', 'Note'] : ['left', 'hot', 'Remove'];
 
             backing.className = `backing ${side} ${tone}`;
             backing.textContent = label;
@@ -2110,10 +2037,9 @@
           if (mode === 'pending' || mode === 'scroll') return;
 
           if (mode === 'swipe') {
-            // Left on a block that has begun is not a removal — it cannot be
-            // removed — so it records that it did not happen, and doing it
-            // again puts it back.
-            if (dx <= -SWIPE_COMMIT) return begun ? toggleMissed(index) : removeBlock(index);
+            // Any block, whatever the clock says. Taking it out of the day is
+            // how you say it did not happen.
+            if (dx <= -SWIPE_COMMIT) return removeBlock(index);
             // Opens whether or not there is one already, so swiping a block
             // that has a note is how you edit it.
             if (dx >= SWIPE_COMMIT) return openNote(index);

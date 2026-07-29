@@ -116,7 +116,6 @@ const SUITES = [
   ['done-test.js', 180],
   ['step1-verify.js', 150],
   ['plan-test.js', 180],
-  ['blocks-test.js', 180],
   ['messages-test.js', 180],
   ['delivery-test.js', 240],
 ];

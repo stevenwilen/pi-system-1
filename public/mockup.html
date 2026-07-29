@@ -54,7 +54,7 @@
 
   /* the hint that a row has more actions. Faint, not muted: it repeats down
      every row, and at muted it draws a second column of emphasis against the
-     titles. Same weight as "didn't happen" above. */
+     titles. */
   .hint{font-size:13px;color:var(--faint);line-height:1;padding:0 2px}
 
   /* revealed by the hint, hidden at rest */
@@ -94,8 +94,8 @@
   .slot{position:relative;border-radius:11px;overflow:hidden;margin-bottom:9px}
   .backing{position:absolute;inset:0;display:flex;align-items:center;
            padding:0 18px;font-size:13px}
-  /* side and colour are separate: left means remove on a block that has not
-     begun, and "didn't happen" on one that has */
+  /* side and colour are separate: left is remove, on any block, and right is
+     the note */
   .backing.left{justify-content:flex-end}
   .backing.right{justify-content:flex-start}
   .backing.hot{background:var(--warn);color:var(--bg)}
@@ -135,8 +135,6 @@
   .past{background:transparent;border:1px solid var(--line)}
   .past .t{color:var(--faint)}
   .past .time{color:#544E46}
-  .askmiss{font-size:12px;color:var(--faint)}
-  .wasmissed{font-size:12px;color:var(--warn)}
   /* the block in progress. muted, not faint: it outranks a block that is over */
   .running{font-size:12px;color:var(--muted);white-space:nowrap}
 
@@ -276,16 +274,15 @@
 
     <!-- no Starts control: the day already started -->
 
-    <!-- what has been. An outline rather than a filled card, and the one thing
-         still worth saying about it in place of a length it no longer needs. -->
+    <!-- what has been. An outline rather than a filled card, and nothing on the
+         right at all: the length is no longer needed and there is nothing left
+         to ask. A block that did not happen is swiped out of the day. -->
     <div class="block past">
       <div><div class="t">Reading</div><div class="time">8:00 AM &ndash; 9:00 AM</div></div>
-      <div class="askmiss">didn't happen?</div>
     </div>
 
     <div class="block past">
       <div><div class="t">Gym</div><div class="time">9:00 AM &ndash; 10:00 AM</div></div>
-      <div class="wasmissed">missed</div>
     </div>
 
     <div class="now"><div class="dot"></div><div class="txt">Next</div><div class="ln"></div></div>
@@ -335,7 +332,7 @@
     <div class="label">Swiping a block</div>
 
     <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:16px">
-      Left throws it away. The card rides the finger and uncovers the miss
+      Left throws it away. The card rides the finger and uncovers the warn
       colour, and the label sits at the edge being uncovered. It commits on
       release with no confirm &mdash; the undo below is the safety net.
     </p>
@@ -349,33 +346,24 @@
     </div>
 
     <p style="font-size:12px;color:var(--muted);line-height:1.6;margin:16px 0">
-      On a block that has already begun, the same swipe means the other thing —
-      it cannot be removed, so it records that it did not happen. Swiping it
-      again puts it back, and the label says so.
+      The same on a block that is over, and on the one you are in. One rule, no
+      exceptions by time: taking a block out of the day IS how you say it did
+      not happen. It used to mean something else here &mdash; a block that had
+      begun could not be removed, so the swipe marked it missed instead, and
+      swiping again put it back.
     </p>
 
     <div class="slot">
-      <div class="backing left hot">didn't happen</div>
+      <div class="backing left hot">Remove</div>
       <div class="block past" style="transform:translateX(-56px)">
         <div class="brow">
           <div><div class="t">Gym</div><div class="time">9:00 AM &ndash; 10:00 AM</div></div>
-          <div class="askmiss">didn't happen?</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="slot">
-      <div class="backing left calm">happened</div>
-      <div class="block past" style="transform:translateX(-56px)">
-        <div class="brow">
-          <div><div class="t">Gym</div><div class="time">9:00 AM &ndash; 10:00 AM</div></div>
-          <div class="wasmissed">missed</div>
         </div>
       </div>
     </div>
 
     <p style="font-size:12px;color:var(--muted);line-height:1.6;margin:16px 0">
-      Right opens a note on it. Neutral, not the miss colour: writing something
+      Right opens a note on it. Neutral, not the warn colour: writing something
       down is not a warning. Not offered on a block that has begun — its note is
       fixed with the rest of it.
     </p>

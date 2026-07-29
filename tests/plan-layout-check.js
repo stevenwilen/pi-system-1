@@ -190,34 +190,27 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   check('the active label is not blue', !/--accent/.test(rule('.running')));
 }
 
-console.log('\n7. the miss colour is for misses, warnings and destruction only');
+console.log('\n7. the warn colour is for warnings and destruction only');
 {
-  // Three jobs, and they are the same job: this is the colour of something
-  // having gone wrong, being about to, or being about to be thrown away. The
-  // destructive-action use (Delete, Remove) is the one extension of "misses
-  // and warnings", and it is listed rather than assumed so a fourth use has
-  // to be argued for here before it can ship.
+  // Two jobs, and they are the same job: this is the colour of something
+  // having gone wrong, or being about to be thrown away. It used to have a
+  // third — a missed block — and that concept is gone entirely.
   const warn = selectorsUsing('var(--warn)').filter((s) => !/^:root/.test(s));
-  const allowed = /\.mark|\.askmiss\.was|\.ends\.late|\.failed|\.danger|\.problem|\.backing\.hot/;
-  check('used only on marks, misses, failures and destructive actions',
+  const allowed = /\.mark|\.ends\.late|\.failed|\.danger|\.problem|\.backing\.hot/;
+  check('used only on marks, failures and destructive actions',
     warn.every((s) => allowed.test(s)), warn.join(' | '));
+  check('and nothing is left claiming a miss', !/askmiss|wasmissed/.test(css));
 
   // The two swipes must not look alike. Left throws a block away and is the
-  // miss colour; right adds thirty minutes of nothing and is neutral, because
-  // the miss colour there would call an addition a warning.
-  // Colour and side are separate now, because left came to mean two things:
-  // removing a block that has not begun, and recording that one which has did
-  // not happen.
-  check('the loud backing is the miss colour', /var\(--warn\)/.test(rule('.backing.hot')));
+  // warn colour; right writes a note and is neutral, because the warn colour
+  // there would call writing something down a warning.
+  check('the loud backing is the warn colour', /var\(--warn\)/.test(rule('.backing.hot')));
   check('the quiet one is not', !/var\(--warn\)/.test(rule('.backing.calm')));
   check('nor is it blue', !/var\(--accent\)/.test(rule('.backing.calm')));
   check('and side carries no colour of its own',
     !/background/.test(rule('.backing.left')) && !/background/.test(rule('.backing.right')));
 
   check('the warning mark carries it', /color: var\(--warn\)/.test(rule('.mark')));
-  check('a missed block carries it', /color: var\(--warn\)/.test(rule('.askmiss.was')));
-  check('and the question that offers it does not',
-    /color: var\(--faint\)/.test(rule('.askmiss')));
   check('an ordinary row does not', !/--warn/.test(rule('.row')));
   check('nor an ordinary meta line', !/--warn/.test(rule('.row .meta')));
   check('nor the block you are in — it is running, not failing',
@@ -226,15 +219,14 @@ console.log('\n7. the miss colour is for misses, warnings and destruction only')
 
 console.log('\n7b. the right edge of a block says one thing per state');
 {
-  // Three states, three things in the same slot, and the whole point is that
-  // no state leaves it empty. A gap there read as a chip that had failed to
-  // render rather than as a chip that was deliberately withheld.
+  // Three states, and only one of them puts anything here now. Upcoming gets
+  // the chip, in progress gets the word, and a block that is over gets
+  // nothing at all — it used to ask "didn't happen?", and there is no such
+  // question any more.
   const act = rule('.running');
   check('the block in progress has a label', act.length > 0);
-  check('it is muted, outranking a block that is over', /color: var\(--muted\)/.test(act));
-  check('and "didn\'t happen?" stays faint below it',
-    /color: var\(--faint\)/.test(rule('.askmiss')));
-  check('it is 12px, like the other two', /font-size: 12px/.test(act));
+  check('it is muted, not faint', /color: var\(--muted\)/.test(act));
+  check('it is 12px, like the chip it replaces', /font-size: 12px/.test(act));
   check('it does not wrap', /white-space: nowrap/.test(act));
 
   // Not a control: no border, no background, nothing to press.
@@ -244,8 +236,8 @@ console.log('\n7b. the right edge of a block says one thing per state');
   check('the word is "active"', /className = 'running';[\s\S]{0,120}textContent = 'active'/.test(code));
   check('a block that has begun gets it',
     /\} else if \(begun\) \{\s*row\.append\(left, activeLabel\(\)\);/.test(code));
-  check('and a block already marked missed does not, because it says missed',
-    /if \(past \|\| \(begun && b\.missed\)\) \{\s*row\.append\(left, missToggle/.test(code));
+  check('and a block that is over gets nothing beside it',
+    /if \(past\) \{\s*row\.append\(left\);/.test(code));
 }
 
 console.log('\n8. the calendar aside is a left rule, not a card');
@@ -384,28 +376,27 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
 
   console.log('   the swipes');
   check('a real distance is required', /SWIPE_COMMIT = \d\d/.test(code));
-  check('left removes a block that has not begun, and marks one that has',
-    /dx <= -SWIPE_COMMIT\) return begun \? toggleMissed\(index\) : removeBlock\(index\)/.test(code));
+  check('left removes a block, whatever the clock says',
+    /dx <= -SWIPE_COMMIT\) return removeBlock\(index\);/.test(code));
+  check('and the time never enters into it',
+    !/toggleMissed/.test(code) && !/begun \?.*removeBlock/.test(code));
   check('right opens a note', /dx >= SWIPE_COMMIT\) return openNote/.test(code));
   check('the card follows the finger', /translateX\(\$\{dx\}px\)/.test(code));
-  // Three meanings on one gesture, so the backing has to name which before
-  // the finger comes off.
-  check('and the backing says which of the three it is',
-    /'Remove'/.test(code) && /didn't happen"/.test(code) &&
-      /'happened'/.test(code) && /'Note'/.test(code));
+  // Two meanings on one gesture, and the direction is which — so the backing
+  // names it before the finger comes off, and there is no third label left.
+  check('the backing names the direction, and only that',
+    /'Remove'/.test(code) && /'Note'/.test(code) &&
+      !/didn't happen"/.test(code) && !/'happened'/.test(code));
   check('removal offers an undo rather than a confirm', /offerUndo\(gone, i\)/.test(code));
   check('and nothing asks first', !/confirm\(`Remove/.test(code));
 
-  // A block whose message has gone out is part of the day that happened. The
-  // swipe that would remove it does not travel at all, rather than travelling
-  // and then being refused on release.
-  // The clamp inverted. It used to stop a delivered block being swiped away;
-  // that swipe now means something else and is allowed, and it is the note
-  // swipe that has nowhere to go on a block already fixed.
-  check('a begun block clamps the note swipe instead',
+  // The clamp survives the simplification, pointing the other way. It used to
+  // stop a delivered block being swiped away; removal is one rule now, and it
+  // is the NOTE swipe that has nowhere to go on a block already under way.
+  check('a begun block clamps the note swipe',
     /begun \? Math\.min\(0, raw\) : raw/.test(code));
   check('and shows no backing when it does', /if \(!dx\) \{/.test(code));
-  check('the sent flag still comes from the server', /sent: Boolean\(b\.sent\)/.test(code));
+  check('the screen no longer keeps the sent flag', !/sent: Boolean\(b\.sent\)/.test(code));
 
   // The buffer insert is gone. Buffer is a title you type into + Block.
   check('nothing inserts a buffer on a swipe', !/insertBuffer/.test(code));
@@ -549,15 +540,21 @@ console.log('\n17. today and tomorrow');
   // shrinking it below the time already elapsed moved it into the past — an
   // action the server refuses on a delivered block anyway.
   check('a block that has begun gets no chip', /\} else if \(begun\) \{/.test(code));
-  check('and one that is over asks instead', /past \|\| \(begun && b\.missed\)/.test(code));
+  check('and one that is over gets nothing at all', /if \(past\) \{\s*row\.append\(left\);/.test(code));
   check('begun is read off the stored start, the same as the reflow',
     /const blockBegun = \(b\) => onToday\(\) && hasBegun\(b, nowMinutes\(\)\)/.test(code));
   check('and there is one definition of it', (code.match(/hasBegun\(/g) || []).length === 2,
     `${(code.match(/hasBegun\(/g) || []).length} uses`);
   check('and a begun block cannot be picked up', /if \(begun\) return;/.test(code));
-  check('it asks instead', /didn't happen\?/.test(code));
-  check('and marking it posts to the miss route', /\/blocks\/\$\{b\.id\}\/miss/.test(code));
-  check('a NOW divider is drawn once', /markedNow = true/.test(code));
+
+  // THE MISS MECHANISM IS GONE, not hidden. Nothing asks whether a block
+  // happened, nothing records that it did not, and there is no route left to
+  // post it to. Taking the block out of the day is the whole of it.
+  check('nothing asks whether it happened', !/didn't happen/.test(code));
+  check('nothing posts a miss', !/\/miss/.test(code));
+  check('and no block carries a missed flag', !/\bmissed\b/.test(code));
+
+  check('a divider is drawn once', /markedNow = true/.test(code));
   check('with a dot and a rule', /className = 'dot'/.test(code) && /className = 'ln'/.test(code));
   check('the Starts control is hidden', /\$\('starts'\)\.classList\.toggle\('hidden', onToday\(\)\)/.test(code));
 
@@ -580,8 +577,13 @@ console.log('\n17. today and tomorrow');
   check('a tap on a greyed row takes it back out', /if \(locked\) return unschedule/.test(code));
   check('the last of its blocks, so twice in a day comes out one at a time',
     /const lastBlockFor = /.test(code));
-  check('and one that has begun does not go at all',
-    /at === -1 \|\| blockBegun\(blocks\[at\]\)\) return/.test(code));
+  // The exception is gone with the server rule that justified it. A block that
+  // had begun used to be exempt because the server refused to remove a
+  // delivered one; it no longer does, and the row would otherwise be the last
+  // place enforcing a rule nothing behind it holds.
+  check('and one that has begun goes too', /at === -1\) return;/.test(code));
+  check('nothing checks the clock on the way out',
+    !/blockBegun\(blocks\[at\]\)/.test(code));
   check('it goes through the ordinary removal, so it is undoable',
     /removeBlock\(at\)/.test(code));
 
@@ -649,9 +651,11 @@ console.log('\n17. the mockup still describes the page');
 
   check('both swipe directions are shown',
     /backing left/.test(mock) && /backing right/.test(mock));
-  check('and all three meanings of the left one',
-    /left hot">Remove/.test(mock) && /left hot">didn't happen/.test(mock) &&
-      /left calm">happened/.test(mock));
+  check('and the left one means one thing',
+    /left hot">Remove/.test(mock) && !/didn't happen<\/div>/.test(mock) &&
+      !/left calm">happened/.test(mock));
+  check('including on a block that is over',
+    /left hot">Remove[\s\S]{0,200}block past/.test(mock));
   check('side and colour are separate there too',
     /\.backing\.hot\{background:var\(--warn\)/.test(mock.replace(/\s/g, '')) &&
       /\.backing\.left\{justify-content:flex-end\}/.test(mock.replace(/\s/g, '')));

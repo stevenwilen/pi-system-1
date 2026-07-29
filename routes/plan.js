@@ -99,7 +99,7 @@ router.get('/plan/:date', async (req, res) => {
 
   const { data: rows, error: blockErr } = await supabase
     .from('blocks')
-    .select('id, title, entry_id, start_time, duration_minutes, note, sort_order, message_sent_at, completed')
+    .select('id, title, entry_id, start_time, duration_minutes, note, sort_order, message_sent_at')
     .eq('plan_id', plan.id)
     .order('sort_order');
 
@@ -124,11 +124,9 @@ router.get('/plan/:date', async (req, res) => {
       duration_minutes: b.duration_minutes,
       note: b.note,
       // Already gone out, so the screen can refuse to offer the things that
-      // would rewrite it.
+      // would rewrite it: a delivered block cannot be moved or resized. It can
+      // still be removed, and its title and note can still be changed.
       sent: Boolean(b.message_sent_at),
-      // A day is assumed to have gone as planned, so this is false only when
-      // someone has said otherwise.
-      missed: b.completed === false,
     })),
   });
 });
@@ -207,22 +205,12 @@ const blockFields = (b, i) => ({
  *
  * This used to delete every block for the date and insert the whole day again.
  * The rows that came back were new rows, so every column the confirm does not
- * set fell to its schema default — and three of those are the day's history:
+ * set fell to its schema default — including `message_sent_at`, which went null
+ * again, putting a block that had already gone out back in the delivery queue
+ * to be re-sent if it had started within the last half hour.
  *
- *   message_sent_at  null again, so a block that had already gone out was
- *                    back in the delivery queue and re-sent if it had started
- *                    within the last half hour
- *   completed        true again, so anything marked "didn't happen" silently
- *                    reverted to done
- *   miss_reason      dropped with it
- *
- * The last two are worse than they look: staleness counts blocks where
- * `completed` is true, so a re-confirm turned a skipped block into evidence of
- * work and reset that entry's clock. That is the exact thing the miss tracking
- * exists to prevent.
- *
- * None of it is carried forward by hand here. The rows are never recreated, so
- * there is nothing to carry: the three columns are simply not in the update.
+ * It is not carried forward by hand here. The rows are never recreated, so
+ * there is nothing to carry: the column is simply not in the update.
  *
  * Identity comes from the client, which was handed each row's id when it
  * loaded the plan. Nothing is matched by title or by time, because reordering
@@ -281,8 +269,10 @@ router.post('/plan', async (req, res) => {
 
       // A block that has already gone out is history. The message named a
       // start time and a length, and both were true when it was sent, so
-      // neither can be edited afterwards. The title and the note still can,
-      // and the review can still mark it missed.
+      // neither can be edited afterwards. The title and the note still can.
+      //
+      // Retiming and resizing only. Removing a delivered block is allowed, and
+      // is handled below.
       const was = known.get(b.id);
       if (
         was.message_sent_at &&
@@ -298,18 +288,15 @@ router.post('/plan', async (req, res) => {
     // Rows the day no longer mentions. Computed here, with the rest of the
     // refusals, so a request that cannot go through has not written anything
     // by the time it is turned away.
+    //
+    // Nothing is refused on this list. A delivered block used to be
+    // unremovable on the grounds that the day that happened is not editable —
+    // which was true while a removed block and a missed block meant different
+    // things. They no longer do: taking a block out IS how you say it did not
+    // happen, and a rule that let you say it about a block whose message had
+    // not gone out but not about one whose had was drawing the line at the
+    // half hour the delivery job last ran.
     const dropped = stored.filter((b) => !claimed.has(b.id));
-
-    for (const b of dropped) {
-      // Same reasoning as retiming, and the stronger case for it: removing a
-      // delivered block destroys the record that the message went out and
-      // whether the block was missed. The day that happened is not editable.
-      if (b.message_sent_at) {
-        return res.status(400).json({
-          error: `"${b.title}" was already sent at ${String(b.start_time).slice(0, 5)} and cannot be removed. A block that has gone out is part of the day that happened.`,
-        });
-      }
-    }
 
     // --- writes ------------------------------------------------------------
 

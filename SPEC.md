@@ -127,14 +127,34 @@ offering to retire something that has not ended.
 
 ### 2.4 A day is assumed to have gone as planned
 
-The review only corrects it. Nothing asks anyone to confirm the ordinary case.
+Nothing asks anyone to confirm the ordinary case. A block sitting in a day that
+has passed is a block that happened, and the only thing that says otherwise is
+taking it out (§2.5).
 
-### 2.5 A missed block does not count as having done the thing
+There was a review once — a screen that asked, the next morning, which of
+yesterday's blocks had happened. Then the question moved onto the blocks
+themselves, asked in place as the day went. Then it went away, because the answer
+was already being given by whether the block was still there.
 
-`blocks.completed` defaults to true and the review sets it false. Staleness
-counts only blocks that were not explicitly marked missed. Counting any block at
-all meant planning something and skipping it reset its clock exactly as much as
-doing it did, so something dodged four weeks running read as fresh every Monday.
+### 2.5 Saying it did not happen is taking it out of the day
+
+There is no separate mark for a miss, and no separate gesture. A block you did
+not do is removed, like any other block you no longer want in the day, and
+staleness counts the blocks that are left.
+
+This replaced a mechanism that recorded the outcome in `blocks.completed` and
+asked about it in place, on each past block, as the day went. It was one concept
+too many: the screen had to explain what a removal meant on a block that had
+already started, and the swipe meant a different thing depending on the clock.
+One rule is smaller than two, and the thing being recorded is the same either
+way.
+
+`blocks.completed` and `blocks.miss_reason` **remain in the database, unused**.
+Nothing writes them, and no column was dropped. `staleness.js` still filters on
+`completed`, which every row now passes because the column still defaults to
+true. The filter is inert and kept on purpose: if anything ever sets that column
+again the query already means the right thing, and removing it would be a second
+change to make later, in the place hardest to notice it was needed.
 
 ### 2.6 Wiping personal rows returns the system to factory state
 
@@ -185,16 +205,14 @@ closes the menu rather than scheduling — tapping away from something you opene
 should undo the opening, not commit to something.
 
 The hint is faint rather than muted. It repeats down the whole list, and at
-muted it would draw a second column of emphasis competing with the titles. It
-is the same weight as *didn't happen?* on a past block, which is the other
-right-edge action on the screen.
+muted it would draw a second column of emphasis competing with the titles.
 
 This was a long press with nothing on screen to suggest it, which meant three
 actions reachable only by already knowing they were there — and one of those
 three, Edit, had no route into it at all: the update endpoint existed and
 nothing on the page ever called it.
 
-Delete is last and is the only one in the miss colour. Between two ordinary
+Delete is last and is the only one in the warn colour. Between two ordinary
 actions it is a misclick waiting to happen.
 
 #### Adding and editing
@@ -265,7 +283,7 @@ size → days needed
 
 slack = days_until_due − days_needed
 
-  slack <= 0    →  !!!    (in the miss colour)
+  slack <= 0    →  !!!    (in the warn colour)
   slack 1–3     →  !!
   slack 4–10    →  !
   slack > 10    →  no mark
@@ -276,7 +294,7 @@ correct: overdue is the most urgent thing the scale can express.
 
 **A mark is static.** It does not decay as work happens, because the system is
 not told when work happens — the only thing it knows is that a block was
-scheduled and not marked missed, which is not the same as progress. A mark that
+scheduled and left in the day, which is not the same as progress. A mark that
 moved on that evidence would be inventing a completion percentage nobody
 reported. It changes when the person changes the date or the size, and when the
 calendar advances. Nothing else moves it.
@@ -319,34 +337,30 @@ Two words, and the difference between them is the whole of this:
 Everything past is begun. What sits between them is the block you are in right
 now.
 
-**A block that has begun is locked.** No duration chip, no note, no reorder, no
-removal. It is the day that happened, or is happening, and the server refuses to
-retime, resize or remove it anyway — so offering any of those was offering
-something that would be rejected on the way out. *Begun* is read off the block's
-**stored** start, the same question the reflow asks when it decides what to hold
-in place.
+**A block that has begun is fixed in place.** No duration chip, no note, no
+reorder. It is the day that happened, or is happening, and the server refuses to
+retime or resize it anyway — so offering any of those was offering something that
+would be rejected on the way out. *Begun* is read off the block's **stored**
+start, the same question the reflow asks when it decides what to hold in place.
+
+**It can still be removed.** That is the one thing on this list that is not
+locked, and it is deliberate: taking a block out is how you say it did not
+happen (§2.5), so a rule that allowed it only before the block started would be
+refusing the statement precisely when there was something to state.
 
 - A **past** block renders as an outline rather than a filled card, with a faint
-  title, and carries **didn't happen?** where the chip would be. One tap marks it
-  missed and it reads **missed** in the miss colour; tapping again undoes it.
-  **This replaces the Yesterday section.** Asking the next morning meant asking
-  about a day already gone; asking in place means the question arrives while the
-  answer is still obvious. The ordinary case is still no question at all — a
-  block is assumed done unless someone says otherwise.
+  title, and carries **nothing** where the chip would be. It used to ask
+  **didn't happen?** there; the outline and the faint title were always what
+  marked it as done, and they still are.
 - A block that has **begun but not ended** is still a card, and says **active**
-  where the chip would be. It is not asked about — it has not failed to happen,
-  it is happening, and the question belongs on a block that is over. But the slot
-  cannot be left empty either: a gap there reads as a chip that failed to render
-  rather than one deliberately withheld.
+  where the chip would be. The slot cannot be left empty on this one: unlike a
+  past block it is a filled card like every other, so a gap there reads as a chip
+  that failed to render rather than one deliberately withheld.
 
   The label is **muted, not the accent colour**, and this is the point worth
   keeping. That slot holds a tappable blue pill on every block above it, so a
   blue word in it invites a press that does nothing. Muted rather than faint
   because this block outranks one that is already over.
-
-  Unless it has already been **marked missed**, in which case it says that
-  instead. One or the other, never both: *active* over the top of the answer you
-  just gave would be arguing with you.
 - A **past** block no longer shows its note. A note says what you are going to do
   in a block, and once the block is over it is not answering that any more. It is
   **hidden, not lost**: the row still holds it, the confirm still sends it, and
@@ -411,7 +425,7 @@ endpoint and no `placed:` rows.
 - **Blocks flow in sequence.** A block begins when the one above it ends, and
   that is the whole rule. Changing one duration shifts everything below it.
 - **+ Block** adds a manual block.
-- **Day ends** is live, and reads `HH:MM next day` in the miss colour past
+- **Day ends** is live, and reads `HH:MM next day` in the warn colour past
   midnight.
 - **Confirm** saves the plan. Any edit afterwards un-saves it.
 
@@ -433,34 +447,34 @@ The chip is blue, because blue is what you can act on, and it is a real
 `<button>` so a keyboard reaches it. The tap is handled on `click` rather than
 on pointer release for exactly that reason.
 
-**Swipe left** means one of two things, decided by whether the block has begun.
+**Swipe left removes.** Any block — upcoming, in progress, or over. One rule, and
+the clock does not enter into it. It commits on release, with no confirmation,
+and offers **Removed · Undo** for six seconds. That is a better trade than a
+confirm: a confirm interrupts every removal to catch the rare wrong one, and the
+undo interrupts none of them and still catches it.
 
-On a block that has **not** begun it **removes**. It commits on release, with no
-confirmation, and offers **Removed · Undo** for six seconds. That is a better
-trade than a confirm: a confirm interrupts every removal to catch the rare wrong
-one, and the undo interrupts none of them and still catches it.
-
-On a block that **has** begun it **marks it missed** — the same gesture meaning
-the other thing, because a begun block cannot be removed. Swiping it again puts
-it back. The **didn't happen?** tap on a past block is unchanged; the swipe is an
-addition, not a replacement.
+It used to mean two things. On a block that had begun it marked it **missed**
+instead, because a begun block could not be removed, and swiping again put it
+back. That is gone with the rest of the miss mechanism (§2.5): removing the block
+IS how you say it did not happen.
 
 **Swipe right to write a note.** A field opens on that block. Not available on a
-block that has begun: its note is fixed with the rest of it.
+block that has begun: a note says what you are about to do in a block, so it is
+fixed once the block starts, along with its length and its place in the day.
 
-The backing has to say which of the three the finger is on before it comes off,
-so **side and colour are separate**:
+The backing says which of the two the finger is on before it comes off, so
+**side and colour are separate**:
 
 | swipe | label | backing |
 |---|---|---|
-| left, not begun | `Remove` | miss colour |
-| left, begun, not yet missed | `didn't happen` | miss colour |
-| left, begun, already missed | `happened` | neutral |
+| left | `Remove` | warn colour |
 | right | `Note` | neutral |
 
-Putting a miss back is not a warning, so it does not get the warning colour. A
+Writing something down is not a warning, so it does not get the warning colour. A
 swipe with nowhere to go does not travel at all — the card stays put and no
-backing appears, rather than following the finger and then doing nothing.
+backing appears, rather than following the finger and then doing nothing. That is
+now the note swipe on a begun block; it used to be the removing swipe on a
+delivered one.
 
 Both swipes need real travel before they commit, far enough that a hand doing
 something else cannot reach it by accident.
@@ -587,39 +601,32 @@ whole request, before anything is written.
 
 **Why it matters.** This used to delete every block for the date and insert the
 whole day again. The rows that came back were new rows, so every column a
-confirm does not set fell to its schema default, and three of those are the
-day's history:
+confirm does not set fell to its schema default — including `message_sent_at`,
+which went null, putting a block that had already gone out back in the delivery
+queue. If it had started within the last 30 minutes it was **sent a second
+time**.
 
-- `message_sent_at` went null, putting a block that had already gone out back
-  in the delivery queue. If it had started within the last 30 minutes it was
-  **sent a second time**.
-- `completed` went true, so anything marked *didn't happen* silently reverted
-  to done.
-- `miss_reason` was dropped with it.
+It is not carried forward by hand. The rows are never recreated, so there is
+nothing to carry: the column is simply not in the update.
 
-The last two are worse than they look: staleness counts blocks where `completed`
-is true, so a re-confirm turned a skipped block into evidence of work and reset
-that entry's clock — the exact thing the miss tracking exists to prevent.
+#### A delivered block cannot be retimed or resized
 
-None of it is carried forward by hand. The rows are never recreated, so there is
-nothing to carry: those three columns are simply not in the update.
+Once `message_sent_at` is set, that block **cannot be moved or resized**. The
+message named a start time and a length, and both were true when it went out.
+Both attempts are refused server-side, naming the block and the time it was sent
+at. Its title and its note can still be edited.
 
-#### A delivered block is history
+**It can be removed.** That refusal existed too, on the grounds that the day
+that happened is not editable — which held while a removed block and a missed
+block meant different things. They no longer do (§2.5), and the rule was drawing
+the line at whichever half hour the delivery job last ran: the same block was
+removable at 08:59 and not at 09:01.
 
-Once `message_sent_at` is set, that block **cannot be moved, resized or
-removed**. The message named a start time and a length and both were true when
-it went out, and removing the row would destroy the record that it went out at
-all and whether the block was missed. Both attempts are refused server-side,
-naming the block and the time it was sent at.
-
-Its title and its note can still be edited, and the review can still mark it
-missed.
-
-The screen does not offer the removal either. `GET /plan/:date` returns a `sent`
-flag per block, and on a block carrying it the removing swipe **does not
-travel**: the card stays put and no backing appears. Letting it follow the
-finger the whole way and then refusing on release would be offering the action
-and taking it back.
+`GET /plan/:date` still returns a `sent` flag per block. **The screen no longer
+reads it.** It decided what to offer on a delivered block from that flag once,
+and now decides from the clock: a block that has begun keeps its hour and its
+length whether or not the job has run yet. That is the stricter of the two and
+never the wrong way round, because delivery happens at the start time.
 
 The gesture decision is still made on the raw movement, not the clamped one —
 a finger dragging left on a delivered block has moved, and reading that as
@@ -753,18 +760,17 @@ npm test       # every suite, sequentially
 
 | | |
 |---|---|
-| `server.js` | serves the page, mounts three routers, starts delivery |
+| `server.js` | serves the page, mounts two routers, starts delivery |
 | `db.js` | the Supabase client |
 | `user.js` | which user this process serves |
 | `clock.js` | dates and clock times as numbers, in the person's own timezone |
-| `staleness.js` | entry → the most recent plan date it was actually done on |
+| `staleness.js` | entry → the most recent plan date it still has a block on |
 | `warning.js` | the mark: size against time left, and nothing else |
 | `messages.js` | what Telegram sends for a block: the header and the note, read off the row |
 | `scheduler.js` | the 15-minute tick: block delivery and the evening nudge |
 | `telegram.js` | the send |
 | `routes/entries.js` | Things: read, add, edit, finish, delete |
 | `routes/plan.js` | the calendar aside, and saving a day |
-| `routes/blocks.js` | marking a block missed |
 | `public/index.html` | the whole app: markup, styles and script in one file |
 | `public/mockup.html` | the layout reference the page is built against |
 | `public/switch.html` | the reference for the Today / Tomorrow switch and past blocks |
@@ -880,7 +886,7 @@ still a 24-hour `time`, and one function on each side decides how a time reads.
 | muted | `#8B8177` |
 | faint | `#6B6459` |
 | accent | `#6E8CB8` |
-| miss | `#C4694A` |
+| warn | `#C4694A` |
 
 The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
 
@@ -909,7 +915,8 @@ The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
   The rule was relaxed to two exceptions when the day switch arrived and is back
   to one: the *in today's plan* badge was the other, and removing it narrowed the
   rule again rather than widening it further.
-- **The miss colour is for misses and warnings**, and nothing else.
+- **The warn colour is for warnings and for destruction**, and nothing else. It
+  had a third job — a missed block — and that concept is gone entirely.
 - **The calendar aside is a left rule with indented text**, in neutral warm grey.
   Reference material: not a card, not blue, not a warning.
 - **Tabular figures on every time.**

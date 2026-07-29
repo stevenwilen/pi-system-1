@@ -235,15 +235,12 @@ const DATE = '2031-03-09';
   {
     // The bug: a re-confirm deleted every block for the date and inserted the
     // whole day again, so every column the confirm does not set fell back to
-    // its schema default. message_sent_at went null and a block that had
-    // already gone out could re-send; completed went true and a block marked
-    // missed reverted to done, which reset that entry's staleness clock.
+    // its schema default. message_sent_at went null, and a block that had
+    // already gone out could be sent a second time.
     const RD = '2031-04-02';
 
-    // From a known state. A run that aborted partway through this section
-    // leaves delivered blocks behind, and the rule below refuses to replace
-    // them — so without this the suite would fail for ever afterwards on a
-    // row it wrote itself.
+    // From a known state, so a run that aborted partway through this section
+    // cannot leave rows behind that the next run reads as its own.
     for (const d of [RD, '2031-04-03']) {
       const { data: old } = await supabase
         .from('plans').select('id').eq('user_id', U).eq('date', d).maybeSingle();
@@ -268,15 +265,15 @@ const DATE = '2031-03-09';
 
     const read = async () => (await supabase
       .from('blocks')
-      .select('id, title, start_time, duration_minutes, note, sort_order, message_sent_at, completed, miss_reason')
+      .select('id, title, start_time, duration_minutes, note, sort_order, message_sent_at')
       .eq('plan_id', rp.id).order('sort_order')).data;
 
     const before = await read();
     const [alpha, beta, gamma] = before;
 
-    // The day has run: Alpha delivered and was missed, Beta delivered.
+    // The day has run: Alpha and Beta both delivered.
     const SENT = '2031-04-02T08:05:00.000Z';
-    await supabase.from('blocks').update({ message_sent_at: SENT, completed: false, miss_reason: 'ran out of time' })
+    await supabase.from('blocks').update({ message_sent_at: SENT })
       .eq('user_id', U).eq('id', alpha.id);
     await supabase.from('blocks').update({ message_sent_at: SENT })
       .eq('user_id', U).eq('id', beta.id);
@@ -300,10 +297,6 @@ const DATE = '2031-03-09';
       after[0].message_sent_at !== null && after[1].message_sent_at !== null,
       `${after[0].message_sent_at} / ${after[1].message_sent_at}`);
     check('so it cannot be sent a second time', after[1].message_sent_at !== null);
-    check('a missed block is still missed', after[0].completed === false,
-      String(after[0].completed));
-    check('with its reason', after[0].miss_reason === 'ran out of time',
-      String(after[0].miss_reason));
     check('and an undelivered one is untouched', after[2].message_sent_at === null);
     check('the ids come back in the order they were sent',
       again.data.ids.join() === before.map((b) => b.id).join(), JSON.stringify(again.data.ids));
@@ -317,8 +310,7 @@ const DATE = '2031-03-09';
     const afterEdit = await read();
     check('the new title landed', afterEdit[0].title === 'Alpha renamed', afterEdit[0].title);
     check('and the new note', afterEdit[0].note === 'rewritten', String(afterEdit[0].note));
-    check('while it is still delivered and still missed',
-      afterEdit[0].message_sent_at !== null && afterEdit[0].completed === false);
+    check('while it is still delivered', afterEdit[0].message_sent_at !== null);
 
     // Alpha and Beta have gone out; only Gamma is still editable and
     // removable, so it is the one the removal cases use.
@@ -331,7 +323,7 @@ const DATE = '2031-03-09';
       !afterDrop.some((b) => b.id === gamma.id) &&
         afterDrop.some((b) => b.id === alpha.id) && afterDrop.some((b) => b.id === beta.id));
     check('the survivors kept their history',
-      afterDrop.find((b) => b.id === alpha.id).completed === false);
+      afterDrop.find((b) => b.id === alpha.id).message_sent_at !== null);
 
     console.log('  adding one');
     const added = await call('/plan', payload([
@@ -375,31 +367,17 @@ const DATE = '2031-03-09';
     check('but an undelivered block moves freely', undeliveredMove.status === 200,
       JSON.stringify(undeliveredMove.data));
 
-    console.log('  nor removed');
+    console.log('  but it CAN be removed');
     {
-      // Leaving a block out of the payload is how it is removed. Removing a
-      // delivered one would destroy the record that the message went out and
-      // whether the block was missed.
-      const removed = await call('/plan', payload([same[1], { ...delta, start_minutes: 660 }]));
-      check('leaving a delivered block out is refused', removed.status === 400, `${removed.status}`);
-      check('and the message says why',
-        /already sent.*cannot be removed/.test(removed.data.error || ''), removed.data.error);
-
-      const survived = await read();
-      check('it is still there', survived.some((b) => b.id === alpha.id), `${survived.length} rows`);
-      check('still delivered', survived.find((b) => b.id === alpha.id).message_sent_at !== null);
-      check('and still missed', survived.find((b) => b.id === alpha.id).completed === false);
-
-      // Both of them at once is refused on the first one it reaches.
-      const bothOut = await call('/plan', payload([{ ...delta, start_minutes: 660 }]));
-      check('removing two delivered blocks is refused as well', bothOut.status === 400,
-        `${bothOut.status}`);
-      check('nothing was written on the way to the refusal', (await read()).length === 3,
-        `${(await read()).length} rows`);
-
-      // Delta never delivered, so it goes without argument.
+      // Retiming and resizing only. Removal used to be refused here too, on
+      // the grounds that the day that happened is not editable — which held
+      // while a removed block and a missed block meant different things. They
+      // no longer do: taking a block out IS how you say it did not happen.
+      //
+      // Delta first, which never went out, so the undelivered path is proved
+      // separately from the delivered one.
       const fine = await call('/plan', payload([same[0], same[1]]));
-      check('an undelivered block still removes cleanly', fine.status === 200,
+      check('an undelivered block removes cleanly', fine.status === 200,
         JSON.stringify(fine.data));
       check('and only it went', (await read()).length === 2, `${(await read()).length}`);
     }
@@ -432,9 +410,25 @@ const DATE = '2031-03-09';
     const untouched = await read();
     check('none of those refusals changed anything',
       untouched.length === 2 &&
-        untouched.find((b) => b.id === alpha.id).completed === false &&
         untouched.find((b) => b.id === alpha.id).message_sent_at !== null,
       `${untouched.length} rows`);
+
+    // Last, because it destroys the row the id cases above were built on: the
+    // delivered block goes too. This is the whole of the simplification —
+    // there is no rule left that removal has to get past.
+    console.log('  a delivered block removes as well');
+    {
+      const goneOut = await call('/plan', payload([same[1]]));
+      check('leaving a delivered block out is accepted', goneOut.status === 200,
+        JSON.stringify(goneOut.data));
+
+      const left = await read();
+      check('and it really went', !left.some((b) => b.id === alpha.id), `${left.length} rows`);
+      check('leaving only the one still named', left.length === 1 && left[0].id === beta.id,
+        JSON.stringify(left.map((b) => b.title)));
+      check('and no error mentions removal any more',
+        !/cannot be removed/.test(JSON.stringify(goneOut.data)), JSON.stringify(goneOut.data));
+    }
 
     // Clean up both dates this section made.
     for (const d of [RD, '2031-04-03']) {

@@ -913,13 +913,13 @@ const SETTLED = 220; // past SETTLE_MS
     check('a past block has no duration chip', !chipIn(slots()[0]));
     check('the upcoming one does', Boolean(chipIn(slots()[2])));
 
-    const askIn = (s) => rowOf(s).children.find((c) => c._class.has('askmiss'));
-    check('a past block asks instead', Boolean(askIn(slots()[0])));
-    check('and it asks quietly', askIn(slots()[0]).textContent === "didn't happen?",
-      askIn(slots()[0]).textContent);
-    check('one already marked reads as missed', askIn(slots()[1]).textContent === 'missed',
-      askIn(slots()[1]).textContent);
-    check('in the warn colour', askIn(slots()[1])._class.has('was'));
+    // And nothing in its place. The chip is withheld because the length can no
+    // longer change; there is no question to put there, because a block that
+    // did not happen comes out of the day instead.
+    check('a past block carries nothing beside its title',
+      rowOf(slots()[0]).children.length === 1, String(rowOf(slots()[0]).children.length));
+    check('nor does the second one', rowOf(slots()[1]).children.length === 1,
+      String(rowOf(slots()[1]).children.length));
 
     const divider = byId.builder.children.filter((c) => c._class.has('now'));
     check('one divider', divider.length === 1, `${divider.length}`);
@@ -936,23 +936,39 @@ const SETTLED = 220; // past SETTLE_MS
       slots()[0].text().includes('8:00 AM – 9:00 AM'), slots()[0].text().trim());
   }
 
-  console.log('\nmarking a past block missed, in place');
+  console.log('\na past block is not asked about, and swipes away like any other');
   {
-    const { ctx, slots, rowOf } = boot({
+    // The whole miss mechanism is gone. There is no question on a past block,
+    // no marked state, and nothing to tap: a block that did not happen comes
+    // out of the day, which is the same gesture as everywhere else.
+    const { ctx, slots, cardOf, rowOf, backingOf, titles } = boot({
       plan: twoDays(), entries: utcEntries({ plans_in: 'morning' }), now: '11:00',
     });
     await ctx.load();
 
-    const ask = () => rowOf(slots()[0]).children.find((c) => c._class.has('askmiss'));
-    check('it starts as a question', ask().textContent === "didn't happen?");
+    check('the past block asks nothing',
+      !rowOf(slots()[0]).children.some((c) => c._class.has('askmiss')));
+    check('and carries nothing at all beside its title',
+      rowOf(slots()[0]).children.length === 1,
+      String(rowOf(slots()[0]).children.length));
 
-    await ask().onclick({ stopPropagation() {} });
-    check('one tap marks it', ask().textContent === 'missed', ask().textContent);
-    check('and it says so in the warn colour', ask()._class.has('was'));
+    // Tapping where the question used to be must not do anything either.
+    const before = titles().join();
+    const card = cardOf(slots()[0]);
+    down(card, 100, 100);
+    up(card, 100, 100);
+    check('a tap on it changes nothing', titles().join() === before, titles().join());
 
-    await ask().onclick({ stopPropagation() {} });
-    check('tapping again undoes it', ask().textContent === "didn't happen?", ask().textContent);
-    check('and drops the colour', !ask()._class.has('was'));
+    down(card, 200, 100);
+    move(card, 150, 100);
+    check('but the swipe says Remove, not "didn\'t happen"',
+      backingOf(slots()[0]).textContent === 'Remove', backingOf(slots()[0]).textContent);
+    check('in the warn colour, like every other removal',
+      backingOf(slots()[0])._class.has('hot'));
+
+    move(card, 100, 100);
+    up(card, 100, 100);
+    check('and it goes', titles().join() === 'Gym,UF application', titles().join());
   }
 
   console.log('\na block added to today starts after now');
@@ -1122,7 +1138,7 @@ const SETTLED = 220; // past SETTLE_MS
     check('and now the row is free', !rowFor('UF application')._class.has('locked'));
   }
 
-  console.log('\na thing whose block has begun stays put');
+  console.log('\na thing comes out of the day whatever the clock says');
   {
     const things = [
       { id: 'e-read', type: 'habit', title: 'Reading', days: 3, mark: null, due: null, size: null, last_scheduled: null },
@@ -1141,17 +1157,18 @@ const SETTLED = 220; // past SETTLE_MS
     check('both rows are greyed', rowFor('Reading')._class.has('locked') &&
       rowFor('UF application')._class.has('locked'));
 
-    const before = titles().join();
+    // Reading is over. It used to be exempt, because the server refused to
+    // remove a block whose message had gone out; it no longer does, so the row
+    // no longer pretends otherwise.
     rowFor('Reading').onclick();
-    check('tapping the one that has begun does nothing', titles().join() === before,
+    check('the one that is over comes out too', titles().join() === 'Gym,UF application',
       titles().join());
-    check('and it stays greyed', rowFor('Reading')._class.has('locked'));
-    check('nothing was offered to undo', byId['undo-host'].children.length === 0);
+    check('and its row frees up', !rowFor('Reading')._class.has('locked'));
+    check('with an undo, like any other removal', byId['undo-host'].children.length > 0);
 
     rowFor('UF application').onclick();
-    check('but the one still to come comes out',
-      titles().join() === 'Reading,Gym', titles().join());
-    check('and its row frees up', !rowFor('UF application')._class.has('locked'));
+    check('and so does the one still to come', titles().join() === 'Gym', titles().join());
+    check('its row frees up as well', !rowFor('UF application')._class.has('locked'));
   }
 
   console.log('\na note is hidden once its block is over');
@@ -1310,11 +1327,10 @@ const SETTLED = 220; // past SETTLE_MS
     check('it has no duration chip', !chipOf(slots()[1]));
     check('the one still to come does', Boolean(chipOf(slots()[2])));
 
-    // No question yet: it has not failed to happen, it is happening. The
-    // question belongs on a block that is over.
+    // No question on any of them. There is no such question any more.
     const askIn = (s) => rowOf(s).children.find((c) => c._class.has('askmiss'));
-    check('and it asks nothing yet', !askIn(slots()[1]));
-    check('while the one that is over does', Boolean(askIn(slots()[0])));
+    check('nothing asks whether it happened',
+      !slots().some((s) => Boolean(askIn(s))));
 
     // It says what it is instead. The slot the chip vacated was reading as a
     // block that had failed to render one.
@@ -1349,8 +1365,11 @@ const SETTLED = 220; // past SETTLE_MS
     check('and no editor opened', !cardOf(slots()[1]).children.some((c) => c._class.has('noteedit')));
   }
 
-  console.log('\nswiping left on a begun block marks it missed');
+  console.log('\nswiping left on a begun block removes it, like every other block');
   {
+    // This used to mark it missed instead, because a delivered block could not
+    // be removed. Both halves of that are gone: the server allows the removal,
+    // and there is no miss to record.
     const inProgress = () => ({
       [TODAY]: {
         plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
@@ -1361,60 +1380,29 @@ const SETTLED = 220; // past SETTLE_MS
         ],
       },
     });
-    const { ctx, slots, cardOf, rowOf, backingOf, titles, posted } = boot({
+    const { ctx, slots, cardOf, rowOf, backingOf, byId, titles, posted } = boot({
       plan: inProgress(), entries: utcEntries({ plans_in: 'morning' }), now: '09:30',
     });
     await ctx.load();
 
-    const askIn = (s) => rowOf(s).children.find((c) => c._class.has('askmiss'));
     const actIn = (s) => rowOf(s).children.find((c) => c._class.has('running'));
-
     check('it starts out saying active', Boolean(actIn(slots()[1])));
 
-    // The backing has to say which of the three things this swipe is, before
-    // the finger comes off.
     const card = cardOf(slots()[1]);
     down(card, 200, 100);
     move(card, 150, 100);
-    check('the label is not Remove', backingOf(slots()[1]).textContent !== 'Remove',
+    check('the label is Remove', backingOf(slots()[1]).textContent === 'Remove',
       backingOf(slots()[1]).textContent);
-    check('it says what it will do', backingOf(slots()[1]).textContent === "didn't happen",
-      backingOf(slots()[1]).textContent);
-    check('in the miss colour', backingOf(slots()[1])._class.has('hot'));
+    check('in the warn colour', backingOf(slots()[1])._class.has('hot'));
 
     posted.length = 0;
     move(card, 100, 100);
     up(card, 100, 100);
 
-    check('the block is still there', titles().join() === 'Reading,Deep work,Errands',
-      titles().join());
-    check('and now reads as missed', askIn(slots()[1]).textContent === 'missed',
-      askIn(slots()[1]) && askIn(slots()[1]).textContent);
-
-    // One or the other, never both: "active" over the top of the answer you
-    // just gave would be arguing with you.
-    check('and stops saying active', !actIn(slots()[1]));
-    check('it posted the miss', posted.some((p) => /\/blocks\/i2\/miss/.test(p.url)),
-      JSON.stringify(posted.map((p) => p.url)));
-    check('as missed, not unmissed', posted[0].body.missed === true,
-      JSON.stringify(posted[0].body));
-
-    // Swiping again puts it back, and the backing says so.
-    const again = cardOf(slots()[1]);
-    down(again, 200, 100);
-    move(again, 150, 100);
-    check('the label flips', backingOf(slots()[1]).textContent === 'happened',
-      backingOf(slots()[1]).textContent);
-    check('and goes quiet, because putting it back is not a warning',
-      backingOf(slots()[1])._class.has('calm') && !backingOf(slots()[1])._class.has('hot'));
-
-    posted.length = 0;
-    move(again, 100, 100);
-    up(again, 100, 100);
-    check('it is unmarked', !askIn(slots()[1]), askIn(slots()[1]) && askIn(slots()[1]).textContent);
-    check('and says active again', Boolean(actIn(slots()[1])));
-    check('and that was posted too', posted[0].body.missed === false,
-      JSON.stringify(posted[0].body));
+    check('and the block goes', titles().join() === 'Reading,Errands', titles().join());
+    check('with an undo offered', byId['undo-host'].children.length > 0);
+    check('and nothing posted to a miss route',
+      !posted.some((p) => /\/miss/.test(p.url)), JSON.stringify(posted.map((p) => p.url)));
   }
 
   console.log('\nswipe left still removes a block that has not begun');
@@ -1444,16 +1432,22 @@ const SETTLED = 220; // past SETTLE_MS
     check('and it goes', titles().join() === 'Reading', titles().join());
   }
 
-  console.log('\nthe tap on a block that is over still works');
+  console.log('\nnothing anywhere still offers a miss');
   {
-    const { ctx, slots, rowOf } = boot({
+    const { ctx, slots, rowOf, posted } = boot({
       plan: twoDays(), entries: utcEntries({ plans_in: 'morning' }), now: '10:45',
     });
     await ctx.load();
-    const ask = () => rowOf(slots()[0]).children.find((c) => c._class.has('askmiss'));
-    check('it is still a question', ask().textContent === "didn't happen?");
-    await ask().onclick({ stopPropagation() {} });
-    check('and still answers it', ask().textContent === 'missed', ask().textContent);
+
+    // Two past blocks and one still to come. None of the three may carry the
+    // question, and nothing may have gone to the route that recorded it.
+    const marks = slots().flatMap((s) =>
+      rowOf(s).children.filter((c) => c._class.has('askmiss')));
+    check('no block asks whether it happened', marks.length === 0, String(marks.length));
+    check('and no text anywhere says so',
+      !slots().some((s) => s.text().includes("didn't happen")));
+    check('nothing was posted to /miss', !posted.some((p) => /\/miss/.test(p.url)),
+      JSON.stringify(posted.map((p) => p.url)));
   }
 
   console.log('\nthe menu still works on a locked row');
