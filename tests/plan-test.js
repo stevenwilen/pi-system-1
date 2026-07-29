@@ -231,6 +231,177 @@ const DATE = '2031-03-09';
     check('and so is one that is not text', notText.status === 400, `${notText.status}`);
   }
 
+  console.log('\nre-confirming keeps the day, it does not rebuild it');
+  {
+    // The bug: a re-confirm deleted every block for the date and inserted the
+    // whole day again, so every column the confirm does not set fell back to
+    // its schema default. message_sent_at went null and a block that had
+    // already gone out could re-send; completed went true and a block marked
+    // missed reverted to done, which reset that entry's staleness clock.
+    const RD = '2031-04-02';
+
+    const first = await call('/plan', {
+      date: RD, wake_minutes: WAKE,
+      blocks: [
+        { title: 'Alpha', start_minutes: 480, duration_minutes: 30, note: 'first' },
+        { title: 'Beta', start_minutes: 510, duration_minutes: 30 },
+        { title: 'Gamma', start_minutes: 540, duration_minutes: 30 },
+      ],
+    });
+    check('a new day saves', first.status === 200, JSON.stringify(first.data));
+    check('and hands back an id per block',
+      Array.isArray(first.data.ids) && first.data.ids.length === 3 && first.data.ids.every(Boolean),
+      JSON.stringify(first.data.ids));
+
+    const { data: rp } = await supabase
+      .from('plans').select('id').eq('user_id', U).eq('date', RD).single();
+
+    const read = async () => (await supabase
+      .from('blocks')
+      .select('id, title, start_time, duration_minutes, note, sort_order, message_sent_at, completed, miss_reason')
+      .eq('plan_id', rp.id).order('sort_order')).data;
+
+    const before = await read();
+    const [alpha, beta, gamma] = before;
+
+    // The day has run: Alpha delivered and was missed, Beta delivered.
+    const SENT = '2031-04-02T08:05:00.000Z';
+    await supabase.from('blocks').update({ message_sent_at: SENT, completed: false, miss_reason: 'ran out of time' })
+      .eq('user_id', U).eq('id', alpha.id);
+    await supabase.from('blocks').update({ message_sent_at: SENT })
+      .eq('user_id', U).eq('id', beta.id);
+
+    const payload = (bs) => ({ date: RD, wake_minutes: WAKE, blocks: bs });
+    const same = [
+      { id: alpha.id, title: 'Alpha', start_minutes: 480, duration_minutes: 30, note: 'first' },
+      { id: beta.id, title: 'Beta', start_minutes: 510, duration_minutes: 30 },
+      { id: gamma.id, title: 'Gamma', start_minutes: 540, duration_minutes: 30 },
+    ];
+
+    console.log('  an identical re-confirm');
+    const again = await call('/plan', payload(same));
+    check('is accepted', again.status === 200, JSON.stringify(again.data));
+
+    const after = await read();
+    check('the same rows, not new ones',
+      after.map((b) => b.id).join() === before.map((b) => b.id).join(),
+      `${before.map((b) => b.id.slice(0, 4))} -> ${after.map((b) => b.id.slice(0, 4))}`);
+    check('a delivered block is still delivered',
+      after[0].message_sent_at !== null && after[1].message_sent_at !== null,
+      `${after[0].message_sent_at} / ${after[1].message_sent_at}`);
+    check('so it cannot be sent a second time', after[1].message_sent_at !== null);
+    check('a missed block is still missed', after[0].completed === false,
+      String(after[0].completed));
+    check('with its reason', after[0].miss_reason === 'ran out of time',
+      String(after[0].miss_reason));
+    check('and an undelivered one is untouched', after[2].message_sent_at === null);
+    check('the ids come back in the order they were sent',
+      again.data.ids.join() === before.map((b) => b.id).join(), JSON.stringify(again.data.ids));
+
+    console.log('  the editable fields still change');
+    const edited = await call('/plan', payload([
+      { ...same[0], title: 'Alpha renamed', note: 'rewritten' },
+      same[1], same[2],
+    ]));
+    check('a delivered block can be retitled', edited.status === 200, JSON.stringify(edited.data));
+    const afterEdit = await read();
+    check('the new title landed', afterEdit[0].title === 'Alpha renamed', afterEdit[0].title);
+    check('and the new note', afterEdit[0].note === 'rewritten', String(afterEdit[0].note));
+    check('while it is still delivered and still missed',
+      afterEdit[0].message_sent_at !== null && afterEdit[0].completed === false);
+
+    console.log('  removing one block');
+    const dropped = await call('/plan', payload([same[0], same[2]]));
+    check('is accepted', dropped.status === 200, JSON.stringify(dropped.data));
+    const afterDrop = await read();
+    check('only that row is gone', afterDrop.length === 2, `${afterDrop.length}`);
+    check('and it is the right one',
+      !afterDrop.some((b) => b.id === beta.id) &&
+        afterDrop.some((b) => b.id === alpha.id) && afterDrop.some((b) => b.id === gamma.id));
+    check('the survivors kept their history', afterDrop.find((b) => b.id === alpha.id).completed === false);
+
+    console.log('  adding one');
+    const added = await call('/plan', payload([
+      same[0], same[2], { title: 'Delta', start_minutes: 570, duration_minutes: 30 },
+    ]));
+    check('is accepted', added.status === 200, JSON.stringify(added.data));
+    const afterAdd = await read();
+    check('three rows now', afterAdd.length === 3, `${afterAdd.length}`);
+    check('the existing ids are unchanged',
+      afterAdd.some((b) => b.id === alpha.id) && afterAdd.some((b) => b.id === gamma.id));
+    check('the new one got a fresh id',
+      afterAdd.some((b) => b.id !== alpha.id && b.id !== gamma.id && b.title === 'Delta'));
+    check('and it is reported back', added.data.ids.length === 3 && added.data.ids.every(Boolean),
+      JSON.stringify(added.data.ids));
+    check('with the existing ones in place',
+      added.data.ids[0] === alpha.id && added.data.ids[1] === gamma.id);
+    check('the delivered one is STILL delivered after all that',
+      afterAdd.find((b) => b.id === alpha.id).message_sent_at !== null);
+
+    console.log('  a delivered block is history');
+    const moved = await call('/plan', payload([
+      { ...same[0], start_minutes: 600 }, same[2],
+    ]));
+    check('retiming it is refused', moved.status === 400, `${moved.status}`);
+    check('and the message says why',
+      /already sent/.test(moved.data.error || ''), moved.data.error);
+
+    const resized = await call('/plan', payload([
+      { ...same[0], duration_minutes: 60 }, same[2],
+    ]));
+    check('resizing it is refused too', resized.status === 400, `${resized.status}`);
+
+    const stillThere = await read();
+    check('and the refusal wrote nothing at all',
+      stillThere.length === 3 && stillThere.find((b) => b.id === alpha.id).start_time.startsWith('08:00'),
+      `${stillThere.length} rows`);
+
+    const undeliveredMove = await call('/plan', payload([
+      same[0], { ...same[2], start_minutes: 660 },
+    ]));
+    check('but an undelivered block can be moved freely',
+      undeliveredMove.status === 200, JSON.stringify(undeliveredMove.data));
+
+    console.log('  an id that is not this plan\'s');
+    const foreign = await call('/plan', payload([
+      { ...same[0], id: '00000000-0000-0000-0000-0000000000ff' },
+    ]));
+    check('is refused', foreign.status === 400, `${foreign.status}`);
+    check('naming the block', /is not part of the plan/.test(foreign.data.error || ''),
+      foreign.data.error);
+
+    // A real row, belonging to the real person's plan rather than this one.
+    // The guard has to be "not in THIS plan", not merely "exists".
+    const otherDay = await call('/plan', {
+      date: '2031-04-03', wake_minutes: WAKE,
+      blocks: [{ title: 'Elsewhere', start_minutes: 480, duration_minutes: 30 }],
+    });
+    const elsewhereId = otherDay.data.ids[0];
+    const crossed = await call('/plan', payload([{ ...same[0], id: elsewhereId }]));
+    check('an id from another day is refused as well', crossed.status === 400, `${crossed.status}`);
+
+    const dup = await call('/plan', payload([same[0], { ...same[0] }]));
+    check('and the same id twice is refused', dup.status === 400,
+      `${dup.status} ${dup.data.error || ''}`);
+
+    // Two, not three: the successful move above sent two blocks and so
+    // dropped Delta. What matters here is that none of the four refusals
+    // moved that number, and that Alpha still carries its history.
+    const untouched = await read();
+    check('none of those refusals changed anything',
+      untouched.length === 2 &&
+        untouched.find((b) => b.id === alpha.id).completed === false &&
+        untouched.find((b) => b.id === alpha.id).message_sent_at !== null,
+      `${untouched.length} rows`);
+
+    // Clean up both dates this section made.
+    for (const d of [RD, '2031-04-03']) {
+      const { data: p } = await supabase
+        .from('plans').select('id').eq('user_id', U).eq('date', d).maybeSingle();
+      if (p) await supabase.from('plans').delete().eq('user_id', U).eq('id', p.id);
+    }
+  }
+
   console.log('\nthe loop closes: scheduling resets staleness');
 
   // A genuinely past date, eleven days back, so `days` is a real positive

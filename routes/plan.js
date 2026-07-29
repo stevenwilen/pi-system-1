@@ -99,7 +99,7 @@ router.get('/plan/:date', async (req, res) => {
 
   const { data: rows, error: blockErr } = await supabase
     .from('blocks')
-    .select('id, title, entry_id, start_time, duration_minutes, note, sort_order')
+    .select('id, title, entry_id, start_time, duration_minutes, note, sort_order, message_sent_at')
     .eq('plan_id', plan.id)
     .order('sort_order');
 
@@ -112,11 +112,21 @@ router.get('/plan/:date', async (req, res) => {
       wake_minutes: toMinutes(plan.wake_time),
     },
     blocks: (rows || []).map((b) => ({
+      // The row's own id, handed to the client so it can hand it back. This
+      // is what lets a re-confirm update the day rather than rebuild it, and
+      // it is the only reason identity survives at all: nothing here matches
+      // blocks by title or by time, because reordering and retiming are
+      // exactly what re-confirming is for.
+      id: b.id,
       title: b.title,
       entryId: b.entry_id,
       start_minutes: toMinutes(b.start_time),
       duration_minutes: b.duration_minutes,
       note: b.note,
+      // So the screen could show that a block has already gone out. Nothing
+      // reads it yet; it costs one column and the alternative is another
+      // round trip the first time anything wants it.
+      sent: Boolean(b.message_sent_at),
     })),
   });
 });
@@ -174,12 +184,48 @@ function validatePlan(date, blocks, wakeMinutes) {
   return null;
 }
 
+/** The columns a confirm owns. Everything else on a block belongs to the day. */
+const blockFields = (b, i) => ({
+  title: String(b.title).trim(),
+  entry_id: b.entryId || null,
+  start_time: hhmmss(Number(b.start_minutes)),
+  duration_minutes: Number(b.duration_minutes),
+  sort_order: i,
+  // Trimmed, and an empty one is no note rather than an empty string —
+  // clearing the field is how a note is removed.
+  note: String(b.note || '').trim() || null,
+});
+
 /**
  * Confirm tomorrow.
  *
- * Re-confirming replaces the day rather than appending to it: the builder
- * holds the whole plan, so what it sends is the plan, and merging two
- * versions of the same day would only invent a third nobody asked for.
+ * Re-confirming reconciles the day against what is already stored. Blocks that
+ * came back with their id are updated in place, blocks with no id are new, and
+ * rows the payload no longer mentions are removed.
+ *
+ * This used to delete every block for the date and insert the whole day again.
+ * The rows that came back were new rows, so every column the confirm does not
+ * set fell to its schema default — and three of those are the day's history:
+ *
+ *   message_sent_at  null again, so a block that had already gone out was
+ *                    back in the delivery queue and re-sent if it had started
+ *                    within the last half hour
+ *   completed        true again, so anything marked "didn't happen" silently
+ *                    reverted to done
+ *   miss_reason      dropped with it
+ *
+ * The last two are worse than they look: staleness counts blocks where
+ * `completed` is true, so a re-confirm turned a skipped block into evidence of
+ * work and reset that entry's clock. That is the exact thing the miss tracking
+ * exists to prevent.
+ *
+ * None of it is carried forward by hand here. The rows are never recreated, so
+ * there is nothing to carry: the three columns are simply not in the update.
+ *
+ * Identity comes from the client, which was handed each row's id when it
+ * loaded the plan. Nothing is matched by title or by time, because reordering
+ * and retiming are exactly what re-confirming is for and any such guess would
+ * be wrong precisely when the day changed most.
  */
 router.post('/plan', async (req, res) => {
   const { date, blocks, wake_minutes } = req.body || {};
@@ -200,19 +246,61 @@ router.post('/plan', async (req, res) => {
       .eq('date', date)
       .maybeSingle();
 
-    let planId;
+    let planId = existing ? existing.id : null;
+    let stored = [];
 
-    if (existing) {
-      planId = existing.id;
-      // Clear first. If the insert below fails the day is left empty rather
-      // than holding a mix of two plans, which is the safer wrong answer.
-      const { error: delErr } = await supabase.from('blocks').delete().eq('plan_id', planId);
-      if (delErr) throw new Error(delErr.message);
+    if (planId) {
+      const { data: rows, error } = await supabase
+        .from('blocks')
+        .select('id, title, start_time, duration_minutes, message_sent_at')
+        .eq('user_id', CURRENT_USER)
+        .eq('plan_id', planId);
+      if (error) throw new Error(error.message);
+      stored = rows || [];
+    }
 
+    // --- everything that can be refused, refused before anything is written --
+
+    const known = new Map(stored.map((b) => [b.id, b]));
+    const claimed = new Set();
+
+    for (const b of blocks) {
+      if (!b.id) continue;
+
+      if (!known.has(b.id)) {
+        return res.status(400).json({
+          error: `block ${b.id} is not part of the plan for ${date}`,
+        });
+      }
+      if (claimed.has(b.id)) {
+        return res.status(400).json({ error: `block ${b.id} appears twice` });
+      }
+      claimed.add(b.id);
+
+      // A block that has already gone out is history. The message named a
+      // start time and a length, and both were true when it was sent, so
+      // neither can be edited afterwards. The title and the note still can,
+      // and the review can still mark it missed.
+      const was = known.get(b.id);
+      if (
+        was.message_sent_at &&
+        (toMinutes(was.start_time) !== Number(b.start_minutes) ||
+          was.duration_minutes !== Number(b.duration_minutes))
+      ) {
+        return res.status(400).json({
+          error: `"${was.title}" was already sent at ${String(was.start_time).slice(0, 5)} and cannot be moved or resized. Its title and note can still be changed.`,
+        });
+      }
+    }
+
+    // --- writes ------------------------------------------------------------
+
+    if (planId) {
       const { error: upErr } = await supabase
         .from('plans')
         .update({ status: 'confirmed', wake_time: wake })
-        .eq('id', planId);
+        .eq('id', planId)
+        .eq('user_id', CURRENT_USER);
       if (upErr) throw new Error(upErr.message);
     } else {
       const { data: made, error: insErr } = await supabase
@@ -224,27 +312,59 @@ router.post('/plan', async (req, res) => {
       planId = made.id;
     }
 
-    // Nothing is composed here any more. A block message is its own columns,
-    // so confirming a day is one insert and no second pass: no model call, no
-    // arithmetic, and no `message_text` to write. That column is left in place
-    // holding whatever it last held, and read by nothing.
-    const rows = blocks.map((b, i) => ({
-      user_id: CURRENT_USER,
-      plan_id: planId,
-      title: String(b.title).trim(),
-      entry_id: b.entryId || null,
-      start_time: hhmmss(Number(b.start_minutes)),
-      duration_minutes: Number(b.duration_minutes),
-      sort_order: i,
-      // Trimmed, and an empty one is no note rather than an empty string —
-      // clearing the field is how a note is removed.
-      note: String(b.note || '').trim() || null,
-    }));
+    // Rows the day no longer mentions.
+    const dropped = stored.filter((b) => !claimed.has(b.id)).map((b) => b.id);
+    if (dropped.length) {
+      const { error } = await supabase
+        .from('blocks')
+        .delete()
+        .eq('user_id', CURRENT_USER)
+        .in('id', dropped);
+      if (error) throw new Error(error.message);
+    }
 
-    const { error: blockErr } = await supabase.from('blocks').insert(rows);
-    if (blockErr) throw new Error(blockErr.message);
+    // The ids of the day as it now stands, in the order it was sent, so the
+    // client can hand them back on the next confirm. Without this a day
+    // confirmed twice in one session would send no ids the second time, and
+    // every block would be dropped and re-inserted — the same bug by a
+    // different route.
+    const ids = new Array(blocks.length).fill(null);
 
-    res.json({ date, blocks: rows.length, status: 'confirmed' });
+    for (const [i, b] of blocks.entries()) {
+      if (!b.id) continue;
+      const { error } = await supabase
+        .from('blocks')
+        .update(blockFields(b, i))
+        .eq('user_id', CURRENT_USER)
+        .eq('id', b.id);
+      if (error) throw new Error(error.message);
+      ids[i] = b.id;
+    }
+
+    const freshAt = blocks.map((b, i) => i).filter((i) => !blocks[i].id);
+
+    if (freshAt.length) {
+      const { data: made, error } = await supabase
+        .from('blocks')
+        .insert(
+          freshAt.map((i) => ({
+            user_id: CURRENT_USER,
+            plan_id: planId,
+            ...blockFields(blocks[i], i),
+          }))
+        )
+        .select('id, sort_order');
+      if (error) throw new Error(error.message);
+
+      // Mapped back by sort_order rather than by position, because nothing
+      // promises a bulk insert returns its rows in the order they were sent.
+      // Every sort_order in one batch is a distinct payload index, so it is a
+      // key here even though the column is not unique in general.
+      const bySort = new Map((made || []).map((r) => [r.sort_order, r.id]));
+      for (const i of freshAt) ids[i] = bySort.get(i) || null;
+    }
+
+    res.json({ date, blocks: blocks.length, status: 'confirmed', ids });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

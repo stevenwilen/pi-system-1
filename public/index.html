@@ -1228,6 +1228,11 @@
 
         wake = data.plan.wake_minutes;
         blocks = (data.blocks || []).map((b) => ({
+          // The row's own id, kept so the next confirm can say which block
+          // this is. Without it the server has no identity to reconcile
+          // against and has to rebuild the day, which loses whether the block
+          // was sent and whether it was missed.
+          id: b.id || null,
           title: b.title,
           entryId: b.entryId,
           duration: b.duration_minutes,
@@ -1821,6 +1826,10 @@
                 date: planDate,
                 wake_minutes: wake,
                 blocks: blocks.map((b) => ({
+                  // Null on anything built in this session. The server reads
+                  // that as "new" and inserts it; everything else it updates
+                  // in place, which is what keeps a delivered block delivered.
+                  id: b.id || null,
                   title: b.title,
                   entryId: b.entryId,
                   start_minutes: b.start,
@@ -1839,6 +1848,24 @@
           alert(res.error);
           return;
         }
+
+        // The ids of the day as it now stands, so a second confirm in the same
+        // session says which block is which. Without this the blocks built
+        // here would still have no id on the next confirm, and the server
+        // would drop and re-insert every one of them — the same bug this
+        // exists to fix, reached a different way.
+        if (Array.isArray(res.ids)) {
+          res.ids.forEach((id, i) => {
+            if (blocks[i]) blocks[i].id = id;
+          });
+        }
+
+        // The day is committed, and so is anything removed on the way to it.
+        // A pending undo would put back a block holding the id of a row this
+        // confirm has just deleted, and the next confirm would be refused for
+        // naming an id the plan does not have.
+        clearUndo();
+
         setSaved(true);
       };
 

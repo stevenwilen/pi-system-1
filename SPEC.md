@@ -428,9 +428,56 @@ the hold fired. Holding the page should mean those never differ; if they ever do
 the block stays under the finger instead of drifting by however far the page
 moved.
 
-Re-confirming replaces the day rather than appending to it. The builder holds the
-whole plan, so what it sends is the plan, and merging two versions of the same
-day would only invent a third nobody asked for.
+#### Re-confirming reconciles, it does not rebuild
+
+The builder holds the whole plan, so what it sends is the plan. The server
+reconciles that against what is stored, **by id**:
+
+| | |
+|---|---|
+| block sent **with** an id | updated in place |
+| block sent **without** one | inserted |
+| id stored, absent from the payload | deleted |
+
+The client is handed each row's id when it loads the plan, and hands it back. A
+confirm also returns the ids of the day as it now stands, in the order it was
+sent, so a second confirm in the same session still knows which block is which.
+
+**Nothing is matched by title or by time.** Reordering and retiming are exactly
+what re-confirming is for, so any such guess would be wrong precisely when the
+day had changed most.
+
+Every id in a payload must belong to this user's plan for that date. One that
+does not — from another day, from another plan, or repeated twice — rejects the
+whole request, before anything is written.
+
+**Why it matters.** This used to delete every block for the date and insert the
+whole day again. The rows that came back were new rows, so every column a
+confirm does not set fell to its schema default, and three of those are the
+day's history:
+
+- `message_sent_at` went null, putting a block that had already gone out back
+  in the delivery queue. If it had started within the last 30 minutes it was
+  **sent a second time**.
+- `completed` went true, so anything marked *didn't happen* silently reverted
+  to done.
+- `miss_reason` was dropped with it.
+
+The last two are worse than they look: staleness counts blocks where `completed`
+is true, so a re-confirm turned a skipped block into evidence of work and reset
+that entry's clock — the exact thing the miss tracking exists to prevent.
+
+None of it is carried forward by hand. The rows are never recreated, so there is
+nothing to carry: those three columns are simply not in the update.
+
+#### A delivered block is history
+
+Once `message_sent_at` is set, that block's **start time and duration cannot
+change**. The message named both and both were true when it went out. The
+attempt is refused server-side, naming the block and the time it was sent at.
+
+Its title and its note can still be edited, and the review can still mark it
+missed.
 
 The start hour is stored as the fact it is, not inferred from the first block. A
 block placed at 06:00 does not mean anyone got up then.
