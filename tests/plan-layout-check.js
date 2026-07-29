@@ -261,7 +261,41 @@ console.log('\n12. the add form asks for exactly the five fields');
     body.indexOf('add-open') < body.indexOf('Tomorrow'));
 }
 
-console.log('\n13. the shape of the day');
+console.log('\n13. a row says it has more actions, rather than hiding them');
+{
+  const hint = rule('.hint');
+  check('there is a hint', hint.length > 0);
+  check('it is faint, so it does not compete with the title',
+    /color: var\(--faint\)/.test(hint), hint.match(/color[^;]*/) || '');
+  check('and never the accent, because it does not commit to anything',
+    !/--accent/.test(hint));
+  check('nor the miss colour', !/--warn/.test(hint));
+
+  check('every row gets one', /className = 'hint'/.test(code));
+  check('it is labelled for a screen reader', /aria-label/.test(code));
+
+  // The three actions behind it. Edit had no route into it at all before
+  // this: the update endpoint existed and nothing on the page called it.
+  check('it reveals Done', /textContent = 'Done'/.test(code));
+  check('it reveals Edit', /textContent = 'Edit'/.test(code));
+  check('it reveals Delete', /textContent = 'Delete'/.test(code));
+  check('Edit opens the sheet on that row', /openSheet\(item\)/.test(code));
+  check('and the sheet posts to the update route', /\/entries\/\$\{editingId\}\/update/.test(code));
+
+  // The whole point of replacing the long press.
+  check('no long press left on a row in Things',
+    !/onpointerdown[\s\S]{0,400}acts\.classList\.remove/.test(code));
+
+  check('tapping the row still schedules it', /addBlock\(\{ title: item\.title/.test(code));
+  check('and the hint does not', /e\.stopPropagation\(\);\s*\n\s*acts\.classList\.toggle/.test(code));
+
+  // One sheet, not two. Two copies of this form would be two places for the
+  // date-and-size rule to drift apart.
+  check('add and edit share one sheet', (code.match(/function openSheet/g) || []).length === 1);
+  check('the type cannot be changed on an edit', /b\.disabled = editingId !== null/.test(code));
+}
+
+console.log('\n14. the shape of the day');
 {
   check('a Starts control', /id="wake-time"/.test(body));
   check('with steppers', /id="wake-minus"/.test(body) && /id="wake-plus"/.test(body));

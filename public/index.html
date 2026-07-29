@@ -231,8 +231,24 @@
         border-bottom-color: var(--muted);
       }
 
-      /* Revealed by a long press on a row in Things. Hidden at rest, so the
-         list reads as a list rather than as a menu. */
+      /* The hint that a row has more than one thing you can do to it.
+         Faint rather than muted: it sits at the right edge of every row in
+         the list, so at muted it would draw a second vertical line of
+         emphasis down the page and compete with the titles. Same weight as
+         "didn't happen" in Yesterday, which is the other right-edge action. */
+      .hint {
+        font-size: 13px;
+        color: var(--faint);
+        background: none;
+        border: 0;
+        font-family: inherit;
+        line-height: 1;
+        padding: 0 2px;
+        cursor: pointer;
+      }
+
+      /* Revealed by the hint. Hidden at rest, so the list reads as a list
+         rather than as a menu. */
       .rowacts {
         display: flex;
         gap: 18px;
@@ -468,6 +484,18 @@
         border-color: var(--muted);
       }
 
+      /* Editing: the type cannot change, so the chooser stops being a chooser
+         and becomes a statement of what this row is. The chosen one still
+         reads normally; the others go, rather than sitting there greyed and
+         inviting a press that will not work. */
+      .choices.fixed button[aria-pressed="false"] {
+        display: none;
+      }
+      .choices.fixed button {
+        border-color: transparent;
+        padding-left: 0;
+      }
+
       .sheet-actions {
         display: flex;
         justify-content: space-between;
@@ -554,6 +582,8 @@
     <!-- the add sheet ------------------------------------------------------- -->
     <div class="scrim hidden" id="add-scrim">
       <div class="sheet">
+        <div class="label" id="sheet-title">Add</div>
+
         <div class="field">
           <label>Type</label>
           <div class="choices" id="type-seg">
@@ -822,9 +852,13 @@
       /**
        * One thing.
        *
-       * Tapping it puts it in tomorrow, which is what this list is for. The
-       * other two things you can do to it — finish it, delete it — sit behind
-       * a long press, so the resting state of the list is a list.
+       * Tapping the row puts it in tomorrow, which is what this list is for.
+       * Everything else you can do to it sits behind the hint at the right
+       * edge, so the resting state of the list is still a list — but the fact
+       * that there is more there is visible rather than something you have to
+       * already know.
+       *
+       * This used to be a long press with nothing on screen to suggest it.
        */
       function thingRow(item) {
         const row = document.createElement('div');
@@ -848,6 +882,13 @@
           top.append(mark);
         }
 
+        const hint = document.createElement('button');
+        hint.type = 'button';
+        hint.className = 'hint';
+        hint.textContent = '···';
+        hint.setAttribute('aria-label', `More for ${item.title}`);
+        top.append(hint);
+
         const meta = document.createElement('div');
         meta.className = 'meta';
         meta.textContent = metaFor(item);
@@ -870,6 +911,18 @@
           acts.append(done);
         }
 
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.textContent = 'Edit';
+        edit.onclick = (e) => {
+          e.stopPropagation();
+          acts.classList.add('hidden');
+          openSheet(item);
+        };
+        acts.append(edit);
+
+        // Last, and the only one in the miss colour. Delete sitting between
+        // two ordinary actions is a misclick waiting to happen.
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'danger';
@@ -881,25 +934,16 @@
         acts.append(del);
         row.append(acts);
 
-        let held = false;
-        let timer = null;
-
-        row.onpointerdown = () => {
-          timer = setTimeout(() => {
-            held = true;
-            acts.classList.remove('hidden');
-          }, 450);
+        hint.onclick = (e) => {
+          // Without this the row's own handler fires straight afterwards and
+          // schedules the thing the person was only asking about.
+          e.stopPropagation();
+          acts.classList.toggle('hidden');
         };
-        row.onpointerup = () => clearTimeout(timer);
-        row.onpointercancel = () => clearTimeout(timer);
-        row.onpointerleave = () => clearTimeout(timer);
 
         row.onclick = () => {
-          if (held) {
-            // The press that opened the actions must not also schedule it.
-            held = false;
-            return;
-          }
+          // An open menu closes rather than scheduling. Tapping away from a
+          // menu you opened should undo the opening, not commit to something.
           if (!acts.classList.contains('hidden')) {
             acts.classList.add('hidden');
             return;
@@ -1171,6 +1215,11 @@
       let formFreq = null;
       let formSize = null;
 
+      // The id being edited, or null when adding. The sheet is one sheet: the
+      // fields and the rules between them are identical either way, and two
+      // copies of that form would be two places for the rules to drift.
+      let editingId = null;
+
       function chooser(box, values, current, pick) {
         box.replaceChildren();
         for (const v of values) {
@@ -1194,7 +1243,12 @@
       function renderForm() {
         for (const b of $('type-seg').children) {
           b.setAttribute('aria-pressed', String(b.dataset.type === formType));
+          // The type is fixed once set, and the server refuses to change it.
+          // Offering the choice on an edit would be offering something that
+          // cannot happen.
+          b.disabled = editingId !== null;
         }
+        $('type-seg').classList.toggle('fixed', editingId !== null);
 
         const dated = DATED.includes(formType);
         const hasDue = Boolean($('f-due').value);
@@ -1222,21 +1276,31 @@
 
       $('f-due').onchange = renderForm;
 
-      function openSheet() {
-        formType = 'task';
-        formFreq = null;
-        formSize = null;
-        $('f-title').value = '';
-        $('f-due').value = '';
+      /** Adding when called with nothing, editing when called with a row. */
+      function openSheet(item) {
+        editingId = item ? item.id : null;
+
+        formType = item ? item.type : 'task';
+        formFreq = item ? item.frequency : null;
+        formSize = item ? item.size : null;
+        $('f-title').value = item ? item.title : '';
+        $('f-due').value = item && item.due ? item.due : '';
+
+        $('sheet-title').textContent = item ? 'Edit' : 'Add';
+        $('add-save').textContent = item ? 'Save' : 'Add';
+
         $('f-problem').classList.add('hidden');
         renderForm();
         $('add-scrim').classList.remove('hidden');
         $('f-title').focus();
       }
 
-      const closeSheet = () => $('add-scrim').classList.add('hidden');
+      const closeSheet = () => {
+        editingId = null;
+        $('add-scrim').classList.add('hidden');
+      };
 
-      $('add-open').onclick = openSheet;
+      $('add-open').onclick = () => openSheet();
       $('add-cancel').onclick = closeSheet;
       $('add-scrim').onclick = (e) => {
         if (e.target === $('add-scrim')) closeSheet();
@@ -1249,13 +1313,18 @@
         if (formType === 'habit') body.frequency = formFreq;
         if (DATED.includes(formType)) {
           body.due = $('f-due').value || '';
-          if (body.due) body.size = formSize;
+          // Sent even when empty, so clearing the date clears the size with
+          // it rather than leaving a size behind with nothing to measure
+          // against. The server applies the same rule to the merged row.
+          body.size = body.due ? formSize : '';
         }
+
+        const url = editingId ? `/entries/${editingId}/update` : '/entries';
 
         let res;
         try {
           res = await (
-            await fetch('/entries', {
+            await fetch(url, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(body),

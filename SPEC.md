@@ -137,12 +137,42 @@ which one it is making. Something that has never been scheduled is counted from
 the day it was written down, and calling that "since scheduled" would be
 reporting a scheduling that never happened.
 
-Tapping a row adds it to tomorrow. A long press reveals **Done** (tasks only)
-and **Delete**.
+Tapping a row adds it to tomorrow, which is what this list is for.
 
-#### Adding something
+At the right edge of every row is a quiet `···`. Tapping it reveals **Done**
+(tasks only), **Edit** and **Delete**. Tapping the row while a menu is open
+closes the menu rather than scheduling — tapping away from something you opened
+should undo the opening, not commit to something.
 
-`+ Add` opens a sheet. Five fields, and no others:
+The hint is faint rather than muted. It repeats down the whole list, and at
+muted it would draw a second column of emphasis competing with the titles. It
+is the same weight as *didn't happen* in Yesterday, which is the other
+right-edge action on the screen.
+
+This was a long press with nothing on screen to suggest it, which meant three
+actions reachable only by already knowing they were there — and one of those
+three, Edit, had no route into it at all: the update endpoint existed and
+nothing on the page ever called it.
+
+Delete is last and is the only one in the miss colour. Between two ordinary
+actions it is a misclick waiting to happen.
+
+#### Adding and editing
+
+`+ Add` opens a sheet. **Edit** opens the same sheet with the row's values in
+it, saving to `POST /entries/:id/update` instead of `POST /entries`.
+
+One sheet, not two. The fields and the rules between them are identical either
+way, and two copies of the form would be two places for the date-and-size rule
+to drift apart.
+
+**The type cannot be changed on an edit.** Changing it would mean deciding what
+happens to a frequency on something that is no longer a habit, and the answer is
+that this is a different thing and should be added as one. The chooser collapses
+to the type the row already is rather than sitting there greyed, because a
+disabled control still invites the press.
+
+Five fields, and no others:
 
 | field | applies to | required |
 |---|---|---|
@@ -160,10 +190,6 @@ comfortable deadline. A size with no date has nothing to be measured against.
 Clearing the date clears the size with it.
 
 There is no why, no note about where something stands, and no free-text size.
-
-The type is fixed once set. Changing it would mean deciding what happens to a
-frequency on something that is no longer a habit, and the answer is that this is
-a different thing and should be added as one.
 
 #### 3.2.1 Warning marks
 
@@ -345,6 +371,7 @@ npm test       # every suite, sequentially
 | `routes/review.js` | yesterday, and marking a block missed |
 | `public/index.html` | the whole app: markup, styles and script in one file |
 | `public/mockup.html` | the layout reference the page is built against |
+| `PLANNING-RULES.md` | **archive.** Notes from the pre-strip system, kept and marked as such |
 | `brain.js`, `tools.js`, `usage.js`, `untrusted.js` | **wired and unused.** See 1 |
 | `link.js`, `calendar-test.js`, `send-test.js` | run by hand, not part of the running system |
 | `make-icons.js` | regenerates the PNGs from the SVG |
