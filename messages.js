@@ -1,17 +1,19 @@
-// What Telegram sends for a block, composed from the row.
+// What Telegram sends for a block: three lines read straight off the row.
 //
-// No model call, here or anywhere behind here. A block message is the block's
-// own title, its two times, and at most one line of context that is arithmetic
-// on dates. Everything in it can be traced to a column.
+// No model call, here or anywhere behind here, and now no composition either.
+// Every part of the message is a column — title, start, duration, note — so
+// there is nothing to assemble at confirm time and nothing stored for delivery
+// to read back.
 //
-// The text is still written into `message_text` when the day is confirmed and
-// still read back at the block's start time, because delivery has to survive a
-// restart and a row is how it does that. What changed is who writes it: this
-// used to be one model call with the whole day in view, and it is now a
-// function of one entry and one date.
+// This file has shrunk twice for the same reason. It was a model call with the
+// whole day in view; then arithmetic that named a deadline or a gap; and now
+// neither, because both were facts the screen had already shown the person on
+// the evening they made the plan.
+//
+// `blocks.message_text` is left in place, holding whatever it last held, and
+// read by nothing.
 
 const { toMinutes } = require('./clock');
-const { daysUntil } = require('./warning');
 
 // Wrapped at midnight. A block starting at 23:00 and running two hours ends at
 // 01:00, and this used to render it as "25:00" — a time that does not exist,
@@ -19,23 +21,25 @@ const { daysUntil } = require('./warning');
 const clock = (mins) =>
   `${String(Math.floor((mins % 1440) / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
 
-// Below this, a gap is not worth naming. Something scheduled the day before
-// yesterday is not neglected, and saying so on every block would make the line
-// worthless on the blocks where it matters.
-const GAP_WORTH_NAMING = 3;
-
 /**
  * What Telegram sends for a block.
  *
- * Three parts, and each may be absent but the first:
+ * The title, the two times, and whatever they wrote about the session. That
+ * is the whole message.
  *
- *   the header       title and both times, always, straight from the row
- *   the note         what they said they were doing in this session, verbatim
- *   the context line the deadline or the gap, composed at confirm time
+ * There was a third part: a line composed at confirm time, naming the deadline
+ * or how long the thing had been left. Both are gone, for one reason twice.
+ * Every fact this system could derive about a block is already on the screen
+ * where it belongs — the deadline as a warning mark, the gap as the order of
+ * the list and the words on the row — and the person read it there before
+ * putting the block in tomorrow. Repeating it at the block's start time told
+ * them a thing they had already decided about, at the hour they could least
+ * act on it.
  *
- * The note comes first because it is the person's own sentence about this
- * particular hour, and the context line is a fact derived about the thing in
- * general. Their words before ours.
+ * What is left is the one thing the screen cannot say back to them: their own
+ * sentence about this particular hour. If they did not write one, there was
+ * nothing to say, and the message is the title and the time. A block with no
+ * note is a plain notification on purpose.
  *
  * Verbatim really is verbatim: nothing here parses, trims or reasons about a
  * note. It is escaped on the way out by telegram.js, along with everything
@@ -43,38 +47,9 @@ const GAP_WORTH_NAMING = 3;
  */
 function composeMessage(block) {
   const start = toMinutes(block.start_time);
-  const parts = [
-    `<b>${block.title}</b>\n${clock(start)} to ${clock(start + block.duration_minutes)}`,
-  ];
+  const header = `<b>${block.title}</b>\n${clock(start)} to ${clock(start + block.duration_minutes)}`;
 
-  if (block.note) parts.push(block.note);
-  if (block.message_text) parts.push(block.message_text);
-
-  return parts.join('\n\n');
+  return block.note ? `${header}\n\n${block.note}` : header;
 }
 
-/**
- * The one context line for a block, or null.
- *
- * The gap, and only the gap. A deadline used to be named here, and used to
- * take precedence over the gap when a block had both. It is gone.
- *
- * The deadline is already on the screen, as a warning mark, where it can be
- * read against everything else competing for the same days. Repeating it at
- * the block's start time told the person a thing they had decided about the
- * night before, at the moment they could least act on it. How long something
- * has been left is the opposite: it is what they were most likely to have
- * forgotten, which is the reason this system exists at all.
- *
- * A block with no entry behind it — anything typed straight into the builder,
- * or one whose entry has since been deleted — has no gap to name and gets
- * nothing.
- */
-function contextLine({ entry, lastSeen, date }) {
-  if (!entry || !lastSeen) return null;
-
-  const gap = daysUntil(lastSeen, date);
-  return gap >= GAP_WORTH_NAMING ? `${gap} days since you last did this.` : null;
-}
-
-module.exports = { composeMessage, contextLine };
+module.exports = { composeMessage };

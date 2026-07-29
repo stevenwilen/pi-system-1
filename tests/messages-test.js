@@ -1,12 +1,13 @@
-// Block messages, composed in code.
+// Block messages, read straight off the row.
 //
-// This used to be a model call with the whole day in view, and the suite that
-// tested it made one real call and then read the prose that came back. There is
-// no call now: a block message is its title, its two times, and at most one
-// line that is arithmetic on two dates.
+// This has shrunk with the thing it tests. It was one real model call and a
+// read of the prose that came back; then fixtures for a line composed from two
+// dates; and now there is no composition at all. A block message is its title,
+// its two times, and whatever the person wrote about the session.
 //
-// So this is fixtures, and the only database work is the end-to-end section
-// proving the composed line really lands on the row that delivery reads.
+// So most of this is fixtures, and the database section proves two things: the
+// note reaches the row delivery reads, and confirming a day writes no
+// message_text at all any more.
 const H = require('./harness');
 const U = H.TEST_USER_ID;
 const path = require('path');
@@ -37,92 +38,72 @@ const made = [];
 
   console.log('the header is facts from the row');
   {
-    const without = {
-      title: 'Gym', start_time: '08:00:00', duration_minutes: 60, message_text: null,
-    };
-    const withText = { ...without, message_text: '11 days since you last did this.' };
+    const bare = { title: 'Gym', start_time: '08:00:00', duration_minutes: 60 };
 
-    check('title and real times', m.composeMessage(without) === '<b>Gym</b>\n08:00 to 09:00',
-      JSON.stringify(m.composeMessage(without)));
-    check('the line is appended when there is one',
-      m.composeMessage(withText).endsWith('11 days since you last did this.'));
-    check('no line still sends something', m.composeMessage(without).length > 0);
+    check('title and real times', m.composeMessage(bare) === '<b>Gym</b>\n08:00 to 09:00',
+      JSON.stringify(m.composeMessage(bare)));
+    check('a block with nothing to add still sends something',
+      m.composeMessage(bare).length > 0);
 
-    const past = { ...without, start_time: '23:00:00', duration_minutes: 120 };
+    const past = { ...bare, start_time: '23:00:00', duration_minutes: 120 };
     check('an end past midnight wraps rather than reading 25:00',
       m.composeMessage(past).includes('23:00 to 01:00'), m.composeMessage(past));
   }
 
-  console.log('\nthe note, verbatim, on its own line');
+  console.log('\nthe note, verbatim, and nothing else');
   {
     const base = { title: 'UF application', start_time: '09:00:00', duration_minutes: 120 };
 
-    const noted = m.composeMessage({ ...base, note: 'Finish the essay draft', message_text: null });
-    check('it follows the header', noted === '<b>UF application</b>\n09:00 to 11:00\n\nFinish the essay draft',
+    const noted = m.composeMessage({ ...base, note: 'Finish the essay draft' });
+    check('it follows the header',
+      noted === '<b>UF application</b>\n09:00 to 11:00\n\nFinish the essay draft',
       JSON.stringify(noted));
 
-    const GAP = '11 days since you last did this.';
-
-    const both = m.composeMessage({
-      ...base, note: 'Finish the essay draft', message_text: GAP,
-    });
-    check('their words come before ours',
-      both.indexOf('Finish the essay draft') < both.indexOf(GAP), both);
-    check('and each gets its own line',
-      both === `<b>UF application</b>\n09:00 to 11:00\n\nFinish the essay draft\n\n${GAP}`,
-      JSON.stringify(both));
-
-    check('no note is no line', m.composeMessage({ ...base, note: null, message_text: GAP }) ===
-      `<b>UF application</b>\n09:00 to 11:00\n\n${GAP}`);
-    check('an empty note is no line either',
-      !m.composeMessage({ ...base, note: '', message_text: null }).includes('\n\n'));
+    check('no note is no second part',
+      m.composeMessage({ ...base, note: null }) === '<b>UF application</b>\n09:00 to 11:00');
+    check('an empty note is no second part either',
+      !m.composeMessage({ ...base, note: '' }).includes('\n\n'));
 
     // Verbatim means verbatim. Nothing here trims, truncates or rewrites.
-    const odd = m.composeMessage({ ...base, note: '  a <b>bold</b> claim  ', message_text: null });
-    check('it is not trimmed or escaped here', odd.includes('  a <b>bold</b> claim  '), JSON.stringify(odd));
-    check('escaping is telegram.js\'s job, and it does it', (() => {
+    const odd = m.composeMessage({ ...base, note: '  a <b>bold</b> claim  ' });
+    check('it is not trimmed or escaped here', odd.includes('  a <b>bold</b> claim  '),
+      JSON.stringify(odd));
+    check("escaping is telegram.js's job, and it does it", (() => {
       const src = require('fs').readFileSync(ROOT + '/telegram.js', 'utf8');
       return /replace\(\/</.test(src) && /toTelegramHtml/.test(src);
     })());
   }
 
-  console.log('\nthe gap, and nothing but the gap');
+  console.log('\nnothing is derived and put in a message any more');
   {
-    const line = (entry, lastSeen) => m.contextLine({ entry, lastSeen, date: DATE });
+    // Both lines this used to add are gone, for one reason twice: the screen
+    // had already shown the person the fact on the evening they made the plan,
+    // and repeating it at the block's start time named a thing they had
+    // decided about at the hour they could least act on it.
+    const withEverything = {
+      title: 'UF application', start_time: '09:00:00', duration_minutes: 120,
+      note: 'Finish the essay draft',
+      // Left over from an older build, and no longer read.
+      message_text: '11 days since you last did this.',
+    };
+    const out = m.composeMessage(withEverything);
 
-    check('the gap is named', line({}, day(-11)) === '11 days since you last did this.',
-      String(line({}, day(-11))));
-    check('a short gap is not worth naming', line({}, day(-2)) === null,
-      String(line({}, day(-2))));
-    check('the threshold is three days', line({}, day(-3)) === '3 days since you last did this.',
-      String(line({}, day(-3))));
-    check('never scheduled says nothing rather than guessing',
-      line({}, null) === null, String(line({}, null)));
-
-    // The deadline used to be named here and used to beat the gap. It is on
-    // the screen as a warning mark instead, where it can be read against
-    // everything else wanting the same days.
-    check('a deadline is not named',
-      line({ due: day(2) }, day(-40)) === '40 days since you last did this.',
-      String(line({ due: day(2) }, day(-40))));
-    check('and does not suppress the gap either',
-      line({ due: day(2) }, day(-11)) === '11 days since you last did this.',
-      String(line({ due: day(2) }, day(-11))));
-    check('a due entry with no gap gets nothing at all',
-      line({ due: day(2) }, null) === null, String(line({ due: day(2) }, null)));
-
-    check('there is no deadline composer left', m.dueLine === undefined);
+    check('a stored line from an older confirm is ignored',
+      !out.includes('11 days since'), JSON.stringify(out));
+    check('the note is still there', out.includes('Finish the essay draft'));
+    check('so the message is exactly two parts',
+      out.split('\n\n').length === 2, JSON.stringify(out));
 
     const src = require('fs')
       .readFileSync(ROOT + '/messages.js', 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '');
-    check('and nothing in the file writes one', !/Due (in|today|tomorrow)|Was due/.test(src));
 
-    // Anything typed straight into the builder, or one whose entry has since
-    // been deleted.
-    check('a block with no entry gets no line', line(null, null) === null);
-    check('even one with a gap to name', line(null, day(-40)) === null);
+    check('no deadline is composed', !/Due (in|today|tomorrow)|Was due/.test(src));
+    check('no gap is composed', !/days since/.test(src));
+    check('there is no context line composer left', m.contextLine === undefined);
+    check('nor a deadline one', m.dueLine === undefined);
+    check('and message_text is not read', !/message_text/.test(src));
   }
 
   console.log('\nnothing in this path reaches the model');
@@ -135,11 +116,11 @@ const made = [];
     check('no brain', !/runBrain|anthropic/i.test(src));
     check('no tools', !/get_calendar|search_entries/.test(src));
     check('no fencing, because there is no prompt to fence into', !/untrusted|fence/.test(src));
-    check('no parser, because there is no reply to parse', !/parseLines/.test(src));
-    check('and no database of its own', !/supabase/.test(src));
+    check('no database of its own', !/supabase/.test(src));
+    check('and no date arithmetic left either', !/daysUntil|staleness/.test(src));
   }
 
-  console.log('\nend to end: the line lands on the row delivery reads');
+  console.log('\nend to end: what confirming a day writes');
   {
     const { data: habit, error: habitErr } = await supabase
       .from('entries')
@@ -156,6 +137,8 @@ const made = [];
     if (taskErr) throw new Error(taskErr.message);
 
     // An older plan the habit was on, eleven days before the day being built.
+    // It used to make the habit's message say so; now it makes no difference
+    // to the message at all, which is what the checks below are for.
     const { data: old } = await supabase
       .from('plans')
       .insert({ user_id: U, date: day(-11), wake_time: '08:00:00', status: 'confirmed' })
@@ -167,7 +150,6 @@ const made = [];
       start_time: '08:00:00', duration_minutes: 60, sort_order: 0, pinned: false,
     });
 
-    // Now confirm the day itself, through the real route logic.
     const PORT = 3977;
     const BASE = `http://127.0.0.1:${PORT}`;
     const server = H.spawnServer(PORT);
@@ -196,78 +178,35 @@ const made = [];
 
     const { data: written } = await supabase
       .from('blocks')
-      .select('title, message_text, note, start_time, duration_minutes')
+      .select('title, note, message_text, start_time, duration_minutes')
       .eq('plan_id', plan.id)
       .order('sort_order');
-
-    for (const b of written) console.log(`    ${b.title}: ${JSON.stringify(b.message_text)}`);
 
     check('the note reached the row', written[0].note === 'twenty pages, no phone',
       String(written[0].note));
     check('and a block without one stored null', written[1].note === null,
       String(written[1].note));
-    check('the message carries both the note and the gap',
-      m.composeMessage(written[0]).includes('twenty pages, no phone') &&
-        m.composeMessage(written[0]).includes('11 days since'),
-      m.composeMessage(written[0]).replace(/\n/g, ' / '));
 
-    check('the habit carries its gap',
-      written[0].message_text === '11 days since you last did this.', String(written[0].message_text));
-    // It has a due date and has never been scheduled, so there is no gap to
-    // name and the deadline is not named anywhere in a message any more.
-    check('the task with a deadline carries no line at all',
+    // The whole point of this deploy: confirming composes nothing.
+    check('no line was composed for the habit with an eleven day gap',
+      written[0].message_text === null, String(written[0].message_text));
+    check('nor for the task with a deadline three days out',
       written[1].message_text === null, String(written[1].message_text));
-    check('and certainly not its due date',
-      !/Due/.test(written[1].message_text || ''), String(written[1].message_text));
-    check('the manual block carries nothing', written[2].message_text === null,
+    check('nor for the manual block', written[2].message_text === null,
       String(written[2].message_text));
-
-    // The plan being confirmed must not count as a scheduling of its own, or
-    // every line would claim zero days.
-    check('the day being saved did not reset the clock',
-      !/0 days/.test(written[0].message_text), written[0].message_text);
-
-    // A deleted thing says nothing, even while a block for it survives.
-    //
-    // This is reachable in four taps: schedule a thing, delete the thing, keep
-    // the block, confirm. It used to compose a line from the deleted row and
-    // send a deadline the next morning for something thrown away the night
-    // before, because this was the one read of `entries` with no status
-    // filter on it.
-    await supabase.from('entries').update({ status: 'deleted' }).eq('user_id', U).eq('id', task.id);
-
-    const res2 = await fetch(`${BASE}/plan`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        date: DATE,
-        wake_minutes: 480,
-        blocks: [
-          { title: habit.title, entryId: habit.id, start_minutes: 480, duration_minutes: 60 },
-          { title: task.title, entryId: task.id, start_minutes: 540, duration_minutes: 60 },
-        ],
-      }),
-    });
-    check('the day still saves with a block for a deleted thing', res2.status === 200, `${res2.status}`);
-
-    const { data: after } = await supabase
-      .from('blocks')
-      .select('title, message_text')
-      .eq('plan_id', plan.id)
-      .order('sort_order');
-
-    check('the deleted thing gets no line', after[1].message_text === null,
-      String(after[1].message_text));
-    check('and certainly not its deadline', !/Due in/.test(after[1].message_text || ''),
-      String(after[1].message_text));
-    check('the block itself survives', after[1].title === task.title, after[1].title);
-    check('and the thing still on the list is unaffected',
-      after[0].message_text === '11 days since you last did this.', String(after[0].message_text));
 
     console.log('\n    as Telegram would receive them:');
     for (const b of written) {
       console.log('    ' + m.composeMessage(b).replace(/\n/g, '\n    ') + '\n');
     }
+
+    check('the block with a note sends it',
+      m.composeMessage(written[0]) ===
+        `<b>${habit.title}</b>\n08:00 to 09:00\n\ntwenty pages, no phone`,
+      JSON.stringify(m.composeMessage(written[0])));
+    check('the one without sends the header alone',
+      m.composeMessage(written[1]) === `<b>${task.title}</b>\n09:00 to 10:00`,
+      JSON.stringify(m.composeMessage(written[1])));
 
     server.kill();
     await supabase.from('entries').delete().eq('user_id', U).in('id', [habit.id, task.id]);

@@ -168,7 +168,7 @@ async function dueBlocks(user_id, date) {
 
   const { data, error } = await supabase
     .from('blocks')
-    .select('id, title, start_time, duration_minutes, message_text, created_at')
+    .select('id, title, start_time, duration_minutes, note, created_at')
     .eq('plan_id', plan.id)
     .is('message_sent_at', null)
     .order('start_time');

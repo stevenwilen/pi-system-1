@@ -358,10 +358,10 @@ handling the block, and a hold that lifted the card out from under the keyboard
 would be the worst of both.
 
 **The note goes into that block's Telegram message**, on its own line after the
-title and time and before the context line — their words before ours. Composed
-in code and used verbatim: nothing parses it, trims it or reasons about it.
-Escaping is `telegram.js`'s job, which it already does for every message, so a
-note containing a `<` arrives as a `<`.
+title and time. It is the only thing in that message besides the header — see
+4.1. Used verbatim: nothing parses it, trims it or reasons about it. Escaping is
+`telegram.js`'s job, which it already does for every message, so a note
+containing a `<` arrives as a `<`.
 
 Capped at 500 characters. It is described as a line or two and it is sent
 verbatim, so the ceiling exists to stop an unbounded field meeting Telegram's
@@ -457,39 +457,35 @@ One message per block, at its start time.
 09:00 to 11:00
 
 Finish the essay draft
-
-11 days since you last did this.
 ```
 
-Three parts, and each may be absent but the first:
+Two parts, both read straight off the block's own row:
 
 | | |
 |---|---|
-| the header | title and both times, always, straight from the row |
+| the header | title and both times, always |
 | the note | what they said they were doing, verbatim. See 3.3 |
-| the context line | the gap, composed at confirm time |
 
-The note comes first because it is the person's own sentence about this
-particular hour, and the context line is a fact derived about the thing in
-general. Their words before ours.
+**Nothing is composed.** There is no assembly step at confirm time, nothing
+stored for delivery to read back, and no arithmetic anywhere on this path. The
+message is four columns.
 
-The context line is composed **in code** when the day is confirmed and stored on
-the block, because delivery happens hours later in a different process and has to
-survive a restart.
+It used to carry a third part: a line naming the deadline, then later the gap.
+Both are gone, for one reason twice. **Every fact this system can derive about a
+block is already on the screen** — the deadline as a warning mark, the gap as the
+order of the list and the words on the row — and the person read it there on the
+evening they put the block in tomorrow. Repeating it at the block's start time
+named a thing they had already decided about, at the hour they could least act on
+it.
 
-It is **the gap and only the gap**: if the block's entry was last actually done
-three or more days ago, the message says how long it has been. Otherwise there is
-no context line, and the header goes out with whatever note there is, or alone.
-That is the ordinary case for a block typed straight into the builder, not a
-degraded one.
+What is left is the one thing the screen cannot say back to them: their own
+sentence about this particular hour.
 
-**Deadlines are not named in a message.** They used to be, and used to take
-precedence over the gap. A deadline is already on the screen as a warning mark
-(3.2.1), where it can be read against everything else competing for the same
-days. Repeating it at the block's start time told the person a thing they had
-decided about the night before, at the moment they could least act on it. How
-long something has been left is the opposite: it is what they were most likely to
-have forgotten, which is the reason this system exists at all.
+A block with no note sends the header alone. That is a plain notification, and it
+is deliberate — if they did not write anything, there was nothing to say.
+
+`blocks.message_text` is left in place holding whatever it last held, and read by
+nothing.
 
 **Delivery.** The scheduler ticks every 15 minutes and asks which blocks of
 today's confirmed plan have started and not been sent. A block more than 30
@@ -563,7 +559,7 @@ npm test       # every suite, sequentially
 | `clock.js` | dates and clock times as numbers, in the person's own timezone |
 | `staleness.js` | entry → the most recent plan date it was actually done on |
 | `warning.js` | the mark: size against time left, and nothing else |
-| `messages.js` | what Telegram sends for a block |
+| `messages.js` | what Telegram sends for a block: the header and the note, read off the row |
 | `scheduler.js` | the 15-minute tick: block delivery and the evening nudge |
 | `telegram.js` | the send |
 | `routes/entries.js` | Things: read, add, edit, finish, delete |

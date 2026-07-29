@@ -14,8 +14,6 @@ const supabase = require('../db');
 const { CURRENT_USER } = require('../user');
 const { minutesOfDay, toMinutes, hhmmss } = require('../clock');
 const { readCalendar } = require('../tools');
-const { lastScheduled } = require('../staleness');
-const { contextLine } = require('../messages');
 
 const router = express.Router();
 
@@ -177,59 +175,6 @@ function validatePlan(date, blocks, wakeMinutes) {
 }
 
 /**
- * The context line for each block, composed in code.
- *
- * Written at confirm time and stored on the block, because delivery happens
- * hours later in a different process and has to survive a restart. This used to
- * be a model call fired and forgotten after the response went out; it is now
- * subtraction on two dates, so it happens inline and the plan is not saved
- * until it has.
- */
-async function linesFor(user_id, planId, date, blocks) {
-  const ids = [...new Set(blocks.map((b) => b.entryId).filter(Boolean))];
-  if (!ids.length) return new Map();
-
-  // Active only, like every other read of this table.
-  //
-  // Without this, deleting a thing and then confirming a day that still holds
-  // a block for it composed a line from the deleted row: "Due in 3 days" about
-  // something the person threw away last night. Four taps to reach, and the
-  // message arrived the next morning.
-  //
-  // A block whose entry is gone gets no line at all rather than a gap line.
-  // The person deleted the thing and kept the block, so what is left is a
-  // block: a title and two times, and nothing to say about it.
-  // Only whether the entry is still there. The line is the gap and nothing
-  // else now, so the due date is not read on this path at all.
-  const { data: rows, error } = await supabase
-    .from('entries')
-    .select('id')
-    .eq('user_id', user_id)
-    .eq('status', 'active')
-    .in('id', ids);
-
-  if (error) throw new Error(error.message);
-
-  const entries = new Map((rows || []).map((r) => [r.id, r]));
-
-  // Excluding this plan matters: its old blocks are deleted by the time this
-  // runs, but a re-confirm that failed halfway could leave some behind, and
-  // counting them would report every entry as scheduled today.
-  const latest = await lastScheduled(user_id, { excludePlanId: planId });
-
-  const lines = new Map();
-  for (const id of ids) {
-    const line = contextLine({
-      entry: entries.get(id),
-      lastSeen: latest.get(id) || null,
-      date,
-    });
-    if (line) lines.set(id, line);
-  }
-  return lines;
-}
-
-/**
  * Confirm tomorrow.
  *
  * Re-confirming replaces the day rather than appending to it: the builder
@@ -279,8 +224,10 @@ router.post('/plan', async (req, res) => {
       planId = made.id;
     }
 
-    const lines = await linesFor(CURRENT_USER, planId, date, blocks);
-
+    // Nothing is composed here any more. A block message is its own columns,
+    // so confirming a day is one insert and no second pass: no model call, no
+    // arithmetic, and no `message_text` to write. That column is left in place
+    // holding whatever it last held, and read by nothing.
     const rows = blocks.map((b, i) => ({
       user_id: CURRENT_USER,
       plan_id: planId,
@@ -292,9 +239,6 @@ router.post('/plan', async (req, res) => {
       // Trimmed, and an empty one is no note rather than an empty string —
       // clearing the field is how a note is removed.
       note: String(b.note || '').trim() || null,
-      // Null for a buffer block, and for anything whose entry had nothing
-      // worth saying. Delivery sends the title and times on their own.
-      message_text: (b.entryId && lines.get(b.entryId)) || null,
     }));
 
     const { error: blockErr } = await supabase.from('blocks').insert(rows);

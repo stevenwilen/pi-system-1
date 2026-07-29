@@ -51,7 +51,7 @@ async function makePlan(date, status, blocks) {
     sort_order: i,
     entry_id: null,
     pinned: false,
-    message_text: null,
+    note: null,
     message_sent_at: null,
     ...b,
   }));
@@ -94,30 +94,30 @@ const statusOf = async (planId) => {
 
   console.log('a confirmed day');
   const planId = await makePlan(now.date, 'confirmed', [
-    { title: 'Started with a line', start_time: at(-5), duration_minutes: 60,
-      message_text: '11 days since you last did this.', created_at: old },
-    { title: 'Started, no line', start_time: at(-5), duration_minutes: 30, created_at: old },
+    { title: 'Started with a note', start_time: at(-5), duration_minutes: 60,
+      note: 'twenty pages, no phone', created_at: old },
+    { title: 'Started, no note', start_time: at(-5), duration_minutes: 30, created_at: old },
     { title: 'Not started yet', start_time: at(60), duration_minutes: 30,
-      message_text: 'Later.', created_at: old },
+      note: 'Later.', created_at: old },
     { title: 'Long past', start_time: at(-90), duration_minutes: 30,
-      message_text: 'Should never arrive.', created_at: old },
+      note: 'Should never arrive.', created_at: old },
   ]);
 
   sent.length = 0;
   await scheduler.deliverDue(profile, now);
 
   const titles = sent.map((s) => s.text.match(/<b>(.*?)<\/b>/)[1]);
-  check('sends the started block that has a line', titles.includes('Started with a line'));
-  check('sends the started block without one', titles.includes('Started, no line'));
+  check('sends the started block that has a note', titles.includes('Started with a note'));
+  check('sends the started block without one', titles.includes('Started, no note'));
   check('does not send a block that has not started', !titles.includes('Not started yet'));
   check('does not send a block long past its time', !titles.includes('Long past'), titles.join(', '));
   check('exactly two went out', sent.length === 2, `${sent.length}`);
 
-  const withLine = sent.find((s) => s.text.includes('Started with a line'));
-  check('message carries header then line', withLine.text === '<b>Started with a line</b>\n' + scheduler.hhmm(at(-5)) + ' to ' + scheduler.hhmm(hhmmss(nowMinutes + 55)) + '\n\n11 days since you last did this.',
+  const withLine = sent.find((s) => s.text.includes('Started with a note'));
+  check('message carries header then note', withLine.text === '<b>Started with a note</b>\n' + scheduler.hhmm(at(-5)) + ' to ' + scheduler.hhmm(hhmmss(nowMinutes + 55)) + '\n\ntwenty pages, no phone',
     JSON.stringify(withLine.text));
 
-  const bare = sent.find((s) => s.text.includes('no line'));
+  const bare = sent.find((s) => s.text.includes('no note'));
   check('fallback is the header alone', !bare.text.includes('\n\n'), JSON.stringify(bare.text));
 
   let state = await statusOf(planId);
@@ -141,17 +141,17 @@ const statusOf = async (planId) => {
     const fresh = await makePlan('2031-06-02', 'confirmed', [
       {
         title: 'Just confirmed', start_time: at(-1), duration_minutes: 30,
-        message_text: '11 days since you last did this.', created_at: new Date().toISOString(),
+        note: 'twenty pages, no phone', created_at: new Date().toISOString(),
       },
     ]);
     sent.length = 0;
     await scheduler.deliverDue(profile, { ...now, date: '2031-06-02' });
     check('it is sent on the first tick', sent.length === 1, `${sent.length} sent`);
-    check('with its line', sent[0].text.endsWith('11 days since you last did this.'), JSON.stringify(sent[0] && sent[0].text));
+    check('with its note', sent[0].text.endsWith('twenty pages, no phone'), JSON.stringify(sent[0] && sent[0].text));
     check('and marked sent', (await statusOf(fresh))[0].message_sent_at !== null);
   }
 
-  console.log('\na block with no line is not a failure');
+  console.log('\na block with no note is not a failure');
   {
     // A buffer block, or anything typed straight into the builder. It has no
     // entry behind it, so there is no date to count and nothing to say.
@@ -167,7 +167,7 @@ const statusOf = async (planId) => {
 
   console.log('\na pending day is never delivered');
   const pending = await makePlan('2031-06-04', 'pending', [
-    { title: 'Never agreed to', start_time: at(-5), duration_minutes: 30, message_text: 'nope', created_at: old },
+    { title: 'Never agreed to', start_time: at(-5), duration_minutes: 30, note: 'nope', created_at: old },
   ]);
   sent.length = 0;
   await scheduler.deliverDue(profile, { ...now, date: '2031-06-04' });
