@@ -54,40 +54,27 @@ function composeMessage(block) {
 }
 
 /**
- * How a deadline reads, relative to the day being planned.
- *
- * Measured against the plan's date rather than today, because this text is
- * written the evening before and read the following morning. "Due tomorrow"
- * written on Monday night has to mean Wednesday, not Tuesday.
- */
-function dueLine(due, date) {
-  const days = daysUntil(date, due);
-
-  if (days < 0) return `Was due ${-days === 1 ? 'yesterday' : `${-days} days ago`}.`;
-  if (days === 0) return 'Due today.';
-  if (days === 1) return 'Due tomorrow.';
-  return `Due in ${days} days.`;
-}
-
-/**
  * The one context line for a block, or null.
  *
- * A deadline beats a gap: if something is due in two days, how long it has
- * been sitting there is the less useful of the two facts. A block with no
- * entry behind it — a buffer, or anything typed straight into the builder —
- * has neither and gets nothing.
+ * The gap, and only the gap. A deadline used to be named here, and used to
+ * take precedence over the gap when a block had both. It is gone.
+ *
+ * The deadline is already on the screen, as a warning mark, where it can be
+ * read against everything else competing for the same days. Repeating it at
+ * the block's start time told the person a thing they had decided about the
+ * night before, at the moment they could least act on it. How long something
+ * has been left is the opposite: it is what they were most likely to have
+ * forgotten, which is the reason this system exists at all.
+ *
+ * A block with no entry behind it — anything typed straight into the builder,
+ * or one whose entry has since been deleted — has no gap to name and gets
+ * nothing.
  */
 function contextLine({ entry, lastSeen, date }) {
-  if (!entry) return null;
+  if (!entry || !lastSeen) return null;
 
-  if (entry.due) return dueLine(entry.due, date);
-
-  if (lastSeen) {
-    const gap = daysUntil(lastSeen, date);
-    if (gap >= GAP_WORTH_NAMING) return `${gap} days since you last did this.`;
-  }
-
-  return null;
+  const gap = daysUntil(lastSeen, date);
+  return gap >= GAP_WORTH_NAMING ? `${gap} days since you last did this.` : null;
 }
 
-module.exports = { composeMessage, contextLine, dueLine };
+module.exports = { composeMessage, contextLine };

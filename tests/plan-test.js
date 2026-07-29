@@ -102,56 +102,6 @@ const DATE = '2031-03-09';
     blockRows.map((b) => b.pinned).join(','));
   check('sort_order preserves the list order', blockRows.map((b) => b.sort_order).join(',') === '0,1,2');
 
-  console.log('\nthe note rides with the block');
-  {
-    const withNotes = await call('/plan', {
-      date: DATE,
-      wake_minutes: WAKE,
-      blocks: [
-        { title: 'Reading', start_minutes: 480, duration_minutes: 30, note: '  ch. 4, no phone  ' },
-        { title: 'Email', start_minutes: 510, duration_minutes: 30 },
-        { title: 'Blank', start_minutes: 540, duration_minutes: 30, note: '   ' },
-      ],
-    });
-    check('a day with notes saves', withNotes.status === 200, JSON.stringify(withNotes.data));
-
-    const { data: rows } = await supabase
-      .from('blocks').select('title, note').eq('plan_id', planRow.id).order('sort_order');
-    check('it is stored, trimmed', rows[0].note === 'ch. 4, no phone', JSON.stringify(rows[0].note));
-    check('a block without one stores null', rows[1].note === null, JSON.stringify(rows[1].note));
-    check('and whitespace is not a note', rows[2].note === null, JSON.stringify(rows[2].note));
-
-    const back = (await call(`/plan/${DATE}`)).data;
-    check('it comes back on the block', back.blocks[0].note === 'ch. 4, no phone',
-      String(back.blocks[0].note));
-    check('and stays null where there was none', back.blocks[1].note === null,
-      String(back.blocks[1].note));
-
-    // It belongs to the block, so re-confirming without it clears it. That is
-    // the point of it living here rather than on the entry.
-    await call('/plan', {
-      date: DATE, wake_minutes: WAKE,
-      blocks: [{ title: 'Reading', start_minutes: 480, duration_minutes: 30 }],
-    });
-    const after = (await call(`/plan/${DATE}`)).data;
-    check('re-confirming without it clears it', after.blocks[0].note === null,
-      String(after.blocks[0].note));
-
-    const tooLong = await call('/plan', {
-      date: DATE, wake_minutes: WAKE,
-      blocks: [{ title: 'Reading', start_minutes: 480, duration_minutes: 30, note: 'x'.repeat(501) }],
-    });
-    check('an unbounded note is refused', tooLong.status === 400, `${tooLong.status}`);
-    check('and told it is a line or two', /line or two/.test(tooLong.data.error || ''),
-      tooLong.data.error);
-
-    const notText = await call('/plan', {
-      date: DATE, wake_minutes: WAKE,
-      blocks: [{ title: 'Reading', start_minutes: 480, duration_minutes: 30, note: { a: 1 } }],
-    });
-    check('and so is one that is not text', notText.status === 400, `${notText.status}`);
-  }
-
   console.log('\nreading it back');
   const back = (await call(`/plan/${DATE}`)).data;
   check('plan is returned', back.plan && back.plan.status === 'confirmed');
@@ -230,6 +180,56 @@ const DATE = '2031-03-09';
   check('and it is the new one', after[0].title === 'Only this');
   const { count: planCount } = await supabase.from('plans').select('*', { count: 'exact', head: true }).eq('user_id', U).eq('date', DATE);
   check('still a single plan row for the day', planCount === 1);
+
+  console.log('\nthe note rides with the block');
+  {
+    const withNotes = await call('/plan', {
+      date: DATE,
+      wake_minutes: WAKE,
+      blocks: [
+        { title: 'Reading', start_minutes: 480, duration_minutes: 30, note: '  ch. 4, no phone  ' },
+        { title: 'Email', start_minutes: 510, duration_minutes: 30 },
+        { title: 'Blank', start_minutes: 540, duration_minutes: 30, note: '   ' },
+      ],
+    });
+    check('a day with notes saves', withNotes.status === 200, JSON.stringify(withNotes.data));
+
+    const { data: rows } = await supabase
+      .from('blocks').select('title, note').eq('plan_id', planRow.id).order('sort_order');
+    check('it is stored, trimmed', rows[0].note === 'ch. 4, no phone', JSON.stringify(rows[0].note));
+    check('a block without one stores null', rows[1].note === null, JSON.stringify(rows[1].note));
+    check('and whitespace is not a note', rows[2].note === null, JSON.stringify(rows[2].note));
+
+    const back = (await call(`/plan/${DATE}`)).data;
+    check('it comes back on the block', back.blocks[0].note === 'ch. 4, no phone',
+      String(back.blocks[0].note));
+    check('and stays null where there was none', back.blocks[1].note === null,
+      String(back.blocks[1].note));
+
+    // It belongs to the block, so re-confirming without it clears it. That is
+    // the point of it living here rather than on the entry.
+    await call('/plan', {
+      date: DATE, wake_minutes: WAKE,
+      blocks: [{ title: 'Reading', start_minutes: 480, duration_minutes: 30 }],
+    });
+    const after = (await call(`/plan/${DATE}`)).data;
+    check('re-confirming without it clears it', after.blocks[0].note === null,
+      String(after.blocks[0].note));
+
+    const tooLong = await call('/plan', {
+      date: DATE, wake_minutes: WAKE,
+      blocks: [{ title: 'Reading', start_minutes: 480, duration_minutes: 30, note: 'x'.repeat(501) }],
+    });
+    check('an unbounded note is refused', tooLong.status === 400, `${tooLong.status}`);
+    check('and told it is a line or two', /line or two/.test(tooLong.data.error || ''),
+      tooLong.data.error);
+
+    const notText = await call('/plan', {
+      date: DATE, wake_minutes: WAKE,
+      blocks: [{ title: 'Reading', start_minutes: 480, duration_minutes: 30, note: { a: 1 } }],
+    });
+    check('and so is one that is not text', notText.status === 400, `${notText.status}`);
+  }
 
   console.log('\nthe loop closes: scheduling resets staleness');
 

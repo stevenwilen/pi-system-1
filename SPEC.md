@@ -456,7 +456,9 @@ One message per block, at its start time.
 <b>UF application</b>
 09:00 to 11:00
 
-Due in 3 days.
+Finish the essay draft
+
+11 days since you last did this.
 ```
 
 Three parts, and each may be absent but the first:
@@ -465,7 +467,7 @@ Three parts, and each may be absent but the first:
 |---|---|
 | the header | title and both times, always, straight from the row |
 | the note | what they said they were doing, verbatim. See 3.3 |
-| the context line | the deadline or the gap, composed at confirm time |
+| the context line | the gap, composed at confirm time |
 
 The note comes first because it is the person's own sentence about this
 particular hour, and the context line is a fact derived about the thing in
@@ -475,18 +477,19 @@ The context line is composed **in code** when the day is confirmed and stored on
 the block, because delivery happens hours later in a different process and has to
 survive a restart.
 
-Which context line a block gets:
+It is **the gap and only the gap**: if the block's entry was last actually done
+three or more days ago, the message says how long it has been. Otherwise there is
+no context line, and the header goes out with whatever note there is, or alone.
+That is the ordinary case for a block typed straight into the builder, not a
+degraded one.
 
-- If the entry has a due date → the deadline, measured against the day being
-  planned rather than today. Written on Monday evening, "Due tomorrow" has to
-  mean Wednesday.
-- Otherwise, if it was last done three or more days ago → the gap.
-- Otherwise none, and the header goes out with whatever note there is, or alone.
-  That is the normal case for a block typed straight into the builder, not a
-  degraded one.
-
-A deadline beats a gap: if something is due in two days, how long it has been
-sitting there is the less useful of the two facts.
+**Deadlines are not named in a message.** They used to be, and used to take
+precedence over the gap. A deadline is already on the screen as a warning mark
+(3.2.1), where it can be read against everything else competing for the same
+days. Repeating it at the block's start time told the person a thing they had
+decided about the night before, at the moment they could least act on it. How
+long something has been left is the opposite: it is what they were most likely to
+have forgotten, which is the reason this system exists at all.
 
 **Delivery.** The scheduler ticks every 15 minutes and asks which blocks of
 today's confirmed plan have started and not been sent. A block more than 30

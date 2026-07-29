@@ -61,17 +61,19 @@ const made = [];
     check('it follows the header', noted === '<b>UF application</b>\n09:00 to 11:00\n\nFinish the essay draft',
       JSON.stringify(noted));
 
+    const GAP = '11 days since you last did this.';
+
     const both = m.composeMessage({
-      ...base, note: 'Finish the essay draft', message_text: 'Due in 3 days.',
+      ...base, note: 'Finish the essay draft', message_text: GAP,
     });
     check('their words come before ours',
-      both.indexOf('Finish the essay draft') < both.indexOf('Due in 3 days.'), both);
+      both.indexOf('Finish the essay draft') < both.indexOf(GAP), both);
     check('and each gets its own line',
-      both === '<b>UF application</b>\n09:00 to 11:00\n\nFinish the essay draft\n\nDue in 3 days.',
+      both === `<b>UF application</b>\n09:00 to 11:00\n\nFinish the essay draft\n\n${GAP}`,
       JSON.stringify(both));
 
-    check('no note is no line', m.composeMessage({ ...base, note: null, message_text: 'Due in 3 days.' }) ===
-      '<b>UF application</b>\n09:00 to 11:00\n\nDue in 3 days.');
+    check('no note is no line', m.composeMessage({ ...base, note: null, message_text: GAP }) ===
+      `<b>UF application</b>\n09:00 to 11:00\n\n${GAP}`);
     check('an empty note is no line either',
       !m.composeMessage({ ...base, note: '', message_text: null }).includes('\n\n'));
 
@@ -84,39 +86,41 @@ const made = [];
     })());
   }
 
-  console.log('\nthe deadline line, measured against the day being planned');
-  {
-    // Written the evening before and read the following morning, so every one
-    // of these is relative to the plan date and not to today.
-    check('a week out', m.dueLine(day(7), DATE) === 'Due in 7 days.', m.dueLine(day(7), DATE));
-    check('tomorrow', m.dueLine(day(1), DATE) === 'Due tomorrow.', m.dueLine(day(1), DATE));
-    check('today', m.dueLine(DATE, DATE) === 'Due today.', m.dueLine(DATE, DATE));
-    check('yesterday', m.dueLine(day(-1), DATE) === 'Was due yesterday.', m.dueLine(day(-1), DATE));
-    check('long past', m.dueLine(day(-9), DATE) === 'Was due 9 days ago.', m.dueLine(day(-9), DATE));
-  }
-
-  console.log('\nwhich fact a block gets');
+  console.log('\nthe gap, and nothing but the gap');
   {
     const line = (entry, lastSeen) => m.contextLine({ entry, lastSeen, date: DATE });
 
-    check('a deadline beats a gap',
-      line({ due: day(2) }, day(-40)) === 'Due in 2 days.',
-      String(line({ due: day(2) }, day(-40))));
-
-    check('with no deadline, the gap is named',
-      line({ due: null }, day(-11)) === '11 days since you last did this.',
-      String(line({ due: null }, day(-11))));
-
-    check('a short gap is not worth naming', line({ due: null }, day(-2)) === null,
-      String(line({ due: null }, day(-2))));
-    check('the threshold is three days',
-      line({ due: null }, day(-3)) === '3 days since you last did this.',
-      String(line({ due: null }, day(-3))));
-
+    check('the gap is named', line({}, day(-11)) === '11 days since you last did this.',
+      String(line({}, day(-11))));
+    check('a short gap is not worth naming', line({}, day(-2)) === null,
+      String(line({}, day(-2))));
+    check('the threshold is three days', line({}, day(-3)) === '3 days since you last did this.',
+      String(line({}, day(-3))));
     check('never scheduled says nothing rather than guessing',
-      line({ due: null }, null) === null, String(line({ due: null }, null)));
+      line({}, null) === null, String(line({}, null)));
 
-    // A buffer block, or anything typed straight into the builder.
+    // The deadline used to be named here and used to beat the gap. It is on
+    // the screen as a warning mark instead, where it can be read against
+    // everything else wanting the same days.
+    check('a deadline is not named',
+      line({ due: day(2) }, day(-40)) === '40 days since you last did this.',
+      String(line({ due: day(2) }, day(-40))));
+    check('and does not suppress the gap either',
+      line({ due: day(2) }, day(-11)) === '11 days since you last did this.',
+      String(line({ due: day(2) }, day(-11))));
+    check('a due entry with no gap gets nothing at all',
+      line({ due: day(2) }, null) === null, String(line({ due: day(2) }, null)));
+
+    check('there is no deadline composer left', m.dueLine === undefined);
+
+    const src = require('fs')
+      .readFileSync(ROOT + '/messages.js', 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    check('and nothing in the file writes one', !/Due (in|today|tomorrow)|Was due/.test(src));
+
+    // Anything typed straight into the builder, or one whose entry has since
+    // been deleted.
     check('a block with no entry gets no line', line(null, null) === null);
     check('even one with a gap to name', line(null, day(-40)) === null);
   }
@@ -209,9 +213,13 @@ const made = [];
 
     check('the habit carries its gap',
       written[0].message_text === '11 days since you last did this.', String(written[0].message_text));
-    check('the task carries its deadline',
-      written[1].message_text === 'Due in 3 days.', String(written[1].message_text));
-    check('the buffer carries nothing', written[2].message_text === null,
+    // It has a due date and has never been scheduled, so there is no gap to
+    // name and the deadline is not named anywhere in a message any more.
+    check('the task with a deadline carries no line at all',
+      written[1].message_text === null, String(written[1].message_text));
+    check('and certainly not its due date',
+      !/Due/.test(written[1].message_text || ''), String(written[1].message_text));
+    check('the manual block carries nothing', written[2].message_text === null,
       String(written[2].message_text));
 
     // The plan being confirmed must not count as a scheduling of its own, or

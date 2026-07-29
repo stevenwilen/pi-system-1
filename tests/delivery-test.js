@@ -141,13 +141,13 @@ const statusOf = async (planId) => {
     const fresh = await makePlan('2031-06-02', 'confirmed', [
       {
         title: 'Just confirmed', start_time: at(-1), duration_minutes: 30,
-        message_text: 'Due in 3 days.', created_at: new Date().toISOString(),
+        message_text: '11 days since you last did this.', created_at: new Date().toISOString(),
       },
     ]);
     sent.length = 0;
     await scheduler.deliverDue(profile, { ...now, date: '2031-06-02' });
     check('it is sent on the first tick', sent.length === 1, `${sent.length} sent`);
-    check('with its line', sent[0].text.endsWith('Due in 3 days.'), JSON.stringify(sent[0] && sent[0].text));
+    check('with its line', sent[0].text.endsWith('11 days since you last did this.'), JSON.stringify(sent[0] && sent[0].text));
     check('and marked sent', (await statusOf(fresh))[0].message_sent_at !== null);
   }
 

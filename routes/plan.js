@@ -199,9 +199,11 @@ async function linesFor(user_id, planId, date, blocks) {
   // A block whose entry is gone gets no line at all rather than a gap line.
   // The person deleted the thing and kept the block, so what is left is a
   // block: a title and two times, and nothing to say about it.
+  // Only whether the entry is still there. The line is the gap and nothing
+  // else now, so the due date is not read on this path at all.
   const { data: rows, error } = await supabase
     .from('entries')
-    .select('id, due')
+    .select('id')
     .eq('user_id', user_id)
     .eq('status', 'active')
     .in('id', ids);
