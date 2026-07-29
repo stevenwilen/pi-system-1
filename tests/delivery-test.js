@@ -95,8 +95,8 @@ const statusOf = async (planId) => {
   console.log('a confirmed day');
   const planId = await makePlan(now.date, 'confirmed', [
     { title: 'Started with a line', start_time: at(-5), duration_minutes: 60,
-      message_text: 'Eleven days since you last did this.', created_at: old },
-    { title: 'Started, no line, confirmed long ago', start_time: at(-5), duration_minutes: 30, created_at: old },
+      message_text: '11 days since you last did this.', created_at: old },
+    { title: 'Started, no line', start_time: at(-5), duration_minutes: 30, created_at: old },
     { title: 'Not started yet', start_time: at(60), duration_minutes: 30,
       message_text: 'Later.', created_at: old },
     { title: 'Long past', start_time: at(-90), duration_minutes: 30,
@@ -108,13 +108,13 @@ const statusOf = async (planId) => {
 
   const titles = sent.map((s) => s.text.match(/<b>(.*?)<\/b>/)[1]);
   check('sends the started block that has a line', titles.includes('Started with a line'));
-  check('sends the started block without one', titles.includes('Started, no line, confirmed long ago'));
+  check('sends the started block without one', titles.includes('Started, no line'));
   check('does not send a block that has not started', !titles.includes('Not started yet'));
   check('does not send a block long past its time', !titles.includes('Long past'), titles.join(', '));
   check('exactly two went out', sent.length === 2, `${sent.length}`);
 
   const withLine = sent.find((s) => s.text.includes('Started with a line'));
-  check('message carries header then line', withLine.text === '<b>Started with a line</b>\n' + scheduler.hhmm(at(-5)) + ' to ' + scheduler.hhmm(hhmmss(nowMinutes + 55)) + '\n\nEleven days since you last did this.',
+  check('message carries header then line', withLine.text === '<b>Started with a line</b>\n' + scheduler.hhmm(at(-5)) + ' to ' + scheduler.hhmm(hhmmss(nowMinutes + 55)) + '\n\n11 days since you last did this.',
     JSON.stringify(withLine.text));
 
   const bare = sent.find((s) => s.text.includes('no line'));
@@ -130,30 +130,40 @@ const statusOf = async (planId) => {
   await scheduler.deliverDue(profile, now);
   check('no duplicates', sent.length === 0, `${sent.length}`);
 
-  console.log('\ngeneration still running');
-  const fresh = await makePlan('2031-06-02', 'confirmed', [
-    { title: 'Just confirmed', start_time: at(-1), duration_minutes: 30, created_at: new Date().toISOString() },
-  ]);
-  // Same clock, different date, so drive it directly against that day.
-  sent.length = 0;
-  await scheduler.deliverDue(profile, { ...now, date: '2031-06-02' });
-  check('a block confirmed seconds ago waits', sent.length === 0, `${sent.length} sent`);
-  let freshState = await statusOf(fresh);
-  check('and stays queued for the next tick', freshState[0].message_sent_at === null);
+  console.log('\na block confirmed seconds ago goes straight out');
+  {
+    // There used to be a grace window here. The line was written by a model
+    // call fired after the confirm response, so a block could exist for the
+    // better part of a minute with no text yet, and delivering in that gap
+    // would have stripped it to its header for ever. The line is composed in
+    // code now and inserted with the block, so a block that exists has
+    // whatever text it is ever going to have and there is nothing to wait for.
+    const fresh = await makePlan('2031-06-02', 'confirmed', [
+      {
+        title: 'Just confirmed', start_time: at(-1), duration_minutes: 30,
+        message_text: 'Due in 3 days.', created_at: new Date().toISOString(),
+      },
+    ]);
+    sent.length = 0;
+    await scheduler.deliverDue(profile, { ...now, date: '2031-06-02' });
+    check('it is sent on the first tick', sent.length === 1, `${sent.length} sent`);
+    check('with its line', sent[0].text.endsWith('Due in 3 days.'), JSON.stringify(sent[0] && sent[0].text));
+    check('and marked sent', (await statusOf(fresh))[0].message_sent_at !== null);
+  }
 
-  console.log('\nsame block once the line lands');
-  await supabase.from('blocks').update({ message_text: 'The line arrived.' }).eq('user_id', U).eq('plan_id', fresh);
-  sent.length = 0;
-  await scheduler.deliverDue(profile, { ...now, date: '2031-06-02' });
-  check('now it goes, with its line', sent.length === 1 && sent[0].text.endsWith('The line arrived.'), JSON.stringify(sent[0] && sent[0].text));
-
-  console.log('\nsame block, still no line, but the wait has expired');
-  const stale = await makePlan('2031-06-03', 'confirmed', [
-    { title: 'Waited long enough', start_time: at(-1), duration_minutes: 30, created_at: old },
-  ]);
-  sent.length = 0;
-  await scheduler.deliverDue(profile, { ...now, date: '2031-06-03' });
-  check('header goes out rather than nothing', sent.length === 1 && !sent[0].text.includes('\n\n'), JSON.stringify(sent[0] && sent[0].text));
+  console.log('\na block with no line is not a failure');
+  {
+    // A buffer block, or anything typed straight into the builder. It has no
+    // entry behind it, so there is no date to count and nothing to say.
+    const buffer = await makePlan('2031-06-03', 'confirmed', [
+      { title: 'Buffer', start_time: at(-1), duration_minutes: 30, created_at: new Date().toISOString() },
+    ]);
+    sent.length = 0;
+    await scheduler.deliverDue(profile, { ...now, date: '2031-06-03' });
+    check('the header goes out on its own', sent.length === 1 && !sent[0].text.includes('\n\n'),
+      JSON.stringify(sent[0] && sent[0].text));
+    check('and it is marked sent, not retried', (await statusOf(buffer))[0].message_sent_at !== null);
+  }
 
   console.log('\na pending day is never delivered');
   const pending = await makePlan('2031-06-04', 'pending', [

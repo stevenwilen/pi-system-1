@@ -54,16 +54,6 @@ const makePlan = async (date, status) => {
   if (error) throw new Error(error.message);
 };
 
-const makeEntry = async (fields) => {
-  const { data, error } = await supabase
-    .from('entries')
-    .insert({ user_id: U, status: 'active', ...fields })
-    .select('id')
-    .single();
-  if (error) throw new Error(error.message);
-  return data.id;
-};
-
 (async () => {
   await H.assertGuarded();
   await H.ensureProfile();
@@ -92,55 +82,17 @@ const makeEntry = async (fields) => {
     check('and says so plainly', sent[0].text === 'No plan for tomorrow yet.', JSON.stringify(sent[0].text));
   }
 
-  console.log('\nwhat it names');
+  console.log('\none line, and only one');
   {
+    // It used to name what had gone quiet on a second line, which needed a
+    // daily verdict written by a model call. That lane is gone, and a version
+    // built from days-since alone would name something every single night —
+    // a nudge that always fires is a digest.
     await clear();
-    // Ranked 0..3. Two cold, one cold habit, one cold but paused.
-    await makeEntry({ type: 'task', title: 'Reading', sort_order: 0, cold: true });
-    await makeEntry({ type: 'project', title: 'Spanish', why: 'x', sort_order: 1, cold: true });
-    await makeEntry({ type: 'habit', title: 'Gym', frequency: 'daily', sort_order: 2, cold: true });
-    await makeEntry({
-      type: 'task', title: 'Dentist', sort_order: 3, cold: true,
-      paused_at: new Date().toISOString(),
-    });
-
-    const text = await scheduler.composeNudge(U);
-    const lines = text.split('\n');
-    check('two lines, no more', lines.length === 2, JSON.stringify(lines));
-    check('the first is always the same', lines[0] === 'No plan for tomorrow yet.');
-    check('two cold priorities are named together', lines[1] === 'Reading and Spanish have gone quiet.', lines[1]);
-    check('a cold habit is not named', !text.includes('Gym'));
-    check('a paused item is not named, cold flag or not', !text.includes('Dentist'));
-  }
-
-  console.log('\none, several, none');
-  {
-    await clear();
-    await makeEntry({ type: 'task', title: 'Reading', sort_order: 0, cold: true });
-    check('one reads singular', (await scheduler.composeNudge(U)).split('\n')[1] === 'Reading has gone quiet.',
-      (await scheduler.composeNudge(U)).split('\n')[1]);
-
-    await clear();
-    // Four cold at four different ages. The two named must be the two left
-    // longest, which is the pair the panel puts at the top of the list.
-    const ago = (n) => {
-      const d = new Date();
-      d.setUTCDate(d.getUTCDate() - n);
-      return d.toISOString();
-    };
-    for (const [t, days] of [['Freshest', 1], ['Oldest', 40], ['Middling', 8], ['Next oldest', 25]]) {
-      await makeEntry({ type: 'task', title: t, cold: true, created_at: ago(days) });
-    }
-    const many = await scheduler.composeNudge(U);
-    check('four cold still names only two',
-      many.split('\n')[1] === 'Oldest and Next oldest have gone quiet.', many.split('\n')[1]);
-    check('and they are the two left longest',
-      !many.includes('Middling') && !many.includes('Freshest'));
-
-    await clear();
-    await makeEntry({ type: 'task', title: 'Warm', sort_order: 0, cold: false });
-    const alone = await scheduler.composeNudge(U);
-    check('nothing cold means one line only', alone === 'No plan for tomorrow yet.', JSON.stringify(alone));
+    await scheduler.sendNudge(profile(), at(20), { force: true });
+    check('exactly one line', sent[0].text.split('\n').length === 1, JSON.stringify(sent[0].text));
+    check('it is the whole message', sent[0].text === scheduler.NUDGE_TEXT, sent[0].text);
+    check('nothing is named', !/quiet/.test(sent[0].text));
   }
 
   console.log('\nthe hour');
@@ -212,16 +164,16 @@ const makeEntry = async (fields) => {
     check('the retry then goes out', sent.length === 1, `${sent.length}`);
   }
 
-  console.log('\nno model call anywhere in this path');
+  console.log('\nno model call anywhere in this file');
   {
     const fs = require('fs');
     const src = fs.readFileSync(ROOT + '/scheduler.js', 'utf8');
-    const nudge = src.slice(src.indexOf('async function composeNudge'), src.indexOf('async function tick'));
-    check('the nudge does not reach the brain', !/runBrain|anthropic/i.test(nudge));
-    check('nor call the judge', !/\bjudge\(/.test(nudge));
-    check('it only reads rows and sends', /from\('entries'\)/.test(nudge) && /from\('plans'\)/.test(nudge));
+    check('the scheduler does not reach the brain', !/runBrain|anthropic/i.test(src));
+    check('nor call a judge', !/\bjudge\(/.test(src));
+    check('the nudge reads the plan row and nothing else', /from\('plans'\)/.test(src));
     check("'nudge' is a job in the sent_log guard", /alreadySent\(profile\.user_id, 'nudge'/.test(src));
     check('and --run knows it', /nudge: sendNudge/.test(src));
+    check('the removed lanes are really gone', !/finance|coldness/i.test(src));
   }
 
   console.log('\ncleanup');

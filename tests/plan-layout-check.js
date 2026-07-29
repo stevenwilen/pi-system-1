@@ -1,7 +1,12 @@
-// The Plan screen's structure, checked against the stylesheet and markup.
+// The screen's structure, checked against the stylesheet and markup.
 //
-// Thirteen concrete problems, each pinned so it cannot come back quietly. No
-// database and no network: this reads the page as shipped.
+// Every rule the mockup demonstrates, pinned so it cannot come back quietly.
+// These are not preferences: each one is a distinction the screen makes with
+// colour or shape, and a violation reads as the screen saying something it
+// does not mean — a decorative thing looking actionable, a list looking like a
+// stack of cards, a section boundary drawn twice.
+//
+// No database and no network: this reads the page as shipped.
 const fs = require('fs');
 const path = require('path');
 const ROOT = path.join(__dirname, '..').split(path.sep).join('/');
@@ -14,8 +19,22 @@ const check = (label, ok, detail = '') => {
 
 const html = fs.readFileSync(ROOT + '/public/index.html', 'utf8');
 const css = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
-const body = html.slice(html.indexOf('<body>'), html.indexOf('</body>'));
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+
+// The markup alone. The <script> lives inside <body>, so slicing to </body>
+// and calling it markup meant every "gone from the markup" check was really
+// reading the script as well — and passing or failing for the wrong reason.
+const body = html
+  .slice(html.indexOf('<body>'), html.indexOf('</body>'))
+  .replace(/<script>[\s\S]*?<\/script>/, '');
+
+// The script with its comments stripped. Several checks below assert that a
+// removed feature is not mentioned, and this file explains at length which
+// features were removed and why. Reading the raw text would fail precisely
+// because the reasoning was written down.
+const code = script
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/^\s*\/\/.*$/gm, '');
 
 // One rule's declarations, by exact selector.
 const rule = (selector) => {
@@ -23,223 +42,240 @@ const rule = (selector) => {
   if (at === -1) return '';
   return css.slice(at, css.indexOf('\n      }', at));
 };
-const px = (selector, prop) => {
-  const m = rule(selector).match(new RegExp(`${prop}:\\s*([\\d.]+)px`));
-  return m ? Number(m[1]) : null;
-};
 
-console.log('1. one label style, and optional is inline');
+// Every rule whose declarations mention a value, by selector. Used to prove a
+// colour appears only where it is allowed to.
+function selectorsUsing(value) {
+  const out = [];
+  const re = /\n {6}([^{@\n][^{]*?)\{([^}]*)\}/g;
+  for (const m of css.matchAll(re)) {
+    if (m[2].includes(value)) out.push(m[1].trim().replace(/\s+/g, ' '));
+  }
+  return out;
+}
+
+console.log('1. the palette is exactly the one specified');
 {
-  const label = rule('label');
-  check('11px', /font-size: 11px/.test(label));
+  const root = rule(':root');
+  const want = {
+    '--bg': '#16130f',
+    '--card': '#211d18',
+    '--line': '#2c2721',
+    '--text': '#ede7de',
+    '--muted': '#8b8177',
+    '--faint': '#6b6459',
+    '--accent': '#6e8cb8',
+    '--warn': '#c4694a',
+  };
+  for (const [name, value] of Object.entries(want)) {
+    check(`${name} is ${value}`, new RegExp(`${name}:\\s*${value}\\s*;`, 'i').test(root));
+  }
+}
+
+console.log('\n2. one label style, and the action is quieter than it');
+{
+  const label = rule('.label');
+  check('10px', /font-size: 10px/.test(label));
   check('uppercase', /text-transform: uppercase/.test(label));
-  check('0.1em tracking', /letter-spacing: 0\.1em/.test(label));
-  check('weight 500', /font-weight: 500/.test(label));
+  check('0.14em tracking', /letter-spacing: 0\.14em/.test(label));
   check('muted', /color: var\(--muted\)/.test(label));
 
-  // A flex column made the label text and its aside two separate rows.
-  check('not a flex column, so the aside stays on the line', !/display: flex/.test(label), label.replace(/\s+/g, ' ').slice(0, 60));
+  // Baseline, so the action sits on the label's line rather than centred
+  // against a taller box.
+  check('the action shares its baseline', /align-items: baseline/.test(label));
 
-  const aside = rule('label .none');
-  check('optional is 10px', /font-size: 10px/.test(aside));
-  check('lowercase, never uppercase', /text-transform: lowercase/.test(aside));
-  check('dimmer than the label', /color: var\(--dim\)/.test(aside));
-  check('and not bold', /font-weight: 400/.test(aside));
+  const act = rule('.label .act');
+  check('the action drops the uppercase', /text-transform: none/.test(act));
+  check('and the tracking', /letter-spacing: 0;/.test(act));
+  check('so it cannot read as a second heading',
+    !/font-weight: (6|7|8|9)00/.test(act), act.match(/font-weight[^;]*/) || '');
 
-  // Every label in the form, so none of them keeps a different treatment.
-  const labels = [...body.matchAll(/<label[^>]*>\s*([A-Za-z][^<]*)/g)].map((m) => m[1].trim());
-  check('every field uses it', labels.length >= 5, labels.join(' | '));
+  // The whole point. A bolder or brighter action would make "+ Add" the
+  // loudest thing in the section, which is backwards.
+  check('it is never brighter than the label',
+    !/color: var\(--text\)/.test(act), act.match(/color[^;]*/) || '');
 }
 
-console.log('\n2. placeholders read as placeholders');
+console.log('\n3. rows are rows; only builder blocks are cards');
 {
-  const ph = rule('input::placeholder,\n      textarea::placeholder');
-  check('textareas covered too, not just inputs', /textarea::placeholder/.test(css));
-  check('dim, not near text brightness', /color: var\(--dim\)/.test(ph), ph.replace(/\s+/g, ' ').slice(0, 70));
-  check('normal weight', /font-weight: 400/.test(ph));
-  check('and Firefox is stopped dimming it twice', /opacity: 1/.test(ph));
+  const row = rule('.row');
+  const divider = rule('.row + .row');
+
+  check('a row has no background', !/background/.test(row), row);
+  check('nor a radius', !/border-radius/.test(row), row);
+  check('rows are separated by a hairline', /border-top: 1px solid var\(--line\)/.test(divider));
+  check('and only between them, never around them',
+    !/border:/.test(row) && css.indexOf('.row + .row') > -1);
+
+  const block = rule('.block');
+  check('a block IS a card', /background: var\(--card\)/.test(block));
+  check('with a radius', /border-radius/.test(block));
+
+  // Nothing else may take the card background. It is the mark of an object
+  // you manipulate, and there is one of those.
+  const carded = selectorsUsing('var(--card)').filter((s) => !/^:root/.test(s));
+  check('nothing else uses the card background',
+    carded.every((s) => /\.block|\.confirm:disabled/.test(s)), carded.join(' | '));
 }
 
-console.log('\n3. no nested cards');
+console.log('\n4. sections are separated by space, not by boxes');
 {
-  check('the add form is not a card', /<form id="add-form" class="formcard">/.test(body));
-  check('nor the block form', /<div class="formcard hidden" id="block-card">/.test(body));
-  check('a formcard has no background', /background: none/.test(rule('.formcard')));
+  const section = rule('.section');
+  check('36px between sections', /margin-bottom: var\(--gap\)/.test(section));
+  check('and the gap is 36px', /--gap:\s*36px/.test(rule(':root')));
+  check('a section has no border', !/border/.test(section), section);
+  check('nor a background', !/background/.test(section), section);
 
-  check('empty states are plain text', /\.empty \{/.test(css));
-  check('with no background of their own', !/background:/.test(rule('.empty')));
-  check('and dim', /color: var\(--dim\)/.test(rule('.empty')));
-
-  // The three the brief named, plus review, all stop being cards.
-  check('"Nothing here yet" is not a card', /el\('div', 'empty', 'Nothing here yet/.test(script));
-  check('"Tap something in Stale" is not a card', /el\('div', 'empty', 'Tap something in Stale/.test(script));
-  check('nothing on the plan screen still builds a card for an absence',
-    !/const empty = el\('div', 'card'\);[\s\S]{0,200}(Nothing here|Tap something|Nothing planned)/.test(script));
+  check('three sections, and only three', (body.match(/<section/g) || []).length === 3,
+    String((body.match(/<section/g) || []).length));
+  check('yesterday is first', body.indexOf('Yesterday') < body.indexOf('Things'));
+  check('things is second', body.indexOf('Things') < body.indexOf('Tomorrow'));
 }
 
-console.log('\n4. the two ends of the day are rows, not cards');
+console.log('\n5. two text sizes in a row, with real space between them');
 {
-  check('neither is a card in the markup', /<div id="starts">/.test(body) && /<div id="ends">/.test(body));
-  check('and neither draws a panel', /background: none/.test(rule('#ends,\n      #starts')));
+  check('the title is 15px', /font-size: 15px/.test(rule('.row .title')));
 
-  const row = rule('.ends-row');
-  check('about 44px tall', px('.ends-row', 'min-height') === 44, String(px('.ends-row', 'min-height')));
-  check('label left, control right', /justify-content: space-between/.test(row));
-
-  check('stepper buttons are 32px', px('.stepper button', 'width') === 32, String(px('.stepper button', 'width')));
-  check('and keep the sage border', /rgba\(143, 160, 122/.test(rule('.stepper button')));
-  check('the gap between them is tight', px('.stepper', 'gap') <= 2, String(px('.stepper', 'gap')));
+  const meta = rule('.row .meta');
+  check('the meta is 12px', /font-size: 12px/.test(meta));
+  check('and muted', /color: var\(--muted\)/.test(meta));
+  check('on its own line, with space above it', /margin-top: 5px/.test(meta));
 }
 
-console.log('\n5. Confirm is its own action');
+console.log('\n6. blue is actionable, and nothing else is blue');
 {
-  check('it sits outside the ends box', /<\/div>\s*<button id="confirm"/.test(body.replace(/\n\s*/g, '\n')) || /id="ends">[\s\S]*?<\/div>\s*<button id="confirm"/.test(body));
-  check('full width', /width: 100%/.test(rule('#confirm')));
-  check('with real space above it', px('#confirm', 'margin-top') >= 16, String(px('#confirm', 'margin-top')));
-  check('and no hairline tying it to a readout', !/border-top: 1px solid var\(--line\)/.test(rule('#confirm')));
+  const blue = selectorsUsing('var(--accent)').filter((s) => !/^:root/.test(s));
+
+  // The steppers, Confirm, and the sheet's save button, which is the same
+  // commit in a different place.
+  const allowed = /\.step|\.confirm|\.sheet-actions \.save/;
+  check('blue appears only on steppers and commits',
+    blue.every((s) => allowed.test(s)), blue.join(' | '));
+
+  check('the stepper buttons are blue', /color: var\(--accent\)/.test(rule('.step')));
+  check('confirm is blue', /background: var\(--accent\)/.test(rule('.confirm')));
+
+  // The specific traps: the calendar aside and the type chooser both look
+  // like places a designer would reach for an accent, and neither is one.
+  check('the calendar aside is not blue', !/--accent/.test(rule('.cal')));
+  check('nor its rule', !/--accent/.test(rule('.cal h4')));
+  check('the type chooser is not blue', !/--accent/.test(rule('.choices button')));
+  check('nor when chosen', !/--accent/.test(rule('.choices button[aria-pressed="true"]')));
+  check('a disabled stepper goes faint, not pale blue',
+    /color: var\(--faint\)/.test(rule('.step:disabled')));
 }
 
-console.log('\n6. a placeholder value is not shouting');
+console.log('\n7. the miss colour is for misses and warnings only');
 {
-  const ph = rule('.ends-row strong.placeholder');
-  check('normal weight', /font-weight: 400/.test(ph));
-  check('and muted', /color: var\(--dim\)/.test(ph));
-  check('a real end time keeps its emphasis', /font-weight: 600/.test(rule('.ends-row strong')));
-  check('the class is applied only when there is nothing to show',
-    /classList\.toggle\('placeholder', !blocks\.length\)/.test(script));
-  check('and it starts out as one', /id="end-time" class="placeholder"/.test(body));
+  const warn = selectorsUsing('var(--warn)').filter((s) => !/^:root/.test(s));
+  const allowed = /\.mark|\.missed|\.ends\.late|\.failed|\.danger|\.problem/;
+  check('used only on marks, misses and failures',
+    warn.every((s) => allowed.test(s)), warn.join(' | '));
+
+  check('the warning mark carries it', /color: var\(--warn\)/.test(rule('.mark')));
+  check('a missed block carries it', /color: var\(--warn\)/.test(rule('.missed')));
+  check('an ordinary row does not', !/--warn/.test(rule('.row')));
+  check('nor an ordinary meta line', !/--warn/.test(rule('.row .meta')));
 }
 
-console.log('\n7. the segmented control is a mode switch');
+console.log('\n8. the calendar aside is a left rule, not a card');
 {
-  check('30px buttons inside 3px padding is a 36px control',
-    px('.seg button', 'height') === 30 && px('.seg', 'padding') === 3,
-    `${px('.seg button', 'height')} + ${px('.seg', 'padding')}`);
-  check('smaller text', px('.seg button', 'font-size') <= 12, String(px('.seg button', 'font-size')));
+  const cal = rule('.cal');
+  check('a left rule', /border-left: 2px solid/.test(cal));
+  check('and only a left rule', !/border-top|border-right|border-bottom|border:/.test(cal), cal);
+  check('no background', !/background/.test(cal), cal);
+  check('no radius', !/border-radius/.test(cal), cal);
+  check('the text is indented from the rule', /padding: [^;]*13px/.test(cal), cal);
+
+  check('its heading is neutral warm grey', /color: var\(--cal-head\)/.test(rule('.cal h4')));
+  check('and its body too', /color: var\(--cal-text\)/.test(rule('.cal p')));
+
+  const root = rule(':root');
+  check('which is a warm grey, not a blue', /--cal-head:\s*#9a8f80/i.test(root));
+  check('and not the miss colour either', !/--cal-head:\s*#c4694a/i.test(root));
 }
 
-console.log('\n8. textareas start at two rows and grow');
+console.log('\n9. tabular figures on every time');
 {
-  check('why starts at two', /<textarea id="f-why" rows="2"/.test(body));
-  check('where it stands too', /<textarea id="f-state" rows="2"/.test(body));
-  // Searched across the stylesheet: `textarea` appears both as the tail of the
-  // shared input group and as its own rule, and rule() finds the first.
-  check('no tall minimum forcing them open', /textarea \{[^}]*min-height: 0/.test(css));
-  check('and no drag handle to fight the growing', /textarea \{[^}]*resize: none/.test(css));
-  check('they grow to fit what is typed', /box\.style\.height = `\$\{box\.scrollHeight\}px`/.test(script));
-  check('and on both, when a row is opened for editing', /grow\(\$\('f-why'\)\);[\s\S]{0,60}grow\(\$\('f-state'\)\)/.test(script));
-}
-
-console.log('\n9. Clear only when there is a date');
-{
-  check('hidden when the field is empty', /classList\.toggle\('hidden', !\$\('f-due'\)\.value\)/.test(script));
-  check('kept in step as it is typed', /\$\('f-due'\)\.oninput = paintDueClear/.test(script));
-  check('and re-checked when the form opens', /paintDueClear\(\);\s*\n\s*grow/.test(script));
-}
-
-console.log('\n10. a pair shares a row, a lone action takes the width');
-{
-  // The Plan screen's button pairs, all of them. The Money tab is out of scope
-  // and keeps its own treatment.
-  const plan = body.slice(body.indexOf('id="plan-view"'), body.indexOf('id="money-view"'));
-  check('no full-width button in a pair on this screen', !/class="primary grow"/.test(plan),
-    (plan.match(/class="primary grow"[^>]*/g) || []).join(' | '));
-  check('the block form still pairs Save with Cancel',
-    /<button class="primary" type="submit">Add block<\/button>[\s\S]{0,120}id="b-cancel"/.test(body));
-  check('with spacing between them', px('.row', 'gap') >= 12, String(px('.row', 'gap')));
-
-  // The sheet is one screen doing one thing, so Save is not one of two
-  // choices. The X in its header is the way out.
-  check('the sheet offers no Cancel', !/id="f-cancel"/.test(body));
-  check('and its Save takes the width', /width: 100%/.test(rule('#f-save')));
-}
-
-console.log('\n11. the header does not waste a row');
-{
-  check('the tabs are inside the header', /<header>[\s\S]*?<nav class="tabs"[\s\S]*?<\/header>/.test(body));
-  check('laid out as one row', /display: flex/.test(rule('header')));
-  check('with the tabs pushed to the end', /margin-left: auto/.test(rule('.tabs')));
-  check('and the title quieter than the content below it', /color: var\(--dim\)/.test(rule('header')));
-}
-
-console.log('\n12. one spacing scale');
-{
-  const scale = [8, 12, 16, 24, 32];
-  const spacings = {
-    'between sections': px('main', 'gap'),
-    'between rows of a section': px('.group', 'gap'),
-    'between list rows': px('#stale,\n      #paused', 'gap'),
-    'inside a card': px('.card', 'padding'),
-    'inside a row': px('.item', 'padding'),
-    'between form fields': px('form', 'gap'),
-  };
-
-  for (const [what, value] of Object.entries(spacings)) {
-    check(`${what} is on the scale`, scale.includes(value), String(value));
+  for (const [what, selector] of [
+    ['the start time', '.num'],
+    ['a block time', '.block .time'],
+    ['a block duration', '.dur'],
+    ['the day end', '.ends b'],
+    ['the calendar aside', '.cal p'],
+  ]) {
+    check(`${what} is tabular`, /font-variant-numeric: tabular-nums/.test(rule(selector)));
   }
-  check('sections are furthest apart', spacings['between sections'] === 32);
-
-  // The inversion the brief named: it was 12-14px inside against a 3px gap.
-  check('a row is no looser inside than the space between rows',
-    spacings['inside a row'] <= spacings['between list rows'],
-    `${spacings['inside a row']} inside, ${spacings['between list rows']} between`);
 }
 
-console.log('\n13. section headers lead, their buttons do not');
+console.log('\n10. the money tab is gone, and so is the tab bar');
 {
-  const head = rule('.group-head h2');
-  const btn = rule('.addbtn');
-  const weight = (r) => Number((r.match(/font-weight: (\d+)/) || [])[1] || 400);
-  const size = (r) => Number((r.match(/font-size: ([\d.]+)px/) || [])[1] || 0);
-
-  check('they share a baseline', /align-items: baseline/.test(rule('.group-head')));
-  check('the button is no heavier than the label', weight(btn) <= weight(head), `${weight(btn)} against ${weight(head)}`);
-  check('nor larger', size(btn) <= size(head), `${size(btn)} against ${size(head)}`);
-  check('and it is dimmer', /color: var\(--dim\)/.test(btn));
-  check('its pill border is gone', /border: 0/.test(btn));
+  check('no tab bar in the markup', !/class="tabs"|role="tablist"/.test(body));
+  check('no tab styling left behind', !/\.tabs/.test(css));
+  check('no money view', !/money/i.test(body));
+  check('nothing in the script switches tabs', !/showTab|tab-money|tab-plan/.test(code));
+  check('and nothing fetches the finance routes', !/\/money|\/finance/.test(code));
 }
 
-console.log('\n14. the add form is a sheet over the app, never in the list');
+console.log('\n11. everything cut is really cut');
 {
-  const plan = body.slice(body.indexOf('id="plan-view"'), body.indexOf('id="money-view"'));
-  check('no form left inside the plan view', !/id="add-form"/.test(plan));
-  check('the priorities section is the list and nothing else',
-    /<h2>Priorities<\/h2>[\s\S]{0,200}?<div id="stale"><\/div>/.test(body));
-
-  check('the sheet is fixed over the page', /position: fixed/.test(rule('.sheet-scrim')));
-  check('and dims what is behind it', /background: rgba\(/.test(rule('.sheet-scrim')));
-  check('it has a header', /<div class="sheet-head">/.test(body));
-  check('with a close control', /id="entry-close"/.test(body));
-  check('the close target is a real hit area',
-    px('.sheet-close', 'width') >= 40 && px('.sheet-close', 'height') >= 40,
-    `${px('.sheet-close', 'width')}x${px('.sheet-close', 'height')}`);
-  check('the fields scroll inside it', /overflow-y: auto/.test(rule('.sheet-body')));
-
-  // Opening it must not leave the list scrolling underneath.
-  check('the page behind is locked', /overflow: hidden/.test(rule('main.locked')));
-  check('locked on open', /\$\('main'\)\.classList\.add\('locked'\)/.test(script));
-  check('and released on close', /\$\('main'\)\.classList\.remove\('locked'\)/.test(script));
-
-  // Nothing may expand in place any more.
-  check('opening no longer scrolls a card into the list', !/scrollIntoView/.test(script.slice(script.indexOf('function openEntry'), script.indexOf('function closeEntry'))));
-
-  // Discarding asks, but only when there is something to lose.
-  check('the X compares against what it opened with', /sheetState\(\) !== openedWith/.test(script));
-  check('and only then confirms', /openedWith &&\s*\n?\s*!confirm\(/.test(script));
-  check('saving closes it', /closeEntry\(\);\s*\n\s*await load\(\)/.test(script));
-}
-
-console.log('\nthe palette is untouched');
-{
-  for (const [name, value] of Object.entries({
-    '--bg': '#16130f', '--surface': '#211d18', '--text': '#ede7de',
-    '--muted': '#8b8177', '--dim': '#6b6459', '--warn': '#c4694a',
-    '--accent': '#8fa07a', '--accent-press': '#7d8b6a',
-  })) {
-    check(`${name} still ${value}`, new RegExp(`${name}: ${value};`).test(css));
+  // Matched against identifiers and endpoints rather than English words. "why"
+  // and "place" both appear legitimately — a placeholder asking why something
+  // was missed, and replaceChildren — and a check that cannot tell those from
+  // the removed field is a check that will be silenced rather than fixed.
+  for (const [what, pattern] of [
+    ['summarize', /summari[sz]e/i],
+    ['the setup interview', /setup-prompt|plan-intent|\/import/i],
+    ['pause and unpause', /\/pause|paused_at|\bpaused\b/i],
+    ['the why field', /f-why|\.why\b|why:/i],
+    ['where it stands', /f-state|\.state\b|state:/i],
+    ['the free-text size field', /f-size-text|state_captured|state_days_old/i],
+    ['the temperature bar', /temperature|stale-bar|interpolat/i],
+    ['cold flags and reasons', /\bcold\b|cold_reason/i],
+    ['reordering', /reorder|sort_order|draggable|ondrag/i],
+    ['pinned blocks', /\bpinned\b/i],
+    ['auto-placement', /to_place|\/place\b|autoPlace/i],
+  ]) {
+    check(`${what}: gone from the markup`, !pattern.test(body), what);
+    check(`${what}: gone from the script`, !pattern.test(code), what);
   }
-  check('no webfont was added', !/fonts\.googleapis|@font-face/.test(html));
 }
 
-console.log(bad === 0 ? '\nPlan layout clean' : `\n${bad} FAILURE(S)`);
+console.log('\n12. the add form asks for exactly the five fields');
+{
+  check('a type chooser', /id="type-seg"/.test(body));
+  check('with three types', (body.match(/data-type="/g) || []).length === 3);
+  check('a title', /id="f-title"/.test(body));
+  check('a due date', /id="f-due"/.test(body));
+  check('a size', /id="f-size-field"/.test(body));
+  check('a frequency', /id="f-freq-field"/.test(body));
+
+  // The five buckets, spelled the way the server spells them. A mismatch here
+  // is a form that offers a value the server will refuse.
+  for (const size of ['a day', 'a few days', 'a week', 'a few weeks', 'months']) {
+    check(`the size "${size}" is offered`, code.includes(`'${size}'`));
+  }
+
+  check('it is a sheet', /class="sheet"/.test(body));
+  check('opened from the Things label', /id="add-open"/.test(body) &&
+    body.indexOf('add-open') < body.indexOf('Tomorrow'));
+}
+
+console.log('\n13. the shape of the day');
+{
+  check('a Starts control', /id="wake-time"/.test(body));
+  check('with steppers', /id="wake-minus"/.test(body) && /id="wake-plus"/.test(body));
+  check('a + Block control', /id="add-block"/.test(body));
+  check('a running day end', /id="end-time"/.test(body));
+  check('and one Confirm', (body.match(/id="confirm"/g) || []).length === 1);
+
+  check('the step is thirty minutes', /const STEP = 30;/.test(code));
+
+  // The whole builder is one cursor walking down the list. If a second
+  // starting point ever appears, blocks have stopped flowing in sequence.
+  check('blocks flow from one cursor', /let cursor = wake;/.test(code));
+  check('and each starts where the last ended', /cursor \+= b\.duration/.test(code));
+}
+
+console.log(bad === 0 ? '\nLayout clean' : `\n${bad} FAILURE(S)`);
 process.exit(bad === 0 ? 0 : 1);

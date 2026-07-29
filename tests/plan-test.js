@@ -56,8 +56,12 @@ const DATE = '2031-03-09';
   check('rejects an empty plan', (await call('/plan', { date: DATE, blocks: [] })).status === 400);
   const offStep = await call('/plan', { date: DATE, blocks: [{ title: 'x', start_minutes: 480, duration_minutes: 45 }] });
   check('rejects a duration off the 30 minute step', offStep.status === 400, offStep.data.error);
+  // Nothing arrives from a calendar any more, so nothing is exempt from the
+  // step. Every block is built with the steppers, so every block lands on it.
   const pinnedOdd = await call('/plan', { date: DATE, blocks: [{ title: 'x', start_minutes: 480, duration_minutes: 45, pinned: true }] });
-  check('but allows an odd length for a pinned calendar event', pinnedOdd.status === 200);
+  check('and the old exemption for pinned events is gone', pinnedOdd.status === 400, pinnedOdd.data.error);
+  const tooShort = await call('/plan', { date: DATE, blocks: [{ title: 'x', start_minutes: 480, duration_minutes: 15 }] });
+  check('rejects a duration under one step', tooShort.status === 400, tooShort.data.error);
   check('rejects a start outside the day', (await call('/plan', { date: DATE, blocks: [{ title: 'x', start_minutes: 1500, duration_minutes: 30 }] })).status === 400);
   check('rejects a blank title', (await call('/plan', { date: DATE, blocks: [{ title: '  ', start_minutes: 480, duration_minutes: 30 }] })).status === 400);
 
@@ -65,9 +69,9 @@ const DATE = '2031-03-09';
   const plan = {
     date: DATE,
     blocks: [
-      { title: target.title, entryId: target.id, start_minutes: 480, duration_minutes: 60, pinned: false },
-      { title: 'Dentist', entryId: null, start_minutes: 600, duration_minutes: 45, pinned: true },
-      { title: 'Deep work', entryId: null, start_minutes: 645, duration_minutes: 120, pinned: false },
+      { title: target.title, entryId: target.id, start_minutes: 480, duration_minutes: 60 },
+      { title: 'Dentist', entryId: null, start_minutes: 600, duration_minutes: 60 },
+      { title: 'Deep work', entryId: null, start_minutes: 660, duration_minutes: 120 },
     ],
   };
   const saved = await call('/plan', plan);
@@ -83,7 +87,8 @@ const DATE = '2031-03-09';
   check('start_time stored as a real time', blockRows[0].start_time.startsWith('08:00'), blockRows[0].start_time);
   check('duration stored in minutes', blockRows[0].duration_minutes === 60);
   check('entry_id links to the real entry', blockRows[0].entry_id === target.id);
-  check('pinned flag survives', blockRows[1].pinned === true);
+  check('nothing is stored as pinned', blockRows.every((b) => b.pinned === false),
+    blockRows.map((b) => b.pinned).join(','));
   check('sort_order preserves the list order', blockRows.map((b) => b.sort_order).join(',') === '0,1,2');
 
   console.log('\nreading it back');
@@ -91,28 +96,28 @@ const DATE = '2031-03-09';
   check('plan is returned', back.plan && back.plan.status === 'confirmed');
   check('blocks come back in order', back.blocks.map((b) => b.title).join('|') === `${target.title}|Dentist|Deep work`);
   check('minutes round trip exactly', back.blocks[0].start_minutes === 480 && back.blocks[0].duration_minutes === 60);
-  check('pinned round trips', back.blocks[1].pinned === true);
+  check('nothing comes back pinned', back.blocks.every((b) => b.pinned === undefined));
   check('entryId round trips', back.blocks[0].entryId === target.id);
 
   console.log('\nthe wake time is a fact about the day, not an inference');
   {
-    // The case that made inferring it wrong: a pinned appointment two hours
-    // before the day is meant to start. The old code took the earliest block,
-    // so this day would have gone on record as a 06:00 start.
+    // The case that made inferring it wrong: a block sitting two hours before
+    // the day is meant to start. The old code took the earliest block, so this
+    // day would have gone on record as a 06:00 start.
     const early = await call('/plan', {
       date: DATE,
       wake_minutes: 8 * 60,
       blocks: [
-        { title: 'Dentist', start_minutes: 360, duration_minutes: 45, pinned: true },
+        { title: 'Early errand', start_minutes: 360, duration_minutes: 60 },
         { title: 'Work', start_minutes: 480, duration_minutes: 60 },
       ],
     });
-    check('a day with an earlier pinned event saves', early.status === 200, JSON.stringify(early.data));
+    check('a day with an earlier block saves', early.status === 200, JSON.stringify(early.data));
 
     const { data: row } = await supabase
       .from('plans').select('wake_time').eq('user_id', U).eq('date', DATE).maybeSingle();
     check('the stored wake time is the one that was sent', row.wake_time.startsWith('08:00'), row.wake_time);
-    check('and not the 06:00 pinned block', !row.wake_time.startsWith('06:00'));
+    check('and not the 06:00 block', !row.wake_time.startsWith('06:00'));
 
     const reopened = (await call(`/plan/${DATE}`)).data;
     check('it comes back as minutes', reopened.plan.wake_minutes === 480, `${reopened.plan.wake_minutes}`);
@@ -164,7 +169,7 @@ const DATE = '2031-03-09';
   });
 
   const refreshed = (await call('/entries')).data;
-  const seen = refreshed.items.find((i) => i.id === target.id) || refreshed.paused.find((i) => i.id === target.id);
+  const seen = refreshed.items.find((i) => i.id === target.id);
   check('entry reports the plan date it appeared in', seen && seen.last_scheduled === past, `${seen && seen.last_scheduled} (today is ${today})`);
   check('days counts back to that plan, not to created_at', seen && seen.days === 11, `${seen && seen.days} days`);
 

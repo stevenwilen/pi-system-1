@@ -43,7 +43,7 @@ const made = { entries: [], plans: [] };
 async function entry(type, title) {
   const { data, error } = await H.db
     .from('entries')
-    .insert({ user_id: U, type, title, why: type === 'project' ? 'because' : null })
+    .insert({ user_id: U, type, title })
     .select('id')
     .single();
   if (error) throw new Error(error.message);
@@ -151,7 +151,7 @@ async function cleanup() {
 
     const after = await get('/entries');
     check('it is off the list', !after.items.some((i) => i.id === task));
-    check('and not hiding in paused', !after.paused.some((i) => i.id === task));
+    check('and there is no second list for it to hide in', after.paused === undefined);
 
     // Kept, not destroyed. This is the whole difference from Delete.
     const { data } = await H.db.from('entries').select('status').eq('id', task).single();
@@ -197,8 +197,8 @@ async function cleanup() {
   {
     const fs = require('fs');
     const html = fs.readFileSync(ROOT + '/public/index.html', 'utf8');
-    check('only on a task', /item\.type === 'task' && !item\.paused/.test(html));
-    check('and it posts to the done route', /entries\/\$\{item\.id\}\/done/.test(html));
+    check('only on a task', /item\.type === 'task'/.test(html));
+    check('and it posts to the done route', /entries\/\$\{id\}\/done/.test(html));
     check('Delete still asks first', /confirm\(`Delete/.test(html));
   }
 

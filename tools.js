@@ -11,19 +11,20 @@ const supabase = require('./db');
 
 // Fields the caller may set. Anything else is dropped, so user_id, id,
 // created_at and updated_at can never be overwritten from outside.
-// `priority` and `sort_order` are both deliberately absent. Both were ways of
-// ordering this list by hand, both are retired, and both columns are still in
-// the schema holding whatever they last held. Leaving them off the whitelist is
-// what stops anything writing to a column nothing reads any more.
 //
-// `cold` and `cold_reason` are absent for a different reason: they are a daily
-// verdict, not a field a caller sets in passing.
+// The absences are the interesting part, and they are all the same absence:
+// every one of these columns is still in the schema, still holding whatever it
+// last held, and read by nothing. `priority` and `sort_order` were ways of
+// ordering this list by hand. `cold` and `cold_reason` were a daily verdict
+// written by a model call. `paused_at` was a declared intent. `why` was a
+// project's stated reason and `body` was a note about where it stood. Leaving
+// them off this list is what stops anything writing to a column nothing reads.
 //
-// `due` is here because the person sets it. It is a date the caller supplies or
-// clears, never something inferred: nothing in this system decides on someone's
-// behalf when a thing is due, in the same way nothing decides that a gap was
-// deliberate.
-const CREATABLE = ['type', 'title', 'body', 'why', 'frequency', 'due'];
+// `due` and `size` are here because the person sets them. They are the two
+// halves of the warning mark, and both are supplied or cleared by hand: nothing
+// in this system decides on someone's behalf when a thing is due or how big it
+// is.
+const CREATABLE = ['type', 'title', 'frequency', 'due', 'size'];
 
 const UPDATABLE = [...CREATABLE, 'status'];
 

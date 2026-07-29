@@ -10,9 +10,19 @@ const H = require('./harness');
     console.log(`  ${table.padEnd(12)} ${count}`);
   }
 
-  const { data: intents } = await H.raw
-    .from('entries').select('title, status').eq('user_id', H.REAL_USER_ID).eq('type', 'finance_intent');
-  console.log(`\n  ${intents.filter((i) => i.status === 'active').length} active intent rows`);
+  // The three live types. Everything else in the `type` check constraint is a
+  // retired kind kept so old tombstones stay valid, and none of it should be
+  // growing.
+  const { data: live } = await H.raw
+    .from('entries')
+    .select('type, status')
+    .eq('user_id', H.REAL_USER_ID)
+    .eq('status', 'active');
+  const counts = {};
+  for (const r of live || []) counts[r.type] = (counts[r.type] || 0) + 1;
+  console.log(
+    `\n  active: ${Object.entries(counts).map(([t, n]) => `${n} ${t}`).join(', ') || 'none'}`
+  );
 
   const { data: touched } = await H.raw
     .from('entries')

@@ -15,871 +15,377 @@ So the system's core move is to make the user **read instead of remember**.
 
 ---
 
-## 1. The Four Pieces
+## 1. What it is
 
-### App — one screen, used once each evening
-Three stacked sections: Review, Stale, Builder. The user opens it in the
-evening, marks what did not happen, sees what has gone cold, and builds
-tomorrow.
+One screen, opened once in the evening. Three sections, top to bottom:
 
-The app does **arithmetic, not judgment**. Shifting blocks, summing durations,
-computing the end time, detecting collisions, sorting by days-since: all of it
-is mechanical and lives in the app. No thresholds, no advice, no decisions about
-what matters. If it required an opinion, it does not belong here.
+1. **Yesterday** — what was planned, each row one tap away from "didn't happen".
+2. **Things** — habits, projects and tasks in one list, coldest first.
+3. **Tomorrow** — the builder.
 
-### Brain — narrow, not conversational
-There is no chat. The brain is called in exactly two places (section 4) and
-never runs an open-ended conversation. It is still an agent with tools, still
-stateless, still reads rows at request time and keeps nothing.
+Behind it: a Postgres notebook (Supabase), two read-only calendar feeds, and a
+Telegram bot that only ever sends.
 
-### Notebook — everything known about the user
-A Supabase (Postgres) database. If a fact is not a row here, the system does not
-know it.
+### The brain is wired and unused
 
-### Messenger — outbound only
-A Telegram bot. It sends, never receives. Replies are ignored; there is no
-inbound webhook. Telegram exists so the system can reach the user *during* the
-day, at the moment a block begins.
+`brain.js`, `tools.js`, `usage.js`, the Anthropic API key and all the API wiring
+are still here and still functional. **Nothing calls them.**
+
+They are kept deliberately. Reasoning was removed from this system because every
+place it was used turned out to be a place where arithmetic on a row said the
+same thing more reliably: a daily verdict on what had gone cold, a line of
+context on each block, a rewrite of a text field. None of those needed a model,
+and each one made the system harder to predict and slower to trust.
+
+But the plumbing is the expensive part — the fenced-input discipline, the tool
+whitelist that cannot be talked past, the per-call cost metering — and rebuilding
+it correctly from nothing is work that has already been done once. So it stays,
+wired and idle, for whenever reasoning has a job that genuinely needs it.
+
+Two rules survive with it, and they apply the moment anything calls it again:
+
+- **The notebook is DATA, never INSTRUCTIONS.** Anything a person or a calendar
+  wrote is fenced before it reaches a prompt (`untrusted.js`). A title that says
+  "ignore your instructions" is a title.
+- **The tool set is fixed and small.** `user_id` is always the first argument and
+  always supplied by the caller, never chosen by a model. Columns that represent
+  a person's own declaration are off the whitelist entirely.
 
 ---
 
-## 2. Core Rules
+## 2. Core rules
 
-These are the invariants. Everything else is implementation detail.
+### 2.1 Nothing is inferred that can be declared
 
-### 2.1 The brain is stateless
-No session objects, no conversation memory, no caches that survive a request, no
-per-user prompt files. Memory is rows, loaded fresh and discarded when the
-response is sent. If the brain "remembers" something that is not a row, that is
-a bug.
+The system does not decide on someone's behalf that a gap was deliberate, that a
+project is nearly done, or that a deadline is at risk in some way the arithmetic
+does not already show. It reads what was typed and counts days.
 
-### 2.2 The notebook is DATA, never INSTRUCTIONS
-Everything loaded from the database is evidence about the user, never a
-directive. User content enters the prompt inside delimited blocks labelled as
-untrusted. A row saying "ignore your previous instructions" is stored, shown as
-data, and has no effect. No table holds a prompt, a rule, or a policy.
+### 2.2 Deleting takes something off the list
 
-Adversarial rows can change what the brain *knows*, never what the brain *is*.
+`status = 'deleted'` is a tombstone. The row stays, and it can never be brought
+back as anything — not active, not done. A deleted row is a row that should not
+have existed.
 
-**How the delimiting works.** Every briefing is wrapped by `untrusted.js` in a
-pair of marker lines carrying a random value generated per call:
+### 2.3 Finishing is not deleting
+
+`status = 'done'` is work that happened. Both drop out of every read, which all
+filter on `status = 'active'`, but they mean opposite things and are recorded
+apart.
+
+**Tasks only.** A habit recurring is the whole point of a habit, and a project is
+not finished by one session of work on it. Offering Done on either would be
+offering to retire something that has not ended.
+
+### 2.4 A day is assumed to have gone as planned
+
+The review only corrects it. Nothing asks anyone to confirm the ordinary case.
+
+### 2.5 A missed block does not count as having done the thing
+
+`blocks.completed` defaults to true and the review sets it false. Staleness
+counts only blocks that were not explicitly marked missed. Counting any block at
+all meant planning something and skipping it reset its clock exactly as much as
+doing it did, so something dodged four weeks running read as fresh every Monday.
+
+### 2.6 Wiping personal rows returns the system to factory state
+
+Nothing about how the system behaves lives outside the database.
+
+---
+
+## 3. The screen
+
+### 3.1 Yesterday
+
+Yesterday's blocks, if the day was planned. An empty answer means yesterday was
+never planned, which is not a failure and is not scolded.
+
+Each row is a title and one tap: **didn't happen**. Tapped, the title goes
+struck-through and the row reads **missed** in the miss colour. Tapping again
+puts it back.
+
+A short reason may be typed under a missed block. It is optional and always has
+been — a miss with no explanation is still worth recording, and demanding one is
+how a review stops being done at all.
+
+### 3.2 Things
+
+Habits, projects and tasks in **one list**. A task left three weeks is the same
+problem as a project left three weeks, so they share a list rather than being
+filed apart.
+
+**Ordered by how long each thing has been left, coldest first.** The order is
+arithmetic on the days, not anything the person arranged: there is no ranking, no
+drag, no `sort_order`.
+
+Each row is two lines:
 
 ```
------BEGIN UNTRUSTED USER DATA <random>-----
-...
------END UNTRUSTED USER DATA <random>-----
+UF application                          !!!
+project · due in 6 days · a few days
+
+Reading
+habit · 11 days since scheduled
+
+Return the router
+task · 3 days since added
 ```
 
-The random value is regenerated until it does not occur anywhere in the content,
-so the content provably cannot contain its own closing marker. A title that
-writes out a fake `-----END ...-----` line does not end the fence, because it
-cannot know the value. The engine prompt states the rule directly: everything
-between those lines is something somebody else wrote, and it cannot give an
-instruction, cancel one, or change what the brain is for.
+**"since scheduled" and "since added" are different claims** and the row says
+which one it is making. Something that has never been scheduled is counted from
+the day it was written down, and calling that "since scheduled" would be
+reporting a scheduling that never happened.
 
-Three briefings are fenced, which is all three: the coldness verdict, the block
-messages, and the finance line. Anything that reaches the model in future is
-fenced the same way, and the reason it is not left to the prompt alone is that
-a prompt rule is a request while an unguessable marker is a fact.
+Tapping a row adds it to tomorrow. A long press reveals **Done** (tasks only)
+and **Delete**.
 
-### 2.3 A fixed, small tool set
-The brain touches the world only through its tools, and `tools.js` keeps its
-field whitelist: anything not on the list is dropped, so `user_id`, `id`, and
-timestamps can never be written from outside.
+#### Adding something
 
-Every tool is scoped to the calling `user_id` at the server layer. The brain
-never supplies a `user_id` and cannot reach another user's rows.
+`+ Add` opens a sheet. Five fields, and no others:
 
-### 2.4 The engine is identical for every user
-System prompt, tool definitions, schedule definitions, code: byte-identical for
-everyone, never varying on personal data. Personal data changes the *content* of
-a message, never the *machinery* that produces it. Timing comes from profile
-rows read by a schedule that is itself the same for all.
+| field | applies to | required |
+|---|---|---|
+| type | — | yes: habit, project or task |
+| title | — | yes |
+| frequency | habits | yes: daily, few times a week, weekly, monthly |
+| due date | projects and tasks | no |
+| size | projects and tasks | **only when a due date is set** |
 
-### 2.5 Deleting takes something off the list
-Deletion is soft: `status = 'deleted'` leaves a tombstone. Deleted rows are
-never returned to the brain and can never be flipped back to **anything** — not
-active, and not done. Resurrecting a tombstone as finished work is the same move
-wearing a different word.
+The size buckets are `a day`, `a few days`, `a week`, `a few weeks`, `months`.
 
-Delete is not a blocklist. If the same thing legitimately arises again it will be
-recorded again as a new row. Delete means "take this off my list", not "never
-learn this about me".
+The date and the size travel together, in both directions. A due date with no
+size cannot produce a warning mark, and on screen that looks exactly like a
+comfortable deadline. A size with no date has nothing to be measured against.
+Clearing the date clears the size with it.
 
-### 2.5.1 Finishing is not deleting
-`status = 'done'` is a third state, and it means the opposite of `deleted`: one
-is work that happened, the other is a row that should not have existed. Both
-drop out of every read — everything filters on `status = 'active'` — so the
-difference is not what the screen shows but what the data says happened.
+There is no why, no note about where something stands, and no free-text size.
 
-**Tasks only.** A task is one thing to do, so there has to be a way to say it is
-finished that is not Delete. A habit recurring is the whole point of a habit,
-and a project is not finished by one session of work on it; Done on either would
-offer to retire something that has not ended. The route refuses both.
+The type is fixed once set. Changing it would mean deciding what happens to a
+frequency on something that is no longer a habit, and the answer is that this is
+a different thing and should be added as one.
 
-Without this the only exit from the list was a destructive button, and a
-finished task stayed on it: its clock reset when it was scheduled, it sank to
-the bottom, then climbed back to the top over the following weeks asking to be
-done again.
+#### 3.2.1 Warning marks
 
-### 2.6 Pausing is not deleting
-Pause is a separate, reversible state. A paused entry is still active and still
-something the user cares about; it has simply been set down on purpose. It drops
-out of the stale list until unpaused, and its clock is not a reproach while it is
-paused.
+Arithmetic, and only arithmetic (`warning.js`).
 
-This exists so the system never has to guess whether a gap is neglect. See 2.7.
+```
+size → days needed
+  a day = 1    a few days = 3    a week = 6    a few weeks = 15    months = 40
 
-### 2.7 Intent is declared, never inferred
-The system does not decide what the user meant. If something has gone quiet on
-purpose, the user says so by tapping **not now**. Nothing infers deliberateness
-from behaviour, and nothing nags on the strength of a guess.
+slack = days_until_due − days_needed
 
-A tap is cheap and unambiguous. An inference is neither.
+  slack <= 0    →  !!!    (in the miss colour)
+  slack 1–3     →  !!
+  slack 4–10    →  !
+  slack > 10    →  no mark
+```
 
-### 2.8 Wiping personal rows returns the system to factory state
-Delete every row for a `user_id` and that user is brand new. Nothing personal
-survives anywhere else, because nothing personal is stored anywhere else.
+A due date in the past gives a negative slack and therefore `!!!`, which is
+correct: overdue is the most urgent thing the scale can express.
+
+**A mark is static.** It does not decay as work happens, because the system is
+not told when work happens — the only thing it knows is that a block was
+scheduled and not marked missed, which is not the same as progress. A mark that
+moved on that evidence would be inventing a completion percentage nobody
+reported. It changes when the person changes the date or the size, and when the
+calendar advances. Nothing else moves it.
+
+**No mark means "nothing to say", never "fine."** A row with no due date, no
+size, or an unrecognised size shows nothing.
+
+### 3.3 Tomorrow
+
+#### The calendar aside
+
+Everything on **both** feeds for that date, read-only. Timed events show their
+time; all-day entries show the title alone. Timed first in clock order, then the
+rest.
+
+**Nothing is auto-placed, nothing is pinned, nothing is stored.** The feeds used
+to mean different things — one was things to know, the other things to do, and
+the second fed all-day events into the day as blocks that had to be argued with
+if you did not want them. Both are now read the same way and shown the same way.
+What to do about what is already on the calendar is the person's decision, and it
+is the one decision this system had been quietly taking.
+
+Reading a day is therefore repeatable and claims nothing. There is no placement
+endpoint and no `placed:` rows.
+
+#### The builder
+
+- **Starts** — an inline control, 30-minute steppers, clamped to 04:00–12:00.
+- **Blocks flow in sequence.** A block begins when the one above it ends, and
+  that is the whole rule. Changing one duration shifts everything below it.
+- 30-minute duration steppers on every block. The floor is one step; below that
+  it has stopped being a block, and removing it is what the person means.
+- **+ Block** adds a manual or buffer block.
+- A long press on a block removes it.
+- **Day ends** is live, and reads `HH:MM next day` in the miss colour past
+  midnight.
+- **Confirm** saves the plan. Any edit afterwards un-saves it.
+
+Re-confirming replaces the day rather than appending to it. The builder holds the
+whole plan, so what it sends is the plan, and merging two versions of the same
+day would only invent a third nobody asked for.
+
+The start hour is stored as the fact it is, not inferred from the first block. A
+block placed at 06:00 does not mean anyone got up then.
+
+### 3.4 A broken feed does not look like a quiet day
+
+`[]` from a dead feed and `[]` from a quiet Tuesday are the same value. A feed
+that cannot be read costs its own events and never the whole builder, but the
+failure travels with the answer and is named on screen: *"Dates could not be
+read."*
 
 ---
 
-## 3. The App
+## 4. Telegram
 
-One screen. Three sections, top to bottom, in the order they are used.
+**Outbound only.** There is no inbound handler and no chat.
 
-### 3.1 REVIEW — what happened yesterday
-Yesterday's blocks, listed. Each has a one-tap **didn't happen**.
+### 4.1 Block messages
 
-Blocks are **assumed done** unless tapped. The posture is trust. An optional
-short reason can be attached to a miss.
+One message per block, at its start time.
 
-### 3.2 STALE — a list per type, each ordered by how long each thing has been left
+```
+<b>UF application</b>
+09:00 to 11:00
 
-**Three lists: Projects, Habits, Tasks**, in that order. They are different
-commitments — a project is a body of work, a habit is a cadence, a task is one
-thing to do — and mixed into a single run of cards the person had to sort them
-by eye every time they looked. Projects lead because they are the things that
-carry.
+Due in 3 days.
+```
 
-A list with nothing in it is **left out entirely** rather than shown empty.
-Three headings over nothing is a screen describing its own structure to someone
-who has not filled it in yet.
+The header is always facts from the row. The line under it is composed **in
+code** when the day is confirmed and stored on the block, because delivery
+happens hours later in a different process and has to survive a restart.
 
-**Longest left, first, within each list.** The order is arithmetic on the
-days-since figure and nothing else. Ties break on title so two rows of the same
-age do not swap places between paints. The oldest thing on the screen is
-therefore no longer necessarily the top row on it: a habit left eleven days sits
-under Habits, below a project left four.
+Which line a block gets:
 
-**The clock counts the doing, not the writing down.** Days-since is measured
-from the last plan in which the thing appeared **and was not marked missed**.
-This used to count any block at all, which meant planning something and skipping
-it reset its clock exactly as much as doing it: something dodged four weeks
-running read as fresh every Monday. The panel, the temperature bar, the cold
-verdict and the evening nudge all inherited that, because all four read the same
-figure.
+- If the entry has a due date → the deadline, measured against the day being
+  planned rather than today. Written on Monday evening, "Due tomorrow" has to
+  mean Wednesday.
+- Otherwise, if it was last done three or more days ago → the gap.
+- Otherwise nothing, and the header goes out alone. That is the normal case for
+  a buffer block, not a degraded one.
 
-The number claims to say how long something has been neglected. Counting the
-writing-down made it say how long since it was last *mentioned*, and those two
-agree right up until someone skips something — which is exactly when it has to
-be right.
+A deadline beats a gap: if something is due in two days, how long it has been
+sitting there is the less useful of the two facts.
 
-A block is assumed done and the review only corrects it (3.5), so this excludes
-what was explicitly marked missed and nothing else. A plan nobody has reviewed
-yet still counts, which is the same assumption the review screen makes.
+**Delivery.** The scheduler ticks every 15 minutes and asks which blocks of
+today's confirmed plan have started and not been sent. Only a confirmed plan
+delivers; a day left pending was built and never agreed to. A block more than 30
+minutes late is marked sent without being sent and logged under `[EXPIRED]`,
+because "Gym, 08:00" arriving at 14:00 is worse than nothing.
 
-**The temperature bar is scaled across every row on the screen, not per list.**
-The colour has to mean the same thing wherever it appears. Scaled per list, a
-habit left three days would burn as cold as a project left three months, and the
-panel would be lying about which is worse.
+There is no grace window for a block whose text has not been written yet. The
+line is composed in code and inserted with the block, so a block that exists has
+whatever text it is ever going to have.
 
-**There is no ranking.** Nothing is dragged, nothing carries a position, and no
-row shows a number. Ordering these against each other by hand was a question
-nobody was asking; the useful one is which has been left longest, and that is
-something the list can work out for itself.
+### 4.2 The evening nudge
 
-Each row keeps its **quiet type mark** — one muted character, not a label. It is
-redundant with the heading above it and kept anyway: it is the left gutter the
-titles align to, and it is the only thing saying what a row is down in Paused.
-
-The row does **not** repeat its heading as a tag. A row under Projects that also
-says "project" is a word for something the eye already had.
-
-Every row also carries the days-since label, the temperature bar, the cold
-outline and its reason, and pause, edit and delete. **Paused items stay in one
-list below**, holding all three types together — there are usually few of them,
-and splitting a short list into three shorter ones buys nothing. That is why the
-type tag survives there.
-
-**The why is not shown on the row.** It is a paragraph per item, and a list of
-paragraphs cannot be scanned, which is the one thing this panel has to be. It is
-still required on a project, still editable, and still read by the brain.
-
-**Two retired columns remain in the schema, holding whatever they last held.**
-`priority` was the first attempt at ordering this list by hand and `sort_order`
-was the second. Both are unused, neither is written, and both are off the tools
-whitelist so nothing can write to them by accident. They are kept because
-dropping a column is the one move that cannot be undone, and an unread column
-costs nothing.
-
-### 3.2.1 Due dates
-Optional, and on **tasks only**.
-
-A habit has a cadence instead. A project has a **size** — days, weeks or months
-— which says how much work is in it, and that is the useful thing to know about
-a project. A date on a project is a guess about when the work will end rather
-than a fact about the work, and it goes stale on its own without anything having
-happened. The interview is told not to ask for one and the form does not offer
-one; a deadline someone volunteers for a project belongs in its state text, as
-something they said.
-
-Set with a date picker in the add form and editable in place afterwards, and
-clearable back to nothing. Never inferred: nothing in this system decides on
-someone's behalf when a thing is due.
-
-Shown as a small pill on the row: the date, or `today` / `tomorrow` / `in 3
-days` when it is close, or `3 days overdue` in the miss colour once it has
-passed.
-
-**Sorting is unchanged.** A due date does not reorder anything. The list is
-ordered by how long each thing has been left, and a deadline is an annotation on
-a row rather than an argument about where that row belongs.
-
-**Two things inform, and neither moves anything.** Every row shows how long
-since it was last scheduled, and a temperature bar: a 3px left edge coloured
-across the range currently on screen, from `#6F9270` at the freshest through
-`#8A9A9E` to `#6B93B8` at the coldest, interpolated. Both lists share one
-scale, so a row means the same thing wherever it sits.
-
-Relative, not absolute. Eleven days means something different on a list whose
-worst is twelve than on one whose worst is ninety, and the bar says which list
-this is. A paused row keeps the neutral hairline: the user has said its clock
-is not running, so the edge has nothing to report.
-
-Last-scheduled is the most recent block tagged to that entry, and for anything
-never scheduled the clock runs from when it was added. Both are read and
-neither acts.
-
-**Cold is a verdict, not a sort.** A cold item gets a red outline and shows one
-line saying why, in place. It does not move. What counts as too long differs per
-item, so the judgment is the brain's (section 4), made once a day and stored.
-The panel only ever reads the stored verdict; it never calls the model.
-
-Each item has these actions:
-- Tap the item to **pull it into tomorrow's plan**.
-- Tap **not now** to **pause** it. It leaves the list until unpaused, and a
-  paused item is never marked cold.
-- **Edit** it: the title always, the why or the frequency where the type
-  requires one, and the due date where the type allows one. The same rules apply
-  as at creation, so editing cannot empty a field that was required to create
-  it — but a due date was never required, so clearing one is always allowed.
-- Mark it **Done**, on a task, per 2.5.1. It leaves the list and stays in the
-  data. Not offered on a habit or a project, nor on anything paused.
-- **Delete** it, softly, per 2.5.
-
-Done sits next to Edit rather than next to Delete. They are one tap each and
-only one of them asks first.
-
-Paused items are listed separately, out of the way but not hidden, so unpausing
-is always one tap and nothing disappears silently.
-
-### 3.2.2 Setting it up: the interview
-The same shape as the finance lane's (§7), for the same reason: getting
-everything out of someone's head needs follow-up questions, and follow-up
-questions are a conversation this system does not hold.
-
-Shown **only while both lists are empty**, and while nothing is paused. Once a
-single row exists the person has started, and a setup card above their own list
-is a screen telling them to begin something they have begun.
-
-1. **Copy setup prompt** serves `SETUP_PROMPT` from `plan-intent.js` — engine
-   text, identical for everyone, containing nothing about anyone.
-2. They answer it in a chat assistant. It asks about projects (what, **why**,
-   where it stands, how big), then habits with their cadence and why, then
-   one-off tasks and what each involves.
-3. They paste the JSON block back. `POST /plan-intent/import` validates every
-   item before writing any of them, and appends.
-
-**Order carries no meaning.** The interview does not ask what order things come
-in and the import does not write a position. The list sorts itself by how long
-each thing has been left.
-
-All-or-nothing, as in the finance lane. One bad entry rejects the whole paste
-rather than leaving a list that looks complete. A project needs a why, a habit
-needs a cadence it understands and must not carry a deadline, and every date
-must be a real one.
-
-### 3.2.3 State, and why it is always dated
-Where a project or task actually stands: what is done, what is left, and what
-the next step is. Optional, and offered in the manual add form as well as the
-interview, so an item added later is not thinner than one added at setup.
-
-It lives in the existing `body` column, which no habit, project or task has ever
-used. **No new columns.**
-
-**It is stored with the date it was captured, and never read without it.**
-Progress ages. "Landing page done, pricing next" is true the day it is written
-and wrong two months later, and a system that repeats it as current is lying
-with the user's own words. So:
-
-- Editing state **re-dates** it. The claim has just been made again, so its
-  clock starts again.
-- Anywhere the brain sees it, it arrives as a dated claim — *"as of 12 days ago
-  they said: ..."* — never as a fact about now.
-- The prompt is explicit that this is the last thing known and not the current
-  position, that the right phrasing is *"last you wrote, the pricing page was
-  next"*, and that it must neither congratulate progress it cannot see nor
-  assume none has been made.
-
-Same discipline as a declared balance in the finance lane, for the same reason:
-a stale figure presented confidently is worse than no figure.
-
-**Block messages draw on it.** Knowing the next step is what turns "Web
-services, 11am" into something worth reading, and it is usually the most useful
-thing the model has about a block.
-
-### Adding something
-An **+ Add** control at the top of the stale list opens a small form:
-
-- **type**: habit | project | task, as a segmented control
-- **title**: text
-- **habit only, frequency**: daily / few times a week / weekly / monthly. This is
-  the user's *intended* cadence, and it is what makes staleness mean anything:
-  eleven days matters for a daily habit and not for a monthly one.
-- **project only, why**: text, required. A project without a stated reason cannot
-  be argued for later.
-- **habit only, why**: text, optional but asked for. A habit carrying only a name
-  and a cadence is a line nobody recognises three months later, so the interview
-  asks rather than waiting to be offered one, and the form does the same.
-- **task only, due**: a date, optional, from a picker rather than a text field,
-  and clearable back to nothing. Never on a project or a habit.
-- **project and task only, where it stands**: optional prose, dated when saved
-  and re-dated whenever it is changed. See 3.2.3.
-- **project only, roughly how big**: days / weeks / months. This is what a
-  project has in place of a deadline.
-- **task**: title, and optionally a due date and where it stands
-
-**The form is a sheet over the app, not a panel inside the list.** Both **+ Add**
-and editing a row open the same full-screen sheet, with its own header and a
-close X; the list behind it is dimmed and does not move. Nothing expands in
-place, so the row you were reading stays where it was. Editing hides the type
-selector, because what a row is was decided when it was created. Save writes and
-closes. The X discards, and asks first only when something has been entered. The
-list is a list at every moment.
-
-Save writes one row to `entries`. No reasoning, no model call.
-
-Creating an entry needs no judgment. Chat was only ever there to pull structure
-out of a sentence, and there is nothing to pull when the person picks a type and
-types a title. That makes this arithmetic, so it lives in the app.
-
-The one exception is the **Summarize** button, which sits under every long-form
-field and rewrites what is already in that field, adding nothing to it. It is a
-reasoning place and is specified as one in 4.3.
-
-### 3.3 BUILDER — tomorrow
-- Every block has a **start time** and a **duration**.
-- Duration adjusts with `-` / `+` steppers in **30-minute increments only**. No
-  hold-to-repeat. No typing times.
-- Blocks **flow in sequence**: changing one shifts everything below it.
-- **Pinned** blocks (calendar events, appointments) do not move. If a change
-  collides with a pinned block, the collision is shown visibly, for example a red
-  or negative gap. The system does **not** auto-resolve it.
-- A running **end time** displays at the bottom and updates live, so the user can
-  see when the day lands and cut things if it is too late.
-- **Drag to reorder.**
-- Buffer and rest time is added **manually**, by the user, as a normal block. The
-  system never inserts automatic padding.
-- **The day's start is set per day**, with steppers, in **30-minute** steps
-  between 04:00 and 12:00 — the same step durations move in, so the whole day
-  sits on one grid. A day saved when the step was fifteen minutes can start at
-  08:15; the stepper moves to the next boundary rather than carrying the offset
-  forward, so one press corrects it without a saved plan being rewritten the
-  moment it is opened.
-- `profile.default_wake_time` seeds a day that has not been built yet. Changing
-  tomorrow's start does **not** rewrite that standing default, and reopening a
-  saved day restores the hour it was actually built with rather than the
-  default. A day that began at 9 does not silently become an 8 o'clock day.
-- The stored `plans.wake_time` is **the hour that was set**, not the earliest
-  block. Those differ whenever a pinned calendar event sits before the day is
-  meant to start, and inferring it would put a 6am appointment on record as a
-  6am start.
-- Moving the start is an edit like any other: everything unpinned reflows from
-  it, any collision with a pinned block is shown and not resolved, and the day
-  stops counting as confirmed until it is confirmed again.
-- **Confirm** saves the plan.
-
-### 3.4 Two calendars: things to know, and things to do
-
-Calendar input is two feeds, and **which feed something is on is the entire
-signal**. Nothing is filtered by `TRANSP`, by calendar name, or by anything
-written inside the event. The user already sorts their own life by choosing
-which calendar a thing goes on; this reads that decision rather than
-second-guessing it.
-
-| | |
-|---|---|
-| `CALENDAR_ICS_URL` | **Dates** — things to **know** |
-| `CALENDAR_ACTION_ICS_URL` | **Personal** — things to **do**. Optional |
-
-**Timed events are appointments on either feed.** Pinned, immovable, collisions
-shown and never resolved. The hour is spoken for whichever calendar it came
-from. Unchanged from before.
-
-**All-day events are where the feeds differ**, because an all-day event claims
-no hours and so the system has to decide what it means:
-
-- **On Dates** it is a fact about the day — a birthday, a deadline someone else
-  owns. It shows as a quiet note above the blocks and is **never** placed.
-- **On Personal** it is work with no time attached yet. On the **first** open of
-  a day with no saved plan, each one is added as an **ordinary block**: the
-  event's title, 30 minutes, **not pinned** — movable, resizable, deletable like
-  anything else — placed the way any new block is, in the first gap it fits in,
-  otherwise appended.
-
-**Placing happens once, and saying no sticks.** Each event is claimed in
-`sent_log` under `placed:<event id>` for that date at the moment it is handed
-over, and the claim is the insert rather than a check-then-write, so two
-builders opening at once cannot both place it. Delete the block, reopen the
-builder, and it does not come back. Without that the feature would be one that
-keeps arguing.
-
-A recurring event's id carries its occurrence, so next week's instance is a
-different thing to place from this week's.
-
-With `CALENDAR_ACTION_ICS_URL` unset there is one feed and the behaviour is
-exactly what it was.
-
-### 3.5 A broken feed does not look like a quiet day
-
-`get_calendar` returns what it could read, so a feed that is down costs its own
-events and never the whole builder. But `[]` from a dead feed and `[]` from a
-Tuesday with nothing on it are the same value, and a calendar that has been
-broken for a week must not read as a quiet week.
-
-So each feed is read separately and **failure is reported rather than
-swallowed**: logged loudly and by name (`[CALENDAR] could not read the Dates
-feed`), and returned to the builder, which says *"Couldn't reach Dates"* in the
-miss colour above the blocks. One feed failing never blames the other.
-
----
-
-## 4. Where Reasoning Is Used
-
-The count is **per lane**, not global. Each lane carries its own, and a lane
-that grows one does not spend the planner's. The planner has three. The finance
-lane has one (section 7).
-
-Within the planner, exactly three places. Nowhere else.
-
-**1. The coldness verdict, once a day.** How long is too long differs per item.
-Three days without a daily habit is not three days without a monthly one, and a
-project deliberately set down is not neglected at all. So it is judged per item
-rather than by a threshold.
-
-One call per user per day, before their evening. It receives every active entry
-with its type, title, frequency or why, how long since it was last scheduled,
-whether it is paused, and its due date where it has one. It returns, for each,
-cold or not and one line saying why. The verdict is stored on the row and the
-panel reads only that, so opening the app never calls the model.
-
-The verdict is made on time, cadence and deadline only. The items are numbered
-in the briefing, but that numbering is by when they were added and exists only
-to match a verdict back to a row. It is not a position, and there is no longer
-one to send.
-
-**A deadline outranks cadence.** An item that is overdue, due today, or due soon
-and is not on any plan yet is cold however recently it was touched: nothing is
-happening about it and the date is coming anyway. The line says so, with the
-number — "due in 2 days and not on any plan yet". An item already on a plan for
-a coming day is being dealt with, so its date is not a reason to flag it.
-
-Everything countable is counted before the call: the days remaining, whether the
-date has passed, and whether the item sits on a plan for today or later. The
-model is asked for the judgement, never the arithmetic.
-
-A paused item is never cold. The user has already said it was set down on
-purpose, and 2.7 means that is not something to second-guess. This holds even
-when it has a deadline and that deadline has passed, and it is enforced in code
-after the reply as well as asked for in the prompt.
-
-Failure leaves the previous verdict standing. Blanking the flags because a call
-failed would turn an outage into a screen that says everything is fine.
-
-**2. Block message generation, at confirm time.** See section 5.
-
-**3. Summarize, on one field, when the button is pressed.** The narrowest of the
-three, and the only one a person triggers directly. It exists because these
-fields are dictated, and speech is not writing: "um so basically the thing is I
-want to like build this business because you know I don't want to be paycheck to
-paycheck" is a real thing to say and a poor thing to read back in four months.
-
-It sits under **every field long enough to be spoken into**, from one shared
-implementation rather than a copy per field:
-
-| Field | Where |
-|---|---|
-| why this matters | projects, habits |
-| where it stands | projects, tasks |
-| why a block didn't happen | the review screen |
-| detail | finance intent rows, in Money |
-
-Not on **roughly how big**, which is a select: four fixed options are not
-dictation and there is nothing there to rewrite.
-
-The miss reason is a sheet rather than the browser's own `prompt`, which has one
-line and nowhere to put a button. It is the field most likely to be spoken — it
-is answered at the end of a long day, about something that went wrong. Closing
-the sheet still marks nothing, exactly as dismissing the prompt did, because the
-reason is optional and marking a block missed by accident is worse than not
-marking it at all.
-
-It is handed the current text of **one field** and returns that same text,
-tidied, which replaces what is in the box. Nothing else about the entry is sent,
-because nothing else is needed and everything else sent is something that could
-come back. It carries **no tools**, cannot read the notebook and cannot write a
-row. The field text arrives fenced as untrusted data (2.2), so an instruction
-typed into a form field is rewritten as the sentence it is.
-
-The rules it is held to: keep the person's meaning and every specific exactly,
-**add nothing**, strip filler and repetition and false starts, aim for one or two
-sentences, first person and plain language, no headers or bullets. Never a
-question and never a remark, because the whole reply is written straight into
-the field and anything else becomes something to delete by hand.
-
-**This is not capture and not extraction.** It never pulls structure out of a
-sentence, never decides what an entry is, and never invents a detail that was
-not already typed. Creating an entry stays arithmetic and stays in the app
-(3.2); a rewrite button is not a way back in to that.
-
-**The original is recoverable.** A tap overwrites something the person said, so
-the replaced text is held and an undo restores it — until the field is edited
-again or the sheet is closed, and no longer. An undo still offering itself after
-the text has moved on would put back something that was true two edits ago.
-
-Each field holds **its own** undo. One shared between them would let a rewrite on
-one field arm the undo on another, and restore text that had never been there.
-
-**Failure changes nothing.** The field keeps every word, the page says so once
-and quietly, and the field is never cleared. A rewrite that half-lands is worse
-than one that does not happen.
-
-Deliberate-versus-drift was once the third. It is not reasoned any more: the user
-declares it with the **not now** button (2.7). A tap replaced a judgment call,
-and the judgment call was the part that could be wrong about someone.
-
-Everything else — ordering, shifting, summing, collision detection, delivery
-timing — is code.
-
----
-
-## 5. Telegram
-
-Outbound only.
-
-**At confirm time**, the brain generates **all** of that day's block messages in
-**one reasoning pass**. It needs the whole day in view to say why a block sits
-where it does. The generated text is **stored** on the block.
-
-**At each block's start time**, the scheduler sends that block's stored text.
-Delivery is a timer and a database read. **The model is never called at
-block-start time.**
-
-Each message carries what the block is, plus one line of reasoning behind it: why
-it is placed there, or that it has been eleven days since they last did it.
-
-**The tick does not align to block boundaries, on purpose.** It runs every 15
-minutes and asks which blocks have started and have not been sent, rather than
-firing exactly on the half hour. A tick that only fires on the boundary has to
-be exactly on time or the block is missed for good; asking the question instead
-means a restart or a deploy recovers by itself.
-
-A block may be delivered up to 30 minutes late. Past that it is marked sent
-without being sent and logged under `[EXPIRED]`, because "Gym, 08:00" arriving
-at 14:00 is worse than nothing. That log line is deliberately distinct: from the
-phone end a message that never arrives looks identical whether the block expired
-or the scheduler is dead, and those need opposite responses.
-
-One exception delays rather than expires. If a block is due and has no stored
-line yet, and its day was confirmed in the last two minutes, generation is
-probably still running, so it is left queued for the next tick.
-
-### 5.1 The evening nudge
-The one thing this system cannot do for someone is notice that they never
-opened it. Every other message is about something the user already decided;
-this one is about the evening they did not spend deciding.
-
-**Once a day, at `profile.nudge_hour` in their timezone, defaulting to 20:00
-when the column is null.** Late enough that the evening has happened, early
-enough that planning tomorrow is still a reasonable thing to ask.
-
-**It sends only when tomorrow has no confirmed plan.** That is the whole
-condition, and it is read from the row rather than inferred from anything. If
-tomorrow is confirmed, nothing is sent at all. Telling someone who has planned
-their day that they have not is the one failure this job must never have.
-
-A plan left *pending* is not a plan. It was built and never agreed to, so the
-nudge still fires.
-
-**No model call.** Either tomorrow has a confirmed plan or it does not, and
-either something is flagged cold or nothing is. Both are lookups, so both are
-code. The text is composed from rows:
+At `profile.nudge_hour` (default 20:00), local time, if **tomorrow has no
+confirmed plan**:
 
 ```
 No plan for tomorrow yet.
-Reading and Spanish have gone quiet.
 ```
 
-The first line is the message. The second appears only when a project or task
-already carries a cold verdict, and names **at most two**: the two left longest,
-which is the order the panel puts them in. Habits are never named: a habit going quiet is what the
-panel is for, and this message is about tomorrow having no shape yet. Paused
-items are never named either, matching the panel exactly — a screen that calls
-something quiet must not be contradicted by a message that calls it cold.
+That is the entire message. One `sent_log` row per evening guards it, and an
+evening where the plan already exists is claimed too so the rest of the evening
+does not ask again.
 
-Nothing else. This is a nudge, not a digest.
+The one thing this system cannot do for someone is notice that they never opened
+it. Every other message is about something they already decided; this one is
+about the evening they did not spend deciding.
 
-Guarded by `sent_log` under the job name `nudge`, so a restart cannot send it
-twice in one evening. An evening that is already planned is claimed in
-`sent_log` too, so the rest of the evening does not keep asking. A **failed
-send writes no row**, so the next tick inside the window tries again.
-
-An unreadable `plans` table stops the job rather than sending. Silence is the
-safe wrong answer here; the alternative is the one thing this job must never do.
+It had a second line that named what had gone quiet. That needed a daily verdict
+written by a model call, and the whole lane is gone. A version built from
+days-since alone would name something every single night, including the nights
+when nothing was actually neglected — and a nudge that always fires is a digest,
+which this is deliberately not.
 
 ---
 
-## 6. Non-Goals
+## 5. Non-goals
 
-- No inbound Telegram. The bot never holds a conversation.
-- No chat interface. The system is not a conversational assistant.
-- No planning *for* the user. It surfaces and accompanies; it does not decide.
-- No inferring intent. If something was set down on purpose, the user says so.
-- No automatic padding, buffers, or auto-resolved collisions.
-- No per-user prompts, rules, or configuration beyond the profile row.
-- No hard deletes. Tombstones only.
-- No judgment in the app.
-
----
-
-## 7. Second lane: Finance
-
-A separate lane. It does not touch the builder, stale panel, or blocks. Its own
-tab. Planner is primary.
-
-### Source of truth
-A Google Sheet connected to the user's bank. Transactions are NEVER stored in
-the notebook. Read a bounded window (~60 days) at reasoning time, reason,
-discard the raw data. Store only the resulting insight as a row.
-
-### Runway lives in the message, not on the screen
-Runway is still the metric that matters: how much cash is on hand, what is
-committed against it, and how long it lasts. **It is not on the screen, and that
-is deliberate.**
-
-**The sheet carries no balances.** It is a list of transactions, so nothing in
-it can be counted into a balance. The only way a figure could appear on that
-screen is if the user typed one, and a typed balance ages silently: it is
-correct the day it is entered and quietly wrong every day after, while looking
-exactly as authoritative. A number that is confidently stale is worse than no
-number, which is the same reason the sync date is always shown rather than only
-when something is wrong.
-
-So the split is:
-
-- **The screen counts spending from the sheet.** Total, categories, transfers
-  excluded, and how old the data is. Arithmetic on what is actually known.
-- **The daily message carries runway**, because that is where a declared balance
-  can be *weighed against how old the claim is*. The brain has the intent rows,
-  knows the date each was written, and can say "you said £X three weeks ago" or
-  decline to reason about it at all. A screen cannot hedge; a sentence can.
-
-If no `finance_intent` row states what is on hand, the balance is not knowable
-and **must not be guessed**. The message says nothing about runway rather than
-inventing it.
-
-Month-over-month category comparison is explicitly REJECTED as the frame. It is
-a tool for someone with steady income asking "am I drifting." It produces noise
-for anyone with variable or zero income, and it flags normal monthly variability
-as behaviour change. The screen showing category totals is **not** that: it
-reports what a window contained, and compares nothing.
-
-Where category-level comparison IS used, it must be against a rolling 3-6 month
-median, and only flag a shift sustained 2+ weeks. Never last-month-vs-this-month.
-
-### Recurring vs chosen
-Recurring charges are the priority signal. They hit automatically and erode a
-balance without any decision being made. One-off deliberate spending is a choice
-the user already made; recurring spending is the thing that happens to them.
-Surface the latter.
-
-### Intent rows (type='finance_intent')
-Whatever the user has declared about their situation and goals:
-  - situation: income, timing, receivables
-  - reserve: an account or amount they consider off-limits, and whether reaching
-    it requires a deliberate transfer (a wall) or can happen passively (a floor).
-    These are different and the message treats them differently.
-  - targets: what they're building toward
-  - declared: spending they have consciously chosen. NEVER flagged. This is the
-    finance equivalent of pausing.
-  - known slips: categories they've already told the system they struggle with.
-    Do not "discover" these, the user already knows. Flag recurrence or growth,
-    not the existence.
-
-These are rows, and only rows. No amount, threshold, account or goal belonging to
-a person is ever written into a prompt or into code. This is rule 2.4: the engine
-must be byte-identical for a user with $300 and a user with $300,000. Any design
-where personal financial numbers live in the engine is wrong.
-
-Rows can also be written one at a time, and edited in place on the list. The kind
-is fixed once written: changing a target into a slip is not an edit, it is a
-different declaration, and rewriting it would leave no trace of what was
-originally said.
-
-### Setting it up: the interview
-The rows above are the hard part to collect. A form asking "what is your
-situation" gets one line back; the useful version needs follow-up questions,
-and follow-up questions are a conversation.
-
-This system has no chat (section 6), so it does not hold that conversation.
-It hands the user a prompt to hold it somewhere else:
-
-1. The **copy the prompt** control serves `SETUP_PROMPT` from `finance-intent.js`.
-   It is engine text — identical for every user, containing nothing about anyone
-   — and it is served rather than kept in the page so there is one copy of it.
-2. The user pastes it into any chat assistant and answers the questions there.
-   That assistant interviews them as a financial advisor would, one or two
-   questions at a time, and ends by emitting a single fenced JSON block.
-3. The user pastes that block back. `POST /finance-intent/import` validates every
-   entry before writing any of them, and appends.
-
-The prompt and the parser of its output live in the same file deliberately.
-Change the set of kinds and both have to change together; keeping them apart is
-how they drift.
-
-Import is all-or-nothing. A paste that is half understood leaves nothing behind
-rather than a partial picture that looks complete. Two rules are enforced there
-and nowhere else: `kind` must be one of the five, and **every reserve must say
-the word wall or the word floor**, because a reserve whose type is unknown
-cannot be messaged about correctly.
-
-Nothing in this flow calls the model. The system writes the prompt and reads the
-answer; the reasoning happens in a tool the user already has.
-
-### The screen
-What was spent, counted: a total, categories with their counts, and the
-transactions themselves. It leads with spending because that is what the sheet
-actually knows.
-
-Transfers between the user's own accounts are excluded from every figure, and
-the screen does not say so. Naming them put the word "transfers" on a screen
-that never shows one. The exclusion is silent, not absent — the briefing the
-model receives still states it, because a total it cannot see the workings of is
-a total it could misread.
-
-**No balance and no runway appear here at all.** Transactions carry no balances,
-so the sheet cannot produce one, and a figure the user typed would age silently
-while still looking authoritative. Runway is the message's job, where a declared
-balance can be weighed against how old the claim is. See "Runway lives in the
-message, not on the screen" above.
-
-The sheet reports its own age. If its newest transaction is several days old the
-screen says so, because stale numbers presented as current are worse than none.
-
-PURE ARITHMETIC. No reasoning, no advice, no charts, no category editor. Same
-discipline as the builder: the app does math, the brain does judgment. Nothing
-read from the sheet is stored — the numbers are counted, answered, and dropped.
-
-### The daily message
-One short line per day.
-  - Leads with runway/balance when cash is tight. Nothing outranks it.
-  - Names recurring charges specifically.
-  - Flags committed spending that exceeds available cash BEFORE it happens, not
-    after.
-  - On quiet days: something true and steady, not manufactured alarm.
-    Silence-adjacent, not invented urgency.
-  - Never flags declared items.
-  - Before writing, the brain reads its own finance insights from the last ~14
-    days and must not repeat itself.
-
-### Where reasoning is used in this lane
-Exactly one place: writing the daily line. Everything countable is counted
-first. Transfers are found by pairing offsetting amounts and by the sheet's own
-category, categories are netted, repeated charges are found by matching
-merchants, and the sync age is subtracted. None of that reaches the model as a
-question. What reaches it is the counted figures, the person's own intent rows,
-and its own recent lines, and what it decides is the one sentence worth sending.
-
-Runway is conditional. Transactions carry no balances, so unless a
-`finance_intent` row states what is on hand, the balance is not knowable and
-must not be guessed at.
-
-### Scope discipline
-One tab, one message a day, one row per insight. If this lane ever needs a second
-screen, it has outgrown its lane.
+- No chat, and no inbound Telegram.
+- No auto-planning, no capacity modelling, no priority scoring.
+- No ranking or manual ordering. The list sorts itself.
+- No finance. That lane existed and was removed whole.
+- No coldness verdicts, no cold flags, no temperature bars.
+- No setup interview. Things are added one at a time through the form.
+- No pause. Something set down on purpose looks the same as something neglected,
+  which was the argument for pausing; it is not worth a column and a filter.
 
 ---
 
-## 8. Running it
+## 6. Running it
 
-One Railway service runs both the web app and the scheduler. `server.js` requires
-`scheduler.js`, which starts its own cron loop as a side effect, so there is one
-process and one deploy.
+```
+npm start      # server + scheduler in one process
+npm test       # every suite, sequentially
+```
 
 ### The files
 
-Nothing in the web layer calls the model, and nothing in the engine serves HTTP.
+| | |
+|---|---|
+| `server.js` | serves the page, mounts three routers, starts delivery |
+| `db.js` | the Supabase client |
+| `user.js` | which user this process serves |
+| `clock.js` | dates and clock times as numbers, in the person's own timezone |
+| `staleness.js` | entry → the most recent plan date it was actually done on |
+| `warning.js` | the mark: size against time left, and nothing else |
+| `messages.js` | what Telegram sends for a block |
+| `scheduler.js` | the 15-minute tick: block delivery and the evening nudge |
+| `telegram.js` | the send |
+| `routes/entries.js` | Things: read, add, edit, finish, delete |
+| `routes/plan.js` | the calendar aside, and saving a day |
+| `routes/review.js` | yesterday, and marking a block missed |
+| `public/index.html` | the whole app: markup, styles and script in one file |
+| `public/mockup.html` | the layout reference the page is built against |
+| `brain.js`, `tools.js`, `usage.js`, `untrusted.js` | **wired and unused.** See 1 |
+| `link.js`, `calendar-test.js`, `send-test.js` | run by hand, not part of the running system |
+| `make-icons.js` | regenerates the PNGs from the SVG |
+
+`tools.js` is the exception to "unused": nothing calls its brain-facing tools,
+but `readCalendar`, `create_entry` and `update_entry` are the write path the
+routes go through, and the whitelist at the top of it is what keeps retired
+columns unwritten.
+
+### Migrations
+
+Run once each, by hand, in the Supabase SQL editor. All are safe to run twice.
 
 | | |
 |---|---|
-| `server.js` | serves the page, mounts the routes, starts delivery. Handles nothing itself |
-| `routes/entries.js` | the list: habits, projects and tasks, and their order |
-| `routes/plan.js` | building a day: the hours already claimed, and the plan around them |
-| `routes/review.js` | yesterday, and marking what did not happen |
-| `routes/finance.js` | the money screen: what was spent, and what was declared |
-| `user.js` | who every request is, until there is auth |
-| `clock.js` | dates and clock times as numbers, in the user's timezone |
-| `db.js` | the Supabase client |
-| `brain.js` | the engine: the system prompt and the agent loop |
-| `summarize.js` | the one-field rewrite (4.3). No tools, no notebook, no rows |
-| `routes/summarize.js` | the only route that reaches a model |
-| `tools.js` | the whitelisted tool set (2.3) |
-| `untrusted.js` | the fence (2.2) |
-| `coldness.js` | the daily verdict |
-| `messages.js` | block messages, written at confirm time |
-| `finance-intent.js` | how a money declaration is stored and validated, and its interview prompt |
-| `plan-intent.js` | how state is stored and validated, and the planner's interview prompt |
-| `finance-insight.js` | the daily finance line |
-| `money.js` | counting a sheet: transfers, categories, repeats, sync age |
-| `sheet.js` | reading the Google Sheet. Never throws; returns `[]` and logs |
-| `staleness.js` | how long since an entry was last scheduled |
-| `scheduler.js` | the tick: delivery, the finance line, the coldness verdict |
-| `telegram.js` | outbound sending |
-| `usage.js` | what each model call cost |
+| `schema.sql` | the tables |
+| `migration-due.sql` | `entries.due` |
+| `migration-nudge.sql` | `profile.nudge_hour` |
+| `migration-size.sql` | `entries.size`, and the check constraint on its five buckets |
 
-Four scripts are run by hand and are not part of the running system:
-`link.js` connects a Telegram chat to the account once, and `calendar-test.js`,
-`sheet-test.js` and `send-test.js` check that each outside connection works.
+**No column or table has ever been dropped.** `entries.why`, `entries.body`,
+`entries.priority`, `entries.sort_order`, `entries.cold`, `entries.cold_reason`,
+`entries.paused_at`, `blocks.pinned`, the `messages` table and the whole finance
+side are all still there, still holding whatever they last held, and read by
+nothing. Dropping a column is the one move that cannot be undone, and an unread
+column costs nothing.
 
-### Which build is running
-`GET /version` reports the commit, branch and deployment the host built, the
-process start time, the Node version, and whether the scheduler is running.
-
-It exists because "has it deployed yet" was previously answered by probing for a
-route that happened to be new and inferring from a 404, which cost several rounds
-of guessing and one wrong conclusion stated as fact.
+What stops anything writing to them is the whitelist in `tools.js`, which is a
+short explicit list rather than a filter of things to exclude.
 
 ### Environment
+
 Set in Railway, and in a local `.env` that is never committed.
 
 | | |
 |---|---|
 | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | the notebook. The service key bypasses row level security, which is why every query scopes `user_id` in code rather than trusting the database to do it |
-| `ANTHROPIC_API_KEY` | the brain |
 | `TELEGRAM_BOT_TOKEN` | outbound only |
-| `CALENDAR_ICS_URL` | the read-only *Dates* feed: things to know. See 3.4 |
-| `CALENDAR_ACTION_ICS_URL` | *optional.* The read-only *Personal* feed: things to do |
-| `FINANCE_TRANSACTIONS_CSV_URL` | the published Google Sheet. Read-only, and the sheet is the system of record: nothing here ever writes to it |
+| `CALENDAR_ICS_URL` | a read-only ICS feed |
+| `CALENDAR_ACTION_ICS_URL` | *optional.* A second one. Both are read the same way |
+| `ANTHROPIC_API_KEY` | the brain. **Nothing calls it.** Kept so the wiring stays live |
 | `PORT` | assigned by the host |
 | `PI_USER_ID` | *optional.* Which user the server serves |
 | `SCHEDULER_DISABLED` | *optional.* `1` loads the scheduler without starting cron |
@@ -897,9 +403,11 @@ messages. **It must never be set in production**, where its absence is what make
 delivery run.
 
 ### Running one job by hand
+
 ```
-node scheduler.js --run nudge      # also: blocks, finance, coldness
+node scheduler.js --run nudge      # also: blocks
 ```
+
 Fires that job for every profile immediately, ignoring both the hour it is meant
 to run at and the `sent_log` guard, and writing no `sent_log` row, so it can be
 tried repeatedly. A manual run does not start the timer.
@@ -908,9 +416,12 @@ What it does **not** skip is the condition the job exists for: `--run nudge` on
 an evening that is already planned still sends nothing, because that is the
 behaviour worth testing rather than the timing.
 
+### Which build is running
+
+`GET /version` reports the commit, branch and deployment the host built, the
+process start time, the Node version, and whether the scheduler is running.
+
 ### What is configurable per user
-Everything else about the engine is identical for everyone (2.4). These are
-timing rows, read by a schedule that is itself the same for all.
 
 | | |
 |---|---|
@@ -919,16 +430,67 @@ timing rows, read by a schedule that is itself the same for all.
 | `profile.telegram_chat_id` | where outbound goes, or nowhere if unset |
 | `profile.nudge_hour` | the evening nudge hour, 0–23. Null means 20 |
 
-### What a call costs
-Every model call writes one row to `api_usage`: the source, model, four token
-counts, and the dollar cost priced from them. A reply that used three tool calls
-writes three rows, one per turn of the agent loop.
+---
 
-The table is **write-only by design**. Nothing reads it. The tab that once did was
-removed, because a usage readout is noise for someone using this to plan their
-day, and cost is a thing to check occasionally, not to watch. The rows are kept
-because they are the only record of what running this costs, and reading them
-back is a query away whenever it is wanted.
+## 7. The look
 
-A metering failure is logged and swallowed. Nothing about counting a cost is
-allowed to cost a reply.
+Reference: `public/mockup.html`.
+
+| | |
+|---|---|
+| bg | `#16130F` |
+| card | `#211D18` |
+| hairline | `#2C2721` |
+| text | `#EDE7DE` |
+| muted | `#8B8177` |
+| faint | `#6B6459` |
+| accent | `#6E8CB8` |
+| miss | `#C4694A` |
+
+The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
+
+- **A row is a row.** Yesterday and Things are plain rows with hairline dividers
+  between them. Only a builder block is a card, because a card says "this is an
+  object you move", and those are the only objects here that move.
+- **Sections are separated by space**, 36px of it — not by borders, not by nested
+  containers.
+- **One label style:** 10px, uppercase, 0.14em tracking, muted. Actions like
+  `+ Add` sit on its baseline and are **quieter** than it, never louder.
+- **Two text sizes per row:** 15px title, 12px muted meta on its own line with
+  real space between them.
+- **Blue is actionable.** It appears on the steppers and on Confirm, and nowhere
+  else. Nothing decorative is ever blue.
+- **The miss colour is for misses and warnings**, and nothing else.
+- **The calendar aside is a left rule with indented text**, in neutral warm grey.
+  Reference material: not a card, not blue, not a warning.
+- **Tabular figures on every time.**
+
+---
+
+## 8. Tests
+
+```
+npm test                              # all of it
+node tests/run-all.js due-test.js     # one suite
+```
+
+Sequential on purpose: they share one test user, and two of them writing the same
+rows at once would fail for a reason that has nothing to do with the code under
+test.
+
+`run-all.js` **refuses to start** if any suite could reach the real person's
+rows. It reads each file and computes whether the app modules it imports can see
+the database, rather than trusting a hand-kept list of dangerous files. A suite
+that writes must import `harness.js`, and no suite may name the real user id at
+all.
+
+`harness.js` hands out a database client that is physically unable to write to
+anyone but the test user: an insert without the test id in the payload, or an
+update or delete without it in the filter, throws before it reaches the network.
+This exists because scoping by hand failed once, destructively.
+
+Suites are **deleted rather than skipped** when the thing they covered is
+removed. A suite that cannot run still reads as coverage, which is worse than
+having no file there at all.
+
+No suite calls a model, because nothing in this system does.

@@ -1,8 +1,8 @@
 // Outbound delivery, on a timer.
 //
-// At each block's start time, send the text the brain already wrote and stored
-// when the day was confirmed. No model call happens here: this reads a row and
-// sends it. See SPEC section 5.
+// Two jobs, and no model call in either. At each block's start time, send the
+// text that was composed in code and stored when the day was confirmed. In the
+// evening, if tomorrow has no confirmed plan, say so once.
 //
 // Run: node scheduler.js
 
@@ -14,9 +14,6 @@ const supabase = require('./db');
 const { toMinutes, tomorrowOf } = require('./clock');
 const { sendTelegram } = require('./telegram');
 const { composeMessage } = require('./messages');
-const { generateDaily } = require('./finance-insight');
-const { judge } = require('./coldness');
-const { lastScheduled, daysBetween } = require('./staleness');
 
 // The tick interval, in minutes.
 //
@@ -32,34 +29,10 @@ const WINDOW = 15;
 // 08:00" arriving at 14:00 is worse than nothing.
 const GRACE_MINUTES = 30;
 
-// Block messages are written after the confirm response goes out and take
-// around half a minute. If a block is due and has no text yet, and the day was
-// confirmed this recently, generation is probably still running. Let the next
-// tick have it: a message fifteen minutes late beats one permanently stripped
-// back to its header.
-const GENERATION_GRACE_MS = 2 * 60 * 1000;
-
-// The hour the finance line goes out, in the person's own time. Evening: the
-// day's spending has mostly happened, and there is still time to act on it.
-const FINANCE_HOUR = 18;
-
-// The coldness verdict runs before the evening, so the panel is already judged
-// by the time anyone opens it to plan tomorrow. Nothing is sent; it only
-// writes to rows.
-const COLD_HOUR = 16;
-
 // When the evening nudge goes out, for anyone who has not said otherwise.
 // Late enough that the evening has had a chance to happen, early enough that
 // planning tomorrow is still a reasonable thing to ask of someone.
 const NUDGE_HOUR = 20;
-
-// Habits are not named in the nudge: a habit going quiet is what the panel is
-// for, and this message is about tomorrow having no shape yet.
-const NAMEABLE = ['project', 'task'];
-
-// At most two, and they are the person's own top two. More than that stops
-// being a nudge and becomes the digest this is deliberately not.
-const MAX_NAMED = 2;
 
 // Telegram rejects anything over 4096 characters.
 const MAX_MESSAGE = 4000;
@@ -125,9 +98,8 @@ async function allProfiles() {
 // The already-sent guard. A row's existence proves this went out for this user
 // on this date, so it survives restarts and redeploys.
 //
-// Still keyed (user_id, job, date), which cannot express "block 4 of today".
-// Re-keying it is part of building block delivery.
-
+// Keyed (user_id, job, date). Blocks do not use it — they carry their own
+// message_sent_at — so the only job behind it now is the nudge.
 async function alreadySent(user_id, job, date) {
   const { data, error } = await supabase
     .from('sent_log')
@@ -163,10 +135,6 @@ async function markSent(user_id, job, date) {
 // delivery
 // ---------------------------------------------------------------------------
 
-// Outbound text used to be copied into `messages` so the chat and the bot read
-// as one thread. There is no chat now, nothing reads that table, and the text
-// of a block message lives on the block itself, so the copy is not written.
-// The table and its rows stay.
 async function deliver(user_id, text) {
   const body =
     text.length > MAX_MESSAGE
@@ -224,6 +192,10 @@ async function markBlockSent(id) {
  * Marking a block sent is what makes this safe to run every fifteen minutes:
  * a block leaves the queue the moment it is delivered, so a slow tick or an
  * overlapping one cannot send it twice.
+ *
+ * There is no longer a grace window for a block whose text has not been
+ * written yet. The text is composed in code and inserted with the block, so a
+ * block that exists has whatever line it is ever going to have.
  */
 async function deliverDue(profile, now) {
   const nowMinutes = minutesOf(now.hour, now.minute);
@@ -250,79 +222,16 @@ async function deliverDue(profile, now) {
       continue;
     }
 
-    if (!block.message_text && Date.now() - new Date(block.created_at).getTime() < GENERATION_GRACE_MS) {
-      // Confirmed moments ago, so the line is probably still being written.
-      // Leave it queued; the next tick is still inside the grace window.
-      console.log(`[SEND] ${block.title}: just confirmed, waiting for its line`);
-      continue;
-    }
-
     const result = await deliver(profile.user_id, composeMessage(block));
 
     if (result.sent) {
       await markBlockSent(block.id);
-      console.log(`[SEND] ${block.title}${block.message_text ? '' : ' (header only)'}`);
+      console.log(`[SEND] ${block.title}`);
     } else {
       // No mark, so the next tick retries while the block is still in grace.
       console.error(`[SEND] ${block.title}: ${JSON.stringify(result)}`);
     }
   }
-}
-
-/**
- * The one finance line for today.
- *
- * A separate lane on its own cadence: once a day, at a fixed hour, regardless
- * of whether a plan exists. sent_log is the guard, so a restart inside the
- * window cannot send a second one, and a failed send leaves no row so the next
- * tick retries.
- */
-async function deliverFinance(profile, now, { force = false } = {}) {
-  const nowMinutes = minutesOf(now.hour, now.minute);
-  if (!force && !inWindow(nowMinutes, minutesOf(FINANCE_HOUR, 0))) return;
-
-  if (!force && (await alreadySent(profile.user_id, 'finance', now.date))) return;
-
-  const result = await generateDaily(profile.user_id, now.date);
-
-  if (!result.text) {
-    // Nothing worth sending is a real outcome, not a failure. It is claimed in
-    // sent_log all the same, so a skipped day is not retried every fifteen
-    // minutes for the rest of the evening.
-    console.log(`[FINANCE] nothing to send today: ${result.skipped}`);
-    if (!force) await markSent(profile.user_id, 'finance', now.date);
-    return;
-  }
-
-  const sent = await deliver(profile.user_id, result.text);
-  if (sent.sent) {
-    if (!force) await markSent(profile.user_id, 'finance', now.date);
-    console.log(`[FINANCE] sent: ${result.text}`);
-  } else {
-    console.error(`[FINANCE] ${JSON.stringify(sent)}`);
-  }
-}
-
-/**
- * Judge what has gone cold, once a day, before the evening.
- *
- * Sends nothing. It writes verdicts to rows so the panel is already judged
- * when it is opened, which is what keeps the model off the read path.
- */
-async function judgeColdness(profile, now, { force = false } = {}) {
-  const nowMinutes = minutesOf(now.hour, now.minute);
-  if (!force && !inWindow(nowMinutes, minutesOf(COLD_HOUR, 0))) return;
-
-  if (!force && (await alreadySent(profile.user_id, 'coldness', now.date))) return;
-
-  const result = await judge(profile.user_id, now.date);
-
-  // Claimed either way. A day where nothing could be judged should not be
-  // retried every fifteen minutes until midnight, and judge() has already left
-  // the previous verdicts standing.
-  if (!force) await markSent(profile.user_id, 'coldness', now.date);
-
-  if (!result.judged) console.log(`[COLD] nothing judged today: ${result.reason}`);
 }
 
 // --- the evening nudge ------------------------------------------------------
@@ -331,66 +240,14 @@ async function judgeColdness(profile, now, { force = false } = {}) {
 // opened it. Every other message is about something they already decided;
 // this one is about the evening they did not spend deciding.
 //
-// No model call. There is nothing here to reason about: either tomorrow has a
-// confirmed plan or it does not, and either something is flagged cold or
-// nothing is. Both are lookups, so both are code.
+// One line, and it used to be two. The second named what had gone quiet, which
+// required a daily verdict written by a model call, and that whole lane is
+// gone. Rebuilding the line from days-since alone would have meant naming
+// something every single night, including the nights when nothing was actually
+// neglected — a nudge that always fires is a digest, and this is deliberately
+// not that.
 
-/**
- * The message, composed from rows.
- *
- * The first line is the whole point. The second is only worth adding when the
- * panel already has a verdict standing, and it names at most two things,
- * because a list of everything is the digest this is not.
- */
-async function composeNudge(user_id) {
-  const lines = ['No plan for tomorrow yet.'];
-
-  const { data, error } = await supabase
-    .from('entries')
-    .select('id, title, created_at')
-    .eq('user_id', user_id)
-    .eq('status', 'active')
-    .in('type', NAMEABLE)
-    .eq('cold', true)
-    // A paused item is never cold, whatever a stale verdict on the row says.
-    // The panel applies the same rule when it draws, and this has to agree
-    // with the panel or the message names something the screen calls quiet.
-    .is('paused_at', null);
-
-  if (error) {
-    // The second line is a bonus and the first is the message. A failure here
-    // costs the detail, never the nudge.
-    console.error(`[NUDGE] could not read what has gone cold: ${error.message}`);
-    return lines.join('\n');
-  }
-
-  // The two left longest, which is the order the panel puts them in. This used
-  // to take the two the person had ranked highest; there is no ranking now, and
-  // naming two at random would point somewhere the screen does not.
-  let named = [];
-  try {
-    const latest = await lastScheduled(user_id);
-    const today = new Date().toISOString().slice(0, 10);
-
-    named = (data || [])
-      .map((r) => ({
-        title: r.title,
-        days: daysBetween(latest.get(r.id) || String(r.created_at).slice(0, 10), today),
-      }))
-      .sort((a, b) => b.days - a.days || a.title.localeCompare(b.title))
-      .slice(0, MAX_NAMED)
-      .map((r) => r.title);
-  } catch (err) {
-    // Ordering is a nicety. If the plans cannot be read, name whatever came
-    // back rather than dropping the line.
-    console.error(`[NUDGE] could not order what has gone cold: ${err.message}`);
-    named = (data || []).slice(0, MAX_NAMED).map((r) => r.title);
-  }
-  if (named.length === 1) lines.push(`${named[0]} has gone quiet.`);
-  else if (named.length >= 2) lines.push(`${named[0]} and ${named[1]} have gone quiet.`);
-
-  return lines.join('\n');
-}
+const NUDGE_TEXT = 'No plan for tomorrow yet.';
 
 /**
  * Tell them the day ahead has no shape yet, once, in their evening.
@@ -428,12 +285,11 @@ async function sendNudge(profile, now, { force = false } = {}) {
     return;
   }
 
-  const text = await composeNudge(profile.user_id);
-  const sent = await deliver(profile.user_id, text);
+  const sent = await deliver(profile.user_id, NUDGE_TEXT);
 
   if (sent.sent) {
     if (!force) await markSent(profile.user_id, 'nudge', now.date);
-    console.log(`[NUDGE] sent: ${text.replace(/\n/g, ' / ')}`);
+    console.log(`[NUDGE] sent: ${NUDGE_TEXT}`);
   } else {
     // No mark, so the next tick inside the window tries again.
     console.error(`[NUDGE] ${JSON.stringify(sent)}`);
@@ -467,18 +323,6 @@ async function tick() {
     }
 
     try {
-      await deliverFinance(profile, now);
-    } catch (err) {
-      console.error(`[FINANCE] ${profile.user_id}: ${err.message}`);
-    }
-
-    try {
-      await judgeColdness(profile, now);
-    } catch (err) {
-      console.error(`[COLD] ${profile.user_id}: ${err.message}`);
-    }
-
-    try {
       await sendNudge(profile, now);
     } catch (err) {
       console.error(`[NUDGE] ${profile.user_id}: ${err.message}`);
@@ -492,16 +336,13 @@ async function tick() {
 // effect of starting cron and takes nothing from it. So everything below is
 // here for one reason, which is to let a suite drive one real user through one
 // real delivery without waiting fifteen minutes for the timer.
-//
-// It was seventeen names. The rest were exported on the assumption something
-// would want them, and nothing ever did. Add one back when a test needs it.
 module.exports = {
   allProfiles, // pick the profile to drive
   localNow, //    build the 'now' to drive it at
   deliverDue, //  the tick itself, for one user
   hhmm, //        so a test can spell the time the same way the message does
   sendNudge, //   the evening nudge, for one user at one moment
-  composeNudge, //the text it would send, without sending it
+  NUDGE_TEXT, //  the whole message, for a test that checks the wording
 };
 
 // ---------------------------------------------------------------------------
@@ -521,8 +362,6 @@ module.exports = {
 
 const JOBS = {
   blocks: deliverDue,
-  finance: deliverFinance,
-  coldness: judgeColdness,
   nudge: sendNudge,
 };
 

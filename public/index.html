@@ -7,7 +7,7 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
     />
     <meta name="theme-color" content="#16130F" />
-    <title>Personal Planning System</title>
+    <title>Planner</title>
 
     <link rel="manifest" href="/manifest.json" />
 
@@ -18,2520 +18,604 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Planner" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
+
     <style>
-      /* Dusk. Built for a phone in a dark room at the end of the day, so the
-         whole surface sits close together in value and only the two things
-         you can act on carry any saturation. */
+      /* One screen, read once in the evening.
+
+         The rules the whole page is built on:
+
+         - A row is a row. Yesterday and Things are plain rows with hairline
+           dividers between them. Only a builder block is a card, because a
+           card says "this is an object you move", and those are the only
+           objects here that move.
+         - Sections are separated by space, not by borders or boxes. 36px is
+           the separator.
+         - One label style, everywhere. Actions sit on its baseline and are
+           quieter than it, never louder.
+         - Two text sizes in a row: 15px title, 12px meta, with real space
+           between them.
+         - Blue is actionable. It is on the steppers and on Confirm, and
+           nowhere else. Nothing decorative is ever blue.
+         - The miss colour is for misses and warnings, and nothing else. */
       :root {
-        --bg: #16130f;        /* warm near-black, never blue-black */
-        --surface: #211d18;   /* cards and rows */
-        --recessed: #1c1913;  /* set into the page, not raised off it */
-        --raised: #2a2620;    /* held above it, while being dragged */
-        --line: #2c2721;      /* hairlines */
+        --bg: #16130f;
+        --card: #211d18;
+        --line: #2c2721;
 
         --text: #ede7de;
         --muted: #8b8177;
-        --dim: #6b6459;       /* disabled, completed, spent */
+        --faint: #6b6459;
 
-        /* Sage means actionable. It appears on the steppers and on Confirm
-           and nowhere else, so anything glowing is a thing you can press. */
-        --accent: #8fa07a;
-        --accent-press: #7d8b6a; /* the same green, held down */
-        --warn: #c4694a;      /* a miss, or a collision */
+        --accent: #6e8cb8;
+        --warn: #c4694a;
 
-        --pinned-line: #3a332a;
-        --radius: 10px;
+        /* The calendar aside. Neutral warm grey: it is reference material,
+           so it must read as neither actionable nor wrong. */
+        --cal-rule: #4a423a;
+        --cal-head: #9a8f80;
+        --cal-text: #b0a79a;
+
+        --gap: 36px;
       }
 
       * {
         box-sizing: border-box;
+        margin: 0;
+        padding: 0;
       }
 
       html,
       body {
         height: 100%;
-        margin: 0;
       }
 
       body {
         background: var(--bg);
         color: var(--text);
-        font: 15px/1.5 ui-rounded, "SF Pro Rounded", -apple-system,
-          BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Roboto,
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
           system-ui, sans-serif;
         -webkit-font-smoothing: antialiased;
-        display: flex;
-        flex-direction: column;
-        height: 100dvh;
-        overscroll-behavior: none;
-        touch-action: manipulation;
+        overscroll-behavior-y: none;
+        -webkit-tap-highlight-color: transparent;
       }
-
-      /* Title and tabs share one row. The title had a row of its own above
-         them, spending vertical space on a word that never changes. */
-      header {
-        flex: none;
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        padding: 8px 16px;
-        padding-top: max(8px, env(safe-area-inset-top));
-        font-size: 13px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--dim);
-      }
-
-      /* Two lanes, and the planner is the primary one. Quiet enough that the
-         tab bar does not compete with the day underneath it. */
-      .tabs {
-        flex: none;
-        display: flex;
-        gap: 4px;
-        margin-left: auto;
-      }
-
-      .tabs button {
-        border: 0;
-        border-radius: 8px;
-        background: none;
-        font: inherit;
-        font-size: 12.5px;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        color: var(--dim);
-        padding: 5px 12px;
-        cursor: pointer;
-      }
-
-      .tabs button[aria-selected="true"] {
-        background: var(--surface);
-        color: var(--text);
-      }
-
-      /* A class, not the two ids. An id selector outranks .hidden whatever the
-         source order, so styling these by id meant hiding them did nothing and
-         both lanes rendered at once, stacked. */
-      .view {
-        display: flex;
-        flex-direction: column;
-        gap: 22px;
-      }
-
-      #intent-list {
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-      }
-
-      /* A section header that is also a control. Styled as the other headers
-         are, so it reads as a heading first and a button second. */
-      .group-head.collapse {
-        width: 100%;
-        border: 0;
-        background: none;
-        font: inherit;
-        text-align: left;
-        cursor: pointer;
-        padding: 4px 2px 6px;
-      }
-
-      .count {
-        font-size: 11px;
-        font-weight: 600;
-        color: var(--dim);
-        font-variant-numeric: tabular-nums;
-      }
-
-      .chevron {
-        margin-left: auto;
-        color: var(--dim);
-        font-size: 16px;
-        line-height: 1;
-        transition: transform 150ms ease-out;
-      }
-
-      .group-head.collapse[aria-expanded='true'] .chevron {
-        transform: rotate(90deg);
-      }
-
-      .intent-actions {
-        display: flex;
-        justify-content: flex-end;
-        padding-bottom: 8px;
-      }
-
-      /* A kind is a heading inside the list, not a card of its own. */
-      .kind-head {
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--dim);
-        padding: 0 2px 5px;
-      }
-
-      .kind-group {
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-      }
-
-      .intent {
-        background: var(--surface);
-        border-radius: var(--radius);
-        padding: 12px 13px;
-        display: flex;
-        flex-direction: column;
-        gap: 5px;
-      }
-
-      .intent-top {
-        display: flex;
-        align-items: flex-start;
-        gap: 10px;
-      }
-
-      .intent-label {
-        flex: 1;
-        min-width: 0;
-        font-size: 14px;
-        font-weight: 500;
-        overflow-wrap: anywhere;
-      }
-
-      /* Wall and floor behave differently and are read differently, so the
-         distinction is on the row rather than buried in the detail. */
-      .mode {
-        flex: none;
-        font-size: 10.5px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--dim);
-        padding-top: 3px;
-      }
-
-      .intent-body {
-        font-size: 12.5px;
-        color: var(--muted);
-        line-height: 1.45;
-        overflow-wrap: anywhere;
-      }
-
-      /* Editing happens where the row is, so the row grows rather than the
-         list being replaced by a form. */
-      .intent.editing {
-        gap: 9px;
-        outline: 1px solid var(--pinned-line);
-        outline-offset: -1px;
-      }
-
-      .intent.editing textarea {
-        min-height: 62px;
-      }
-
-      /* --- the setup interview --- */
-
-      .setup-step {
-        display: flex;
-        gap: 11px;
-        align-items: flex-start;
-      }
-
-      .step-n {
-        flex: none;
-        width: 20px;
-        height: 20px;
-        margin-top: 1px;
-        border-radius: 6px;
-        background: var(--recessed);
-        border: 1px solid var(--line);
-        color: var(--muted);
-        font-size: 11px;
-        font-weight: 700;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .setup-title {
-        font-size: 13.5px;
-        font-weight: 600;
-        margin-bottom: 2px;
-      }
-
-      #setup-paste {
-        min-height: 90px;
-        font-size: 13px;
-        line-height: 1.4;
-      }
-
-      /* A class, not the id. Anything that gets hidden must not be given a
-         display by id, or hiding it becomes a specificity contest. */
-      .setup-preview {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        padding-top: 4px;
-        border-top: 1px solid var(--line);
-      }
-
-      #setup-list {
-        display: flex;
-        flex-direction: column;
-        gap: 7px;
-      }
-
-      /* Exactly what will be written, before anything is. */
-      .preview-row {
-        display: flex;
-        gap: 9px;
-        align-items: baseline;
-        font-size: 13px;
-      }
-
-      .preview-kind {
-        flex: none;
-        min-width: 74px;
-        font-size: 10.5px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--dim);
-      }
-
-      .preview-text {
-        flex: 1;
-        min-width: 0;
-        overflow-wrap: anywhere;
-      }
-
-      .preview-text small {
-        display: block;
-        font-size: 12px;
-        color: var(--muted);
-        line-height: 1.4;
-      }
-
-      /* --- the money numbers --- */
-
-      #money-numbers {
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-      }
-
-      /* The sync line is always present, whether or not the sheet is stale. A
-         screen that only mentions the date when something is wrong teaches you
-         to read its silence as freshness. */
-      .sync {
-        font-size: 12px;
-        color: var(--muted);
-        padding: 10px 13px;
-        background: var(--surface);
-        border-radius: var(--radius) var(--radius) 0 0;
-      }
-
-      .sync.stale {
-        color: var(--warn);
-        border-left: 2px solid var(--warn);
-        border-radius: 0 var(--radius) 0 0;
-      }
-
-      .total {
-        background: var(--surface);
-        padding: 16px 13px;
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-      }
-
-      .total .figure {
-        font-size: 26px;
-        font-weight: 600;
-        font-variant-numeric: tabular-nums;
-        letter-spacing: -0.01em;
-      }
-
-      .total .label {
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      .cat {
-        display: flex;
-        align-items: baseline;
-        gap: 12px;
-        background: var(--surface);
-        padding: 9px 13px;
-      }
-
-      .cat:last-of-type {
-        border-radius: 0 0 var(--radius) var(--radius);
-      }
-
-      .cat-name {
-        flex: 1;
-        min-width: 0;
-        font-size: 13.5px;
-        overflow-wrap: anywhere;
-      }
-
-      .cat-count {
-        flex: none;
-        font-size: 11px;
-        color: var(--dim);
-        font-variant-numeric: tabular-nums;
-      }
-
-      .cat-amount {
-        flex: none;
-        font-size: 13.5px;
-        font-variant-numeric: tabular-nums;
-        min-width: 74px;
-        text-align: right;
-      }
-
-      /* More came back than went out. Not an error, and not spending. */
-      .cat.inflow .cat-amount {
-        color: var(--dim);
-      }
-
 
       main {
-        flex: 1;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-        padding: 8px 16px 32px;
-        display: flex;
-        flex-direction: column;
-        gap: 32px;
+        max-width: 480px;
+        margin: 0 auto;
+        padding: 28px 20px calc(40px + env(safe-area-inset-bottom));
       }
 
-      /* --- sections --- */
-
-      .group {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .group-head {
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
-        padding: 0 2px;
-      }
-
-      .group-head h2 {
-        margin: 0;
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }
-
-      /* Tight horizontally, generous vertically: the eye runs down a list at
-         night, and side padding only narrows the text. */
-      .card {
-        background: var(--surface);
-        border-radius: var(--radius);
-        padding: 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      .none {
-        font-size: 13px;
-        color: var(--muted);
-        line-height: 1.45;
-      }
-
-      /* An empty list is not a thing, so it does not get a card. A card around
-         "nothing here yet" is a container drawn around an absence, and next to
-         real cards it reads as another item. */
-      .empty {
-        font-size: 13px;
-        color: var(--dim);
-        line-height: 1.45;
-        padding: 4px 2px;
-      }
-
-      /* A form is the section's content, not an object inside it. The wrapping
-         card put a panel inside a panel and stacked a third under it. */
-      .formcard {
-        background: none;
-        border-radius: 0;
-        padding: 2px;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-
-      /* --- the entry sheet ---------------------------------------------------
-       *
-       * Adding something is its own screen, not a panel that grows in the
-       * middle of the list. Inline, the form pushed every row below it down the
-       * page and left the list doing two jobs at once: the thing you were
-       * reading moved while you typed. It is over the app now, and the list
-       * behind it does not move at all.
-       */
-
-      .sheet-scrim {
-        position: fixed;
-        inset: 0;
-        z-index: 20;
-        background: rgba(10, 8, 6, 0.62);
-        display: flex;
-        justify-content: center;
-      }
-
-      /* Full screen on a phone, which is the only place this runs. The width
-         cap only matters on a desktop window, where it leaves the dimmed list
-         showing either side rather than stretching one column of fields across
-         the whole monitor. */
-      .sheet {
-        flex: 1;
-        max-width: 560px;
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        background: var(--bg);
-      }
-
-      .sheet-head {
-        flex: none;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 16px;
-        padding-top: max(10px, env(safe-area-inset-top));
-        border-bottom: 1px solid var(--line);
-      }
-
-      .sheet-head h2 {
-        margin: 0;
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }
-
-      /* A hit area, not a glyph. 40px square is the smallest thing a thumb
-         finds without aiming. */
-      .sheet-close {
-        margin-left: auto;
-        width: 40px;
-        height: 40px;
-        flex: none;
-        border: 0;
-        border-radius: 8px;
-        background: none;
-        color: var(--muted);
-        font: inherit;
-        font-size: 22px;
-        line-height: 1;
-        cursor: pointer;
-      }
-
-      .sheet-close:active {
-        color: var(--text);
-      }
-
-      .sheet-body {
-        flex: 1;
-        min-height: 0;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-        padding: 16px 16px 32px;
-        padding-bottom: max(32px, env(safe-area-inset-bottom));
-      }
-
-      /* One action, so it takes the width. Beside a Cancel it read as one of
-         two choices; the X in the header is the way out. */
-      #f-save {
-        width: 100%;
-      }
-
-      /* The page behind must not scroll under the sheet. Without this a swipe
-         that misses the fields drags the list around beneath it. */
-      main.locked {
-        overflow: hidden;
-      }
-
-      /* --- buttons --- */
-
-      .linkbtn {
-        border: 0;
-        background: none;
-        padding: 0;
-        font: inherit;
-        font-size: 12.5px;
-        font-weight: 600;
-        color: var(--muted);
-        cursor: pointer;
-      }
-
-      .linkbtn:active {
-        color: var(--text);
-      }
-
-      .linkbtn.danger {
-        color: var(--warn);
-      }
-
-      .linkbtn:disabled {
-        color: var(--dim);
-        cursor: default;
-      }
-
-      /* What a field can do, under the field. Right-aligned so it sits at the
-         end of the box rather than starting a new column of its own, and quiet
-         enough that it never competes with the label above it. */
-      .field-actions {
-        display: flex;
-        align-items: baseline;
-        justify-content: flex-end;
-        gap: 14px;
-        margin-top: 6px;
-      }
-
-      /* The quiet failure. It sits at the left of the row and says the field
-         was left alone, which is the only thing worth knowing. */
-      .field-actions .none {
-        margin-right: auto;
-        font-size: 11.5px;
-        text-align: left;
-      }
-
-      /* Quiet by design. Adding something is not the point of the screen. */
-      .addbtn {
-        margin-left: auto;
-        border: 0;
-        background: none;
-        color: var(--dim);
-        font: inherit;
-        font-size: 11px;
-        font-weight: 500;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        padding: 2px 0;
-        cursor: pointer;
-      }
-
-      .addbtn:active {
-        color: var(--text);
-      }
-
-      /* Used inside forms. Not the accent: saving a row is not the commitment
-         the accent is reserved for. */
-      .primary {
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        background: var(--recessed);
-        color: var(--text);
-        font: inherit;
-        font-size: 14px;
-        font-weight: 600;
-        padding: 10px 22px;
-        cursor: pointer;
-      }
-
-      .primary:active {
-        background: var(--surface);
-      }
-
-      .primary:disabled {
-        color: var(--dim);
-        cursor: default;
-      }
-
-      /* --- stale rows --- */
-
-      /* Square. A single-sided border against a rounded corner leaves a wedge
-         of background showing where the two curves fail to meet. */
-      .item {
-        background: var(--surface);
-        border-radius: 0;
-        border-left: 3px solid var(--line);
-        padding: 8px 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      /* Tight inside a row, loose between rows. It was the other way round,
-         which is why the page looked jammed and still sprawled. */
-      #stale,
-      #paused {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      /* Three lists in one panel, so the gap between them has to be bigger than
-         the gap between rows. At the same 8px the headings would read as rows
-         and the whole thing would look like one list with labels dropped in it. */
-      #stale {
-        gap: 20px;
-      }
-
-      .type-group {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .item-top {
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-      }
-
-      .item-title {
-        flex: 1;
-        min-width: 0;
-        font-size: 14.5px;
-        font-weight: 500;
-        line-height: 1.35;
-        overflow-wrap: anywhere;
-      }
-
-      .item-title.pullable {
-        cursor: pointer;
-      }
-
-      .item-title.pullable:active {
-        color: var(--accent);
-      }
-
-      .days {
-        flex: none;
-        font-size: 11.5px;
-        font-variant-numeric: tabular-nums;
-        color: var(--muted);
-        white-space: nowrap;
-        padding-top: 2px;
-      }
-
-      .item-meta {
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        flex-wrap: wrap;
-      }
-
-      .why {
-        font-size: 12.5px;
-        color: var(--muted);
-        line-height: 1.45;
-        overflow-wrap: anywhere;
-      }
-
-      /* The type is a label, not a badge. No fill, no colour of its own. */
-      .tag {
-        font-size: 10.5px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--dim);
-      }
-
-      .actions {
-        margin-left: auto;
-        display: flex;
-        gap: 14px;
-      }
-
-      .item.paused {
-        background: none;
-        border-left-color: var(--line);
-      }
-
-      .item.paused .item-title {
-        color: var(--dim);
-      }
-
-      /* Gone cold. An outline, not a move: the order is the person's and
-         nothing but a drag changes it. */
-      .item.cold {
-        outline: 1px solid var(--warn);
-        outline-offset: -1px;
-      }
-
-      .cold-reason {
-        font-size: 12px;
-        color: var(--muted);
-        line-height: 1.4;
-        overflow-wrap: anywhere;
-      }
-
-      /* What kind of thing this is, in the slot the drag handle used to sit
-         in. A readout, not a control: nothing here can be pressed or dragged. */
-      .mark {
-        flex: none;
-        width: 14px;
-        text-align: center;
-        color: var(--dim);
-        font-size: 13px;
-        line-height: 1.35;
-        user-select: none;
-        pointer-events: none;
-      }
-
-      /* --- the builder --- */
-
-      #builder {
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-      }
-
-      .block {
-        display: flex;
-        align-items: center;
-        gap: 11px;
-        background: var(--surface);
-        border-radius: var(--radius);
-        padding: 11px 12px;
-      }
-
-      /* Recessed, and outlined rather than filled. A calendar event is a wall
-         the day has to fit around, not a feature of the plan. */
-      .block.pinned {
-        background: var(--recessed);
-        border: 1px solid var(--pinned-line);
-        padding: 10px 11px;
-      }
-
-      .block.pinned .block-title {
-        color: var(--muted);
-      }
-
-      .handle {
-        flex: none;
-        width: 18px;
-        text-align: center;
-        color: var(--dim);
-        cursor: grab;
-        touch-action: none;
-        user-select: none;
-        font-size: 14px;
-      }
-
-      .block.pinned .handle {
-        cursor: default;
-      }
-
-      .block-body {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 1px;
-      }
-
-      .block-title {
-        font-size: 14px;
-        font-weight: 500;
-        overflow-wrap: anywhere;
-      }
-
-      .block-when {
-        font-size: 11.5px;
-        color: var(--dim);
-        font-variant-numeric: tabular-nums;
-        letter-spacing: 0.01em;
-      }
-
-      /* --- steppers: actionable, so sage --- */
-
-      .stepper {
-        flex: none;
-        display: flex;
-        align-items: center;
-        gap: 2px;
-      }
-
-      .stepper button {
-        width: 32px;
-        height: 32px;
-        flex: none;
-        border: 1px solid rgba(143, 160, 122, 0.28);
-        border-radius: 8px;
-        background: none;
-        color: var(--accent);
-        font: inherit;
-        font-size: 15px;
-        font-weight: 600;
-        line-height: 1;
-        cursor: pointer;
-      }
-
-      .stepper button:active {
-        background: rgba(125, 139, 106, 0.12);
-        color: var(--accent-press);
-      }
-
-      .stepper button:disabled {
-        border-color: var(--line);
-        color: var(--dim);
-        cursor: default;
-      }
-
-      .stepper span {
-        min-width: 42px;
-        text-align: center;
-        font-size: 11.5px;
-        font-weight: 600;
-        font-variant-numeric: tabular-nums;
-        color: var(--muted);
-      }
-
-      .drop {
-        border: 1px dashed var(--pinned-line);
-        border-radius: var(--radius);
-        height: 44px;
-      }
-
-      .block.dragging {
-        opacity: 0.35;
-      }
-
-      /* Shown, never resolved. */
-      .clash {
-        font-size: 12px;
-        font-weight: 500;
-        color: var(--warn);
-        padding: 3px 13px 5px;
-        line-height: 1.4;
-      }
-
-      /* --- review --- */
-
-      #review {
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-      }
-
-      /* Yesterday is spent. It reads dimmer than tomorrow so the eye does not
-         stop here on the way down the screen. */
-      .block.review .block-title {
-        color: var(--dim);
-        font-weight: 400;
-      }
-
-      /* A miss is the only thing on this list worth noticing, so it is the
-         only thing that holds its colour. */
-      .block.missed .block-title {
-        color: var(--text);
-        font-weight: 500;
-      }
-
-      .block.missed {
-        border-left: 2px solid var(--warn);
-        border-radius: 0 var(--radius) var(--radius) 0;
-      }
-
-      .miss-reason {
-        font-size: 12px;
-        color: var(--muted);
-        line-height: 1.4;
-        padding-top: 3px;
-        overflow-wrap: anywhere;
-      }
-
-      /* --- the ends of the day --- */
-      /*
-         Two compact rows that bookend the block list, not two cards. A card is
-         a container for several things; one label and one control is a row, and
-         boxing it spent a whole panel on a single stepper.
-      */
-      #ends,
-      #starts {
-        background: none;
-        border-radius: 0;
-        gap: 0;
-        padding: 0;
-      }
-
-      .ends-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        min-height: 44px;
-        font-size: 12.5px;
-        color: var(--muted);
-        padding: 0 2px;
-      }
-
-      .ends-row strong {
-        font-size: 16px;
-        font-weight: 600;
-        color: var(--text);
-        font-variant-numeric: tabular-nums;
-        letter-spacing: 0.01em;
-      }
-
-      #starts strong {
-        min-width: 46px;
-        text-align: center;
-      }
-
-      /* No box around the two arrows. The sage already says they can be
-         pressed, and an outline on each turned one small control into three
-         objects sitting in a row. */
-      #starts .stepper button {
-        border-color: transparent;
-        font-size: 19px;
-      }
-
-      #starts .stepper button:disabled {
-        color: var(--dim);
-      }
-
-      /* A value that has not been computed yet is a placeholder, and reads like
-         one: muted and ordinary weight. Only a real end time is emphasised. */
-      .ends-row strong.placeholder {
-        font-size: 12.5px;
-        font-weight: 400;
-        color: var(--dim);
-      }
-
-      .ends-row.late strong {
-        color: var(--warn);
-      }
-
-      /* The hairline is the whole separation. The time is a readout, Confirm
-         is a commitment, and they should not read as one control. */
-      /* Confirm is an action, not the bottom of a readout.
-         It used to sit inside the "day ends" box under a hairline, which made
-         committing the day look like the last line of a display. It stands on
-         its own, full width, with real space above it. */
-      #confirm {
-        width: 100%;
-        margin-top: 16px;
-        border: 1px solid rgba(143, 160, 122, 0.28);
-        border-radius: var(--radius);
-        background: none;
-        color: var(--accent);
-        font: inherit;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-        padding: 14px;
-        cursor: pointer;
-      }
-
-      #confirm:active {
-        background: rgba(125, 139, 106, 0.1);
-        color: var(--accent-press);
-      }
-
-      #confirm:disabled {
-        border-color: var(--line);
-        color: var(--dim);
-        background: none;
-        cursor: default;
-      }
-
-      /* --- forms --- */
-
-      form {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-
-      .seg {
-        display: flex;
-        gap: 3px;
-        background: var(--recessed);
-        border-radius: 9px;
-        padding: 3px;
-      }
-
-      .seg button {
-        flex: 1;
-        height: 30px;
-        border: 0;
-        border-radius: 7px;
-        background: none;
-        font: inherit;
-        font-size: 12px;
-        font-weight: 500;
-        color: var(--muted);
-        padding: 0;
-        cursor: pointer;
-      }
-
-      .seg button[aria-pressed="true"] {
-        background: var(--surface);
-        color: var(--text);
-      }
-
-      /* One label style, everywhere.
-         Block rather than a flex column: as a flex column the label text and
-         its "optional" marker became two rows, both uppercase and bold at
-         different sizes, which read as two competing headings. Inline flow puts
-         them on one line and the control below, which is what a label is. */
-      label {
-        display: block;
-        font-size: 11px;
-        font-weight: 500;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }
-
-      /* The control the label names. Forced onto its own line, since inline
-         flow would otherwise leave it beside the text. */
-      label > input,
-      label > select,
-      label > textarea {
-        display: block;
-        margin-top: 8px;
-      }
-
-      /* A row of controls is already block level, so it only needs the gap.
-         Setting display here would flatten the flex it depends on. */
-      label > .row {
-        margin-top: 8px;
-      }
-
-      /* "optional" is an aside on the label, not a second label. Lowercase,
-         smaller, dimmer, and always on the same line. */
-      label .none {
-        margin-left: 6px;
-        font-size: 10px;
-        font-weight: 400;
-        letter-spacing: 0.01em;
-        text-transform: lowercase;
-        color: var(--dim);
-      }
-
-      input,
-      select,
-      textarea {
-        font: inherit;
-        font-size: 15px;
-        font-weight: 400;
-        letter-spacing: normal;
-        text-transform: none;
-        color: var(--text);
-        background: var(--recessed);
-        border: 1px solid var(--line);
-        border-radius: 9px;
-        padding: 10px 11px;
-        width: 100%;
-      }
-
-      textarea {
-        resize: none;
-        min-height: 0;
-        height: auto;
-        overflow-y: hidden;
-        line-height: 1.45;
-      }
-
-      input:focus,
-      select:focus,
-      textarea:focus {
-        outline: 1px solid var(--accent);
-        outline-offset: -1px;
-      }
-
-      /* Clearly dimmer than typed text, and never bold. A placeholder rendered
-         near the brightness of real content reads as something already
-         entered. */
-      input::placeholder,
-      textarea::placeholder {
-        color: var(--dim);
-        font-weight: 400;
-        opacity: 1; /* Firefox dims placeholders again on top of the colour. */
-      }
-
-      .row {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-      }
-
-      .row .grow {
-        flex: 1;
-      }
-
-      .err {
-        font-size: 12.5px;
-        color: var(--warn);
-        line-height: 1.4;
-      }
-
-      /* !important because this is an absolute, and because it losing a
-         specificity contest is silent: the element simply stays on screen and
-         nothing reports it. That already happened once, to the two lanes. */
       .hidden {
         display: none !important;
       }
 
-      /* --- what the features added since need ---------------------------- */
-      /*
-         The stylesheet above is the one from before the night sky theme,
-         restored whole rather than unpicked by hand. Everything below it is
-         here because something built afterwards draws it and would otherwise
-         render unstyled: the type mark and the due pill. Nothing below is
-         decoration.
-      */
-
-      /* A deadline, as an annotation on the row. Nothing sorts by it. */
-      .due {
-        flex: none;
-        font-size: 10.5px;
-        font-weight: 600;
-        letter-spacing: 0.04em;
+      /* Every time on the page lines up vertically with every other one. */
+      .tnum {
         font-variant-numeric: tabular-nums;
+      }
+
+      /* --- the one label style ------------------------------------------- */
+
+      .label {
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
         color: var(--muted);
+        margin-bottom: 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+      }
+
+      /* On the label's baseline, and deliberately quieter than it: no
+         uppercase, no tracking, no weight. The section is the heading; the
+         action is a thing you may do, not a second heading. */
+      .label .act {
+        letter-spacing: 0;
+        text-transform: none;
+        font-size: 12px;
+        color: var(--muted);
+        background: none;
+        border: 0;
+        padding: 0;
+        font-family: inherit;
+        cursor: pointer;
+      }
+
+      .label .date {
+        letter-spacing: 0;
+        text-transform: none;
+        font-size: 11px;
+        color: var(--faint);
+      }
+
+      .section {
+        margin-bottom: var(--gap);
+      }
+
+      /* --- plain rows, hairline dividers ---------------------------------- */
+
+      .row {
+        padding: 12px 0;
+      }
+
+      .row + .row {
+        border-top: 1px solid var(--line);
+      }
+
+      .row-top {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+
+      .row .title {
+        font-size: 15px;
+        flex: 1;
+        line-height: 1.35;
+      }
+
+      /* The meta line: its own line, with real space above it. */
+      .row .meta {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 5px;
+        line-height: 1.4;
+      }
+
+      .between {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .mark {
+        font-size: 14px;
+        color: var(--warn);
+        letter-spacing: 1px;
+      }
+
+      .done {
+        color: var(--faint);
+        text-decoration: line-through;
+      }
+
+      .right {
+        font-size: 12px;
+        color: var(--faint);
+        background: none;
+        border: 0;
+        font-family: inherit;
+        padding: 0;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+
+      .missed {
+        font-size: 12px;
+        color: var(--warn);
+        background: none;
+        border: 0;
+        font-family: inherit;
+        padding: 0;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+
+      .empty {
+        font-size: 13px;
+        color: var(--faint);
+        padding: 2px 0 4px;
+      }
+
+      /* The optional reason on a missed block. A bare line, no box: it is a
+         note attached to a row, not a field on a form. */
+      .reason {
+        margin-top: 8px;
+        width: 100%;
+        background: none;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        color: var(--text);
+        font: inherit;
+        font-size: 13px;
+        padding: 3px 0;
+      }
+      .reason::placeholder {
+        color: var(--faint);
+      }
+      .reason:focus {
+        outline: none;
+        border-bottom-color: var(--muted);
+      }
+
+      /* Revealed by a long press on a row in Things. Hidden at rest, so the
+         list reads as a list rather than as a menu. */
+      .rowacts {
+        display: flex;
+        gap: 18px;
+        margin-top: 9px;
+      }
+      .rowacts button {
+        font-size: 12px;
+        color: var(--muted);
+        background: none;
+        border: 0;
+        padding: 0;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .rowacts .danger {
+        color: var(--warn);
+      }
+
+      /* --- the calendar aside --------------------------------------------- */
+      /* A left rule and indented text. Not a card, not blue, not a warning:
+         this is what is already true about the day. */
+
+      .cal {
+        border-left: 2px solid var(--cal-rule);
+        padding: 8px 0 8px 13px;
+        margin-bottom: 22px;
+      }
+      .cal h4 {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--cal-head);
+      }
+      .cal p {
+        font-size: 13px;
+        color: var(--cal-text);
+        margin-top: 6px;
+        line-height: 1.6;
+        white-space: pre-line;
+        font-variant-numeric: tabular-nums;
+      }
+      .cal .failed {
+        color: var(--warn);
+      }
+
+      /* --- inline control, not a card ------------------------------------- */
+
+      .inline {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+      }
+      .inline > span {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .stepper {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      /* Blue, because pressing it changes the day. */
+      .step {
+        color: var(--accent);
+        font-size: 18px;
+        line-height: 1;
+        background: none;
+        border: 0;
+        font-family: inherit;
+        padding: 2px 6px;
+        cursor: pointer;
+      }
+      .step:disabled {
+        color: var(--faint);
+      }
+      .num {
+        font-size: 15px;
+        font-variant-numeric: tabular-nums;
+        min-width: 46px;
+        text-align: center;
+      }
+
+      /* --- blocks ARE cards ------------------------------------------------ */
+      /* Because they are objects you manipulate. Nothing else here is. */
+
+      .block {
+        background: var(--card);
+        border-radius: 11px;
+        padding: 14px 15px;
+        margin-bottom: 9px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+      .block .t {
+        font-size: 15px;
+      }
+      .block .time {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .dur {
+        font-size: 13px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        min-width: 40px;
+        text-align: center;
+      }
+
+      .addblock {
+        font-size: 12px;
+        color: var(--faint);
+        padding-top: 8px;
+        background: none;
+        border: 0;
+        font-family: inherit;
+        cursor: pointer;
+      }
+
+      .ends {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-top: 28px;
+        padding-bottom: 20px;
+      }
+      .ends span {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .ends b {
+        font-size: 17px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+      }
+      /* A day running past midnight is the one thing the end time can be
+         wrong about, so it is said in the miss colour. */
+      .ends.late b {
+        color: var(--warn);
+      }
+
+      /* Blue, because it is the one thing on this page that commits. */
+      .confirm {
+        display: block;
+        width: 100%;
+        background: var(--accent);
+        color: var(--bg);
+        text-align: center;
+        padding: 14px;
+        border-radius: 11px;
+        font-size: 14px;
+        font-weight: 600;
+        border: 0;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .confirm:disabled {
+        background: var(--card);
+        color: var(--faint);
+      }
+
+      /* --- the add sheet --------------------------------------------------- */
+
+      .scrim {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        z-index: 10;
+      }
+      .sheet {
+        background: var(--bg);
+        width: 100%;
+        max-width: 480px;
+        border-radius: 18px 18px 0 0;
+        padding: 22px 20px calc(24px + env(safe-area-inset-bottom));
+        max-height: 88vh;
+        overflow-y: auto;
+      }
+
+      .field {
+        margin-bottom: 20px;
+      }
+      .field > label {
+        display: block;
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+      .field input[type="text"],
+      .field input[type="date"] {
+        width: 100%;
+        background: none;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        color: var(--text);
+        font: inherit;
+        padding: 6px 0;
+      }
+      .field input:focus {
+        outline: none;
+        border-bottom-color: var(--muted);
+      }
+
+      /* Choices read as text, not as controls. The chosen one is simply the
+         one that is not dimmed — no fill and no blue, because picking a type
+         is not an action against the day. */
+      .choices {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .choices button {
+        font-size: 13px;
+        color: var(--faint);
+        background: none;
         border: 1px solid var(--line);
         border-radius: 999px;
-        padding: 2px 8px;
-        white-space: nowrap;
+        padding: 6px 13px;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .choices button[aria-pressed="true"] {
+        color: var(--text);
+        border-color: var(--muted);
       }
 
-      /* Past the date, in the same colour a missed block uses. */
-      .due.overdue {
+      .sheet-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 26px;
+      }
+      .sheet-actions .cancel {
+        font-size: 13px;
+        color: var(--muted);
+        background: none;
+        border: 0;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .sheet-actions .save {
+        background: var(--accent);
+        color: var(--bg);
+        border: 0;
+        border-radius: 11px;
+        padding: 12px 26px;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .problem {
+        font-size: 12px;
         color: var(--warn);
-        border-color: var(--warn);
+        margin-top: 14px;
       }
-
     </style>
   </head>
+
   <body>
-    <header>
-      Planner
-      <nav class="tabs" role="tablist">
-        <button type="button" id="tab-plan" role="tab" aria-selected="true">Plan</button>
-        <button type="button" id="tab-money" role="tab" aria-selected="false">Money</button>
-      </nav>
-    </header>
-
-    <main id="main">
-     <div id="plan-view" class="view">
-      <div class="group">
-        <div class="group-head">
-          <h2>Review</h2>
-          <span class="none" id="review-date"></span>
-        </div>
+    <main>
+      <!-- 1. YESTERDAY ------------------------------------------------------ -->
+      <section class="section">
+        <div class="label">Yesterday <span class="date" id="review-date"></span></div>
         <div id="review"></div>
-      </div>
+      </section>
 
-      <!-- Shown only while the list is empty. The same shape as the money
-           tab's: the app writes the question, a chat assistant asks it, and
-           the answer comes back as JSON. Nothing here calls the model. -->
-      <div class="group hidden" id="plan-setup-group">
-        <div class="group-head">
-          <h2>Set up</h2>
+      <!-- 2. THINGS --------------------------------------------------------- -->
+      <section class="section">
+        <div class="label">
+          Things
+          <button type="button" class="act" id="add-open">+ Add</button>
+        </div>
+        <div id="things"></div>
+      </section>
+
+      <!-- 3. TOMORROW ------------------------------------------------------- -->
+      <section>
+        <div class="label">Tomorrow <span class="date" id="plan-date"></span></div>
+
+        <div class="cal" id="cal">
+          <h4>On your calendar</h4>
+          <p id="cal-list"></p>
         </div>
 
-        <div class="card" id="plan-setup-card">
-          <div class="setup-step">
-            <span class="step-n">1</span>
-            <div>
-              <div class="setup-title">Copy the interview</div>
-              <div class="none">It asks what you are working on, why each one matters, where it stands, what order they come in, and what you do regularly.</div>
-            </div>
-          </div>
-          <button class="primary" id="plan-copy-prompt" type="button">Copy setup prompt</button>
-
-          <div class="setup-step">
-            <span class="step-n">2</span>
-            <div>
-              <div class="setup-title">Answer it in a Claude chat</div>
-              <div class="none">Paste it in and talk it through. It ends by giving you a block of JSON.</div>
-            </div>
-          </div>
-
-          <div class="setup-step">
-            <span class="step-n">3</span>
-            <div>
-              <div class="setup-title">Paste the result back</div>
-              <div class="none">The whole reply is fine. Nothing is saved until you have seen exactly what it will save.</div>
-            </div>
-          </div>
-
-          <textarea id="plan-setup-paste" placeholder="Paste the reply here"></textarea>
-          <div class="err hidden" id="plan-setup-error"></div>
-          <button class="primary" id="plan-setup-read" type="button">Read it</button>
-
-          <div class="setup-preview hidden" id="plan-setup-preview">
-            <div class="setup-title" id="plan-setup-count"></div>
-            <div id="plan-setup-list"></div>
-            <div class="row">
-              <button class="primary" id="plan-setup-confirm" type="button">Save these</button>
-              <button class="linkbtn" id="plan-setup-discard" type="button">Discard</button>
-            </div>
+        <div class="inline">
+          <span>Starts</span>
+          <div class="stepper">
+            <button type="button" class="step" id="wake-minus">&minus;</button>
+            <span class="num" id="wake-time">08:00</span>
+            <button type="button" class="step" id="wake-plus">+</button>
           </div>
         </div>
-      </div>
 
-      <div class="group">
-        <div class="group-head">
-          <h2>Priorities</h2>
-          <button class="addbtn" id="add-toggle" type="button">+ Add</button>
-        </div>
-
-        <div id="stale"></div>
-      </div>
-
-      <div class="group hidden" id="paused-group">
-        <div class="group-head"><h2>Paused</h2></div>
-        <div id="paused"></div>
-      </div>
-
-      <div class="group">
-        <div class="group-head">
-          <h2>Tomorrow</h2>
-          <span class="none" id="plan-date"></span>
-          <button class="addbtn" id="block-toggle" type="button">+ Block</button>
-        </div>
-
-        <div class="formcard hidden" id="block-card">
-          <form id="block-form">
-            <label>
-              What is it
-              <input id="b-title" type="text" autocomplete="off" placeholder="Lunch, rest, drive" />
-            </label>
-            <div class="row">
-              <button class="primary" type="submit">Add block</button>
-              <button class="linkbtn" type="button" id="b-cancel">Cancel</button>
-            </div>
-          </form>
-        </div>
-
-        <div class="card hidden" id="all-day"></div>
-
-        <!-- Where the day starts, set per day rather than once. It used to be
-             fixed at the profile default, which made every day begin at the
-             same hour whatever the day actually was. -->
-        <div id="starts">
-          <div class="ends-row">
-            <span>Day starts</span>
-            <div class="stepper" id="wake-stepper">
-              <button type="button" id="wake-minus" aria-label="Earlier">−</button>
-              <strong id="wake-time">07:00</strong>
-              <button type="button" id="wake-plus" aria-label="Later">+</button>
-            </div>
-          </div>
-        </div>
+        <div style="height: 14px"></div>
 
         <div id="builder"></div>
 
-        <div id="ends">
-          <div class="ends-row">
-            <span>Day ends</span>
-            <strong id="end-time" class="placeholder">not yet</strong>
-          </div>
+        <button type="button" class="addblock" id="add-block">+ Block</button>
+
+        <div class="ends" id="ends">
+          <span>Day ends</span>
+          <b class="tnum" id="end-time">—</b>
         </div>
 
-        <button id="confirm" type="button" disabled>Confirm</button>
-      </div>
-     </div>
-
-     <div id="money-view" class="view hidden">
-      <!-- Three sections, ordered at runtime. Before setup the interview
-           leads, because spending without context is the generic reporting
-           this lane exists to avoid. Once the first rows save, spending
-           leads permanently. -->
-      <div class="group" id="setup-group">
-        <div class="group-head">
-          <h2>Set up</h2>
-        </div>
-
-        <div class="card hidden" id="setup-card">
-          <div class="setup-step">
-            <span class="step-n">1</span>
-            <div>
-              <div class="setup-title">Copy the interview</div>
-              <div class="none">It asks about your income, what you have, what is off limits, what you are building toward, and what you already know about your own spending.</div>
-            </div>
-          </div>
-          <button class="primary" id="copy-prompt" type="button">Copy setup prompt</button>
-
-          <div class="setup-step">
-            <span class="step-n">2</span>
-            <div>
-              <div class="setup-title">Answer it in a Claude chat</div>
-              <div class="none">Paste it in and talk it through. It ends by giving you a block of JSON.</div>
-            </div>
-          </div>
-
-          <div class="setup-step">
-            <span class="step-n">3</span>
-            <div>
-              <div class="setup-title">Paste the result back</div>
-              <div class="none">The whole reply is fine. Nothing is saved until you have seen exactly what it will save.</div>
-            </div>
-          </div>
-
-          <textarea id="setup-paste" placeholder="Paste the reply here"></textarea>
-          <div class="err hidden" id="setup-error"></div>
-          <button class="primary" id="setup-read" type="button">Read it</button>
-
-          <div class="setup-preview hidden" id="setup-preview">
-            <div class="setup-title" id="setup-count"></div>
-            <div id="setup-list"></div>
-            <div class="row">
-              <button class="primary grow" id="setup-confirm" type="button">Save these</button>
-              <button class="linkbtn" id="setup-discard" type="button">Discard</button>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <div class="group" id="spending-group">
-        <div class="group-head">
-          <h2>Spending</h2>
-          <span class="none" id="money-window"></span>
-        </div>
-        <div id="money-numbers"></div>
-      </div>
-
-      <div class="group hidden" id="intent-group">
-        <!-- Reference and configuration, not something to scroll past every
-             day, so it opens closed. -->
-        <button class="group-head collapse" id="intent-head" type="button" aria-expanded="false">
-          <h2>What I've told it</h2>
-          <span class="count" id="intent-count"></span>
-          <span class="chevron">&#8250;</span>
-        </button>
-
-        <div class="hidden" id="intent-body">
-          <div class="intent-actions">
-            <button class="addbtn" id="intent-toggle" type="button">+ Add row</button>
-          </div>
-          <div id="intent-list"></div>
-        </div>
-      </div>
-     </div>
+        <button type="button" class="confirm" id="confirm">Confirm</button>
+      </section>
     </main>
 
-    <!-- Adding and editing happen here, over the app, never in the list. The
-         same form serves both: what a row is was decided when it was created,
-         so editing hides the type selector rather than offering a change that
-         would really be a different entry. -->
-    <div class="sheet-scrim hidden" id="entry-sheet">
-      <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="entry-sheet-title">
-        <div class="sheet-head">
-          <h2 id="entry-sheet-title">Add</h2>
-          <button class="sheet-close" id="entry-close" type="button" aria-label="Close">&#215;</button>
-        </div>
-
-        <div class="sheet-body">
-          <form id="add-form" class="formcard">
-            <div class="seg" id="type-seg" role="group" aria-label="Type">
-              <button type="button" data-type="habit" aria-pressed="false">Habit</button>
-              <button type="button" data-type="project" aria-pressed="false">Project</button>
-              <button type="button" data-type="task" aria-pressed="true">Task</button>
-            </div>
-
-            <label>
-              Title
-              <input id="f-title" type="text" autocomplete="off" />
-            </label>
-
-            <label class="hidden" id="f-frequency-wrap">
-              Intended frequency
-              <select id="f-frequency">
-                <option value="daily">daily</option>
-                <option value="few times a week">few times a week</option>
-                <option value="weekly">weekly</option>
-                <option value="monthly">monthly</option>
-              </select>
-            </label>
-
-            <!-- Required on a project, offered on a habit. A habit with only a
-                 name and a cadence is a line nobody recognises in three
-                 months. -->
-            <!-- A div holding a label, rather than a label. The buttons below
-                 the field belong to it, and a button inside a label forwards
-                 its taps to the control the label names. -->
-            <div class="hidden" id="f-why-wrap">
-              <label>
-                Why this matters <span class="none hidden" id="f-why-optional">optional</span>
-                <textarea id="f-why" rows="2" autocapitalize="sentences"></textarea>
-              </label>
-              <!-- The Summarize row is attached here by attachSummarize rather
-                   than written out, so every long-form field gets the same one
-                   and there is one place for it to change. -->
-            </div>
-
-            <!-- Projects and tasks only, and optional there. A picker rather
-                 than a text field: a date typed by hand is a date typed
-                 wrong. Clear puts it back to nothing. -->
-            <!-- Where it stands. Optional, and dated when saved, so an item
-                 added by hand is not thinner than one from the interview. -->
-            <!-- A div holding a label, for the same reason the why is: the
-                 Summarize row below the field belongs to it, and a button
-                 inside a label forwards its taps to the control the label
-                 names. -->
-            <div class="hidden" id="f-state-wrap">
-              <label>
-                Where it stands <span class="none">optional</span>
-                <textarea id="f-state" rows="2" autocapitalize="sentences" placeholder="What is done, what is left, what is next"></textarea>
-              </label>
-            </div>
-
-            <label class="hidden" id="f-size-wrap">
-              Roughly how big <span class="none">optional</span>
-              <select id="f-size">
-                <option value="">not saying</option>
-                <option value="days">days</option>
-                <option value="weeks">weeks</option>
-                <option value="months">months</option>
-              </select>
-            </label>
-
-            <label class="hidden" id="f-due-wrap">
-              Due <span class="none">optional</span>
-              <div class="row">
-                <input id="f-due" class="grow" type="date" />
-                <button class="linkbtn" type="button" id="f-due-clear">Clear</button>
-              </div>
-            </label>
-
-            <div class="err hidden" id="f-error"></div>
-
-            <button class="primary" type="submit" id="f-save">Save</button>
-          </form>
-        </div>
-      </section>
-    </div>
-
-    <!-- Why a block didn't happen.
-         A sheet rather than the browser's own prompt. A prompt is one line
-         with nowhere to put a button, and this is the field most likely to be
-         spoken rather than typed: it is answered at the end of a long day,
-         about something that went wrong. Closing it still cancels, exactly as
-         dismissing the prompt did, because the reason is optional and marking
-         a block missed by accident is worse than not marking it. -->
-    <div class="sheet-scrim hidden" id="miss-sheet">
-      <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="miss-sheet-title">
-        <div class="sheet-head">
-          <h2 id="miss-sheet-title">Didn't happen</h2>
-          <button class="sheet-close" id="miss-close" type="button" aria-label="Close">&#215;</button>
-        </div>
-
-        <div class="sheet-body">
-          <div class="formcard">
-            <div class="none" id="miss-what"></div>
-
-            <div id="f-miss-wrap">
-              <label>
-                Why <span class="none">optional</span>
-                <textarea id="f-miss" rows="2" autocapitalize="sentences" placeholder="What got in the way"></textarea>
-              </label>
-            </div>
-
-            <div class="err hidden" id="miss-error"></div>
-
-            <button class="primary" type="button" id="miss-save">Mark as missed</button>
+    <!-- the add sheet ------------------------------------------------------- -->
+    <div class="scrim hidden" id="add-scrim">
+      <div class="sheet">
+        <div class="field">
+          <label>Type</label>
+          <div class="choices" id="type-seg">
+            <button type="button" data-type="habit">habit</button>
+            <button type="button" data-type="project">project</button>
+            <button type="button" data-type="task">task</button>
           </div>
         </div>
-      </section>
+
+        <div class="field">
+          <label for="f-title">Title</label>
+          <input type="text" id="f-title" autocomplete="off" />
+        </div>
+
+        <div class="field hidden" id="f-freq-field">
+          <label>Frequency</label>
+          <div class="choices" id="freq-seg"></div>
+        </div>
+
+        <div class="field hidden" id="f-due-field">
+          <label for="f-due">Due date</label>
+          <input type="date" id="f-due" />
+        </div>
+
+        <div class="field hidden" id="f-size-field">
+          <label>Size</label>
+          <div class="choices" id="size-seg"></div>
+        </div>
+
+        <div class="problem hidden" id="f-problem"></div>
+
+        <div class="sheet-actions">
+          <button type="button" class="cancel" id="add-cancel">Cancel</button>
+          <button type="button" class="save" id="add-save">Add</button>
+        </div>
+      </div>
     </div>
 
     <script>
       const $ = (id) => document.getElementById(id);
-      const stale = $('stale');
-      const paused = $('paused');
 
-      let type = 'task';
+      // The step everything moves in. Half an hour is the smallest unit this
+      // system expresses: block durations, the start time, all of it.
+      const STEP = 30;
 
-      async function api(url, options) {
-        const res = await fetch(url, options);
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `request failed (${res.status})`);
-        return data;
-      }
-
-      // "today", "1 day", "11 days". The unit is spelled out rather than
-      // abbreviated to "11d" because this number is the whole point of the
-      // panel and should read as a sentence, not a badge.
-      function ageLabel(days) {
-        if (days <= 0) return 'today';
-        return `${days} day${days === 1 ? '' : 's'}`;
-      }
-
-      function el(tag, className, text) {
-        const node = document.createElement(tag);
-        if (className) node.className = className;
-        if (text !== undefined) node.textContent = text;
-        return node;
-      }
-
-      // Staleness as temperature. The edge of each row is coloured by where it
-      // sits in the range currently on screen, so the list reads as a gradient
-      // from fresh at the bottom to cold at the top rather than as a set of
-      // categories. Relative, not absolute: eleven days means something
-      // different on a list where the worst is twelve than on one where the
-      // worst is ninety.
-      //
-      // The fresh end is deliberately cooler than the sage accent. They were a
-      // few points apart once, and a fresh row's edge read as something you
-      // could press.
-      const FRESH = [0x6f, 0x92, 0x70];
-      const MIDDLE = [0x8a, 0x9a, 0x9e];
-      const COLDEST = [0x6b, 0x93, 0xb8];
-
-      const hex = (rgb) =>
-        '#' + rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
-
-      const mix = (from, to, t) => from.map((v, i) => v + (to[i] - v) * t);
-
-      function temperature(days, min, max) {
-        if (!(max > min)) return hex(MIDDLE);
-        const t = (days - min) / (max - min);
-        return t < 0.5
-          ? hex(mix(FRESH, MIDDLE, t * 2))
-          : hex(mix(MIDDLE, COLDEST, (t - 0.5) * 2));
-      }
-
-      // --- due dates --------------------------------------------------------
-      //
-      // An annotation, never an ordering. A deadline says something true about
-      // a row; it does not decide where the row sits.
-
-      // Beyond this the date is more useful than a countdown: "in 23 days" is
-      // harder to place than the day itself.
-      const NEAR_DAYS = 7;
-
-      const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-      // Whole days between two YYYY-MM-DD strings, read at noon UTC so no
-      // timezone can push the answer over a day boundary.
-      const daysUntil = (from, to) =>
-        Math.round((new Date(`${to}T12:00:00Z`) - new Date(`${from}T12:00:00Z`)) / 86400000);
-
-      /**
-       * How a deadline reads, and whether it has passed.
-       *
-       * Close by, it is said in days, because that is how a deadline is felt
-       * when it is near. Further out it is a date, because a countdown that
-       * large is just arithmetic the person has to undo.
-       */
-      function dueLabel(due, today) {
-        const days = daysUntil(today, due);
-
-        if (days < 0) {
-          const n = Math.abs(days);
-          return { text: `${n} day${n === 1 ? '' : 's'} overdue`, overdue: true };
-        }
-        if (days === 0) return { text: 'today', overdue: false };
-        if (days === 1) return { text: 'tomorrow', overdue: false };
-        if (days <= NEAR_DAYS) return { text: `in ${days} days`, overdue: false };
-
-        const [y, m, d] = due.split('-').map(Number);
-        // The year only when it is not this one, so the common case stays short.
-        const sameYear = String(y) === today.slice(0, 4);
-        return {
-          text: `${d} ${MONTHS[m - 1]}${sameYear ? '' : ' ' + y}`,
-          overdue: false,
-        };
-      }
-
-      // What kind of thing a row is, as one quiet character.
-      //
-      // A habit has to be tellable from a project at a glance, because the list
-      // holds all three again and a daily habit at eleven days means something
-      // a monthly project at eleven days does not. A full-width uppercase TASK
-      // down the side of a list of tasks was a column of the same four letters,
-      // which is noise wearing the clothes of information.
-      const TYPE_MARK = { habit: '↻', project: '◆', task: '·' };
-
-      /**
-       * One row.
-       *
-       * There is no position and nothing to drag. Rows are ordered by how long
-       * they have been left, which the list works out for itself.
-       */
-      // showType is off in the three lists, where the heading already says it,
-      // and on in Paused, which is one list holding all three.
-      function itemCard(item, { range, showType = true } = {}) {
-        const card = el(
-          'div',
-          'card item' + (item.paused ? ' paused' : '') + (item.cold ? ' cold' : '')
-        );
-        card.dataset.id = item.id;
-
-        // Paused rows keep the neutral hairline. A pause is not a temperature:
-        // the person has said the clock is not running, so the edge has nothing
-        // to report.
-        if (range && !item.paused) {
-          card.style.borderLeftColor = temperature(item.days, range.min, range.max);
-        }
-
-        const top = el('div', 'item-top');
-
-        const mark = el('div', 'mark', TYPE_MARK[item.type] || '');
-        mark.title = item.type;
-        top.append(mark);
-
-        const title = el('div', 'item-title', item.title);
-        // Tapping the title is how something gets into tomorrow. Paused items
-        // are not offered: the person has said not now, and the panel should
-        // not quietly keep suggesting it.
-        if (!item.paused) {
-          title.classList.add('pullable');
-          title.onclick = () => {
-            addBlock({ title: item.title, entryId: item.id });
-            $('builder').scrollIntoView({ behavior: 'smooth', block: 'center' });
-          };
-        }
-        top.append(title);
-        // Never-scheduled items count from when they were added, so the label
-        // says which clock is running rather than implying a plan existed.
-        const suffix = item.last_scheduled ? ' since scheduled' : ' since added';
-        top.append(el('div', 'days', ageLabel(item.days) + suffix));
-        card.append(top);
-
-        // The verdict, in place. It never moves the row: the order is the
-        // person's and nothing but a drag changes it.
-        if (item.cold && item.cold_reason) {
-          card.append(el('div', 'cold-reason', item.cold_reason));
-        }
-
-        // The why is not shown here. It is a paragraph per row, and a list of
-        // paragraphs is not a list you can scan — which is the one thing this
-        // panel has to be. It is still there, still required on a project, and
-        // still one tap away under Edit. The brain reads it either way.
-
-        const meta = el('div', 'item-meta');
-        if (showType) meta.append(el('span', 'tag ' + item.type, item.type));
-        if (item.frequency) meta.append(el('span', 'none', item.frequency));
-
-        if (item.due) {
-          const when = dueLabel(item.due, todayDate);
-          meta.append(el('span', 'due' + (when.overdue ? ' overdue' : ''), when.text));
-        }
-
-        const actions = el('div', 'actions');
-
-        const edit = el('button', 'linkbtn', 'Edit');
-        edit.type = 'button';
-        edit.onclick = () => openEntry(item);
-        actions.append(edit);
-
-        // Tasks only, and not while paused. A habit recurring is the whole
-        // point of a habit and a project is not finished by one session of work
-        // on it, so Done on either would offer to retire something that has not
-        // ended. Sat next to Edit rather than next to Delete: they are one tap
-        // each and only one of them asks first.
-        if (item.type === 'task' && !item.paused) {
-          const done = el('button', 'linkbtn', 'Done');
-          done.type = 'button';
-          done.onclick = () => act(`/entries/${item.id}/done`, {});
-          actions.append(done);
-        }
-
-        const pause = el('button', 'linkbtn', item.paused ? 'Resume' : 'Not now');
-        pause.type = 'button';
-        pause.onclick = () => act(`/entries/${item.id}/pause`, { paused: !item.paused });
-        actions.append(pause);
-
-        const del = el('button', 'linkbtn danger', 'Delete');
-        del.type = 'button';
-        del.onclick = () => {
-          // Soft delete, but it cannot be undone from the app, so it asks.
-          if (confirm(`Delete "${item.title}"?`)) act(`/entries/${item.id}/delete`, {});
-        };
-        actions.append(del);
-
-        meta.append(actions);
-        card.append(meta);
-        return card;
-      }
-
-      // --- the stale list ---------------------------------------------------
-
-      // Everything the person is keeping track of, in one list. Ordered by how
-      // long each has been left rather than by anything they arranged: there is
-      // no position to preserve any more.
-      let staleItems = [];
-
-      // How many rows are set down. Only the setup card reads it, to tell an
-      // empty system from one whose owner has paused everything in it.
-      let pausedCount = 0;
-
-      // Today where the person lives, as the server counted it. Due dates are
-      // measured against this and never against the device clock, which can be
-      // a day out from the timezone the rest of the screen is using.
-      let todayDate = '';
-
-      // --- the planner's setup interview ------------------------------------
-      //
-      // The same three steps as the money tab: copy a prompt, answer it
-      // elsewhere, paste the block back. extractJson is shared with that flow,
-      // because a reply arrives in the same three shapes either way.
-
-      const PLAN_TYPES = ['project', 'habit', 'task'];
-      const PLAN_FREQUENCIES = {
-        daily: 'daily',
-        'few-times-weekly': 'few times a week',
-        'few times a week': 'few times a week',
-        'few times weekly': 'few times a week',
-        weekly: 'weekly',
-        monthly: 'monthly',
-      };
-
-      let planSetupPrompt = '';
-      let planPending = null;
-
-      function validatePlanItems(list) {
-        if (!Array.isArray(list) || !list.length) return 'there were no items in it';
-
-        for (const [i, row] of list.entries()) {
-          const at = `entry ${i + 1}`;
-          const type = String((row && row.type) || '').trim().toLowerCase();
-          const title = String((row && row.title) || '').trim();
-
-          if (!PLAN_TYPES.includes(type)) return `${at} has type "${type}", which is not one of ${PLAN_TYPES.join(', ')}`;
-          if (!title) return `${at} has no title`;
-
-          if (type === 'project' && !String((row && row.why) || '').trim()) {
-            return `${at} ("${title}") is a project with no why`;
-          }
-          if (type === 'habit' && !PLAN_FREQUENCIES[String((row && row.frequency) || '').trim().toLowerCase()]) {
-            return `${at} ("${title}") is a habit with frequency "${(row && row.frequency) || ''}", which is not one this understands`;
-          }
-          if (type === 'habit' && row && row.due) {
-            return `${at} ("${title}") is a habit with a due date. Habits have a frequency instead.`;
-          }
-          if (row && row.due && !/^\d{4}-\d{2}-\d{2}$/.test(String(row.due))) {
-            return `${at} ("${title}") has due "${row.due}", which is not a date in YYYY-MM-DD form`;
-          }
-        }
-        return null;
-      }
-
-      // Exactly what will be written. Nothing is saved until this is seen.
-      function showPlanPreview(list) {
-        planPending = list;
-        $('plan-setup-count').textContent = `${list.length} thing${list.length === 1 ? '' : 's'} will be saved`;
-
-        const box = $('plan-setup-list');
-        box.replaceChildren();
-
-        for (const row of list) {
-          const type = String(row.type).toLowerCase();
-          const line = el('div', 'preview-row');
-          line.append(el('div', 'preview-kind', type));
-
-          const text = el('div', 'preview-text', String(row.title));
-          const notes = [];
-          if (row.why) notes.push(String(row.why));
-          if (row.frequency) notes.push(PLAN_FREQUENCIES[String(row.frequency).toLowerCase()] || String(row.frequency));
-          if (row.state) notes.push(String(row.state));
-          if (row.size) notes.push(`${row.size} of work`);
-          if (row.due) notes.push(`due ${row.due}`);
-          if (notes.length) text.append(el('small', null, notes.join(' · ')));
-
-          line.append(text);
-          box.append(line);
-        }
-
-        $('plan-setup-preview').classList.remove('hidden');
-      }
-
-      $('plan-copy-prompt').onclick = async () => {
-        const button = $('plan-copy-prompt');
-        try {
-          // Written from the value already held, not fetched here: awaiting
-          // inside the handler loses the user gesture that permits a write.
-          await navigator.clipboard.writeText(planSetupPrompt);
-          button.textContent = 'Copied';
-          setTimeout(() => (button.textContent = 'Copy setup prompt'), 1600);
-        } catch {
-          button.textContent = 'Could not copy';
-          setTimeout(() => (button.textContent = 'Copy setup prompt'), 1600);
-        }
-      };
-
-      $('plan-setup-read').onclick = () => {
-        const error = $('plan-setup-error');
-        error.classList.add('hidden');
-        $('plan-setup-preview').classList.add('hidden');
-        planPending = null;
-
-        const list = extractJson($('plan-setup-paste').value || '', 'items');
-        if (!list) {
-          error.textContent = 'No JSON block found in that. Paste the whole reply, including the ```json part.';
-          error.classList.remove('hidden');
-          return;
-        }
-
-        const problem = validatePlanItems(list);
-        if (problem) {
-          error.textContent = `${problem}. Nothing has been saved.`;
-          error.classList.remove('hidden');
-          return;
-        }
-
-        showPlanPreview(list);
-      };
-
-      $('plan-setup-discard').onclick = () => {
-        planPending = null;
-        $('plan-setup-preview').classList.add('hidden');
-        $('plan-setup-paste').value = '';
-      };
-
-      $('plan-setup-confirm').onclick = async () => {
-        if (!planPending) return;
-        const button = $('plan-setup-confirm');
-        button.disabled = true;
-
-        try {
-          await api('/plan-intent/import', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ items: planPending }),
-          });
-          planPending = null;
-          $('plan-setup-paste').value = '';
-          $('plan-setup-preview').classList.add('hidden');
-          await load();
-        } catch (err) {
-          const error = $('plan-setup-error');
-          error.textContent = `${err.message} Nothing has been saved.`;
-          error.classList.remove('hidden');
-        } finally {
-          button.disabled = false;
-        }
-      };
-
-      // Longest left, first.
-      //
-      // The list orders itself, and there is nothing to arrange. Ranking these
-      // against each other was a question nobody was asking: the useful one is
-      // which has been left longest, and that is arithmetic. Ties break on
-      // title so two rows of the same age do not swap places between paints.
-      const byNeglect = (a, b) => b.days - a.days || a.title.localeCompare(b.title);
-
-      // A list each. The three are different commitments — a project is a body
-      // of work, a habit is a cadence, a task is one thing to do — and mixed
-      // together the person had to sort them by eye every time they looked.
-      //
-      // Projects first: they are the things that carry, and a screen opens on
-      // what it wants read first.
-      const TYPE_LISTS = [
-        ['project', 'Projects'],
-        ['habit', 'Habits'],
-        ['task', 'Tasks'],
-      ];
-
-      function paintStale() {
-        const list = $('stale');
-        list.replaceChildren();
-
-        if (!staleItems.length) {
-          list.append(el('div', 'empty', 'Nothing here yet. Add a habit, project or task.'));
-        }
-
-        // One scale across every row on the screen, not one per list. The
-        // colour has to mean the same thing wherever it appears: scaled per
-        // list, a habit left three days would burn as cold as a project left
-        // three months, and the panel would be lying about which is worse.
-        const ages = staleItems.map((i) => i.days);
-        const range = ages.length
-          ? { min: Math.min(...ages), max: Math.max(...ages) }
-          : null;
-
-        for (const [type, heading] of TYPE_LISTS) {
-          const items = staleItems.filter((i) => i.type === type);
-          // A list with nothing in it is left out rather than shown empty.
-          // Three headings over nothing is a screen describing its own
-          // structure to someone who has not filled it in yet.
-          if (!items.length) continue;
-
-          const group = el('div', 'type-group');
-          group.append(el('div', 'kind-head', heading));
-          // Longest left, first, within each list.
-          for (const item of items.sort(byNeglect)) {
-            // The type is the heading now. Repeating it on every row under it
-            // is a word that says nothing the eye did not already have.
-            group.append(itemCard(item, { range, showType: false }));
-          }
-          list.append(group);
-        }
-
-        // The interview is offered only while there is nothing at all. Once one
-        // row exists the person has started, and a setup card above their list
-        // is a screen telling them to begin something they have begun.
-        const empty = !staleItems.length && !pausedCount;
-        $('plan-setup-group').classList.toggle('hidden', !empty);
-        if (empty && !planSetupPrompt) loadPlanPrompt();
-      }
-
-      // Fetched once and held, so copying is a synchronous act inside the tap
-      // that permits it. Served rather than kept in the page so there is one
-      // copy of it, and so the client only ever repeats what it was given.
-      async function loadPlanPrompt() {
-        try {
-          planSetupPrompt = (await api('/plan-intent/setup-prompt')).prompt || '';
-        } catch {
-          // The rest of the card still works; only copying would fail, and it
-          // says so when it does.
-        }
-      }
-
-      async function act(url, body) {
-        try {
-          await api(url, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-          await load();
-        } catch (err) {
-          alert(err.message);
-        }
-      }
-
-      async function load() {
-        let data;
-        try {
-          data = await api('/entries');
-        } catch (err) {
-          stale.replaceChildren(el('div', 'card', err.message));
-          return;
-        }
-
-        todayDate = data.today;
-        staleItems = data.items;
-        // Counted before painting: a person with everything paused has still
-        // set this up, and should not be shown the interview again.
-        pausedCount = data.paused.length;
-        paintStale();
-
-        paused.replaceChildren();
-        $('paused-group').classList.toggle('hidden', !data.paused.length);
-        for (const item of data.paused) paused.append(itemCard(item));
-
-        // The profile's standing answer. It seeds a day that has not been
-        // built yet; a day already saved keeps whatever it was saved with,
-        // which openDay restores.
-        const [wh, wm] = String(data.wake_time).split(':').map(Number);
-        defaultWakeMinutes = wh * 60 + wm;
-        if (planDate === null) wakeMinutes = defaultWakeMinutes;
-
-        if (planDate === null) {
-          planDate = nextDay(data.today);
-          $('plan-date').textContent = new Date(`${planDate}T12:00:00Z`)
-            .toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'short' });
-          await openDay(planDate);
-        } else {
-          renderBuilder();
-        }
-      }
-
-      // --- the add form ---
-
-      function setType(next) {
-        type = next;
-        for (const b of $('type-seg').children) {
-          b.setAttribute('aria-pressed', String(b.dataset.type === next));
-        }
-        $('f-frequency-wrap').classList.toggle('hidden', next !== 'habit');
-        // A project must give one, a habit is invited to, a task has none.
-        const reasoned = next === 'project' || next === 'habit';
-        $('f-why-wrap').classList.toggle('hidden', !reasoned);
-        $('f-why-optional').classList.toggle('hidden', next !== 'habit');
-        if (!reasoned) $('f-why').value = '';
-        // Projects and tasks only. A habit has a cadence, and switching to one
-        // clears any date already typed so it cannot be sent for a type that
-        // must not carry it.
-        // A task has a deadline. A project has a size instead, which says how
-        // much work is in it rather than guessing when it ends. A habit has a
-        // cadence. Each type carries the one that means something for it.
-        const ranked = next === 'project' || next === 'task';
-        $('f-due-wrap').classList.toggle('hidden', next !== 'task');
-        $('f-state-wrap').classList.toggle('hidden', !ranked);
-        $('f-size-wrap').classList.toggle('hidden', next !== 'project');
-        if (next !== 'task') $('f-due').value = '';
-        if (!ranked) $('f-state').value = '';
-        if (next !== 'project') $('f-size').value = '';
-      }
-
-      for (const b of $('type-seg').children) {
-        b.onclick = () => {
-          setType(b.dataset.type);
-          // Switching type can empty the why, which changes what the button
-          // below it is able to do.
-          clearSummarize();
-        };
-      }
-
-      // A date field has no empty state a person can reach on every platform:
-      // some pickers will not let you delete what is in them once it is set.
-      //
-      // Shown only when there is something to clear. On an empty field it was
-      // a control offering to undo nothing.
-      function paintDueClear() {
-        $('f-due-clear').classList.toggle('hidden', !$('f-due').value);
-      }
-
-      $('f-due').oninput = paintDueClear;
-      $('f-due').onchange = paintDueClear;
-
-      $('f-due-clear').onclick = () => {
-        $('f-due').value = '';
-        paintDueClear();
-      };
-
-      // Textareas start at two rows and grow to fit. A fixed tall box is empty
-      // space on a phone until it is not enough.
-      function grow(box) {
-        box.style.height = 'auto';
-        box.style.height = `${box.scrollHeight}px`;
-      }
-
-      // --- summarize: dictation cleanup, on every long-form field -----------
-      //
-      // One button under one field. It rewrites what is in the box and puts
-      // the result back in place, which means a tap overwrites something the
-      // person said out loud. So the text it replaced is held until the field
-      // is edited again or the sheet closes, and Undo puts it back.
-      //
-      // Held no longer than that, deliberately. An Undo still sitting there
-      // after the text has moved on would restore something that was true two
-      // edits ago, which is worse than not offering it.
-      //
-      // Attached rather than written out per field. Four fields with four
-      // copies of this would be four places for the undo rule to drift, and
-      // the rule is the part that protects what the person said.
-      // host is the element the row is appended to, and is always the field's
-      // wrapper rather than its label. A button inside a label forwards its
-      // taps to the control the label names, so an Undo in there would put the
-      // cursor in the box instead of restoring anything.
-      function attachSummarize(box, host) {
-        const actions = el('div', 'field-actions');
-        const note = el('span', 'none hidden');
-        const undo = el('button', 'linkbtn hidden', 'Undo');
-        const run = el('button', 'linkbtn', 'Summarize');
-        undo.type = 'button';
-        run.type = 'button';
-        // Off until there is something in the field to work on.
-        run.disabled = true;
-        actions.append(note, undo, run);
-        host.append(actions);
-
-        let before = null;
-        let busy = false;
-
-        function paint() {
-          run.disabled = busy || !box.value.trim();
-          run.textContent = busy ? 'Summarizing…' : 'Summarize';
-          undo.classList.toggle('hidden', before === null);
-        }
-
-        function reset() {
-          before = null;
-          busy = false;
-          note.textContent = '';
-          note.classList.add('hidden');
-          paint();
-        }
-
-        // Typing is what retires the undo: the text it would put back is no
-        // longer the text that was replaced.
-        box.oninput = () => {
-          grow(box);
-          reset();
-        };
-
-        undo.onclick = () => {
-          if (before === null) return;
-          box.value = before;
-          grow(box);
-          // Setting a value in code raises no input event, so the state is
-          // cleared by hand rather than waiting for one that is not coming.
-          reset();
-        };
-
-        run.onclick = async () => {
-          const was = box.value;
-          if (!was.trim() || busy) return;
-
-          note.textContent = '';
-          note.classList.add('hidden');
-          busy = true;
-          paint();
-
-          try {
-            const { text } = await api('/summarize', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ text: was }),
-            });
-            box.value = text;
-            grow(box);
-            // Recorded after the field is written, so what Undo restores is
-            // exactly what was replaced.
-            before = was;
-          } catch (err) {
-            // The field keeps every word. Said once and quietly under it: the
-            // person did nothing to cause this and there is nothing to fix.
-            note.textContent = err.message;
-            note.classList.remove('hidden');
-          } finally {
-            busy = false;
-            paint();
-          }
-        };
-
-        paint();
-        return { reset };
-      }
-
-      // The two on the entry sheet. Saying why something matters, or where it
-      // stands, out loud produces speech; this turns it into the sentence they
-      // meant.
-      const whySummarize = attachSummarize($('f-why'), $('f-why-wrap'));
-      const stateSummarize = attachSummarize($('f-state'), $('f-state-wrap'));
-
-      // Both are cleared together, because both live and die with the sheet.
-      const clearSummarize = () => {
-        whySummarize.reset();
-        stateSummarize.reset();
-      };
-
-      // One form for both. Editing an existing row hides the type selector,
-      // because what something is was decided when it was created and changing
-      // it would be a different entry rather than an edit.
-      let editingEntry = null;
-
-      // What the fields held when the sheet opened. Closing compares against
-      // this rather than asking "is anything filled in", so opening a row and
-      // closing it untouched does not accuse you of discarding work, and
-      // clearing a field that had something in it counts as a change.
-      let openedWith = '';
-
-      const sheetFields = ['f-title', 'f-why', 'f-frequency', 'f-due', 'f-state', 'f-size'];
-
-      const sheetState = () => JSON.stringify(sheetFields.map((id) => $(id).value));
-
-      function openEntry(item) {
-        editingEntry = item || null;
-
-        $('f-title').value = item ? item.title : '';
-        $('f-why').value = (item && item.why) || '';
-        $('f-frequency').value = (item && item.frequency) || 'daily';
-        $('f-due').value = (item && item.due) || '';
-        $('f-state').value = (item && item.state) || '';
-        $('f-size').value = (item && item.size) || '';
-        $('f-error').classList.add('hidden');
-        paintDueClear();
-        grow($('f-why'));
-        grow($('f-state'));
-
-        setType(item ? item.type : 'task');
-        $('type-seg').classList.toggle('hidden', Boolean(item));
-        $('f-save').textContent = item ? 'Save changes' : 'Save';
-        $('entry-sheet-title').textContent = item ? 'Edit' : 'Add';
-
-        // setType clears the fields a type does not carry, so the snapshot is
-        // taken after it runs. Taken before, switching type on the way in would
-        // read as something the person typed.
-        openedWith = sheetState();
-        clearSummarize();
-
-        $('entry-sheet').classList.remove('hidden');
-        $('main').classList.add('locked');
-        $('f-title').focus();
-      }
-
-      function closeEntry() {
-        editingEntry = null;
-        clearSummarize();
-        $('entry-sheet').classList.add('hidden');
-        $('main').classList.remove('locked');
-      }
-
-      $('add-toggle').onclick = () => openEntry(null);
-
-      // The X discards. It asks first only when there is something to lose:
-      // a confirm on an untouched sheet is a dialog that is always wrong.
-      $('entry-close').onclick = () => {
-        if (sheetState() !== openedWith &&
-            !confirm('Discard this? What you have typed will not be saved.')) {
-          return;
-        }
-        closeEntry();
-      };
-
-      $('add-form').onsubmit = async (event) => {
-        event.preventDefault();
-        const error = $('f-error');
-        error.classList.add('hidden');
-        $('f-save').disabled = true;
-
-        // Only what this type carries. Sending a why for a habit would set a
-        // field nothing reads, and the server would have to ignore it anyway.
-        const payload = { title: $('f-title').value };
-        if (!editingEntry) payload.type = type;
-        if (type === 'habit') payload.frequency = $('f-frequency').value;
-        if (type === 'project' || type === 'habit') payload.why = $('f-why').value;
-        // Always sent for a type that can carry one, including when it is
-        // empty. That empty string is how a date is cleared: leaving the field
-        // out would mean "unchanged", and there would be no way to remove one.
-        if (type === 'task') payload.due = $('f-due').value;
-        // Always sent, empty included, so clearing a note removes it rather
-        // than leaving the old one standing under a new date.
-        if (type === 'project' || type === 'task') payload.state = $('f-state').value;
-        if (type === 'project') payload.size = $('f-size').value;
-
-        try {
-          await api(
-            editingEntry ? `/entries/${editingEntry.id}/update` : '/entries',
-            {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify(payload),
-            }
-          );
-          closeEntry();
-          await load();
-        } catch (err) {
-          error.textContent = err.message;
-          error.classList.remove('hidden');
-        } finally {
-          $('f-save').disabled = false;
-        }
-      };
-
-      // --- review -----------------------------------------------------------
-      //
-      // Yesterday, assumed done. Nothing here confirms the ordinary case; the
-      // only action is correcting it. A block already marked shows its reason
-      // and can be put back, because a mis-tap at the end of a long day should
-      // not be permanent.
-
-      function reviewRow(block) {
-        const row = el('div', 'block review' + (block.completed ? '' : ' missed'));
-
-        const body = el('div', 'block-body');
-        body.append(el('div', 'block-title', block.title));
-        body.append(
-          el(
-            'div',
-            'block-when',
-            `${clock(block.start_minutes)} to ${clock(block.start_minutes + block.duration_minutes)}`
-          )
-        );
-        if (!block.completed && block.miss_reason) {
-          body.append(el('div', 'miss-reason', block.miss_reason));
-        }
-        row.append(body);
-
-        const action = el('button', 'linkbtn' + (block.completed ? '' : ' danger'));
-        action.type = 'button';
-        action.textContent = block.completed ? "Didn't happen" : 'Undo';
-        action.onclick = () =>
-          block.completed
-            ? askReason(block)
-            : setMissed(block, false, '').catch((err) => alert(err.message));
-        row.append(action);
-
-        return row;
-      }
-
-      // The reason is optional, and the sheet says so. Demanding one is how a
-      // review stops getting done.
-      //
-      // Which block is being explained. Held here rather than read back off
-      // the screen, so a list that reloads under the open sheet cannot change
-      // what gets marked.
-      let missBlock = null;
-      const missSummarize = attachSummarize($('f-miss'), $('f-miss-wrap'));
-
-      function askReason(block) {
-        missBlock = block;
-        $('f-miss').value = '';
-        $('miss-what').textContent = `"${block.title}" didn't happen.`;
-        $('miss-error').classList.add('hidden');
-        missSummarize.reset();
-        grow($('f-miss'));
-
-        $('miss-sheet').classList.remove('hidden');
-        $('main').classList.add('locked');
-        $('f-miss').focus();
-      }
-
-      function closeMiss() {
-        missBlock = null;
-        missSummarize.reset();
-        $('miss-sheet').classList.add('hidden');
-        $('main').classList.remove('locked');
-      }
-
-      // Closing marks nothing, which is what dismissing the old prompt did.
-      $('miss-close').onclick = closeMiss;
-
-      $('miss-save').onclick = async () => {
-        const block = missBlock;
-        if (!block) return;
-
-        const reason = $('f-miss').value;
-        $('miss-save').disabled = true;
-        $('miss-error').classList.add('hidden');
-
-        try {
-          await setMissed(block, true, reason);
-          closeMiss();
-        } catch (err) {
-          // The sheet stays open holding every word, so a failed save is not
-          // also a lost sentence.
-          $('miss-error').textContent = err.message;
-          $('miss-error').classList.remove('hidden');
-        } finally {
-          $('miss-save').disabled = false;
-        }
-      };
-
-      // Throws rather than reporting, so the caller decides. The sheet needs to
-      // stay open holding what was typed; the un-mark tap below has nothing to
-      // lose and can just say so.
-      async function setMissed(block, missed, reason) {
-        await api(`/blocks/${block.id}/miss`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ missed, reason }),
-        });
-        await loadReview();
-      }
-
-      async function loadReview() {
-        const list = $('review');
-        let data;
-        try {
-          data = await api('/review');
-        } catch (err) {
-          list.replaceChildren(el('div', 'card', err.message));
-          return;
-        }
-
-        $('review-date').textContent = data.blocks.length
-          ? new Date(`${data.date}T12:00:00Z`).toLocaleDateString('en-GB', {
-              timeZone: 'UTC',
-              weekday: 'long',
-              day: 'numeric',
-              month: 'short',
-            })
-          : '';
-
-        list.replaceChildren();
-
-        if (!data.blocks.length) {
-          list.append(el('div', 'empty', 'Nothing planned yesterday.'));
-          return;
-        }
-
-        for (const block of data.blocks) list.append(reviewRow(block));
-
-        const missed = data.blocks.filter((b) => !b.completed).length;
-        if (missed) {
-          list.append(
-            el(
-              'div',
-              'clash',
-              `${missed} of ${data.blocks.length} didn't happen.`
-            )
-          );
-        }
-      }
-
-      // --- the builder ------------------------------------------------------
-
-      const STEP = 30; // minutes. The only unit the builder speaks.
-      const MIN_DURATION = 30;
-      const MAX_DURATION = 8 * 60;
-
-      let blocks = [];
-      let wakeMinutes = 7 * 60;
-
-      // What the profile says, kept apart from what this day is set to. A day
-      // with no saved plan starts from the default; changing tomorrow's start
-      // does not quietly rewrite the standing one.
-      let defaultWakeMinutes = 7 * 60;
-
-      // Half hours, the same step the durations move in, so the whole day sits
-      // on one grid.
-      const WAKE_STEP = 30;
+      // The hours a person actually gets up. Outside these the stepper would
+      // be being flexible rather than helpful.
       const WAKE_MIN = 4 * 60;
       const WAKE_MAX = 12 * 60;
 
-      function setWake(mins) {
-        wakeMinutes = Math.max(WAKE_MIN, Math.min(WAKE_MAX, mins));
-        paintWake();
-      }
+      const SIZES = ['a day', 'a few days', 'a week', 'a few weeks', 'months'];
+      const FREQUENCIES = ['daily', 'few times a week', 'weekly', 'monthly'];
 
-      /**
-       * One step, landing on the half hour.
-       *
-       * A day saved when the step was fifteen minutes can start at 08:15, and
-       * adding thirty to that gives 08:45 and then 09:15 — off the grid for
-       * ever. Stepping to the next boundary instead means the first press
-       * corrects it, without rewriting a saved plan the moment it is opened.
-       */
-      function stepWake(direction) {
-        const onGrid = wakeMinutes % WAKE_STEP === 0;
-        setWake(
-          direction > 0
-            ? Math.floor(wakeMinutes / WAKE_STEP) * WAKE_STEP + WAKE_STEP
-            : onGrid
-              ? wakeMinutes - WAKE_STEP
-              : Math.floor(wakeMinutes / WAKE_STEP) * WAKE_STEP
-        );
-      }
+      // A due date belongs to these two. A habit has a cadence instead.
+      const DATED = ['project', 'task'];
 
-      function paintWake() {
-        $('wake-time').textContent = clock(wakeMinutes);
-        $('wake-minus').disabled = wakeMinutes <= WAKE_MIN;
-        $('wake-plus').disabled = wakeMinutes >= WAKE_MAX;
-      }
-      let planDate = null;
-      // Whether what is on screen matches what is saved. Any edit clears it,
-      // so the button always says whether there is unsaved work.
-      let saved = false;
+      const pad = (n) => String(n).padStart(2, '0');
 
-      function refreshConfirm() {
-        const button = $('confirm');
-        button.textContent = saved ? 'Confirmed' : 'Confirm';
-        button.disabled = saved || !blocks.length;
-      }
+      /** Minutes past midnight as a clock time, wrapping past midnight. */
+      const clock = (mins) => `${pad(Math.floor((mins % 1440) / 60))}:${pad(mins % 60)}`;
 
-      function setSaved(next) {
-        saved = next;
-        refreshConfirm();
-      }
-
-      // Every edit goes through here, so there is one place that knows the
-      // day on screen no longer matches the day in the database.
-      function changed() {
-        saved = false;
-        renderBuilder();
-      }
-
-      const clock = (mins) => {
-        const m = ((Math.round(mins) % 1440) + 1440) % 1440;
-        return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-      };
-
+      /** A duration as a person says it: 30m, 1h, 1h 30m. */
       function span(mins) {
         const h = Math.floor(mins / 60);
         const m = mins % 60;
@@ -2539,964 +623,658 @@
         return m ? `${h}h ${m}m` : `${h}h`;
       }
 
-      /**
-       * Walk the list once and give every block a start time.
-       *
-       * Unpinned blocks flow: each begins where the last one ended. Pinned
-       * blocks hold the start they came with and never move, so the cursor
-       * jumps to them. When the cursor has already run past a pinned block the
-       * overlap is recorded on the block and shown. It is never resolved:
-       * nothing is shortened, nothing is pushed, because the person is the one
-       * who decides what gives.
-       */
-      function layout() {
-        let cursor = wakeMinutes;
+      const toMinutes = (t) => {
+        const [h, m] = String(t).split(':').map(Number);
+        return h * 60 + m;
+      };
 
-        for (const b of blocks) {
-          if (b.pinned) {
-            b.clash = Math.max(0, cursor - b.start);
-            // max, not the pinned end alone. When the flow has already run
-            // past this block the cursor must not travel backwards, or the
-            // next block would be placed inside the one that overran.
-            cursor = Math.max(cursor, b.start + b.duration);
-          } else {
-            b.clash = 0;
-            b.start = cursor;
-            cursor += b.duration;
-          }
+      const addDays = (date, n) => {
+        const d = new Date(`${date}T12:00:00Z`);
+        d.setUTCDate(d.getUTCDate() + n);
+        return d.toISOString().slice(0, 10);
+      };
+
+      const prettyDate = (date) =>
+        new Intl.DateTimeFormat('en-GB', {
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+          timeZone: 'UTC',
+        }).format(new Date(`${date}T12:00:00Z`));
+
+      // --- state --------------------------------------------------------------
+
+      let things = [];
+      let blocks = []; // { title, entryId, duration, start }
+      let wake = 8 * 60;
+      let planDate = null;
+      let saved = false;
+
+      // Test seam: a suite needs to put the page into the state a saved day
+      // leaves it in without driving a real confirm through the network.
+      function setSaved(v) {
+        saved = v;
+        renderConfirm();
+      }
+
+      // --- 1. yesterday --------------------------------------------------------
+
+      async function loadReview() {
+        let data;
+        try {
+          data = await (await fetch('/review')).json();
+        } catch {
+          return;
         }
-        return cursor;
+
+        $('review-date').textContent = data.date ? prettyDate(data.date) : '';
+        const box = $('review');
+        box.replaceChildren();
+
+        if (!data.blocks || !data.blocks.length) {
+          const none = document.createElement('div');
+          none.className = 'empty';
+          none.textContent = 'Nothing was planned.';
+          box.append(none);
+          return;
+        }
+
+        for (const b of data.blocks) box.append(reviewRow(b));
       }
 
       /**
-       * Where a new block of this length should go.
+       * One block of yesterday.
        *
-       * The first gap it fits in, in clock order, otherwise the end. A gap is
-       * the free time between where the flow has reached and the start of the
-       * next pinned block, so filling one moves nothing: everything before it
-       * is untouched, the pinned block keeps its time, and everything after
-       * still flows from that pinned block's end.
-       *
-       * This is arithmetic, not judgment. It asks whether a duration fits in a
-       * window, never whether something deserves the morning. Appending after
-       * an early appointment would be wrong on nearly every day that has one.
+       * Assumed done. The only question being asked is whether that is wrong,
+       * and it is one tap to say so. Nothing here asks anyone to confirm the
+       * ordinary case.
        */
-      function insertIndexFor(duration) {
-        let cursor = wakeMinutes;
+      function reviewRow(b) {
+        const row = document.createElement('div');
+        row.className = 'row';
 
-        for (let i = 0; i < blocks.length; i++) {
-          const b = blocks[i];
-          if (!b.pinned) {
-            cursor += b.duration;
-            continue;
+        const top = document.createElement('div');
+        top.className = 'between';
+
+        const title = document.createElement('span');
+        title.className = 'title';
+        title.textContent = b.title;
+
+        const action = document.createElement('button');
+        action.type = 'button';
+
+        const missed = b.completed === false;
+        if (missed) title.classList.add('done');
+        action.className = missed ? 'missed' : 'right';
+        action.textContent = missed ? 'missed' : "didn't happen";
+
+        top.append(title, action);
+        row.append(top);
+
+        // The reason is optional and always has been. Demanding one is how a
+        // review stops being done at all.
+        const reason = document.createElement('input');
+        reason.className = 'reason';
+        reason.type = 'text';
+        reason.placeholder = 'why, if you want to say';
+        reason.value = b.miss_reason || '';
+        if (!missed) reason.classList.add('hidden');
+        row.append(reason);
+
+        const mark = async (isMissed, why) => {
+          try {
+            await fetch(`/blocks/${b.id}/miss`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ missed: isMissed, reason: why || '' }),
+            });
+          } catch {
+            // The screen already shows the new state. A failed write is
+            // corrected by the next load rather than by an alert in the
+            // middle of a review.
           }
-          if (b.start - cursor >= duration) return i;
-          cursor = Math.max(cursor, b.start + b.duration);
-        }
-        return blocks.length;
-      }
+        };
 
-      function blockRow(b, index) {
-        const row = el('div', 'block' + (b.pinned ? ' pinned' : ''));
-        row.dataset.index = String(index);
+        action.onclick = () => {
+          const nowMissed = action.textContent !== 'missed';
+          title.classList.toggle('done', nowMissed);
+          action.className = nowMissed ? 'missed' : 'right';
+          action.textContent = nowMissed ? 'missed' : "didn't happen";
+          reason.classList.toggle('hidden', !nowMissed);
+          if (!nowMissed) reason.value = '';
+          mark(nowMissed, reason.value);
+        };
 
-        const handle = el('div', 'handle', b.pinned ? '📌' : '⠿');
-        if (!b.pinned) handle.onpointerdown = (e) => startDrag(e, index);
-        row.append(handle);
-
-        const body = el('div', 'block-body');
-        body.append(el('div', 'block-title', b.title));
-        body.append(
-          el('div', 'block-when', `${clock(b.start)} to ${clock(b.start + b.duration)}`)
-        );
-        row.append(body);
-
-        if (b.pinned) {
-          row.append(el('div', 'block-when', span(b.duration)));
-        } else {
-          const stepper = el('div', 'stepper');
-
-          const minus = el('button', null, '−');
-          minus.type = 'button';
-          minus.disabled = b.duration <= MIN_DURATION;
-          minus.onclick = () => {
-            b.duration = Math.max(MIN_DURATION, b.duration - STEP);
-            changed();
-          };
-
-          const plus = el('button', null, '+');
-          plus.type = 'button';
-          plus.disabled = b.duration >= MAX_DURATION;
-          plus.onclick = () => {
-            b.duration = Math.min(MAX_DURATION, b.duration + STEP);
-            changed();
-          };
-
-          stepper.append(minus, el('span', null, span(b.duration)), plus);
-          row.append(stepper);
-
-          const remove = el('button', 'linkbtn', '×');
-          remove.type = 'button';
-          remove.onclick = () => {
-            blocks.splice(index, 1);
-            changed();
-          };
-          row.append(remove);
-        }
+        reason.onchange = () => mark(true, reason.value);
 
         return row;
       }
 
-      function renderBuilder() {
-        const end = layout();
-        const builder = $('builder');
-        builder.replaceChildren();
+      // --- 2. things -----------------------------------------------------------
 
-        if (!blocks.length) {
-          builder.append(el('div', 'empty', 'Tap something in Stale to put it in tomorrow, or add a block.'));
+      /** How a deadline reads. */
+      function dueText(days) {
+        if (days < 0) return `${-days} day${-days === 1 ? '' : 's'} overdue`;
+        if (days === 0) return 'due today';
+        if (days === 1) return 'due tomorrow';
+        return `due in ${days} days`;
+      }
+
+      /**
+       * The meta line: type, then either the deadline and its size, or how
+       * long this has been sitting there.
+       *
+       * "since scheduled" and "since added" are different claims, and the row
+       * says which one it is making. Something never scheduled is counted from
+       * the day it was written down, and calling that "since scheduled" would
+       * be reporting a scheduling that never happened.
+       */
+      function metaFor(item) {
+        if (item.due) {
+          return [item.type, dueText(item.days_until_due), item.size]
+            .filter(Boolean)
+            .join(' · ');
         }
 
-        blocks.forEach((b, i) => {
-          builder.append(blockRow(b, i));
-          if (b.clash) {
-            builder.append(
-              el('div', 'clash', `Overlaps ${b.title} by ${span(b.clash)}. Shorten something above.`)
-            );
-          }
-        });
-
-        paintWake();
-        refreshConfirm();
-        $('end-time').textContent = blocks.length ? clock(end) : 'not yet';
-        // Emphasis is earned by a real computed time, not by the word standing
-        // in for one.
-        $('end-time').classList.toggle('placeholder', !blocks.length);
-        // Past midnight is the one case the clock cannot show on its own:
-        // 00:30 looks earlier than 23:00 rather than later.
-        $('ends').querySelector('.ends-row').classList.toggle('late', end >= 1440);
-        if (end >= 1440 && blocks.length) {
-          $('end-time').textContent = clock(end) + ' next day';
-        }
+        const noun = item.last_scheduled ? 'scheduled' : 'added';
+        if (item.days === 0) return `${item.type} · ${noun} today`;
+        return `${item.type} · ${item.days} day${item.days === 1 ? '' : 's'} since ${noun}`;
       }
 
-      function addBlock({ title, entryId = null, duration = 60 }) {
-        const block = { title, entryId, duration, start: 0, pinned: false, clash: 0 };
-        const at = insertIndexFor(duration);
-        blocks.splice(at, 0, block);
-        changed();
-      }
-
-      // --- drag to reorder ---
-      //
-      // Pointer events rather than HTML5 drag and drop, which does not fire on
-      // touch. The row being dragged is left in place at reduced opacity and a
-      // marker shows where it would land, so the list never reshuffles under
-      // the finger while it is still moving.
-
-      let drag = null;
-
-      function startDrag(event, index) {
-        if (blocks[index].pinned) return;
-        event.preventDefault();
-
-        drag = { from: index, to: index };
-        const row = event.currentTarget.parentNode;
-        row.classList.add('dragging');
-        row.setPointerCapture(event.pointerId);
-
-        const move = (e) => {
-          const rows = [...$('builder').querySelectorAll('.block')];
-          let to = drag.from;
-          for (const r of rows) {
-            const box = r.getBoundingClientRect();
-            const i = Number(r.dataset.index);
-            // Past the midpoint of a row means the dragged block belongs on
-            // the far side of it.
-            if (e.clientY > box.top + box.height / 2) to = i;
-          }
-          drag.to = to;
-        };
-
-        const end = () => {
-          row.releasePointerCapture(event.pointerId);
-          row.removeEventListener('pointermove', move);
-          row.removeEventListener('pointerup', end);
-          row.removeEventListener('pointercancel', end);
-
-          const moved = drag && drag.to !== drag.from;
-          if (moved) {
-            const [block] = blocks.splice(drag.from, 1);
-            blocks.splice(drag.to, 0, block);
-          }
-          drag = null;
-          moved ? changed() : renderBuilder();
-        };
-
-        row.addEventListener('pointermove', move);
-        row.addEventListener('pointerup', end);
-        row.addEventListener('pointercancel', end);
-      }
-
-      // --- pinned blocks from the calendar ---
-
-      function nextDay(date) {
-        const d = new Date(`${date}T12:00:00Z`);
-        d.setUTCDate(d.getUTCDate() + 1);
-        return d.toISOString().slice(0, 10);
-      }
-
-      // A calendar that cannot be read must never stop planning, so a failure
-      // here is an empty day rather than an error.
-      async function fetchCalendar(date) {
+      async function load() {
+        let data;
         try {
-          const data = await api(`/calendar/${date}`);
-          return {
-            events: data.events || [],
-            allDay: data.all_day || [],
-            failed: data.failed || [],
-          };
+          data = await (await fetch('/entries')).json();
         } catch {
-          // The request itself failed, which is not the same as a feed being
-          // down and is not something the server can name for us.
-          return { events: [], allDay: [], failed: [{ label: 'your calendar' }] };
+          return;
         }
+
+        things = data.items || [];
+
+        // The day being built is tomorrow, reckoned where the person lives.
+        if (!planDate) {
+          planDate = addDays(data.today, 1);
+          $('plan-date').textContent = prettyDate(planDate);
+          wake = toMinutes(data.wake_time || '08:00');
+          await loadCalendar(planDate);
+          await loadPlan(planDate);
+        }
+
+        renderThings();
+        renderWake();
       }
 
-      // All-day entries are reminders. They are worth seeing while planning and
-      // they claim no hours, so they sit above the blocks rather than inside
-      // them. An earlier version made each one a 24 hour pinned block, which
-      // swallowed the whole day.
-      function showAllDay(allDay, failed = []) {
-        const note = $('all-day');
-        note.replaceChildren();
-        note.classList.toggle('hidden', !allDay.length && !failed.length);
+      function renderThings() {
+        const box = $('things');
+        box.replaceChildren();
 
-        // The failure goes first and in the miss colour. An unreachable feed
-        // and a day with nothing on it both produce no blocks, and without
-        // this they look identical — so a calendar that has been broken for a
-        // week reads as a quiet week.
-        if (failed.length) {
-          const names = failed.map((f) => f.label).join(' and ');
-          note.append(el('div', 'err', `Couldn't reach ${names}. Anything on it is missing from this day.`));
+        if (!things.length) {
+          const none = document.createElement('div');
+          none.className = 'empty';
+          none.textContent = 'Nothing here yet.';
+          box.append(none);
+          return;
         }
 
-        if (allDay.length) {
-          note.append(el('span', 'none', 'All day: ' + allDay.map((a) => a.title).join(', ')));
-        }
+        for (const item of things) box.append(thingRow(item));
       }
 
+      /**
+       * One thing.
+       *
+       * Tapping it puts it in tomorrow, which is what this list is for. The
+       * other two things you can do to it — finish it, delete it — sit behind
+       * a long press, so the resting state of the list is a list.
+       */
+      function thingRow(item) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.dataset.id = item.id;
+
+        const top = document.createElement('div');
+        top.className = 'row-top';
+
+        const title = document.createElement('div');
+        title.className = 'title';
+        title.textContent = item.title;
+        top.append(title);
+
+        // '!!!', '!!' or '!'. Computed on the server and arithmetic all the
+        // way down: the days the size needs against the days that are left.
+        if (item.mark) {
+          const mark = document.createElement('div');
+          mark.className = 'mark';
+          mark.textContent = item.mark;
+          top.append(mark);
+        }
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = metaFor(item);
+
+        row.append(top, meta);
+
+        const acts = document.createElement('div');
+        acts.className = 'rowacts hidden';
+
+        // Tasks only. A habit recurring is the point of a habit, and a project
+        // is not finished by one session of work on it.
+        if (item.type === 'task') {
+          const done = document.createElement('button');
+          done.type = 'button';
+          done.textContent = 'Done';
+          done.onclick = (e) => {
+            e.stopPropagation();
+            finish(item.id);
+          };
+          acts.append(done);
+        }
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'danger';
+        del.textContent = 'Delete';
+        del.onclick = (e) => {
+          e.stopPropagation();
+          if (confirm(`Delete "${item.title}"?`)) remove(item.id);
+        };
+        acts.append(del);
+        row.append(acts);
+
+        let held = false;
+        let timer = null;
+
+        row.onpointerdown = () => {
+          timer = setTimeout(() => {
+            held = true;
+            acts.classList.remove('hidden');
+          }, 450);
+        };
+        row.onpointerup = () => clearTimeout(timer);
+        row.onpointercancel = () => clearTimeout(timer);
+        row.onpointerleave = () => clearTimeout(timer);
+
+        row.onclick = () => {
+          if (held) {
+            // The press that opened the actions must not also schedule it.
+            held = false;
+            return;
+          }
+          if (!acts.classList.contains('hidden')) {
+            acts.classList.add('hidden');
+            return;
+          }
+          addBlock({ title: item.title, entryId: item.id, duration: 60 });
+        };
+
+        return row;
+      }
+
+      async function finish(id) {
+        try {
+          await fetch(`/entries/${id}/done`, { method: 'POST' });
+        } catch {
+          return;
+        }
+        things = things.filter((t) => t.id !== id);
+        renderThings();
+      }
+
+      async function remove(id) {
+        try {
+          await fetch(`/entries/${id}/delete`, { method: 'POST' });
+        } catch {
+          return;
+        }
+        things = things.filter((t) => t.id !== id);
+        renderThings();
+      }
+
+      // --- 3. tomorrow ---------------------------------------------------------
+
+      /**
+       * The calendar aside.
+       *
+       * Read, shown, forgotten. Nothing here is placed into the day and
+       * nothing about it is stored: it is what is already true about tomorrow,
+       * and what to do about it is the person's decision to make.
+       */
       async function loadCalendar(date) {
-        const { events, allDay, failed } = await fetchCalendar(date);
-        showAllDay(allDay, failed);
-
-        // The server returns them already in clock order, so they only need
-        // appending. An earlier version sorted the whole list with a
-        // comparator that returned 0 for any pinned/unpinned pair, which is
-        // not a valid ordering: the result depended on the sort algorithm
-        // rather than on the times.
-        blocks = blocks.filter((b) => !b.pinned);
-        for (const e of events) {
-          blocks.push({
-            title: e.title,
-            entryId: null,
-            duration: e.duration_minutes,
-            start: e.start_minutes,
-            pinned: true,
-            clash: 0,
-          });
+        let data;
+        try {
+          data = await (await fetch(`/calendar/${date}`)).json();
+        } catch {
+          return;
         }
+
+        const lines = (data.items || []).map((e) =>
+          e.start_minutes === null ? e.title : `${e.title}, ${clock(e.start_minutes)}`
+        );
+
+        const box = $('cal-list');
+        box.replaceChildren();
+        box.textContent = lines.length ? lines.join('\n') : 'Nothing on it.';
+
+        // A feed that is down and a quiet Tuesday produce the same empty list,
+        // so a failure is said out loud rather than left to look like a free
+        // day.
+        for (const f of data.failed || []) {
+          const warn = document.createElement('span');
+          warn.className = 'failed';
+          warn.textContent = `\n${f.label} could not be read.`;
+          box.append(warn);
+        }
+      }
+
+      /** A day already confirmed, so it survives a page load. */
+      async function loadPlan(date) {
+        let data;
+        try {
+          data = await (await fetch(`/plan/${date}`)).json();
+        } catch {
+          return renderBuilder();
+        }
+        if (!data.plan) return renderBuilder();
+
+        wake = data.plan.wake_minutes;
+        blocks = (data.blocks || []).map((b) => ({
+          title: b.title,
+          entryId: b.entryId,
+          duration: b.duration_minutes,
+        }));
+        saved = data.plan.status === 'confirmed';
+        renderWake();
         renderBuilder();
       }
 
       /**
-       * Open the day.
+       * Blocks flow in sequence from the start time.
        *
-       * A confirmed plan wins over the calendar: it already contains whatever
-       * pinned blocks existed when it was built, and reseeding from the feed
-       * would duplicate them.
+       * Nothing is pinned and nothing is placed automatically, so a block
+       * begins when the one above it ends and that is the whole rule. Changing
+       * one duration shifts everything below it, which is what the steppers
+       * are for.
        */
-      async function openDay(date) {
-        // Named `existing`, not `saved`: `saved` is the module-level flag for
-        // whether the screen matches the database, and shadowing it here would
-        // make every assignment inside this function silently local.
-        let existing = { plan: null, blocks: [] };
-        try {
-          existing = await api(`/plan/${date}`);
-        } catch {
-          // No saved plan is the normal case, and a failure here should still
-          // leave a usable builder.
+      function reflow() {
+        let cursor = wake;
+        for (const b of blocks) {
+          b.start = cursor;
+          cursor += b.duration;
         }
-
-        if (existing.plan && existing.blocks.length) {
-          // A saved day is reopened as it was built, not as the profile would
-          // build it. Without this, coming back to a day that started at 9
-          // would silently re-lay it out from the default and shift everything.
-          if (Number.isInteger(existing.plan.wake_minutes)) {
-            wakeMinutes = existing.plan.wake_minutes;
-          }
-          blocks = existing.blocks.map((b) => ({
-            title: b.title,
-            entryId: b.entryId,
-            duration: b.duration_minutes,
-            start: b.start_minutes,
-            pinned: b.pinned,
-            clash: 0,
-          }));
-          // The note still comes from the feed: it is not part of the plan
-          // because it never occupied any of it.
-          const fresh = await fetchCalendar(date);
-          showAllDay(fresh.allDay, fresh.failed);
-          renderBuilder();
-          setSaved(existing.plan.status === 'confirmed');
-          return;
-        }
-
-        setSaved(false);
-        await loadCalendar(date);
-        await placeActionItems(date);
+        return cursor;
       }
 
-      /**
-       * Pull in whatever the action calendar is offering for this day.
-       *
-       * Only on a day with no saved plan, and only once per event per day: the
-       * server records each one as it hands it over, so deleting the block and
-       * reopening the builder does not bring it back. Saying no has to stick,
-       * or the feature is just a thing that keeps arguing.
-       *
-       * They arrive as ordinary blocks — not pinned, movable, resizable,
-       * deletable — placed the same way anything else is: the first gap they
-       * fit in, otherwise the end.
-       */
-      async function placeActionItems(date) {
-        let placed = [];
-        try {
-          const res = await api(`/calendar/${date}/place`, { method: 'POST' });
-          placed = res.placed || [];
-        } catch {
-          // Nothing to add is the normal case, and a failure here must not
-          // cost the day that has already been laid out.
-          return;
-        }
-
-        for (const item of placed) {
-          addBlock({ title: item.title, duration: item.duration_minutes });
-        }
+      function addBlock({ title, entryId = null, duration = 60 }) {
+        blocks.push({ title, entryId, duration });
+        saved = false;
+        renderBuilder();
       }
 
-      $('block-toggle').onclick = () => {
-        const card = $('block-card');
-        const opening = card.classList.contains('hidden');
-        card.classList.toggle('hidden', !opening);
-        if (opening) {
-          $('b-title').value = '';
-          $('b-title').focus();
-        }
-      };
+      function setWake(mins) {
+        wake = mins;
+        renderWake();
+        renderBuilder();
+      }
 
-      $('b-cancel').onclick = () => $('block-card').classList.add('hidden');
+      function renderWake() {
+        $('wake-time').textContent = clock(wake);
+        $('wake-minus').disabled = wake <= WAKE_MIN;
+        $('wake-plus').disabled = wake >= WAKE_MAX;
+      }
 
-      $('block-form').onsubmit = (event) => {
-        event.preventDefault();
-        const title = $('b-title').value.trim();
-        if (!title) return;
-        addBlock({ title });
-        $('block-card').classList.add('hidden');
-      };
+      // A day saved off the half hour — from a build when the step was fifteen
+      // minutes — is corrected by one press rather than kept off the grid for
+      // ever.
+      const stepUp = (v) => Math.min(WAKE_MAX, Math.floor(v / STEP) * STEP + STEP);
+      const stepDown = (v) => Math.max(WAKE_MIN, Math.ceil(v / STEP) * STEP - STEP);
 
-      // Moving the start moves the day. Everything unpinned flows from it, so
-      // this goes through changed() like any other edit: the layout is redone,
-      // any collision with a pinned event is shown, and the day stops counting
-      // as saved until it is confirmed again.
       $('wake-minus').onclick = () => {
-        stepWake(-1);
-        changed();
+        saved = false;
+        setWake(stepDown(wake));
+      };
+      $('wake-plus').onclick = () => {
+        saved = false;
+        setWake(stepUp(wake));
       };
 
-      $('wake-plus').onclick = () => {
-        stepWake(1);
-        changed();
+      function renderBuilder() {
+        const end = reflow();
+        const box = $('builder');
+        box.replaceChildren();
+
+        for (const [i, b] of blocks.entries()) box.append(blockCard(b, i));
+
+        $('end-time').textContent = !blocks.length
+          ? '—'
+          : end >= 1440
+            ? `${clock(end)} next day`
+            : clock(end);
+        $('ends').classList.toggle('late', blocks.length > 0 && end >= 1440);
+
+        renderConfirm();
+      }
+
+      /** A block: the one kind of object on this page you manipulate, so a card. */
+      function blockCard(b, i) {
+        const card = document.createElement('div');
+        card.className = 'block';
+
+        const left = document.createElement('div');
+        const t = document.createElement('div');
+        t.className = 't';
+        t.textContent = b.title;
+        const time = document.createElement('div');
+        time.className = 'time';
+        time.textContent = `${clock(b.start)} – ${clock(b.start + b.duration)}`;
+        left.append(t, time);
+
+        const stepper = document.createElement('div');
+        stepper.className = 'stepper';
+
+        const minus = document.createElement('button');
+        minus.type = 'button';
+        minus.className = 'step';
+        minus.textContent = '−';
+        minus.disabled = b.duration <= STEP;
+        minus.onclick = () => {
+          // The floor is one step. Below that it has stopped being a block,
+          // and removing it is what the person means.
+          if (b.duration > STEP) {
+            b.duration -= STEP;
+            saved = false;
+            renderBuilder();
+          }
+        };
+
+        const dur = document.createElement('div');
+        dur.className = 'dur';
+        dur.textContent = span(b.duration);
+
+        const plus = document.createElement('button');
+        plus.type = 'button';
+        plus.className = 'step';
+        plus.textContent = '+';
+        plus.onclick = () => {
+          b.duration += STEP;
+          saved = false;
+          renderBuilder();
+        };
+
+        stepper.append(minus, dur, plus);
+        card.append(left, stepper);
+
+        // Removing a block is a long press, the same gesture as the actions on
+        // a thing, so there is one way to reach the destructive move.
+        let timer = null;
+        card.onpointerdown = () => {
+          timer = setTimeout(() => {
+            blocks.splice(i, 1);
+            saved = false;
+            renderBuilder();
+          }, 550);
+        };
+        card.onpointerup = () => clearTimeout(timer);
+        card.onpointercancel = () => clearTimeout(timer);
+        card.onpointerleave = () => clearTimeout(timer);
+
+        return card;
+      }
+
+      $('add-block').onclick = () => {
+        const title = prompt('What is this block?');
+        if (title && title.trim()) addBlock({ title: title.trim(), duration: STEP });
       };
+
+      function renderConfirm() {
+        const button = $('confirm');
+        button.textContent = saved ? 'Confirmed' : 'Confirm';
+        button.disabled = saved || !blocks.length;
+      }
 
       $('confirm').onclick = async () => {
-        const button = $('confirm');
-        button.disabled = true;
+        if (!blocks.length) return;
+        reflow();
+
+        let res;
         try {
-          await api('/plan', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              date: planDate,
-              // Sent rather than left to be inferred from the first block: a
-              // pinned event before the day starts is not when the day starts.
-              wake_minutes: wakeMinutes,
-              blocks: blocks.map((b) => ({
-                title: b.title,
-                entryId: b.entryId,
-                start_minutes: b.start,
-                duration_minutes: b.duration,
-                pinned: b.pinned,
-              })),
-            }),
-          });
-          setSaved(true);
-          // Scheduling something resets its clock, so the panel it came from
-          // has to be reread rather than left showing yesterday's numbers.
-          await load();
-        } catch (err) {
-          alert(err.message);
-          setSaved(false);
-        }
-      };
-
-      // --- tabs -------------------------------------------------------------
-
-      function showTab(name) {
-        for (const [tab, view] of [
-          ['tab-plan', 'plan-view'],
-          ['tab-money', 'money-view'],
-        ]) {
-          const on = tab === `tab-${name}`;
-          $(tab).setAttribute('aria-selected', String(on));
-          $(view).classList.toggle('hidden', !on);
-        }
-      }
-
-      $('tab-plan').onclick = () => showTab('plan');
-      $('tab-money').onclick = () => {
-        showTab('money');
-        loadIntent();
-        loadMoney();
-      };
-
-      // --- the numbers ------------------------------------------------------
-      //
-      // Arithmetic that already happened on the server. This renders it and
-      // does not interpret it: no advice, no judgment, nothing coloured to
-      // suggest a figure is good or bad.
-
-      // Spending reads as a plain figure. A negative here means more came back
-      // than went out, which is unusual enough to deserve the plus.
-      const amount = (n) => (n < 0 ? '+$' : '$') + Math.abs(n).toFixed(2);
-
-      function syncLine(sync) {
-        if (!sync.newest) return 'No transactions in this window.';
-        if (sync.days_ago <= 0) return 'Last transaction today.';
-        if (sync.days_ago === 1) return 'Last transaction yesterday.';
-        if (!sync.stale) return `Last transaction ${sync.days_ago} days ago.`;
-        // Named as a sync, not as spending. A balance that looks current and
-        // is not is worse than no balance at all.
-        return `Last synced ${sync.days_ago} days ago, on ${sync.newest}. Anything since then is missing.`;
-      }
-
-      async function loadMoney() {
-        const box = $('money-numbers');
-        let data;
-        try {
-          data = await api('/finance-summary?days=60');
-        } catch (err) {
-          box.replaceChildren(el('div', 'card', err.message));
-          return;
-        }
-
-        box.replaceChildren();
-        $('money-window').textContent = data.connected
-          ? `${data.window.from} to ${data.window.to}`
-          : '';
-
-        if (!data.connected) {
-          const empty = el('div', 'card');
-          empty.append(
-            el('span', 'none', 'The sheet returned nothing. The reason is in the server log; the numbers stay blank rather than guessing.')
-          );
-          box.append(empty);
-          return;
-        }
-
-        const sync = el('div', 'sync' + (data.sync.stale ? ' stale' : ''), syncLine(data.sync));
-        box.append(sync);
-
-        const total = el('div', 'total');
-        total.append(el('div', 'label', `Spent over ${data.days} days`));
-        total.append(el('div', 'figure', amount(data.total_spend)));
-        box.append(total);
-
-        for (const c of data.categories) {
-          // A category can net negative when a refund landed inside the window
-          // and the charge it offsets did not.
-          const row = el('div', 'cat' + (c.amount < 0 ? ' inflow' : ''));
-          row.append(el('div', 'cat-name', c.category));
-          row.append(el('div', 'cat-count', String(c.count)));
-          row.append(el('div', 'cat-amount', amount(c.amount)));
-          box.append(row);
-        }
-
-        if (data.uncategorised.count) {
-          const row = el('div', 'cat');
-          row.append(el('div', 'cat-name', 'Not yet categorised'));
-          row.append(el('div', 'cat-count', String(data.uncategorised.count)));
-          row.append(el('div', 'cat-amount', amount(data.uncategorised.amount)));
-          box.append(row);
-        }
-
-        // Transfers are not shown, and are no longer mentioned either. They are
-        // still found, still paired, and still netted out of every figure
-        // above; the endpoint returns them and nothing renders them. Seeing
-        // money move between your own accounts every day is noise.
-        //
-        // Their exclusion is now silent rather than stated. The figures are
-        // unchanged by that: what went was the label, not the arithmetic.
-      }
-
-      // --- what the person has declared about their money -------------------
-      //
-      // Rows, and only rows. Nothing on this tab reaches a prompt, and no
-      // amount is written into the page. The labels below describe shapes of
-      // declaration, never quantities.
-
-      const KIND_LABELS = {
-        situation: 'Situation',
-        reserve: 'Reserve',
-        target: 'Targets',
-        declared: 'Declared, never flagged',
-        slip: 'Known slips',
-      };
-
-      const KIND_HINTS = {
-        situation: 'Income and timing',
-        reserve: 'Money that is off limits',
-        target: 'Something you are building toward',
-        declared: 'Spending you have chosen. Never flagged.',
-        slip: 'Something you already know about. Only growth is raised.',
-      };
-
-      // Which row is open for editing, by id, or 'new' for the one being added.
-      let editingIntent = null;
-      let intentItems = [];
-
-      /**
-       * A row in edit mode, in place.
-       *
-       * The kind is only offered when adding. Changing what an existing row
-       * means is not an edit: declared is never flagged and slip only reports
-       * growth, so turning one into the other changes what the system will say
-       * about it, and that should not be a stray tap. Delete and re-add is the
-       * deliberate path.
-       */
-      function intentEditor(item) {
-        const row = el('div', 'intent editing');
-        const isNew = !item.id;
-
-        if (isNew) {
-          const kindWrap = el('label', null, 'Kind');
-          const kind = document.createElement('select');
-          for (const k of KINDS) {
-            const option = document.createElement('option');
-            option.value = k;
-            option.textContent = `${KIND_LABELS[k]}: ${KIND_HINTS[k]}`;
-            kind.append(option);
-          }
-          kind.value = item.kind || 'situation';
-          kindWrap.append(kind);
-          row.append(kindWrap);
-
-          const modeWrap = el('label', 'hidden', 'Reaching it');
-          const mode = document.createElement('select');
-          for (const [value, text] of [
-            ['wall', 'Wall, it would take a deliberate transfer'],
-            ['floor', 'Floor, ordinary spending can reach it'],
-          ]) {
-            const option = document.createElement('option');
-            option.value = value;
-            option.textContent = text;
-            mode.append(option);
-          }
-          modeWrap.append(mode);
-          row.append(modeWrap);
-
-          kind.onchange = () => modeWrap.classList.toggle('hidden', kind.value !== 'reserve');
-          modeWrap.classList.toggle('hidden', kind.value !== 'reserve');
-
-          row.kindEl = kind;
-          row.modeEl = mode;
-        } else if (item.mode) {
-          // Fixed, but shown, so it is clear which kind of reserve this is.
-          row.append(el('div', 'mode', `${item.kind} ${item.mode}, fixed`));
-        } else {
-          row.append(el('div', 'mode', `${item.kind}, fixed`));
-        }
-
-        const labelWrap = el('label', null, 'Label');
-        const label = document.createElement('input');
-        label.type = 'text';
-        label.value = item.label || '';
-        labelWrap.append(label);
-        row.append(labelWrap);
-
-        const bodyWrap = el('label', null, 'Detail');
-        const body = document.createElement('textarea');
-        // Dictated like the rest, so it carries the same keyboard settings the
-        // sheet's textareas do: plain multiline, autocapitalise on, and nothing
-        // set that would put a suggestion strip over the microphone.
-        body.rows = 2;
-        body.autocapitalize = 'sentences';
-        body.value = item.body || '';
-        bodyWrap.append(body);
-        row.append(bodyWrap);
-
-        // Same button, same rules. Hosted on the row rather than the label, and
-        // the undo lives as long as this editor does: the row is rebuilt on
-        // save or cancel, which retires it exactly when the sheet's does.
-        attachSummarize(body, row);
-
-        const error = el('div', 'err hidden');
-        row.append(error);
-
-        const actions = el('div', 'row');
-        const save = el('button', 'primary grow', isNew ? 'Add' : 'Save');
-        save.type = 'button';
-        const cancel = el('button', 'linkbtn', 'Cancel');
-        cancel.type = 'button';
-        actions.append(save, cancel);
-        row.append(actions);
-
-        cancel.onclick = () => {
-          editingIntent = null;
-          paintIntent();
-        };
-
-        save.onclick = async () => {
-          error.classList.add('hidden');
-          save.disabled = true;
-
-          const payload = isNew
-            ? {
-                kind: row.kindEl.value,
-                mode: row.modeEl.value,
-                label: label.value,
-                body: body.value,
-              }
-            : { label: label.value, body: body.value };
-
-          try {
-            await api(
-              isNew ? '/finance-intent' : `/finance-intent/${item.id}/update`,
-              {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify(payload),
-              }
-            );
-            editingIntent = null;
-            await loadIntent();
-          } catch (err) {
-            error.textContent = err.message;
-            error.classList.remove('hidden');
-            save.disabled = false;
-          }
-        };
-
-        // After the row is on the screen: a textarea that is not rendered yet
-        // measures as zero, and sizing it then would collapse it.
-        setTimeout(() => {
-          label.focus();
-          grow(body);
-        }, 0);
-        return row;
-      }
-
-      function intentRow(item) {
-        if (editingIntent === item.id) return intentEditor(item);
-
-        const row = el('div', 'intent');
-
-        const top = el('div', 'intent-top');
-        const labelEl = el('div', 'intent-label pullable', item.label);
-        // The row itself is the edit affordance. There is no separate screen.
-        labelEl.onclick = () => {
-          editingIntent = item.id;
-          paintIntent();
-        };
-        top.append(labelEl);
-        if (item.mode) top.append(el('div', 'mode', item.mode));
-        row.append(top);
-
-        if (item.body) row.append(el('div', 'intent-body', item.body));
-
-        const actions = el('div', 'actions');
-
-        const del = el('button', 'linkbtn danger', 'Delete');
-        del.type = 'button';
-        del.onclick = async () => {
-          if (!confirm(`Delete "${item.label}"?`)) return;
-          try {
-            await api(`/finance-intent/${item.id}/delete`, {
+          res = await (
+            await fetch('/plan', {
               method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: '{}',
-            });
-            await loadIntent();
-          } catch (err) {
-            alert(err.message);
-          }
-        };
-        actions.append(del);
-
-        row.append(actions);
-        return row;
-      }
-
-      // Closed by default. What has been declared is configuration, read when
-      // something needs changing rather than every evening.
-      let intentOpen = false;
-
-      function setIntentOpen(open) {
-        const body = $('intent-body');
-        // Repainting calls this with whatever the state already is. Animating
-        // then would collapse and regrow the panel every time a row is saved.
-        const wasOpen = !body.classList.contains('hidden');
-
-        intentOpen = open;
-        body.classList.toggle('hidden', !open);
-        $('intent-head').setAttribute('aria-expanded', String(open));
-      }
-
-      function paintIntent() {
-        const list = $('intent-list');
-        list.replaceChildren();
-
-        // A new row sits at the top, above the groups, because it has no kind
-        // to be grouped under until it is saved.
-        if (editingIntent === 'new') list.append(intentEditor({}));
-
-        for (const kind of KINDS) {
-          const items = intentItems.filter((i) => i.kind === kind);
-          if (!items.length) continue;
-
-          const group = el('div', 'kind-group');
-          group.append(el('div', 'kind-head', KIND_LABELS[kind] || kind));
-          for (const item of items) group.append(intentRow(item));
-          list.append(group);
-        }
-      }
-
-      async function loadIntent() {
-        const list = $('intent-list');
-        let data;
-        try {
-          data = await api('/finance-intent');
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                date: planDate,
+                wake_minutes: wake,
+                blocks: blocks.map((b) => ({
+                  title: b.title,
+                  entryId: b.entryId,
+                  start_minutes: b.start,
+                  duration_minutes: b.duration,
+                })),
+              }),
+            })
+          ).json();
         } catch (err) {
-          list.replaceChildren(el('div', 'card', err.message));
+          alert(`Could not save: ${err.message}`);
           return;
         }
 
-        intentItems = data.items;
+        if (res.error) {
+          alert(res.error);
+          return;
+        }
+        setSaved(true);
+      };
 
-        // The setup card stands in for the empty state. Nothing is known yet,
-        // and the interview is how that changes. Adding a row by hand stays
-        // available either way, so one wrong answer does not mean redoing the
-        // whole interview.
-        const nothingYet = !intentItems.length && editingIntent !== 'new';
-        $('setup-card').classList.toggle('hidden', !nothingYet);
+      // --- the add sheet -------------------------------------------------------
 
-        // Before setup the interview leads: spending with no context is the
-        // generic reporting this lane exists to avoid. After it, spending
-        // leads and the intent rows become reference, kept out of the way.
-        const configured = intentItems.length > 0 || editingIntent === 'new';
+      let formType = 'task';
+      let formFreq = null;
+      let formSize = null;
 
-        $('setup-group').classList.toggle('hidden', configured);
-        $('intent-group').classList.toggle('hidden', !configured);
-        $('spending-group').style.order = configured ? '0' : '1';
-        $('setup-group').style.order = '0';
-        $('intent-group').style.order = '1';
-
-        $('intent-count').textContent = intentItems.length ? String(intentItems.length) : '';
-
-        // Asserted on every load rather than left to the markup. The section
-        // starts closed in the HTML and the flag starts false, but nothing
-        // holds those two together, and a section whose chevron disagrees with
-        // its contents is worse than one that is simply shut. Opened only when
-        // a row is being added, since the editor lives inside it.
-        setIntentOpen(Boolean(editingIntent) || intentOpen);
-
-        paintIntent();
-
-        if (nothingYet && !setupPrompt) {
-          try {
-            setupPrompt = (await api('/finance-intent/setup-prompt')).prompt;
-          } catch {
-            // Held empty; the copy button falls back to the textarea.
-          }
+      function chooser(box, values, current, pick) {
+        box.replaceChildren();
+        for (const v of values) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = v;
+          b.setAttribute('aria-pressed', String(v === current));
+          b.onclick = () => pick(v);
+          box.append(b);
         }
       }
-
-      // --- the setup interview ----------------------------------------------
-
-      const KINDS = ['situation', 'reserve', 'target', 'declared', 'slip'];
-      let setupPrompt = '';
-      let pending = null;
 
       /**
-       * Pull the JSON out of whatever was pasted.
+       * Which fields this type has.
        *
-       * The reply may be a bare object, a fenced block, or a block buried in
-       * closing remarks the model was asked not to write and wrote anyway.
-       * Each candidate is tried in turn rather than assuming a shape.
+       * The size only appears once there is a due date, because a size with no
+       * deadline to be measured against has nothing to say. That is the same
+       * rule the server enforces; it is here so the field is never asked for
+       * when it is not wanted.
        */
-      function extractJson(text, key = 'intents') {
-        const candidates = [];
-
-        const fenced = [...String(text).matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
-        for (const m of fenced) candidates.push(m[1]);
-
-        // Failing a fence, the widest brace span. Taking the first { to the
-        // last } keeps nested objects intact.
-        const first = text.indexOf('{');
-        const last = text.lastIndexOf('}');
-        if (first !== -1 && last > first) candidates.push(text.slice(first, last + 1));
-
-        candidates.push(text);
-
-        for (const candidate of candidates) {
-          try {
-            const parsed = JSON.parse(candidate.trim());
-            if (parsed && Array.isArray(parsed[key])) return parsed[key];
-            // A bare array is close enough to what was asked for.
-            if (Array.isArray(parsed)) return parsed;
-          } catch {
-            // Try the next shape.
-          }
-        }
-        return null;
-      }
-
-      function validateIntents(list) {
-        if (!Array.isArray(list) || !list.length) return 'there were no entries in it';
-
-        for (const [i, row] of list.entries()) {
-          const kind = String((row && row.kind) || '').trim().toLowerCase();
-          const title = String((row && row.title) || '').trim();
-          const body = String((row && row.body) || '').trim();
-
-          if (!KINDS.includes(kind)) return `entry ${i + 1} has kind "${kind}", which is not one of ${KINDS.join(', ')}`;
-          if (!title) return `entry ${i + 1} has no title`;
-
-          if (kind === 'reserve') {
-            const wall = /\bwall\b/i.test(body);
-            const floor = /\bfloor\b/i.test(body);
-            if (wall === floor) return `entry ${i + 1} ("${title}") is a reserve but does not say whether it is a wall or a floor`;
-          }
-        }
-        return null;
-      }
-
-      function showPreview(list) {
-        pending = list;
-        $('setup-count').textContent = `${list.length} thing${list.length === 1 ? '' : 's'} will be saved`;
-
-        const box = $('setup-list');
-        box.replaceChildren();
-
-        for (const row of list) {
-          const line = el('div', 'preview-row');
-          const kind = String(row.kind).toLowerCase();
-          const mode =
-            kind === 'reserve' ? (/\bwall\b/i.test(row.body || '') ? ' wall' : ' floor') : '';
-          line.append(el('div', 'preview-kind', kind + mode));
-
-          const text = el('div', 'preview-text', String(row.title));
-          if (row.body) text.append(el('small', null, String(row.body)));
-          line.append(text);
-          box.append(line);
+      function renderForm() {
+        for (const b of $('type-seg').children) {
+          b.setAttribute('aria-pressed', String(b.dataset.type === formType));
         }
 
-        $('setup-preview').classList.remove('hidden');
+        const dated = DATED.includes(formType);
+        const hasDue = Boolean($('f-due').value);
+
+        $('f-freq-field').classList.toggle('hidden', formType !== 'habit');
+        $('f-due-field').classList.toggle('hidden', !dated);
+        $('f-size-field').classList.toggle('hidden', !dated || !hasDue);
+
+        chooser($('freq-seg'), FREQUENCIES, formFreq, (v) => {
+          formFreq = v;
+          renderForm();
+        });
+        chooser($('size-seg'), SIZES, formSize, (v) => {
+          formSize = v;
+          renderForm();
+        });
       }
 
-      $('copy-prompt').onclick = async () => {
-        const button = $('copy-prompt');
+      for (const b of $('type-seg').children) {
+        b.onclick = () => {
+          formType = b.dataset.type;
+          renderForm();
+        };
+      }
+
+      $('f-due').onchange = renderForm;
+
+      function openSheet() {
+        formType = 'task';
+        formFreq = null;
+        formSize = null;
+        $('f-title').value = '';
+        $('f-due').value = '';
+        $('f-problem').classList.add('hidden');
+        renderForm();
+        $('add-scrim').classList.remove('hidden');
+        $('f-title').focus();
+      }
+
+      const closeSheet = () => $('add-scrim').classList.add('hidden');
+
+      $('add-open').onclick = openSheet;
+      $('add-cancel').onclick = closeSheet;
+      $('add-scrim').onclick = (e) => {
+        if (e.target === $('add-scrim')) closeSheet();
+      };
+
+      $('add-save').onclick = async () => {
+        const problem = $('f-problem');
+        const body = { type: formType, title: $('f-title').value.trim() };
+
+        if (formType === 'habit') body.frequency = formFreq;
+        if (DATED.includes(formType)) {
+          body.due = $('f-due').value || '';
+          if (body.due) body.size = formSize;
+        }
+
+        let res;
         try {
-          // Written from the value already held, not fetched here: awaiting
-          // inside the handler loses the user gesture that permits a write.
-          await navigator.clipboard.writeText(setupPrompt);
-          button.textContent = 'Copied';
-          setTimeout(() => (button.textContent = 'Copy setup prompt'), 2000);
-        } catch {
-          // Clipboard permission varies. Falling back to a selectable box
-          // means the prompt is still gettable rather than unreachable.
-          const box = $('setup-paste');
-          box.value = setupPrompt;
-          box.select();
-          button.textContent = 'Copy it from the box';
-        }
-      };
-
-      $('setup-read').onclick = () => {
-        const error = $('setup-error');
-        error.classList.add('hidden');
-        $('setup-preview').classList.add('hidden');
-        pending = null;
-
-        const list = extractJson($('setup-paste').value || '');
-        if (!list) {
-          error.textContent =
-            "Could not find the JSON block in that. Paste the whole reply, including the part between ```json and ```. Nothing has been saved.";
-          error.classList.remove('hidden');
-          return;
-        }
-
-        const problem = validateIntents(list);
-        if (problem) {
-          error.textContent = `Read it, but ${problem}. Nothing has been saved.`;
-          error.classList.remove('hidden');
-          return;
-        }
-
-        showPreview(list);
-      };
-
-      $('setup-discard').onclick = () => {
-        pending = null;
-        $('setup-preview').classList.add('hidden');
-        $('setup-paste').value = '';
-      };
-
-      $('setup-confirm').onclick = async () => {
-        if (!pending) return;
-        const button = $('setup-confirm');
-        button.disabled = true;
-
-        try {
-          await api('/finance-intent/import', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ intents: pending }),
-          });
-          pending = null;
-          $('setup-paste').value = '';
-          $('setup-preview').classList.add('hidden');
-          await loadIntent();
+          res = await (
+            await fetch('/entries', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            })
+          ).json();
         } catch (err) {
-          const error = $('setup-error');
-          error.textContent = `${err.message} Nothing has been saved.`;
-          error.classList.remove('hidden');
-        } finally {
-          button.disabled = false;
+          res = { error: err.message };
         }
+
+        if (res.error) {
+          problem.textContent = res.error;
+          problem.classList.remove('hidden');
+          return;
+        }
+
+        closeSheet();
+        await load();
       };
 
-      // A row can be added by hand without redoing the interview. It opens an
-      // editor in the list rather than a form somewhere else.
-      $('intent-toggle').onclick = () => {
-        editingIntent = editingIntent === 'new' ? null : 'new';
-        $('setup-card').classList.add('hidden');
-        paintIntent();
-      };
-
-      $('intent-head').onclick = () => setIntentOpen(!intentOpen);
-
-      setType('task');
-      showTab('plan');
       load();
       loadReview();
     </script>
