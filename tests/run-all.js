@@ -102,6 +102,7 @@ function refuseUnguarded(names) {
 const SUITES = [
   // read-only, fast
   ['warning-test.js', 60],
+  ['fence-test.js', 60],
   ['builder-test.js', 120],
   ['plan-layout-check.js', 120],
   ['icons-check.js', 60],

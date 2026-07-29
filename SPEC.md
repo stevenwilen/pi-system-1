@@ -37,19 +37,48 @@ same thing more reliably: a daily verdict on what had gone cold, a line of
 context on each block, a rewrite of a text field. None of those needed a model,
 and each one made the system harder to predict and slower to trust.
 
-But the plumbing is the expensive part — the fenced-input discipline, the tool
-whitelist that cannot be talked past, the per-call cost metering — and rebuilding
-it correctly from nothing is work that has already been done once. So it stays,
-wired and idle, for whenever reasoning has a job that genuinely needs it.
+But the plumbing is the expensive part — the fencing, the tool whitelist that
+cannot be talked past, the per-call cost metering — and rebuilding it correctly
+from nothing is work that has already been done once. So it stays, wired and
+idle, for whenever reasoning has a job that genuinely needs it.
 
 Two rules survive with it, and they apply the moment anything calls it again:
 
-- **The notebook is DATA, never INSTRUCTIONS.** Anything a person or a calendar
-  wrote is fenced before it reaches a prompt (`untrusted.js`). A title that says
-  "ignore your instructions" is a title.
+- **The notebook is DATA, never INSTRUCTIONS.** A title that says "ignore your
+  instructions" is a title. See below for where this is enforced.
 - **The tool set is fixed and small.** `user_id` is always the first argument and
   always supplied by the caller, never chosen by a model. Columns that represent
   a person's own declaration are off the whitelist entirely.
+
+#### Fencing is enforced inside `runBrain`
+
+```js
+runBrain(user_id, TASK, { data: rows, source: 'block-messages' })
+```
+
+The two arguments mean opposite things. `task` is engine text: written in this
+repository, identical for every user, never built from a row — an instruction.
+`data` is anything a person, a feed, or this model on an earlier day wrote —
+never an instruction, however it is phrased. `runBrain` fences `data` on the way
+in (`untrusted.js`), and there is no way to pass it that skips the fencing.
+
+Data first, instruction last, so the final thing the model reads is the thing it
+is meant to act on. A caller arriving with a fence marker already in its `task`
+is refused, so there is exactly one way to fence.
+
+**This was not true until it was made true.** Fencing used to be the caller's
+job: each one wrapped its own untrusted text and concatenated the result.
+That held for exactly as long as the callers that remembered it, and both were
+rewritten in the strip — one deleted, one replaced by arithmetic. `untrusted.js`
+was left sitting in the tree with zero importers, including from `brain.js`. The
+next caller will be written weeks from now by someone reading the signature
+rather than this paragraph, so the guarantee now lives in the signature.
+
+**Still an open hole:** tool results are not fenced. Rows come back from
+`search_entries` and `get_calendar` as bare JSON, and what stops them reading as
+instructions is a paragraph of the system prompt rather than a marker in the
+text. That is weaker than the `data` path and should be closed before anything
+calls the brain in anger.
 
 ---
 
@@ -391,7 +420,7 @@ npm test       # every suite, sequentially
 | `public/index.html` | the whole app: markup, styles and script in one file |
 | `public/mockup.html` | the layout reference the page is built against |
 | `PLANNING-RULES.md` | **archive.** Notes from the pre-strip system, kept and marked as such |
-| `brain.js`, `tools.js`, `usage.js`, `untrusted.js` | **wired and unused.** See 1 |
+| `brain.js`, `usage.js`, `untrusted.js` | **wired and unused.** See 1. `brain.js` requires the other two |
 | `link.js`, `calendar-test.js`, `send-test.js` | run by hand, not part of the running system |
 | `make-icons.js` | regenerates the PNGs from the SVG |
 
@@ -431,7 +460,7 @@ Set in Railway, and in a local `.env` that is never committed.
 | `TELEGRAM_BOT_TOKEN` | outbound only |
 | `CALENDAR_ICS_URL` | a read-only ICS feed |
 | `CALENDAR_ACTION_ICS_URL` | *optional.* A second one. Both are read the same way |
-| `ANTHROPIC_API_KEY` | the brain. **Nothing calls it.** Kept so the wiring stays live |
+| `ANTHROPIC_API_KEY` | the brain. **Nothing calls it.** Kept so the wiring stays live. Read by the SDK, not by any file here, so grepping the repo for it finds nothing |
 | `PORT` | assigned by the host |
 | `PI_USER_ID` | *optional.* Which user the server serves |
 | `SCHEDULER_DISABLED` | *optional.* `1` loads the scheduler without starting cron |

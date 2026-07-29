@@ -1,8 +1,15 @@
 // The brain. Stateless — it holds nothing between calls.
 //
-// The system prompt below is the ENGINE. It is identical for every user and
-// is never built from database rows. Rows reach the model only as tool
-// results, which are data about the user, never instructions to the brain.
+// The system prompt below is the ENGINE. It is identical for every user and is
+// never built from database rows.
+//
+// Rows reach the model two ways, and both are data about the person rather
+// than instructions to the brain: as tool results, and as the `data` argument
+// to runBrain, which is fenced here on the way in. Fencing is not something a
+// caller does any more — see composeTask.
+//
+// NOTHING IN THE RUNNING SYSTEM CALLS THIS FILE. It is kept wired and working
+// so reasoning can return without the plumbing being rebuilt. See SPEC 1.
 
 require('dotenv').config();
 
@@ -10,6 +17,7 @@ const util = require('util');
 const { Anthropic } = require('@anthropic-ai/sdk');
 const tools = require('./tools');
 const { recordUsage } = require('./usage');
+const { fence, LABEL } = require('./untrusted');
 
 const MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS = 16000;
@@ -227,20 +235,67 @@ async function nowLine(user_id) {
 }
 
 /**
+ * Build the user message from an engine task and untrusted content.
+ *
+ * The two arguments mean opposite things and this is the only place that
+ * knows it:
+ *
+ *   task  engine text. Written in this repository, identical for every user,
+ *         never built from a row. This is an instruction.
+ *   data  anything a person, a feed, or this model on an earlier day wrote.
+ *         Never an instruction, however it is phrased.
+ *
+ * `data` is fenced here, unconditionally, and there is no way to pass it that
+ * skips the fencing. That is the whole point of the shape: the guarantee used
+ * to be a convention every caller had to remember, which held for exactly as
+ * long as the callers that remembered it existed. Both were rewritten in the
+ * strip, and the fencing quietly stopped happening anywhere at all.
+ *
+ * Data first, instructions last, so the final thing the model reads is the
+ * thing it is meant to act on.
+ *
+ * Exported for tests: what a caller cannot see is exactly what has to be
+ * pinned, and pinning it must not cost an API call.
+ */
+function composeTask(task, data) {
+  const engine = String(task ?? '').trim();
+  if (!engine) throw new Error('a task is required');
+
+  // One way to fence, and it is this function. A caller arriving with its own
+  // marker is a caller doing by hand what this now does structurally, and the
+  // two coexisting is how a fence ends up wrapping the instructions instead of
+  // the data.
+  if (engine.includes(LABEL)) {
+    throw new Error(
+      'the task already carries a fence marker. Pass untrusted content as `data` and let runBrain fence it.'
+    );
+  }
+
+  if (data === null || data === undefined) return engine;
+
+  // Objects arrive stringified rather than as "[object Object]", which is what
+  // fence() alone would make of a row.
+  const content = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+
+  return `${fence(content)}\n\n${engine}`;
+}
+
+/**
  * Run the agent loop once and return the final text.
  * Remembers nothing: every call starts from the arguments alone.
  *
- * There is no history parameter. Conversation is gone, and each of the two
- * reasoning calls is a single self-contained task, so anything the model needs
- * has to arrive in `task` or through a tool.
+ * There is no history parameter. Conversation is gone, so anything the model
+ * needs has to arrive in `task`, in `data`, or through a tool.
+ *
+ *   runBrain(user_id, TASK, { data: briefing, source: 'block-messages' })
  *
  * `source` only labels the token metering. It has no effect on reasoning.
  */
-async function runBrain(user_id, task, source = 'reasoning') {
+async function runBrain(user_id, task, { data = null, source = 'reasoning' } = {}) {
   if (!user_id) throw new Error('user_id is required');
 
   const messages = [
-    { role: 'user', content: `${await nowLine(user_id)}\n\n${task}` },
+    { role: 'user', content: `${await nowLine(user_id)}\n\n${composeTask(task, data)}` },
   ];
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
@@ -294,4 +349,4 @@ async function runBrain(user_id, task, source = 'reasoning') {
   return `(stopped after ${MAX_TURNS} tool turns without a final answer)`;
 }
 
-module.exports = { runBrain };
+module.exports = { runBrain, composeTask };
