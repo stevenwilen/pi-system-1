@@ -300,15 +300,33 @@ too.
 
 #### When today is showing
 
-- A block whose **end time has passed** renders as **past**: an outline rather
-  than a filled card, faint title, and no duration chip — it cannot be retimed,
-  so a control that could only mislead is not drawn.
-- A past block carries **didn't happen?** where the chip would be. One tap marks
-  it missed and it reads **missed** in the miss colour; tapping again undoes it.
+Two words, and the difference between them is the whole of this:
+
+| | |
+|---|---|
+| **begun** | its **start** time has passed |
+| **past** | its **end** time has passed as well |
+
+Everything past is begun. What sits between them is the block you are in right
+now.
+
+**A block that has begun is locked.** No duration chip, no note, no reorder, no
+removal. It is the day that happened, or is happening, and the server refuses to
+retime, resize or remove it anyway — so offering any of those was offering
+something that would be rejected on the way out. *Begun* is read off the block's
+**stored** start, the same question the reflow asks when it decides what to hold
+in place.
+
+- A **past** block renders as an outline rather than a filled card, with a faint
+  title, and carries **didn't happen?** where the chip would be. One tap marks it
+  missed and it reads **missed** in the miss colour; tapping again undoes it.
   **This replaces the Yesterday section.** Asking the next morning meant asking
   about a day already gone; asking in place means the question arrives while the
   answer is still obvious. The ordinary case is still no question at all — a
   block is assumed done unless someone says otherwise.
+- A block that has **begun but not ended** is still a card, and says nothing on
+  its right-hand side unless it has already been marked missed. It has not failed
+  to happen; it is happening, and asking would be premature.
 - A **NOW divider** sits between what has been and what is left: a dot, the word,
   and a hairline. It is drawn once, and not at all on a day entirely behind or
   entirely ahead, where it would be marking the edge of the list rather than a
@@ -381,14 +399,34 @@ The chip is blue, because blue is what you can act on, and it is a real
 `<button>` so a keyboard reaches it. The tap is handled on `click` rather than
 on pointer release for exactly that reason.
 
-**Swipe left to remove.** The card follows the finger and uncovers the miss
-colour with *Remove* at the edge it is exposing. It commits on release, with no
+**Swipe left** means one of two things, decided by whether the block has begun.
+
+On a block that has **not** begun it **removes**. It commits on release, with no
 confirmation, and offers **Removed · Undo** for six seconds. That is a better
 trade than a confirm: a confirm interrupts every removal to catch the rare wrong
 one, and the undo interrupts none of them and still catches it.
 
-**Swipe right to write a note.** A field opens on that block. The backing is
-neutral, not the miss colour — writing something down is not a warning.
+On a block that **has** begun it **marks it missed** — the same gesture meaning
+the other thing, because a begun block cannot be removed. Swiping it again puts
+it back. The **didn't happen?** tap on a past block is unchanged; the swipe is an
+addition, not a replacement.
+
+**Swipe right to write a note.** A field opens on that block. Not available on a
+block that has begun: its note is fixed with the rest of it.
+
+The backing has to say which of the three the finger is on before it comes off,
+so **side and colour are separate**:
+
+| swipe | label | backing |
+|---|---|---|
+| left, not begun | `Remove` | miss colour |
+| left, begun, not yet missed | `didn't happen` | miss colour |
+| left, begun, already missed | `happened` | neutral |
+| right | `Note` | neutral |
+
+Putting a miss back is not a warning, so it does not get the warning colour. A
+swipe with nowhere to go does not travel at all — the card stays put and no
+backing appears, rather than following the finger and then doing nothing.
 
 Both swipes need real travel before they commit, far enough that a hand doing
 something else cannot reach it by accident.
@@ -428,7 +466,9 @@ verbatim, so the ceiling exists to stop an unbounded field meeting Telegram's
 own limit somewhere less helpful.
 
 **Press and hold to reorder.** No drag handle: 400ms anywhere on the block,
-including on the duration chip. It vibrates if the device can, then lifts —
+including on the duration chip. Not on a block that has begun — picking it up
+would offer a drop the server refuses, and the day it would be carried out of
+has already happened. It vibrates if the device can, then lifts —
 larger, lighter, shadowed, with every other block stepped back — so there is no
 question which one is in your hand. Drag vertically and the others part to show
 the gap it will drop into. Release settles it into place over 180ms rather than

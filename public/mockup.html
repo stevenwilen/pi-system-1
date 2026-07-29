@@ -51,10 +51,6 @@
   .title{font-size:15px;flex:1;line-height:1.35}
   .meta{font-size:12px;color:var(--muted);margin-top:5px;line-height:1.4}
   .mark{font-size:14px;color:var(--warn);letter-spacing:1px}
-  .done{color:var(--faint);text-decoration:line-through}
-  .right{font-size:12px;color:var(--faint)}
-  .missed{font-size:12px;color:var(--warn)}
-  .between{display:flex;justify-content:space-between;align-items:center}
 
   /* the hint that a row has more actions. Faint, not muted: it repeats down
      every row, and at muted it draws a second column of emphasis against the
@@ -64,10 +60,6 @@
   /* revealed by the hint, hidden at rest */
   .rowacts{display:flex;gap:18px;margin-top:9px;font-size:12px;color:var(--muted)}
   .rowacts .danger{color:var(--warn)}
-
-  /* the optional reason on a missed block — a line, not a box */
-  .reason{margin-top:8px;font-size:13px;color:var(--faint);
-          border-bottom:1px solid var(--line);padding:3px 0}
 
   /* calendar: a quiet aside, not a card */
   .cal{border-left:2px solid var(--cal-rule);padding:8px 0 8px 13px;margin-bottom:22px}
@@ -102,8 +94,12 @@
   .slot{position:relative;border-radius:11px;overflow:hidden;margin-bottom:9px}
   .backing{position:absolute;inset:0;display:flex;align-items:center;
            padding:0 18px;font-size:13px}
-  .backing.left{background:var(--warn);color:var(--bg);justify-content:flex-end}
-  .backing.right{background:var(--line);color:var(--text);justify-content:flex-start}
+  /* side and colour are separate: left means remove on a block that has not
+     begun, and "didn't happen" on one that has */
+  .backing.left{justify-content:flex-end}
+  .backing.right{justify-content:flex-start}
+  .backing.hot{background:var(--warn);color:var(--bg)}
+  .backing.calm{background:var(--line);color:var(--text)}
   .slot .block{position:relative;margin-bottom:0}
 
   /* the block's own line, so a note can sit under it rather than beside it */
@@ -323,7 +319,7 @@
     </p>
 
     <div class="slot">
-      <div class="backing left">Remove</div>
+      <div class="backing left hot">Remove</div>
       <div class="block" style="transform:translateX(-56px)">
         <div><div class="t">Email</div><div class="time">11:00 &ndash; 11:30</div></div>
         <div class="dur">30m</div>
@@ -331,12 +327,39 @@
     </div>
 
     <p style="font-size:12px;color:var(--muted);line-height:1.6;margin:16px 0">
-      Right opens a note on it. Neutral, not the miss colour: writing something
-      down is not a warning.
+      On a block that has already begun, the same swipe means the other thing —
+      it cannot be removed, so it records that it did not happen. Swiping it
+      again puts it back, and the label says so.
     </p>
 
     <div class="slot">
-      <div class="backing right">Note</div>
+      <div class="backing left hot">didn't happen</div>
+      <div class="block past" style="transform:translateX(-56px)">
+        <div class="brow">
+          <div><div class="t">Gym</div><div class="time">9:00 AM &ndash; 10:00 AM</div></div>
+          <div class="askmiss">didn't happen?</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slot">
+      <div class="backing left calm">happened</div>
+      <div class="block past" style="transform:translateX(-56px)">
+        <div class="brow">
+          <div><div class="t">Gym</div><div class="time">9:00 AM &ndash; 10:00 AM</div></div>
+          <div class="wasmissed">missed</div>
+        </div>
+      </div>
+    </div>
+
+    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin:16px 0">
+      Right opens a note on it. Neutral, not the miss colour: writing something
+      down is not a warning. Not offered on a block that has begun — its note is
+      fixed with the rest of it.
+    </p>
+
+    <div class="slot">
+      <div class="backing right calm">Note</div>
       <div class="block" style="transform:translateX(56px)">
         <div class="brow">
           <div><div class="t">Email</div><div class="time">11:00 &ndash; 11:30</div></div>

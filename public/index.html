@@ -369,19 +369,26 @@
         font-size: 13px;
         opacity: 0;
       }
-      /* Left removes, so the backing is the miss colour and its label sits at
-         the right — the edge the card is uncovering as it goes. */
+      /* Two independent things: which edge the label sits at, and how loud the
+         backing is. They used to be one class each, which worked while left
+         always meant remove — and stopped working when left came to mean two
+         different things depending on whether the block had started. */
       .backing.left {
-        background: var(--warn);
-        color: var(--bg);
         justify-content: flex-end;
       }
-      /* Right adds thirty minutes of nothing. Neutral: adding a gap is not a
-         warning, and the miss colour here would say it was. */
       .backing.right {
+        justify-content: flex-start;
+      }
+      /* Throwing something away, or recording that it did not happen. */
+      .backing.hot {
+        background: var(--warn);
+        color: var(--bg);
+      }
+      /* Writing a note, or putting a miss back. Neither is a warning, and the
+         miss colour on either would say it was. */
+      .backing.calm {
         background: var(--line);
         color: var(--text);
-        justify-content: flex-start;
       }
 
       .block {
@@ -1430,7 +1437,27 @@
         let markedNow = false;
 
         for (const [i, b] of blocks.entries()) {
-          const past = onToday() && b.start + b.duration <= now;
+          // Two different lines, and the difference is the whole of this.
+          //
+          //   begun  its start time has passed. It is the day that happened,
+          //          or is happening, and nothing about it can be changed.
+          //   past   its end time has passed as well, so it is over.
+          //
+          // Everything past is begun. What sits between them is the block you
+          // are in right now, which used to be treated as upcoming — it kept
+          // its duration chip, and shrinking it below the time already elapsed
+          // quietly moved it into the past. The server refuses to resize a
+          // delivered block, so the screen was offering something that would
+          // have been rejected on the way out.
+          // Read off the STORED start, which is the same question reflow asks
+          // when it decides what to hold in place. Reading the recomputed one
+          // was wrong in a way that took a test to see: a block reflow had just
+          // pushed to the next half hour could land exactly on now, and would
+          // then lock itself the moment it arrived — a block that has never
+          // been anywhere near the past becoming unremovable because the clock
+          // caught up with where it was moved to.
+          const begun = onToday() && hasBegun(b, now);
+          const past = begun && b.start + b.duration <= now;
 
           // Once, between the last thing that has finished and the first that
           // has not. A day entirely behind or entirely ahead gets no divider,
@@ -1441,7 +1468,7 @@
             markedNow = true;
           }
 
-          box.append(blockCard(b, i, past));
+          box.append(blockCard(b, i, { begun, past }));
         }
 
         $('end-time').textContent = !blocks.length
@@ -1488,37 +1515,46 @@
        * still no question at all: a block is assumed done unless someone says
        * otherwise.
        */
-      function missToggle(b) {
+      function missToggle(b, i) {
         const button = document.createElement('button');
         button.type = 'button';
+        button.className = b.missed ? 'askmiss was' : 'askmiss';
+        button.textContent = b.missed ? 'missed' : "didn't happen?";
 
-        const paint = () => {
-          button.className = b.missed ? 'askmiss was' : 'askmiss';
-          button.textContent = b.missed ? 'missed' : "didn't happen?";
-        };
-        paint();
-
-        button.onclick = async (e) => {
+        button.onclick = (e) => {
           if (e && e.stopPropagation) e.stopPropagation();
-          if (!b.id) return; // never saved, so there is no row to mark
-
-          b.missed = !b.missed;
-          paint();
-
-          try {
-            await fetch(`/blocks/${b.id}/miss`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ missed: b.missed }),
-            });
-          } catch {
-            // The screen already shows the new state. A failed write is
-            // corrected by the next load rather than by an alert in the
-            // middle of a day.
-          }
+          toggleMissed(i);
         };
 
         return button;
+      }
+
+      /**
+       * Yes it happened, or no it did not. Reachable two ways.
+       *
+       * By tapping the question on a block that is over, and by swiping left
+       * on any block that has begun — which is the same gesture that removes
+       * an upcoming one, meaning the other thing, because a block that has
+       * started cannot be removed.
+       */
+      async function toggleMissed(i) {
+        const b = blocks[i];
+        if (!b || !b.id) return; // never saved, so there is no row to mark
+
+        b.missed = !b.missed;
+        renderBuilder();
+
+        try {
+          await fetch(`/blocks/${b.id}/miss`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ missed: b.missed }),
+          });
+        } catch {
+          // The screen already shows the new state. A failed write is
+          // corrected by the next load rather than by an alert in the middle
+          // of a day.
+        }
       }
 
       // --- what a block can be told to do -------------------------------------
@@ -1703,7 +1739,7 @@
       const pageY = () =>
         (typeof window !== 'undefined' && window.scrollY) || 0;
 
-      function blockCard(b, i, past = false) {
+      function blockCard(b, i, { begun = false, past = false } = {}) {
         const slot = document.createElement('div');
         slot.className = 'slot';
 
@@ -1725,11 +1761,18 @@
         time.textContent = `${clock(b.start)} – ${clock(b.start + b.duration)}`;
         left.append(t, time);
 
-        // A block that has been and gone carries the one thing still worth
-        // saying about it instead of a length, because a length it no longer
-        // has any use for is a control that can only mislead.
-        if (past) {
-          row.append(left, missToggle(b));
+        // A block that has begun carries no length control. A length it can no
+        // longer be given is a control that can only mislead, and the server
+        // would refuse the change anyway.
+        //
+        // What it carries instead depends on whether there is anything to say
+        // yet. Over, and it asks. Still running, and it says nothing unless it
+        // has already been marked — a block you are in the middle of has not
+        // failed to happen yet, and asking would be premature.
+        if (past || (begun && b.missed)) {
+          row.append(left, missToggle(b, i));
+        } else if (begun) {
+          row.append(left);
         } else {
           const dur = document.createElement('button');
           dur.type = 'button';
@@ -1758,7 +1801,7 @@
 
         slot.append(backing, card);
 
-        attach({ slot, card, backing, index: i });
+        attach({ slot, card, backing, index: i, begun });
         return slot;
       }
 
@@ -1802,7 +1845,7 @@
         return area;
       }
 
-      function attach({ slot, card, backing, index }) {
+      function attach({ slot, card, backing, index, begun = false }) {
         const siblings = () => [...$('builder').children];
 
         const lift = (on) => {
@@ -1833,6 +1876,10 @@
 
         const startReorder = () => {
           if (!gesture || gesture.mode !== 'pending') return;
+          // A block that has begun cannot be moved. Picking it up would offer
+          // a drop the server refuses, and the day it was carried out of has
+          // already happened.
+          if (begun) return;
 
           const rect = slot.getBoundingClientRect
             ? slot.getBoundingClientRect()
@@ -1899,14 +1946,19 @@
         card.onpointermove = (e) => {
           if (!gesture || gesture.id !== e.pointerId) return;
 
-          // A block whose message has gone out cannot be removed, so the swipe
-          // that would remove it does not travel: leftward movement is clamped
-          // to nothing and the miss-coloured backing never appears. Refusing on
-          // release, after the card had followed the finger the whole way,
-          // would be offering the action and then taking it back.
-          const held = blocks[index];
+          // Which way this block can be swiped at all.
+          //
+          // An upcoming block goes both ways: left removes, right writes a
+          // note. A block that has begun goes left only, and left means
+          // something else on it — it cannot be removed, so the same gesture
+          // records that it did not happen. Its note is fixed with the rest of
+          // it, so the rightward swipe does not travel.
+          //
+          // Clamped rather than refused on release. Letting the card follow
+          // the finger the whole way and then doing nothing would be offering
+          // an action and taking it back.
           const raw = e.clientX - gesture.x0;
-          const dx = held && held.sent ? Math.max(0, raw) : raw;
+          const dx = begun ? Math.min(0, raw) : raw;
           const dy = e.clientY - gesture.y0;
 
           // Which gesture this is gets decided on the RAW movement, never the
@@ -1944,8 +1996,21 @@
             }
 
             card.style.transform = `translateX(${dx}px)`;
-            backing.className = `backing ${dx < 0 ? 'left' : 'right'}`;
-            backing.textContent = dx < 0 ? 'Remove' : 'Note';
+
+            // The same swipe means three things depending on the block, so the
+            // backing has to say which before the finger comes off.
+            const b = blocks[index];
+            const [side, tone, label] =
+              dx > 0
+                ? ['right', 'calm', 'Note']
+                : !begun
+                  ? ['left', 'hot', 'Remove']
+                  : b && b.missed
+                    ? ['left', 'calm', 'happened']
+                    : ['left', 'hot', "didn't happen"];
+
+            backing.className = `backing ${side} ${tone}`;
+            backing.textContent = label;
             // Fades in with the travel, so the colour arrives before the
             // commit does and the action is readable before release.
             backing.style.opacity = String(Math.min(1, Math.abs(dx) / SWIPE_COMMIT));
@@ -1982,7 +2047,10 @@
           if (mode === 'pending' || mode === 'scroll') return;
 
           if (mode === 'swipe') {
-            if (dx <= -SWIPE_COMMIT) return removeBlock(index);
+            // Left on a block that has begun is not a removal — it cannot be
+            // removed — so it records that it did not happen, and doing it
+            // again puts it back.
+            if (dx <= -SWIPE_COMMIT) return begun ? toggleMissed(index) : removeBlock(index);
             // Opens whether or not there is one already, so swiping a block
             // that has a note is how you edit it.
             if (dx >= SWIPE_COMMIT) return openNote(index);

@@ -192,16 +192,21 @@ console.log('\n7. the miss colour is for misses, warnings and destruction only')
   // and warnings", and it is listed rather than assumed so a fourth use has
   // to be argued for here before it can ship.
   const warn = selectorsUsing('var(--warn)').filter((s) => !/^:root/.test(s));
-  const allowed = /\.mark|\.askmiss\.was|\.ends\.late|\.failed|\.danger|\.problem|\.backing\.left/;
+  const allowed = /\.mark|\.askmiss\.was|\.ends\.late|\.failed|\.danger|\.problem|\.backing\.hot/;
   check('used only on marks, misses, failures and destructive actions',
     warn.every((s) => allowed.test(s)), warn.join(' | '));
 
   // The two swipes must not look alike. Left throws a block away and is the
   // miss colour; right adds thirty minutes of nothing and is neutral, because
   // the miss colour there would call an addition a warning.
-  check('the removing swipe is the miss colour', /var\(--warn\)/.test(rule('.backing.left')));
-  check('the buffer swipe is not', !/var\(--warn\)/.test(rule('.backing.right')));
-  check('nor is it blue', !/var\(--accent\)/.test(rule('.backing.right')));
+  // Colour and side are separate now, because left came to mean two things:
+  // removing a block that has not begun, and recording that one which has did
+  // not happen.
+  check('the loud backing is the miss colour', /var\(--warn\)/.test(rule('.backing.hot')));
+  check('the quiet one is not', !/var\(--warn\)/.test(rule('.backing.calm')));
+  check('nor is it blue', !/var\(--accent\)/.test(rule('.backing.calm')));
+  check('and side carries no colour of its own',
+    !/background/.test(rule('.backing.left')) && !/background/.test(rule('.backing.right')));
 
   check('the warning mark carries it', /color: var\(--warn\)/.test(rule('.mark')));
   check('a missed block carries it', /color: var\(--warn\)/.test(rule('.askmiss.was')));
@@ -347,21 +352,28 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
 
   console.log('   the swipes');
   check('a real distance is required', /SWIPE_COMMIT = \d\d/.test(code));
-  check('left removes', /dx <= -SWIPE_COMMIT\) return removeBlock/.test(code));
+  check('left removes a block that has not begun, and marks one that has',
+    /dx <= -SWIPE_COMMIT\) return begun \? toggleMissed\(index\) : removeBlock\(index\)/.test(code));
   check('right opens a note', /dx >= SWIPE_COMMIT\) return openNote/.test(code));
   check('the card follows the finger', /translateX\(\$\{dx\}px\)/.test(code));
-  check('and the backing says which it is',
-    /dx < 0 \? 'Remove' : 'Note'/.test(code));
+  // Three meanings on one gesture, so the backing has to name which before
+  // the finger comes off.
+  check('and the backing says which of the three it is',
+    /'Remove'/.test(code) && /didn't happen"/.test(code) &&
+      /'happened'/.test(code) && /'Note'/.test(code));
   check('removal offers an undo rather than a confirm', /offerUndo\(gone, i\)/.test(code));
   check('and nothing asks first', !/confirm\(`Remove/.test(code));
 
   // A block whose message has gone out is part of the day that happened. The
   // swipe that would remove it does not travel at all, rather than travelling
   // and then being refused on release.
-  check('a delivered block clamps the removing swipe',
-    /held && held\.sent \? Math\.max\(0, raw\) : raw/.test(code));
+  // The clamp inverted. It used to stop a delivered block being swiped away;
+  // that swipe now means something else and is allowed, and it is the note
+  // swipe that has nowhere to go on a block already fixed.
+  check('a begun block clamps the note swipe instead',
+    /begun \? Math\.min\(0, raw\) : raw/.test(code));
   check('and shows no backing when it does', /if \(!dx\) \{/.test(code));
-  check('the sent flag comes from the server', /sent: Boolean\(b\.sent\)/.test(code));
+  check('the sent flag still comes from the server', /sent: Boolean\(b\.sent\)/.test(code));
 
   // The buffer insert is gone. Buffer is a title you type into + Block.
   check('nothing inserts a buffer on a swipe', !/insertBuffer/.test(code));
@@ -501,7 +513,14 @@ console.log('\n17. today and tomorrow');
     /background: transparent/.test(rule('.block.past')) &&
       /border: 1px solid var\(--line\)/.test(rule('.block.past')));
   check('with a faint title', /color: var\(--faint\)/.test(rule('.block.past .t')));
-  check('a past block gets no chip', /if \(past\) \{[\s\S]{0,80}missToggle/.test(code));
+  // Not just a past one. A block you are in the middle of kept its chip, and
+  // shrinking it below the time already elapsed moved it into the past — an
+  // action the server refuses on a delivered block anyway.
+  check('a block that has begun gets no chip', /\} else if \(begun\) \{/.test(code));
+  check('and one that is over asks instead', /past \|\| \(begun && b\.missed\)/.test(code));
+  check('begun is read off the stored start, the same as the reflow',
+    /const begun = onToday\(\) && hasBegun\(b, now\)/.test(code));
+  check('and a begun block cannot be picked up', /if \(begun\) return;/.test(code));
   check('it asks instead', /didn't happen\?/.test(code));
   check('and marking it posts to the miss route', /\/blocks\/\$\{b\.id\}\/miss/.test(code));
   check('a NOW divider is drawn once', /markedNow = true/.test(code));
@@ -584,9 +603,12 @@ console.log('\n17. the mockup still describes the page');
 
   check('both swipe directions are shown',
     /backing left/.test(mock) && /backing right/.test(mock));
-  check('and they are not the same colour',
-    /\.backing\.left\{[^}]*--warn/.test(mock.replace(/\s/g, '')) ||
-      /backing\.left\{background:var\(--warn\)/.test(mock.replace(/\s/g, '')));
+  check('and all three meanings of the left one',
+    /left hot">Remove/.test(mock) && /left hot">didn't happen/.test(mock) &&
+      /left calm">happened/.test(mock));
+  check('side and colour are separate there too',
+    /\.backing\.hot\{background:var\(--warn\)/.test(mock.replace(/\s/g, '')) &&
+      /\.backing\.left\{justify-content:flex-end\}/.test(mock.replace(/\s/g, '')));
   check('it shows all three row actions',
     /Done/.test(mock) && /Edit/.test(mock) && /Delete/.test(mock));
 

@@ -484,58 +484,6 @@ const SETTLED = 220; // past SETTLE_MS
     check('and a block without one shows none', !noteOf(slots()[1]));
   }
 
-  console.log('\na block that has already gone out cannot be swiped away');
-  {
-    const { ctx, slots, cardOf, backingOf, editorOf } = boot({
-      plan: {
-        plan: { date: '2026-07-28', status: 'confirmed', wake_minutes: 480 },
-        blocks: [
-          { id: 'a1', title: 'Sent', entryId: null, start_minutes: 480, duration_minutes: 30, sent: true },
-          { id: 'b2', title: 'Unsent', entryId: null, start_minutes: 510, duration_minutes: 30, sent: false },
-        ],
-      },
-    });
-    await ctx.load();
-
-    const sent = cardOf(slots()[0]);
-    down(sent, 200, 100);
-    move(sent, 100, 100); // a full removing swipe, and then some
-    check('the card does not travel left', !sent.style.transform, sent.style.transform);
-    check('and the miss colour never appears', !backingOf(slots()[0])._class.has('left'));
-    up(sent, 100, 100);
-    check('nothing was removed', slots().length === 2, `${slots().length}`);
-
-    // Refusing on release, after the card had followed the finger the whole
-    // way, would be offering the action and then taking it back.
-    check('so it was never offered', !backingOf(slots()[0]).textContent,
-      backingOf(slots()[0]).textContent);
-
-    // The right-hand swipe is a note, which a delivered block may still have.
-    down(sent, 100, 100);
-    move(sent, 190, 100);
-    check('but it can still be swiped the other way',
-      backingOf(slots()[0])._class.has('right'));
-    up(sent, 190, 100);
-    check('and the note opens', Boolean(editorOf(slots()[0])));
-    editorOf(slots()[0]).onblur();
-
-    // A leftward drag has still moved the finger, so it must not be read as
-    // stillness and leave the hold timer running.
-    down(cardOf(slots()[0]), 200, 100);
-    move(cardOf(slots()[0]), 100, 100);
-    await wait(HELD);
-    check('a refused swipe does not become a pick-up',
-      !cardOf(slots()[0])._class.has('lifted'));
-    up(cardOf(slots()[0]), 100, 100);
-
-    const unsent = cardOf(slots()[1]);
-    down(unsent, 200, 100);
-    move(unsent, 100, 100);
-    check('an undelivered block still swipes away', unsent.style.transform === 'translateX(-100px)',
-      unsent.style.transform);
-    up(unsent, 100, 100);
-    check('and goes', slots().length === 1, `${slots().length}`);
-  }
 
   console.log('\na swipe short of the threshold does nothing');
   {
@@ -948,8 +896,10 @@ const SETTLED = 220; // past SETTLE_MS
 
   console.log('\ntoday: what has been, and what is left');
   {
+    // 10:45, so the third block at 11:00 has genuinely not begun. At 11:00
+    // exactly it would have, and would lose its chip with the rest.
     const { ctx, byId, slots, cardOf, rowOf, titles } = boot({
-      plan: twoDays(), entries: utcEntries({ plans_in: 'morning' }), now: '11:00',
+      plan: twoDays(), entries: utcEntries({ plans_in: 'morning' }), now: '10:45',
     });
     await ctx.load();
 
@@ -1196,6 +1146,154 @@ const SETTLED = 220; // past SETTLE_MS
     const body = posted.find((p) => p.url === '/plan').body;
     check('and is sent unchanged', body.blocks[0].start_minutes === 480,
       String(body.blocks[0].start_minutes));
+  }
+
+  console.log('\na block you are in the middle of is locked');
+  {
+    // 09:30, so Deep work (09:00–10:00) has begun and has not finished. It
+    // used to keep its duration chip, and shrinking it below the half hour
+    // already elapsed moved it silently into the past — an action the server
+    // refuses on a delivered block anyway.
+    const inProgress = () => ({
+      [TODAY]: {
+        plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+        blocks: [
+          { id: 'i1', title: 'Reading', entryId: null, start_minutes: 480, duration_minutes: 60, sent: true },
+          { id: 'i2', title: 'Deep work', entryId: null, start_minutes: 540, duration_minutes: 60, sent: true },
+          { id: 'i3', title: 'Errands', entryId: null, start_minutes: 600, duration_minutes: 60 },
+        ],
+      },
+    });
+    const opts = { plan: inProgress(), entries: utcEntries({ plans_in: 'morning' }), now: '09:30' };
+
+    const { ctx, slots, cardOf, rowOf, chipOf, titles } = boot(opts);
+    await ctx.load();
+
+    check('three blocks', titles().join() === 'Reading,Deep work,Errands', titles().join());
+    check('the first is over', cardOf(slots()[0])._class.has('past'));
+    check('the second has begun but is not over', !cardOf(slots()[1])._class.has('past'));
+
+    check('it has no duration chip', !chipOf(slots()[1]));
+    check('the one still to come does', Boolean(chipOf(slots()[2])));
+
+    // Nothing to say about it yet: it has not failed to happen, it is
+    // happening. The question belongs on a block that is over.
+    const askIn = (s) => rowOf(s).children.find((c) => c._class.has('askmiss'));
+    check('and it asks nothing yet', !askIn(slots()[1]));
+    check('while the one that is over does', Boolean(askIn(slots()[0])));
+
+    // Holding it must not pick it up.
+    const card = cardOf(slots()[1]);
+    down(card, 100, 100);
+    await wait(HELD);
+    check('holding it does not lift it', !card._class.has('lifted'));
+    up(card, 100, 100);
+
+    // Nor may it take a note.
+    down(card, 100, 100);
+    move(card, 190, 100);
+    check('the note swipe does not travel', !card.style.transform, card.style.transform);
+    up(card, 190, 100);
+    check('and no editor opened', !cardOf(slots()[1]).children.some((c) => c._class.has('noteedit')));
+  }
+
+  console.log('\nswiping left on a begun block marks it missed');
+  {
+    const inProgress = () => ({
+      [TODAY]: {
+        plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+        blocks: [
+          { id: 'i1', title: 'Reading', entryId: null, start_minutes: 480, duration_minutes: 60, sent: true },
+          { id: 'i2', title: 'Deep work', entryId: null, start_minutes: 540, duration_minutes: 60, sent: true },
+          { id: 'i3', title: 'Errands', entryId: null, start_minutes: 600, duration_minutes: 60 },
+        ],
+      },
+    });
+    const { ctx, slots, cardOf, rowOf, backingOf, titles, posted } = boot({
+      plan: inProgress(), entries: utcEntries({ plans_in: 'morning' }), now: '09:30',
+    });
+    await ctx.load();
+
+    const askIn = (s) => rowOf(s).children.find((c) => c._class.has('askmiss'));
+
+    // The backing has to say which of the three things this swipe is, before
+    // the finger comes off.
+    const card = cardOf(slots()[1]);
+    down(card, 200, 100);
+    move(card, 150, 100);
+    check('the label is not Remove', backingOf(slots()[1]).textContent !== 'Remove',
+      backingOf(slots()[1]).textContent);
+    check('it says what it will do', backingOf(slots()[1]).textContent === "didn't happen",
+      backingOf(slots()[1]).textContent);
+    check('in the miss colour', backingOf(slots()[1])._class.has('hot'));
+
+    posted.length = 0;
+    move(card, 100, 100);
+    up(card, 100, 100);
+
+    check('the block is still there', titles().join() === 'Reading,Deep work,Errands',
+      titles().join());
+    check('and now reads as missed', askIn(slots()[1]).textContent === 'missed',
+      askIn(slots()[1]) && askIn(slots()[1]).textContent);
+    check('it posted the miss', posted.some((p) => /\/blocks\/i2\/miss/.test(p.url)),
+      JSON.stringify(posted.map((p) => p.url)));
+    check('as missed, not unmissed', posted[0].body.missed === true,
+      JSON.stringify(posted[0].body));
+
+    // Swiping again puts it back, and the backing says so.
+    const again = cardOf(slots()[1]);
+    down(again, 200, 100);
+    move(again, 150, 100);
+    check('the label flips', backingOf(slots()[1]).textContent === 'happened',
+      backingOf(slots()[1]).textContent);
+    check('and goes quiet, because putting it back is not a warning',
+      backingOf(slots()[1])._class.has('calm') && !backingOf(slots()[1])._class.has('hot'));
+
+    posted.length = 0;
+    move(again, 100, 100);
+    up(again, 100, 100);
+    check('it is unmarked', !askIn(slots()[1]), askIn(slots()[1]) && askIn(slots()[1]).textContent);
+    check('and that was posted too', posted[0].body.missed === false,
+      JSON.stringify(posted[0].body));
+  }
+
+  console.log('\nswipe left still removes a block that has not begun');
+  {
+    const { ctx, slots, cardOf, backingOf, titles } = boot({
+      entries: utcEntries({ plans_in: 'morning' }),
+      now: '09:30',
+      plan: {
+        [TODAY]: {
+          plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+          blocks: [
+            { id: 'u1', title: 'Reading', entryId: null, start_minutes: 480, duration_minutes: 60, sent: true },
+            { id: 'u2', title: 'Errands', entryId: null, start_minutes: 600, duration_minutes: 60 },
+          ],
+        },
+      },
+    });
+    await ctx.load();
+
+    const card = cardOf(slots()[1]);
+    down(card, 200, 100);
+    move(card, 150, 100);
+    check('the label is Remove', backingOf(slots()[1]).textContent === 'Remove',
+      backingOf(slots()[1]).textContent);
+    move(card, 100, 100);
+    up(card, 100, 100);
+    check('and it goes', titles().join() === 'Reading', titles().join());
+  }
+
+  console.log('\nthe tap on a block that is over still works');
+  {
+    const { ctx, slots, rowOf } = boot({
+      plan: twoDays(), entries: utcEntries({ plans_in: 'morning' }), now: '10:45',
+    });
+    await ctx.load();
+    const ask = () => rowOf(slots()[0]).children.find((c) => c._class.has('askmiss'));
+    check('it is still a question', ask().textContent === "didn't happen?");
+    await ask().onclick({ stopPropagation() {} });
+    check('and still answers it', ask().textContent === 'missed', ask().textContent);
   }
 
   console.log('\nthe menu still works on a locked row');
