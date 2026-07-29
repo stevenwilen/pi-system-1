@@ -99,7 +99,7 @@ router.get('/plan/:date', async (req, res) => {
 
   const { data: rows, error: blockErr } = await supabase
     .from('blocks')
-    .select('id, title, entry_id, start_time, duration_minutes, note, sort_order, message_sent_at')
+    .select('id, title, entry_id, start_time, duration_minutes, note, sort_order, message_sent_at, completed')
     .eq('plan_id', plan.id)
     .order('sort_order');
 
@@ -123,10 +123,12 @@ router.get('/plan/:date', async (req, res) => {
       start_minutes: toMinutes(b.start_time),
       duration_minutes: b.duration_minutes,
       note: b.note,
-      // So the screen could show that a block has already gone out. Nothing
-      // reads it yet; it costs one column and the alternative is another
-      // round trip the first time anything wants it.
+      // Already gone out, so the screen can refuse to offer the things that
+      // would rewrite it.
       sent: Boolean(b.message_sent_at),
+      // A day is assumed to have gone as planned, so this is false only when
+      // someone has said otherwise.
+      missed: b.completed === false,
     })),
   });
 });

@@ -135,6 +135,44 @@
         color: var(--faint);
       }
 
+      /* The switch IS the label. Same row, same height, same type as any other
+         section heading — the word that used to name the day now chooses it,
+         and there is no new control on the screen. */
+      .dayswitch {
+        display: flex;
+        align-items: baseline;
+        gap: 9px;
+        margin-bottom: 14px;
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      .dayswitch .opt {
+        /* Dimmer than faint. The day you are not looking at should be legible
+           as a way back and nothing more. */
+        color: #4a443c;
+        background: none;
+        border: 0;
+        padding: 0;
+        font: inherit;
+        letter-spacing: inherit;
+        text-transform: inherit;
+        cursor: pointer;
+      }
+      .dayswitch .opt.on {
+        color: var(--text);
+      }
+      .dayswitch .sep {
+        color: #3a342d;
+      }
+      .dayswitch .date {
+        letter-spacing: 0;
+        text-transform: none;
+        font-size: 11px;
+        color: var(--faint);
+        margin-left: 4px;
+      }
+
       .section {
         margin-bottom: var(--gap);
       }
@@ -169,12 +207,6 @@
         line-height: 1.4;
       }
 
-      .between {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
-      }
 
       .mark {
         font-size: 14px;
@@ -182,32 +214,24 @@
         letter-spacing: 1px;
       }
 
-      .done {
+      /* Already in the day on screen. It stands where the warning mark would,
+         because it answers the same question — what about this needs my
+         attention — with "nothing, you have already dealt with it". */
+      .inplan {
+        font-size: 12px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .row.locked .title {
         color: var(--faint);
-        text-decoration: line-through;
+      }
+      .row.locked .meta {
+        color: var(--faint);
+        opacity: 0.7;
       }
 
-      .right {
-        font-size: 12px;
-        color: var(--faint);
-        background: none;
-        border: 0;
-        font-family: inherit;
-        padding: 0;
-        white-space: nowrap;
-        cursor: pointer;
-      }
 
-      .missed {
-        font-size: 12px;
-        color: var(--warn);
-        background: none;
-        border: 0;
-        font-family: inherit;
-        padding: 0;
-        white-space: nowrap;
-        cursor: pointer;
-      }
+
 
       .empty {
         font-size: 13px;
@@ -217,24 +241,6 @@
 
       /* The optional reason on a missed block. A bare line, no box: it is a
          note attached to a row, not a field on a form. */
-      .reason {
-        margin-top: 8px;
-        width: 100%;
-        background: none;
-        border: 0;
-        border-bottom: 1px solid var(--line);
-        color: var(--text);
-        font: inherit;
-        font-size: 13px;
-        padding: 3px 0;
-      }
-      .reason::placeholder {
-        color: var(--faint);
-      }
-      .reason:focus {
-        outline: none;
-        border-bottom-color: var(--muted);
-      }
 
       /* The hint that a row has more than one thing you can do to it.
          Faint rather than muted: it sits at the right edge of every row in
@@ -446,6 +452,61 @@
       .noteedit:focus {
         outline: none;
         border-bottom-color: var(--muted);
+      }
+
+      /* A block that has already happened. An outline rather than a filled
+         card: still there, still part of the day, but no longer an object you
+         pick up and move. */
+      .block.past {
+        background: transparent;
+        border: 1px solid var(--line);
+      }
+      .block.past .t {
+        color: var(--faint);
+      }
+      .block.past .time {
+        color: #544e46;
+      }
+
+      /* The one thing you can still say about a block that has been and gone.
+         Quiet, because the honest default is that it happened. */
+      .askmiss {
+        font-size: 12px;
+        color: var(--faint);
+        background: none;
+        border: 0;
+        padding: 0;
+        font-family: inherit;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .askmiss.was {
+        color: var(--warn);
+      }
+
+      /* Where the day is now: a dot, the word, and a rule running out to the
+         edge. It sits between what has been and what is left. */
+      .now {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 4px 0 13px;
+      }
+      .now .dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .now .txt {
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        color: var(--accent);
+      }
+      .now .ln {
+        flex: 1;
+        height: 1px;
+        background: #2b3646;
       }
 
       /* Picked up. Bigger, lighter, casting a shadow: it has to be obvious
@@ -691,13 +752,7 @@
 
   <body>
     <main>
-      <!-- 1. YESTERDAY ------------------------------------------------------ -->
-      <section class="section">
-        <div class="label">Yesterday <span class="date" id="review-date"></span></div>
-        <div id="review"></div>
-      </section>
-
-      <!-- 2. THINGS --------------------------------------------------------- -->
+      <!-- 1. THINGS --------------------------------------------------------- -->
       <section class="section">
         <div class="label">
           Things
@@ -706,20 +761,30 @@
         <div id="things"></div>
       </section>
 
-      <!-- 3. TOMORROW ------------------------------------------------------- -->
+      <!-- 2. THE DAY -------------------------------------------------------- -->
       <section>
-        <div class="label">Tomorrow <span class="date" id="plan-date"></span></div>
+        <!-- The switch is the label. No new control: the heading that said
+             which day this was now says which day you are looking at, and
+             either word can be pressed. -->
+        <div class="dayswitch">
+          <button type="button" class="opt" id="pick-today">Today</button>
+          <span class="sep">/</span>
+          <button type="button" class="opt" id="pick-tomorrow">Tomorrow</button>
+          <span class="date" id="plan-date"></span>
+        </div>
 
         <div class="cal" id="cal">
           <h4>On your calendar</h4>
           <p id="cal-list"></p>
         </div>
 
-        <div class="inline">
+        <!-- Hidden on today: the day has already started, so there is nothing
+             to decide about when it does. -->
+        <div class="inline" id="starts">
           <span>Starts</span>
           <div class="stepper">
             <button type="button" class="step" id="wake-minus">&minus;</button>
-            <span class="num" id="wake-time">08:00</span>
+            <span class="num" id="wake-time">8:00 AM</span>
             <button type="button" class="step" id="wake-plus">+</button>
           </div>
         </div>
@@ -836,8 +901,23 @@
 
       const pad = (n) => String(n).padStart(2, '0');
 
-      /** Minutes past midnight as a clock time, wrapping past midnight. */
-      const clock = (mins) => `${pad(Math.floor((mins % 1440) / 60))}:${pad(mins % 60)}`;
+      /**
+       * Minutes past midnight as a clock time, wrapping past midnight.
+       *
+       * Twelve hour, because that is how the person reads a clock. Midnight is
+       * 12 AM and noon is 12 PM: hour 0 and hour 12 both display as 12, which
+       * is the one case a naive modulo gets wrong.
+       *
+       * Storage is untouched — every time in the database is still minutes or
+       * a 24 hour `time`, and this is the only place that decides how one
+       * looks.
+       */
+      function clock(mins) {
+        const at = ((mins % 1440) + 1440) % 1440;
+        const h = Math.floor(at / 60);
+        const hour = h % 12 === 0 ? 12 : h % 12;
+        return `${hour}:${pad(at % 60)} ${h < 12 ? 'AM' : 'PM'}`;
+      }
 
       /**
        * A duration as a person says it: 30m, 1h, 1.5h, 2h, 2.5h.
@@ -881,10 +961,43 @@
       // --- state --------------------------------------------------------------
 
       let things = [];
-      let blocks = []; // { title, entryId, duration, start }
+      let blocks = []; // { id, title, entryId, duration, note, sent, start }
       let wake = 8 * 60;
-      let planDate = null;
       let saved = false;
+
+      // Which day is on screen, and the two dates it chooses between. `today`
+      // is the person's own date, read from the server rather than the device,
+      // because the day boundary that matters is theirs.
+      let today = null;
+      let timeZone = 'UTC';
+      let showing = 'tomorrow';
+
+      const planDateFor = (which) => (which === 'today' ? today : addDays(today, 1));
+      const planDate = () => planDateFor(showing);
+
+      /**
+       * The time it is where this person lives, in minutes past their midnight.
+       *
+       * Read from their timezone rather than the device's, for the same reason
+       * the date is: a phone carried into another zone must not decide that
+       * half their day has already happened.
+       */
+      function nowMinutes() {
+        const parts = new Intl.DateTimeFormat('en-GB', {
+          timeZone,
+          hour: '2-digit',
+          minute: '2-digit',
+          hourCycle: 'h23',
+        })
+          .formatToParts(new Date())
+          .reduce((acc, p) => ({ ...acc, [p.type]: p.value }), {});
+        return Number(parts.hour) * 60 + Number(parts.minute);
+      }
+
+      /** The next half hour, which is where a block added to today begins. */
+      const nextBoundary = () => Math.ceil(nowMinutes() / STEP) * STEP;
+
+      const onToday = () => showing === 'today';
 
       // Test seam: a suite needs to put the page into the state a saved day
       // leaves it in without driving a real confirm through the network.
@@ -893,100 +1006,7 @@
         renderConfirm();
       }
 
-      // --- 1. yesterday --------------------------------------------------------
-
-      async function loadReview() {
-        let data;
-        try {
-          data = await (await fetch('/review')).json();
-        } catch {
-          return;
-        }
-
-        $('review-date').textContent = data.date ? prettyDate(data.date) : '';
-        const box = $('review');
-        box.replaceChildren();
-
-        if (!data.blocks || !data.blocks.length) {
-          const none = document.createElement('div');
-          none.className = 'empty';
-          none.textContent = 'Nothing was planned.';
-          box.append(none);
-          return;
-        }
-
-        for (const b of data.blocks) box.append(reviewRow(b));
-      }
-
-      /**
-       * One block of yesterday.
-       *
-       * Assumed done. The only question being asked is whether that is wrong,
-       * and it is one tap to say so. Nothing here asks anyone to confirm the
-       * ordinary case.
-       */
-      function reviewRow(b) {
-        const row = document.createElement('div');
-        row.className = 'row';
-
-        const top = document.createElement('div');
-        top.className = 'between';
-
-        const title = document.createElement('span');
-        title.className = 'title';
-        title.textContent = b.title;
-
-        const action = document.createElement('button');
-        action.type = 'button';
-
-        const missed = b.completed === false;
-        if (missed) title.classList.add('done');
-        action.className = missed ? 'missed' : 'right';
-        action.textContent = missed ? 'missed' : "didn't happen";
-
-        top.append(title, action);
-        row.append(top);
-
-        // The reason is optional and always has been. Demanding one is how a
-        // review stops being done at all.
-        const reason = document.createElement('input');
-        reason.className = 'reason';
-        reason.type = 'text';
-        reason.placeholder = 'why, if you want to say';
-        reason.value = b.miss_reason || '';
-        if (!missed) reason.classList.add('hidden');
-        row.append(reason);
-
-        const mark = async (isMissed, why) => {
-          try {
-            await fetch(`/blocks/${b.id}/miss`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ missed: isMissed, reason: why || '' }),
-            });
-          } catch {
-            // The screen already shows the new state. A failed write is
-            // corrected by the next load rather than by an alert in the
-            // middle of a review.
-          }
-        };
-
-        action.onclick = () => {
-          const nowMissed = action.textContent !== 'missed';
-          title.classList.toggle('done', nowMissed);
-          action.className = nowMissed ? 'missed' : 'right';
-          action.textContent = nowMissed ? 'missed' : "didn't happen";
-          reason.classList.toggle('hidden', !nowMissed);
-          if (!nowMissed) reason.value = '';
-          mark(nowMissed, reason.value);
-        };
-
-        reason.onchange = () => mark(true, reason.value);
-
-        return row;
-      }
-
-      // --- 2. things -----------------------------------------------------------
+      // --- things -------------------------------------------------------------
 
       /** How a deadline reads. */
       function dueText(days) {
@@ -1027,18 +1047,68 @@
 
         things = data.items || [];
 
-        // The day being built is tomorrow, reckoned where the person lives.
-        if (!planDate) {
-          planDate = addDays(data.today, 1);
-          $('plan-date').textContent = prettyDate(planDate);
+        if (!today) {
+          today = data.today;
+          timeZone = data.timezone || 'UTC';
           wake = toMinutes(data.wake_time || '08:00');
-          await loadCalendar(planDate);
-          await loadPlan(planDate);
+
+          // Which day the screen opens on. An evening planner is here to plan
+          // tomorrow; a morning planner is here to plan the day they are in.
+          showing = data.plans_in === 'morning' ? 'today' : 'tomorrow';
+
+          await showDay(showing);
         }
 
         renderThings();
         renderWake();
       }
+
+      /**
+       * Put a day on screen: its calendar, its plan, its shape.
+       *
+       * Everything held about the day being built is replaced, because the two
+       * days share nothing. Anything unconfirmed on the day being left is
+       * dropped, which is the same thing that happens on a page reload.
+       */
+      async function showDay(which) {
+        showing = which;
+        clearUndo();
+
+        const date = planDate();
+        $('plan-date').textContent = prettyDate(date);
+        $('pick-today').classList.toggle('on', which === 'today');
+        $('pick-tomorrow').classList.toggle('on', which === 'tomorrow');
+
+        // The day has already started, so there is nothing to decide about
+        // when it does.
+        $('starts').classList.toggle('hidden', onToday());
+
+        blocks = [];
+        saved = false;
+
+        await loadCalendar(date);
+        await loadPlan(date);
+
+        renderWake();
+        renderThings();
+      }
+
+      // The promise is returned rather than dropped. Nothing in the browser
+      // waits on it, but a suite driving the switch has to know when the day
+      // it asked for is actually on screen.
+      $('pick-today').onclick = () => (onToday() ? null : showDay('today'));
+      $('pick-tomorrow').onclick = () => (onToday() ? showDay('tomorrow') : null);
+
+      /**
+       * Is this thing already a block in the day on screen?
+       *
+       * Read off the blocks the builder is holding rather than off anything
+       * stored, so removing a block unlocks its row on the same render — and
+       * so the answer follows the switch: a thing in tomorrow is not locked
+       * while you are looking at today.
+       */
+      const inShownPlan = (entryId) =>
+        Boolean(entryId) && blocks.some((b) => b.entryId === entryId);
 
       function renderThings() {
         const box = $('things');
@@ -1067,8 +1137,12 @@
        * This used to be a long press with nothing on screen to suggest it.
        */
       function thingRow(item) {
+        // Already in the day on screen. It cannot be added twice, so the row
+        // says where it is instead of offering to put it there again.
+        const locked = inShownPlan(item.id);
+
         const row = document.createElement('div');
-        row.className = 'row';
+        row.className = locked ? 'row locked' : 'row';
         row.dataset.id = item.id;
 
         const top = document.createElement('div');
@@ -1079,9 +1153,16 @@
         title.textContent = item.title;
         top.append(title);
 
-        // '!!!', '!!' or '!'. Computed on the server and arithmetic all the
-        // way down: the days the size needs against the days that are left.
-        if (item.mark) {
+        if (locked) {
+          // Where the warning mark would be, and instead of it. Both answer
+          // "does this need me", and this one answers no.
+          const where = document.createElement('div');
+          where.className = 'inplan';
+          where.textContent = `in ${showing === 'today' ? "today's" : "tomorrow's"} plan`;
+          top.append(where);
+        } else if (item.mark) {
+          // '!!!', '!!' or '!'. Computed on the server and arithmetic all the
+          // way down: the days the size needs against the days that are left.
           const mark = document.createElement('div');
           mark.className = 'mark';
           mark.textContent = item.mark;
@@ -1154,6 +1235,10 @@
             acts.classList.add('hidden');
             return;
           }
+          // Already in the day on screen, so there is nothing a tap could add.
+          // The menu above still works: this is locked against being scheduled
+          // twice, not against being edited, finished or deleted.
+          if (locked) return;
           addBlock({ title: item.title, entryId: item.id });
         };
 
@@ -1241,6 +1326,11 @@
           // happened. It cannot be removed, and the swipe that would do it is
           // not offered.
           sent: Boolean(b.sent),
+          missed: Boolean(b.missed),
+          // Where the day says this block is. Only today reads it: a block
+          // that has already begun keeps the hour it began at, whatever the
+          // blocks above it do afterwards.
+          storedStart: b.start_minutes,
         }));
         saved = data.plan.status === 'confirmed';
         renderWake();
@@ -1252,17 +1342,47 @@
        *
        * Nothing is pinned and nothing is placed automatically, so a block
        * begins when the one above it ends and that is the whole rule. Changing
-       * one duration shifts everything below it, which is what the steppers
-       * are for.
+       * one duration shifts everything below it, which is what the chips are
+       * for.
+       *
+       * Today is the one day with a past in it, and the past does not flow.
+       * A block that has already begun keeps the hour it began at — the
+       * message naming that hour has usually gone out, and a plan that
+       * rewrote this morning as the afternoon would be a plan about a day
+       * nobody lived. Everything still to come flows from the later of where
+       * the last block ended and the next half hour, so a block added now
+       * lands ahead of now rather than back at the wake time.
        */
+      const hasBegun = (b, now) =>
+        b.storedStart !== undefined && b.storedStart !== null && b.storedStart <= now;
+
       function reflow() {
+        const live = onToday();
+        const now = live ? nowMinutes() : 0;
+        const floor = live ? nextBoundary() : 0;
+
         let cursor = wake;
+
         for (const b of blocks) {
-          b.start = cursor;
-          cursor += b.duration;
+          b.start = live && hasBegun(b, now) ? b.storedStart : live ? Math.max(cursor, floor) : cursor;
+          cursor = b.start + b.duration;
         }
         return cursor;
       }
+
+      /**
+       * Has the day on screen drifted from the day in the database?
+       *
+       * On today it can, without anyone touching anything: a day that has run
+       * late has its remaining blocks pushed to the next half hour, so what is
+       * left sits ahead of now rather than behind it. The screen must not call
+       * that "Confirmed" — the times it is showing are not the times delivery
+       * would use.
+       */
+      const drifted = () =>
+        blocks.some(
+          (b) => b.storedStart !== undefined && b.storedStart !== null && b.start !== b.storedStart
+        );
 
       // Every new block starts at one step. It grows by tapping its duration,
       // which is one press per half hour and no presses at all for the common
@@ -1305,7 +1425,23 @@
         const box = $('builder');
         box.replaceChildren();
 
-        for (const [i, b] of blocks.entries()) box.append(blockCard(b, i));
+        const now = onToday() ? nowMinutes() : null;
+        let markedNow = false;
+
+        for (const [i, b] of blocks.entries()) {
+          const past = onToday() && b.start + b.duration <= now;
+
+          // Once, between the last thing that has finished and the first that
+          // has not. A day entirely behind or entirely ahead gets no divider,
+          // because it would be marking the edge of the list rather than a
+          // place in the day.
+          if (onToday() && !past && !markedNow && i > 0) {
+            box.append(nowDivider());
+            markedNow = true;
+          }
+
+          box.append(blockCard(b, i, past));
+        }
 
         $('end-time').textContent = !blocks.length
           ? '—'
@@ -1314,7 +1450,74 @@
             : clock(end);
         $('ends').classList.toggle('late', blocks.length > 0 && end >= 1440);
 
+        // The day on screen no longer matches the day stored, so it is not
+        // confirmed however it got that way.
+        if (saved && drifted()) saved = false;
+
         renderConfirm();
+
+        // Which things are in the day has just changed, so which rows are
+        // locked has too. Removing a block unlocks its row on this render
+        // rather than on the next load.
+        renderThings();
+      }
+
+      function nowDivider() {
+        const bar = document.createElement('div');
+        bar.className = 'now';
+
+        const dot = document.createElement('div');
+        dot.className = 'dot';
+        const txt = document.createElement('div');
+        txt.className = 'txt';
+        txt.textContent = 'NOW';
+        const ln = document.createElement('div');
+        ln.className = 'ln';
+
+        bar.append(dot, txt, ln);
+        return bar;
+      }
+
+      /**
+       * Yes it happened, or no it did not — asked in place, when it happened.
+       *
+       * This is what the Yesterday section used to be. Asking the next morning
+       * meant asking about a day already gone; asking here means the question
+       * arrives while the answer is still obvious, and the ordinary case is
+       * still no question at all: a block is assumed done unless someone says
+       * otherwise.
+       */
+      function missToggle(b) {
+        const button = document.createElement('button');
+        button.type = 'button';
+
+        const paint = () => {
+          button.className = b.missed ? 'askmiss was' : 'askmiss';
+          button.textContent = b.missed ? 'missed' : "didn't happen?";
+        };
+        paint();
+
+        button.onclick = async (e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+          if (!b.id) return; // never saved, so there is no row to mark
+
+          b.missed = !b.missed;
+          paint();
+
+          try {
+            await fetch(`/blocks/${b.id}/miss`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ missed: b.missed }),
+            });
+          } catch {
+            // The screen already shows the new state. A failed write is
+            // corrected by the next load rather than by an alert in the
+            // middle of a day.
+          }
+        };
+
+        return button;
       }
 
       // --- what a block can be told to do -------------------------------------
@@ -1499,7 +1702,7 @@
       const pageY = () =>
         (typeof window !== 'undefined' && window.scrollY) || 0;
 
-      function blockCard(b, i) {
+      function blockCard(b, i, past = false) {
         const slot = document.createElement('div');
         slot.className = 'slot';
 
@@ -1507,7 +1710,7 @@
         backing.className = 'backing';
 
         const card = document.createElement('div');
-        card.className = 'block';
+        card.className = past ? 'block past' : 'block';
 
         const row = document.createElement('div');
         row.className = 'brow';
@@ -1521,23 +1724,32 @@
         time.textContent = `${clock(b.start)} – ${clock(b.start + b.duration)}`;
         left.append(t, time);
 
-        const dur = document.createElement('button');
-        dur.type = 'button';
-        dur.className = 'dur';
-        dur.textContent = span(b.duration);
-        dur.setAttribute('aria-label', `${b.title}: ${span(b.duration)}. Press to lengthen.`);
+        // A block that has been and gone carries the one thing still worth
+        // saying about it instead of a length, because a length it no longer
+        // has any use for is a control that can only mislead.
+        if (past) {
+          row.append(left, missToggle(b));
+        } else {
+          const dur = document.createElement('button');
+          dur.type = 'button';
+          dur.className = 'dur';
+          dur.textContent = span(b.duration);
+          dur.setAttribute('aria-label', `${b.title}: ${span(b.duration)}. Press to lengthen.`);
 
-        // The tap lives on click rather than in the pointer handler below, so
-        // the keyboard reaches it too: this is a real button and Enter works.
-        dur.onclick = () => {
-          if (swallowClick) {
-            swallowClick = false;
-            return;
-          }
-          cycleDuration(i);
-        };
+          // The tap lives on click rather than in the pointer handler below,
+          // so the keyboard reaches it too: this is a real button and Enter
+          // works.
+          dur.onclick = () => {
+            if (swallowClick) {
+              swallowClick = false;
+              return;
+            }
+            cycleDuration(i);
+          };
 
-        row.append(left, dur);
+          row.append(left, dur);
+        }
+
         card.append(row);
 
         if (i === noting) card.append(noteEditor(b, i));
@@ -1885,6 +2097,12 @@
           });
         }
 
+        // What is stored is now what is on screen, so nothing has drifted.
+        // Without this a confirmed day would immediately read as unconfirmed
+        // again, because every block it had just moved still remembered the
+        // hour it used to be at.
+        for (const b of blocks) b.storedStart = b.start;
+
         // The day is committed, and so is anything removed on the way to it.
         // A pending undo would put back a block holding the id of a row this
         // confirm has just deleted, and the next confirm would be refused for
@@ -2030,7 +2248,6 @@
       };
 
       load();
-      loadReview();
     </script>
   </body>
 </html>

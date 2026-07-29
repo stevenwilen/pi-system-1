@@ -40,14 +40,16 @@ const made = [];
   {
     const bare = { title: 'Gym', start_time: '08:00:00', duration_minutes: 60 };
 
-    check('title and real times', m.composeMessage(bare) === '<b>Gym</b>\n08:00 to 09:00',
+    // Twelve hour, because that is how the person reads a clock. Storage is
+    // untouched: the row still says 08:00:00.
+    check('title and real times', m.composeMessage(bare) === '<b>Gym</b>\n8:00 AM to 9:00 AM',
       JSON.stringify(m.composeMessage(bare)));
     check('a block with nothing to add still sends something',
       m.composeMessage(bare).length > 0);
 
     const past = { ...bare, start_time: '23:00:00', duration_minutes: 120 };
     check('an end past midnight wraps rather than reading 25:00',
-      m.composeMessage(past).includes('23:00 to 01:00'), m.composeMessage(past));
+      m.composeMessage(past).includes('11:00 PM to 1:00 AM'), m.composeMessage(past));
   }
 
   console.log('\nthe note, verbatim, and nothing else');
@@ -56,11 +58,11 @@ const made = [];
 
     const noted = m.composeMessage({ ...base, note: 'Finish the essay draft' });
     check('it follows the header',
-      noted === '<b>UF application</b>\n09:00 to 11:00\n\nFinish the essay draft',
+      noted === '<b>UF application</b>\n9:00 AM to 11:00 AM\n\nFinish the essay draft',
       JSON.stringify(noted));
 
     check('no note is no second part',
-      m.composeMessage({ ...base, note: null }) === '<b>UF application</b>\n09:00 to 11:00');
+      m.composeMessage({ ...base, note: null }) === '<b>UF application</b>\n9:00 AM to 11:00 AM');
     check('an empty note is no second part either',
       !m.composeMessage({ ...base, note: '' }).includes('\n\n'));
 
@@ -202,10 +204,10 @@ const made = [];
 
     check('the block with a note sends it',
       m.composeMessage(written[0]) ===
-        `<b>${habit.title}</b>\n08:00 to 09:00\n\ntwenty pages, no phone`,
+        `<b>${habit.title}</b>\n8:00 AM to 9:00 AM\n\ntwenty pages, no phone`,
       JSON.stringify(m.composeMessage(written[0])));
     check('the one without sends the header alone',
-      m.composeMessage(written[1]) === `<b>${task.title}</b>\n09:00 to 10:00`,
+      m.composeMessage(written[1]) === `<b>${task.title}</b>\n9:00 AM to 10:00 AM`,
       JSON.stringify(m.composeMessage(written[1])));
 
     server.kill();

@@ -89,7 +89,7 @@ function hhmm(time) {
 async function allProfiles() {
   const { data, error } = await supabase
     .from('profile')
-    .select('user_id, timezone, default_wake_time, telegram_chat_id, nudge_hour');
+    .select('user_id, timezone, default_wake_time, telegram_chat_id, nudge_hour, plans_in');
 
   if (error) throw new Error(`could not load profiles: ${error.message}`);
   return data || [];
@@ -247,7 +247,17 @@ async function deliverDue(profile, now) {
 // neglected — a nudge that always fires is a digest, and this is deliberately
 // not that.
 
-const NUDGE_TEXT = 'No plan for tomorrow yet.';
+// One message per kind of planner, because the day it asks about is the whole
+// content of it. Telling an evening planner about today would be naming a day
+// they are already halfway through; telling a morning planner about tomorrow
+// would be asking for a plan they do not make until they wake up.
+const NUDGE_TEXT = {
+  evening: 'No plan for tomorrow yet.',
+  morning: 'No plan for today yet.',
+};
+
+/** Which day this person's nudge is about. Null reads as evening. */
+const plansIn = (profile) => (profile.plans_in === 'morning' ? 'morning' : 'evening');
 
 /**
  * Tell them the day ahead has no shape yet, once, in their evening.
@@ -263,33 +273,37 @@ async function sendNudge(profile, now, { force = false } = {}) {
 
   if (!force && (await alreadySent(profile.user_id, 'nudge', now.date))) return;
 
-  const tomorrow = tomorrowOf(now.date);
+  // The day this person's plan is about. An evening planner is asked about
+  // tomorrow, a morning planner about the day they are in.
+  const kind = plansIn(profile);
+  const asks = kind === 'morning' ? now.date : tomorrowOf(now.date);
 
   const { data: plan, error } = await supabase
     .from('plans')
     .select('id')
     .eq('user_id', profile.user_id)
-    .eq('date', tomorrow)
+    .eq('date', asks)
     .eq('status', 'confirmed')
     .maybeSingle();
 
   // Unreadable is not the same as absent. Saying nothing is the safe wrong
   // answer here, because the alternative is telling someone who has planned
   // their day that they have not.
-  if (error) throw new Error(`could not read the plan for ${tomorrow}: ${error.message}`);
+  if (error) throw new Error(`could not read the plan for ${asks}: ${error.message}`);
 
   if (plan) {
     // Claimed anyway, so the rest of the evening does not ask again.
     if (!force) await markSent(profile.user_id, 'nudge', now.date);
-    console.log(`[NUDGE] ${tomorrow} is already confirmed, sending nothing`);
+    console.log(`[NUDGE] ${asks} is already confirmed, sending nothing`);
     return;
   }
 
-  const sent = await deliver(profile.user_id, NUDGE_TEXT);
+  const text = NUDGE_TEXT[kind];
+  const sent = await deliver(profile.user_id, text);
 
   if (sent.sent) {
     if (!force) await markSent(profile.user_id, 'nudge', now.date);
-    console.log(`[NUDGE] sent: ${NUDGE_TEXT}`);
+    console.log(`[NUDGE] sent: ${text}`);
   } else {
     // No mark, so the next tick inside the window tries again.
     console.error(`[NUDGE] ${JSON.stringify(sent)}`);

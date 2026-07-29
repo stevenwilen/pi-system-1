@@ -15,11 +15,22 @@
 
 const { toMinutes } = require('./clock');
 
-// Wrapped at midnight. A block starting at 23:00 and running two hours ends at
-// 01:00, and this used to render it as "25:00" — a time that does not exist,
-// sent to a phone at eleven at night.
-const clock = (mins) =>
-  `${String(Math.floor((mins % 1440) / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+// Twelve hour, because that is how the person reads a clock and the message is
+// read on a phone alongside every other notification.
+//
+// Wrapped at midnight. A block starting at 11:00 PM and running two hours ends
+// at 1:00 AM, and this used to render it as "25:00" — a time that does not
+// exist, sent to a phone at eleven at night.
+//
+// Midnight is 12 AM and noon is 12 PM: hour 0 and hour 12 both display as 12,
+// which is the one case a naive modulo gets wrong.
+function clock(mins) {
+  const at = ((mins % 1440) + 1440) % 1440;
+  const h = Math.floor(at / 60);
+  const m = at % 60;
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
 
 /**
  * What Telegram sends for a block.

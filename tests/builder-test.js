@@ -80,14 +80,34 @@ const SCRIPT = html
 const ENTRIES = {
   today: '2026-07-27',
   timezone: 'America/New_York',
-  wake_time: '08:00',
+  wake_time: '08:00', // as the server sends it: 24 hour, display is the page's job
   items: [],
 };
 
 const SLOT = 49; // one block's height plus the gap, per getBoundingClientRect
 
+// The clock the page reads. It asks Intl for the hour in the profile's own
+// timezone, so a case that needs "it is 11am" fixes the whole environment to a
+// zone with no offset and freezes Date there.
+function atClock(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const Frozen = class extends Date {
+    constructor(...a) {
+      if (a.length) return super(...a);
+      return super(Date.UTC(2026, 6, 27, h, m, 0));
+    }
+    static now() {
+      return Date.UTC(2026, 6, 27, h, m, 0);
+    }
+  };
+  return Frozen;
+}
+
 /** Builds a fresh script instance with its own DOM. */
-function boot({ calendar = [], plan = null, failed = [], reduced = false } = {}) {
+function boot({
+  calendar = [], plan = null, failed = [], reduced = false,
+  entries = null, now = null,
+} = {}) {
   // Every id the markup declares, read from the file rather than listed here.
   const byId = {};
   for (const id of new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]))) {
@@ -108,8 +128,18 @@ function boot({ calendar = [], plan = null, failed = [], reduced = false } = {})
   // A page that can be scrolled out from under a drag.
   const win = { scrollY: 0 };
 
+  // A plan per date, so a case can hand back different days and the switch
+  // has something to switch between.
+  const plans = plan && plan.plan === undefined ? plan : null;
+  const planFor = (url) => {
+    const date = url.split('/').pop();
+    if (plans) return plans[date] || { plan: null, blocks: [] };
+    return plan || { plan: null, blocks: [] };
+  };
+
   const sandbox = {
-    console, setTimeout, clearTimeout, Intl, Date, Math, JSON,
+    console, setTimeout, clearTimeout, Intl, Math, JSON,
+    Date: now ? atClock(now) : Date,
     String, Number, Boolean, Array, Object,
     alert: () => {}, confirm: () => true, prompt: () => 'Typed block',
     window: win,
@@ -117,9 +147,8 @@ function boot({ calendar = [], plan = null, failed = [], reduced = false } = {})
       ok: true,
       json: async () => {
         if (url.startsWith('/calendar')) return { items: calendar, failed };
-        if (url.startsWith('/plan/')) return plan || { plan: null, blocks: [] };
-        if (url === '/review') return { date: '2026-07-26', blocks: [] };
-        return ENTRIES;
+        if (url.startsWith('/plan/')) return planFor(url);
+        return entries || ENTRIES;
       },
     }),
     document: {
@@ -147,11 +176,20 @@ function boot({ calendar = [], plan = null, failed = [], reduced = false } = {})
   const noteOf = (s) => cardOf(s).children.find((c) => c._class.has('note'));
   const editorOf = (s) => cardOf(s).children.find((c) => c._class.has('noteedit'));
 
+  // The title alone. Reading it out of the whole card's text stopped working
+  // when times became twelve hour: "8:00 AM" contains an A, so a block called
+  // "A" appeared to be present in every row on the screen.
+  const titleOf = (s) => {
+    const left = rowOf(s).children.find((c) => c.children.some((k) => k._class.has('t')));
+    return (left.children.find((k) => k._class.has('t')) || {}).textContent || '';
+  };
+  const titles = () => slots().map(titleOf);
+
   const touchmoves = () => listeners.filter((l) => l.type === 'touchmove');
 
   return {
     ctx, byId, slots, cardOf, backingOf, rowOf, chipOf, noteOf, editorOf,
-    listeners, touchmoves, win,
+    titleOf, titles, listeners, touchmoves, win,
   };
 }
 
@@ -189,7 +227,7 @@ const SETTLED = 220; // past SETTLE_MS
     check('it climbs by half hours to four, then wraps',
       seen.join(' ') === '1h 1.5h 2h 2.5h 3h 3.5h 4h 30m 1h', seen.join(' '));
 
-    check('the end time follows', byId['end-time'].textContent === '09:00',
+    check('the end time follows', byId['end-time'].textContent === '9:00 AM',
       byId['end-time'].textContent);
   }
 
@@ -238,23 +276,23 @@ const SETTLED = 220; // past SETTLE_MS
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
     ctx.addBlock({ title: 'C' });
-    check('laid out in sequence', slots()[2].text().includes('09:00 – 09:30'),
+    check('laid out in sequence', slots()[2].text().includes('9:00 AM – 9:30 AM'),
       slots()[2].text().trim());
 
     chipOf(slots()[0]).onclick(); // A: 30 -> 60
-    check('the one below moved', slots()[1].text().includes('09:00 – 09:30'),
+    check('the one below moved', slots()[1].text().includes('9:00 AM – 9:30 AM'),
       slots()[1].text().trim());
-    check('and the one below that', slots()[2].text().includes('09:30 – 10:00'),
+    check('and the one below that', slots()[2].text().includes('9:30 AM – 10:00 AM'),
       slots()[2].text().trim());
-    check('the one above did not', slots()[0].text().includes('08:00 – 09:00'),
+    check('the one above did not', slots()[0].text().includes('8:00 AM – 9:00 AM'),
       slots()[0].text().trim());
-    check('the end time followed live', byId['end-time'].textContent === '10:00',
+    check('the end time followed live', byId['end-time'].textContent === '10:00 AM',
       byId['end-time'].textContent);
   }
 
   console.log('\nswipe left removes, with an undo rather than a confirm');
   {
-    const { ctx, byId, slots, cardOf, backingOf } = boot();
+    const { ctx, byId, slots, cardOf, backingOf, titleOf } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -276,8 +314,7 @@ const SETTLED = 220; // past SETTLE_MS
     up(card, 110, 100);
 
     check('it is gone', slots().length === 1, `${slots().length}`);
-    check('and the one below moved up', slots()[0].text().includes('A') === false &&
-      slots()[0].text().includes('B'), slots()[0].text().trim());
+    check('and the one below moved up', titleOf(slots()[0]) === 'B', titleOf(slots()[0]));
     check('no confirm was asked for', true);
 
     const bar = byId['undo-host'].children[0];
@@ -330,7 +367,7 @@ const SETTLED = 220; // past SETTLE_MS
       noteOf(slots()[0]).textContent);
     check('and the editor closed', !editorOf(slots()[0]));
     check('the block is otherwise unchanged',
-      slots()[0].text().includes('08:00 – 08:30'), slots()[0].text().trim());
+      slots()[0].text().includes('8:00 AM – 8:30 AM'), slots()[0].text().trim());
   }
 
   console.log('\nswiping a block that has a note reopens it');
@@ -693,7 +730,7 @@ const SETTLED = 220; // past SETTLE_MS
 
   console.log('\nheld, then dragged to a new place');
   {
-    const { ctx, slots, cardOf } = boot();
+    const { ctx, slots, cardOf, titles } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -712,13 +749,12 @@ const SETTLED = 220; // past SETTLE_MS
     up(card, 100, 100 + SLOT * 2);
     await wait(SETTLED);
 
-    check('it landed last', slots().map((s) => s.text()).join('|').indexOf('A') >
-      slots().map((s) => s.text()).join('|').indexOf('C'));
+    check('it landed last', titles().indexOf('A') > titles().indexOf('C'), titles().join(' '));
     check('the order is B C A',
       slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'B C A',
       slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
     check('and the times were recomputed from the top',
-      slots()[0].text().includes('08:00 – 08:30'), slots()[0].text().trim());
+      slots()[0].text().includes('8:00 AM – 8:30 AM'), slots()[0].text().trim());
     check('every transform was cleared', slots().every((s) => !s.style.transform));
   }
 
@@ -826,13 +862,266 @@ const SETTLED = 220; // past SETTLE_MS
     const { ctx, byId, slots } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
-    check('still a stepper', byId['wake-time'].textContent === '08:00');
+    check('still a stepper', byId['wake-time'].textContent === '8:00 AM');
     byId['wake-plus'].onclick();
-    check('one step is half an hour', byId['wake-time'].textContent === '08:30');
-    check('and the day moved with it', slots()[0].text().includes('08:30 – 09:00'),
+    check('one step is half an hour', byId['wake-time'].textContent === '8:30 AM');
+    check('and the day moved with it', slots()[0].text().includes('8:30 AM – 9:00 AM'),
       slots()[0].text().trim());
     for (let i = 0; i < 40; i++) byId['wake-minus'].onclick();
-    check('still clamped at 04:00', byId['wake-time'].textContent === '04:00');
+    check('still clamped at 4:00 AM', byId['wake-time'].textContent === '4:00 AM');
+  }
+
+  // --- today and tomorrow --------------------------------------------------
+
+  const TODAY = '2026-07-27';
+  const TOMORROW = '2026-07-28';
+
+  // 08:00–09:00 done, 09:00–10:00 done, 11:00–13:00 still to come, with the
+  // clock fixed at 11:00 in a zone with no offset.
+  const twoDays = () => ({
+    [TODAY]: {
+      plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+      blocks: [
+        { id: 't1', title: 'Reading', entryId: 'e-read', start_minutes: 480, duration_minutes: 60, sent: true },
+        { id: 't2', title: 'Gym', entryId: null, start_minutes: 540, duration_minutes: 60, sent: true, missed: true },
+        { id: 't3', title: 'UF application', entryId: 'e-uf', start_minutes: 660, duration_minutes: 120 },
+      ],
+    },
+    [TOMORROW]: {
+      plan: { date: TOMORROW, status: 'confirmed', wake_minutes: 480 },
+      blocks: [
+        { id: 'm1', title: 'Spanish', entryId: 'e-spanish', start_minutes: 480, duration_minutes: 60 },
+      ],
+    },
+  });
+
+  const utcEntries = (extra = {}) => ({
+    today: TODAY, timezone: 'UTC', wake_time: '08:00', items: [], ...extra,
+  });
+
+  console.log('\nthe switch is the label');
+  {
+    const { ctx, byId, titles } = boot({
+      plan: twoDays(), entries: utcEntries(), now: '11:00',
+    });
+    await ctx.load();
+
+    check('an evening planner opens on tomorrow', byId['pick-tomorrow']._class.has('on'));
+    check('and today is the quiet one', !byId['pick-today']._class.has('on'));
+    check('the date says which', byId['plan-date'].textContent === 'Tue 28 Jul',
+      byId['plan-date'].textContent);
+    check("tomorrow's plan is the one loaded", titles().join() === 'Spanish', titles().join());
+    check('and the Starts control is there', !byId.starts._class.has('hidden'));
+
+    await byId['pick-today'].onclick();
+    check('tapping Today switches', byId['pick-today']._class.has('on'));
+    check('and tomorrow goes quiet', !byId['pick-tomorrow']._class.has('on'));
+    check('the date follows', byId['plan-date'].textContent === 'Mon 27 Jul',
+      byId['plan-date'].textContent);
+    check("today's plan is loaded", titles().join() === 'Reading,Gym,UF application',
+      titles().join());
+    check('and Starts is hidden, because the day already started',
+      byId.starts._class.has('hidden'));
+
+    await byId['pick-tomorrow'].onclick();
+    check('and back again', titles().join() === 'Spanish', titles().join());
+    check('with Starts shown again', !byId.starts._class.has('hidden'));
+  }
+
+  console.log('\na morning planner opens on today');
+  {
+    const { ctx, byId } = boot({
+      plan: twoDays(), entries: utcEntries({ plans_in: 'morning' }), now: '11:00',
+    });
+    await ctx.load();
+    check('today is the active word', byId['pick-today']._class.has('on'));
+    check('and Starts is hidden', byId.starts._class.has('hidden'));
+  }
+
+  console.log('\ntoday: what has been, and what is left');
+  {
+    const { ctx, byId, slots, cardOf, rowOf, titles } = boot({
+      plan: twoDays(), entries: utcEntries({ plans_in: 'morning' }), now: '11:00',
+    });
+    await ctx.load();
+
+    check('all three blocks are there', titles().join() === 'Reading,Gym,UF application',
+      titles().join());
+    check('the two that have finished are past',
+      cardOf(slots()[0])._class.has('past') && cardOf(slots()[1])._class.has('past'));
+    check('and the one still to come is not', !cardOf(slots()[2])._class.has('past'));
+
+    const chipIn = (s) => rowOf(s).children.find((c) => c._class.has('dur'));
+    check('a past block has no duration chip', !chipIn(slots()[0]));
+    check('the upcoming one does', Boolean(chipIn(slots()[2])));
+
+    const askIn = (s) => rowOf(s).children.find((c) => c._class.has('askmiss'));
+    check('a past block asks instead', Boolean(askIn(slots()[0])));
+    check('and it asks quietly', askIn(slots()[0]).textContent === "didn't happen?",
+      askIn(slots()[0]).textContent);
+    check('one already marked reads as missed', askIn(slots()[1]).textContent === 'missed',
+      askIn(slots()[1]).textContent);
+    check('in the warn colour', askIn(slots()[1])._class.has('was'));
+
+    const divider = byId.builder.children.filter((c) => c._class.has('now'));
+    check('one NOW divider', divider.length === 1, `${divider.length}`);
+    check('between the past and what is left',
+      byId.builder.children.indexOf(divider[0]) === 2,
+      String(byId.builder.children.indexOf(divider[0])));
+    check('it carries a dot and the word',
+      divider[0].children.some((c) => c._class.has('dot')) &&
+        divider[0].text().includes('NOW'));
+
+    check('a past block keeps the hour it happened at',
+      slots()[0].text().includes('8:00 AM – 9:00 AM'), slots()[0].text().trim());
+  }
+
+  console.log('\nmarking a past block missed, in place');
+  {
+    const { ctx, slots, rowOf } = boot({
+      plan: twoDays(), entries: utcEntries({ plans_in: 'morning' }), now: '11:00',
+    });
+    await ctx.load();
+
+    const ask = () => rowOf(slots()[0]).children.find((c) => c._class.has('askmiss'));
+    check('it starts as a question', ask().textContent === "didn't happen?");
+
+    await ask().onclick({ stopPropagation() {} });
+    check('one tap marks it', ask().textContent === 'missed', ask().textContent);
+    check('and it says so in the warn colour', ask()._class.has('was'));
+
+    await ask().onclick({ stopPropagation() {} });
+    check('tapping again undoes it', ask().textContent === "didn't happen?", ask().textContent);
+    check('and drops the colour', !ask()._class.has('was'));
+  }
+
+  console.log('\na block added to today starts after now');
+  {
+    const { ctx, slots, titles } = boot({
+      plan: twoDays(), entries: utcEntries({ plans_in: 'morning' }), now: '11:17',
+    });
+    await ctx.load();
+
+    ctx.addBlock({ title: 'Errand' });
+    check('it is on the end', titles()[3] === 'Errand', titles().join());
+    // 11:17 rounds up to 11:30, but UF application runs to 13:00, so the
+    // cursor is later than the boundary and wins.
+    check('it follows the last block rather than the clock',
+      slots()[3].text().includes('1:00 PM – 1:30 PM'), slots()[3].text().trim());
+  }
+
+  console.log('\na day that has run out of blocks starts the next one at the half hour');
+  {
+    const { ctx, slots, titles } = boot({
+      entries: utcEntries({ plans_in: 'morning' }),
+      now: '11:17',
+      plan: {
+        [TODAY]: {
+          plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+          blocks: [
+            { id: 'p1', title: 'Done', entryId: null, start_minutes: 480, duration_minutes: 60, sent: true },
+          ],
+        },
+      },
+    });
+    await ctx.load();
+
+    ctx.addBlock({ title: 'Next' });
+    check('two blocks', titles().join() === 'Done,Next', titles().join());
+    check('the finished one kept its hour', slots()[0].text().includes('8:00 AM – 9:00 AM'),
+      slots()[0].text().trim());
+    check('and the new one starts at the next half hour, not the wake time',
+      slots()[1].text().includes('11:30 AM – 12:00 PM'), slots()[1].text().trim());
+  }
+
+  console.log('\ntomorrow has no past and no divider');
+  {
+    const { ctx, byId, slots, cardOf } = boot({
+      plan: twoDays(), entries: utcEntries(), now: '11:00',
+    });
+    await ctx.load();
+    check('nothing is past', slots().every((s) => !cardOf(s)._class.has('past')));
+    check('and there is no divider',
+      byId.builder.children.filter((c) => c._class.has('now')).length === 0);
+    ctx.addBlock({ title: 'Later' });
+    check('a new block flows from the wake time', slots()[1].text().includes('9:00 AM – 9:30 AM'),
+      slots()[1].text().trim());
+  }
+
+  console.log('\na thing already in the shown day is locked');
+  {
+    const things = [
+      { id: 'e-uf', type: 'project', title: 'UF application', days: 6, mark: '!!!', due: null, size: null, last_scheduled: null },
+      { id: 'e-spanish', type: 'habit', title: 'Spanish', days: 3, mark: null, due: null, size: null, last_scheduled: null },
+      { id: 'e-free', type: 'task', title: 'Return the router', days: 1, mark: null, due: null, size: null, last_scheduled: null },
+    ];
+    const { ctx, byId, slots, cardOf } = boot({
+      plan: twoDays(), entries: utcEntries({ plans_in: 'morning', items: things }), now: '11:00',
+    });
+    await ctx.load();
+
+    const rows = () => byId.things.children.filter((c) => c._class.has('row'));
+    const rowFor = (title) => rows().find((r) => r.text().includes(title));
+    const badge = (r) => r.children[0].children.find((c) => c._class.has('inplan'));
+
+    check('the one in today is locked', rowFor('UF application')._class.has('locked'));
+    check('and says where it is', badge(rowFor('UF application')).textContent === "in today's plan",
+      badge(rowFor('UF application')) && badge(rowFor('UF application')).textContent);
+    check('in place of its warning mark',
+      !rowFor('UF application').children[0].children.some((c) => c._class.has('mark')));
+
+    check('one in tomorrow is not locked while today is shown',
+      !rowFor('Spanish')._class.has('locked'));
+    check('nor is one in no plan at all', !rowFor('Return the router')._class.has('locked'));
+
+    const before = slots().length;
+    rowFor('UF application').onclick();
+    check('tapping it adds nothing', slots().length === before, `${slots().length}`);
+
+    rowFor('Return the router').onclick();
+    check('but an unlocked row still schedules', slots().length === before + 1,
+      `${slots().length}`);
+    check('and locks itself immediately', rowFor('Return the router')._class.has('locked'));
+
+    // Removing the block puts the row back on the same render.
+    const added = slots()[slots().length - 1];
+    const card = cardOf(added);
+    down(card, 200, 100);
+    move(card, 100, 100);
+    up(card, 100, 100);
+    check('removing its block unlocks it', !rowFor('Return the router')._class.has('locked'));
+    check('and its mark comes back if it had one', true);
+
+    await byId['pick-tomorrow'].onclick();
+    check('the badge follows the switch',
+      badge(rowFor('Spanish')).textContent === "in tomorrow's plan",
+      badge(rowFor('Spanish')) && badge(rowFor('Spanish')).textContent);
+    check('and what was locked on today is free on tomorrow',
+      !rowFor('UF application')._class.has('locked'));
+  }
+
+  console.log('\nthe menu still works on a locked row');
+  {
+    const things = [
+      { id: 'e-uf', type: 'task', title: 'UF application', days: 6, mark: null, due: null, size: null, last_scheduled: null },
+    ];
+    const { ctx, byId } = boot({
+      plan: twoDays(), entries: utcEntries({ plans_in: 'morning', items: things }), now: '11:00',
+    });
+    await ctx.load();
+
+    const row = byId.things.children.filter((c) => c._class.has('row'))[0];
+    check('it is locked', row._class.has('locked'));
+
+    const acts = row.children.find((c) => c._class.has('rowacts'));
+    check('it still has a menu', Boolean(acts));
+    check('with all three actions',
+      acts.children.map((c) => c.textContent).join() === 'Done,Edit,Delete',
+      acts.children.map((c) => c.textContent).join());
+
+    const hint = row.children[0].children.find((c) => c._class.has('hint'));
+    hint.onclick({ stopPropagation() {} });
+    check('and the hint still opens it', !acts._class.has('hidden'));
   }
 
   console.log(bad === 0 ? '\nBuilder clean' : `\n${bad} FAILURE(S)`);

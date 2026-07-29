@@ -127,10 +127,12 @@ console.log('\n4. sections are separated by space, not by boxes');
   check('a section has no border', !/border/.test(section), section);
   check('nor a background', !/background/.test(section), section);
 
-  check('three sections, and only three', (body.match(/<section/g) || []).length === 3,
+  // Two, not three. Yesterday is gone: the question it asked is asked in place
+  // now, on today's own blocks as they pass.
+  check('two sections, and only two', (body.match(/<section/g) || []).length === 2,
     String((body.match(/<section/g) || []).length));
-  check('yesterday is first', body.indexOf('Yesterday') < body.indexOf('Things'));
-  check('things is second', body.indexOf('Things') < body.indexOf('Tomorrow'));
+  check('things is first', body.indexOf('Things') < body.indexOf('dayswitch'));
+  check('and there is no Yesterday', !/Yesterday/.test(body));
 }
 
 console.log('\n5. two text sizes in a row, with real space between them');
@@ -147,11 +149,23 @@ console.log('\n6. blue is actionable, and nothing else is blue');
 {
   const blue = selectorsUsing('var(--accent)').filter((s) => !/^:root/.test(s));
 
-  // The start steppers, the duration chip, Undo, Confirm, and the sheet's
-  // save button. Every one of them is a thing a press acts on.
-  const allowed = /\.step|\.dur|\.undo button|\.confirm|\.sheet-actions \.save/;
-  check('blue appears only on the controls that act',
-    blue.every((s) => allowed.test(s)), blue.join(' | '));
+  // THE RULE WIDENED. It used to be "blue is actionable, and nothing else is
+  // blue" — the steppers and Confirm, full stop. Two things now carry it that
+  // no press acts on:
+  //
+  //   .now      the divider marking where the day has got to
+  //   .inplan   a thing that is already in the day on screen
+  //
+  // Both say "here is where you are", which is the nearest thing to an action
+  // that is not one. They are listed by name so a third has to be argued for
+  // here rather than added quietly, and so anyone reading this knows the
+  // stricter rule was relaxed on purpose.
+  const acts = /\.step|\.dur|\.undo button|\.confirm|\.sheet-actions \.save/;
+  const orients = /\.now \.dot|\.now \.txt|\.inplan/;
+  check('blue appears only on the controls that act, or the two that orient',
+    blue.every((s) => acts.test(s) || orients.test(s)), blue.join(' | '));
+  check('and nothing decorative has it',
+    !blue.some((s) => /\.cal|\.backing|\.block\b|\.row\b/.test(s)), blue.join(' | '));
 
   check('the start steppers are blue', /color: var\(--accent\)/.test(rule('.step')));
   check('the duration chip is blue, because it is now the control',
@@ -178,7 +192,7 @@ console.log('\n7. the miss colour is for misses, warnings and destruction only')
   // and warnings", and it is listed rather than assumed so a fourth use has
   // to be argued for here before it can ship.
   const warn = selectorsUsing('var(--warn)').filter((s) => !/^:root/.test(s));
-  const allowed = /\.mark|\.missed|\.ends\.late|\.failed|\.danger|\.problem|\.backing\.left/;
+  const allowed = /\.mark|\.askmiss\.was|\.ends\.late|\.failed|\.danger|\.problem|\.backing\.left/;
   check('used only on marks, misses, failures and destructive actions',
     warn.every((s) => allowed.test(s)), warn.join(' | '));
 
@@ -190,7 +204,9 @@ console.log('\n7. the miss colour is for misses, warnings and destruction only')
   check('nor is it blue', !/var\(--accent\)/.test(rule('.backing.right')));
 
   check('the warning mark carries it', /color: var\(--warn\)/.test(rule('.mark')));
-  check('a missed block carries it', /color: var\(--warn\)/.test(rule('.missed')));
+  check('a missed block carries it', /color: var\(--warn\)/.test(rule('.askmiss.was')));
+  check('and the question that offers it does not',
+    /color: var\(--faint\)/.test(rule('.askmiss')));
   check('an ordinary row does not', !/--warn/.test(rule('.row')));
   check('nor an ordinary meta line', !/--warn/.test(rule('.row .meta')));
 }
@@ -461,7 +477,73 @@ console.log('\n16. the shape of the day');
   // The whole builder is one cursor walking down the list. If a second
   // starting point ever appears, blocks have stopped flowing in sequence.
   check('blocks flow from one cursor', /let cursor = wake;/.test(code));
-  check('and each starts where the last ended', /cursor \+= b\.duration/.test(code));
+  check('and each starts where the last ended', /cursor = b\.start \+ b\.duration;/.test(code));
+}
+
+console.log('\n17. today and tomorrow');
+{
+  console.log('   the switch is the label');
+  check('there is no separate control', !/id="day-toggle"|class="tabs"/.test(body));
+  check('the heading is the switch', /class="dayswitch"/.test(body));
+  check('with both words', /id="pick-today"/.test(body) && /id="pick-tomorrow"/.test(body));
+  check('and the date beside them', /class="date" id="plan-date"/.test(body));
+
+  const sw = rule('.dayswitch');
+  check('same type as any other label', /font-size: 10px/.test(sw) &&
+    /letter-spacing: 0\.14em/.test(sw) && /text-transform: uppercase/.test(sw));
+  check('and the same space under it', /margin-bottom: 14px/.test(sw));
+  check('the inactive word is very faint',
+    /color: #4a443c/.test(rule('.dayswitch .opt')), rule('.dayswitch .opt'));
+  check('the active one is full text', /color: var\(--text\)/.test(rule('.dayswitch .opt.on')));
+
+  console.log('   today');
+  check('a finished block renders as an outline, not a card',
+    /background: transparent/.test(rule('.block.past')) &&
+      /border: 1px solid var\(--line\)/.test(rule('.block.past')));
+  check('with a faint title', /color: var\(--faint\)/.test(rule('.block.past .t')));
+  check('a past block gets no chip', /if \(past\) \{[\s\S]{0,80}missToggle/.test(code));
+  check('it asks instead', /didn't happen\?/.test(code));
+  check('and marking it posts to the miss route', /\/blocks\/\$\{b\.id\}\/miss/.test(code));
+  check('a NOW divider is drawn once', /markedNow = true/.test(code));
+  check('with a dot and a rule', /className = 'dot'/.test(code) && /className = 'ln'/.test(code));
+  check('the Starts control is hidden', /\$\('starts'\)\.classList\.toggle\('hidden', onToday\(\)\)/.test(code));
+
+  console.log('   the past does not flow');
+  check('a block that has begun keeps its hour', /hasBegun\(b, now\) \? b\.storedStart/.test(code));
+  check('what is left starts at the next half hour', /Math\.max\(cursor, floor\)/.test(code));
+  check('which is the boundary after now', /Math\.ceil\(nowMinutes\(\) \/ STEP\) \* STEP/.test(code));
+  check('and a drifted day is not called confirmed', /if \(saved && drifted\(\)\) saved = false/.test(code));
+
+  console.log('   which day opens');
+  check('the preference comes from the server', /data\.plans_in === 'morning'/.test(code));
+  check('and there is no settings UI for it', !/plans_in/.test(body));
+
+  console.log('   a thing already in the day');
+  check('locked against being added twice', /if \(locked\) return;/.test(code));
+  check('it says which day it is in',
+    /in \$\{showing === 'today' \? "today's" : "tomorrow's"\} plan/.test(code));
+  check('read off the blocks on screen, so removing one unlocks it',
+    /blocks\.some\(\(b\) => b\.entryId === entryId\)/.test(code));
+  check('and the row is dimmed', /color: var\(--faint\)/.test(rule('.row.locked .title')));
+  check('the menu is not locked with it', !/if \(locked\)[\s\S]{0,200}acts\.classList/.test(code));
+}
+
+console.log('\n18. every time on the page is twelve hour');
+{
+  check('one formatter, and it wraps at midnight', /const at = \(\(mins % 1440\) \+ 1440\) % 1440;/.test(code));
+  check('midnight and noon are both 12', /h % 12 === 0 \? 12 : h % 12/.test(code));
+  check('and it says which', /h < 12 \? 'AM' : 'PM'/.test(code));
+  check('nothing renders a 24 hour clock beside it',
+    !/pad\(Math\.floor\(\(mins % 1440\) \/ 60\)\)/.test(code));
+
+  // The message path has its own copy, because it runs on the server.
+  const msg = fs.readFileSync(ROOT + '/messages.js', 'utf8');
+  check('Telegram gets the same', /'AM' : 'PM'/.test(msg));
+
+  // Storage is untouched. The page still sends minutes and the row is still a
+  // 24 hour `time`; only the reading of it changed.
+  check('the page still sends minutes', /start_minutes: b\.start/.test(code));
+  check('and still reads them', /toMinutes/.test(code));
 }
 
 console.log('\n17. the mockup still describes the page');
@@ -482,9 +564,9 @@ console.log('\n17. the mockup still describes the page');
   for (const [what, klass] of [
     ['the row hint', 'hint'],
     ['the revealed actions', 'rowacts'],
-    ["the swipe backing", "backing"],
-    ["a note", "note"],
-    ["the note editor", "noteedit"],
+    ['the swipe backing', 'backing'],
+    ['a note', 'note'],
+    ['the note editor', 'noteedit'],
     ['the duration chip', 'dur'],
     ['a lifted block', 'lifted'],
     ['the dimmed others', 'dimmed'],
@@ -492,6 +574,10 @@ console.log('\n17. the mockup still describes the page');
     ['the calendar aside', 'cal'],
     ['block cards', 'block'],
     ['the add sheet', 'sheet'],
+    ['the day switch', 'dayswitch'],
+    ['a past block', 'past'],
+    ['the NOW divider', 'now'],
+    ['a locked row', 'locked'],
   ]) {
     check(`${what} is drawn in the mockup`, new RegExp(`class="[^"]*\\b${klass}\\b`).test(mock), klass);
   }
@@ -504,9 +590,18 @@ console.log('\n17. the mockup still describes the page');
   check('it shows all three row actions',
     /Done/.test(mock) && /Edit/.test(mock) && /Delete/.test(mock));
 
+  // The switch has a reference of its own, which is where it came from.
+  const sw = fs.readFileSync(ROOT + '/public/switch.html', 'utf8');
+  check('switch.html is kept as the reference for the day switch',
+    /class="dayswitch"/.test(sw));
+  check('it shows both states', /opt on">Today/.test(sw) && /opt on">Tomorrow/.test(sw));
+  check('and the page uses its inactive colour',
+    /#4A443C/i.test(sw) && /#4a443c/i.test(rule('.dayswitch .opt')));
+
   // What was replaced must not survive in the reference either.
   check('no tab bar', !/class="tabs"/.test(mock));
   check('no Money', !/Money/.test(mock));
+  check('and no Yesterday section', !/>Yesterday</.test(mock));
   check('no steppers on a block',
     !/class="block"[\s\S]{0,200}class="stepper"/.test(mock));
   check('no keep/remove confirm', !/confirming/.test(mock));

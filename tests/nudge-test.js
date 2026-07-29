@@ -82,6 +82,46 @@ const makePlan = async (date, status) => {
     check('and says so plainly', sent[0].text === 'No plan for tomorrow yet.', JSON.stringify(sent[0].text));
   }
 
+  console.log('\nwhich day it asks about follows how this person plans');
+  {
+    const evening = (extra = {}) => profile({ plans_in: 'evening', ...extra });
+    const morning = (extra = {}) => profile({ plans_in: 'morning', ...extra });
+
+    // An evening planner is asked about tomorrow.
+    await clear();
+    await makePlan(TOMORROW, 'confirmed');
+    await scheduler.sendNudge(evening(), at(20), { force: true });
+    check('evening: tomorrow confirmed, so nothing', sent.length === 0, JSON.stringify(sent));
+
+    await clear();
+    await makePlan(DATE, 'confirmed');
+    await scheduler.sendNudge(evening(), at(20), { force: true });
+    check('evening: today confirmed is not tomorrow', sent.length === 1);
+    check('and it names tomorrow', sent[0].text === 'No plan for tomorrow yet.', sent[0].text);
+
+    // A morning planner is asked about the day they are in.
+    await clear();
+    await makePlan(DATE, 'confirmed');
+    await scheduler.sendNudge(morning(), at(20), { force: true });
+    check('morning: today confirmed, so nothing', sent.length === 0, JSON.stringify(sent));
+
+    await clear();
+    await makePlan(TOMORROW, 'confirmed');
+    await scheduler.sendNudge(morning(), at(20), { force: true });
+    check('morning: tomorrow confirmed is not today', sent.length === 1);
+    check('and it names today', sent[0].text === 'No plan for today yet.', sent[0].text);
+
+    // Null is the shape every row had before the column existed.
+    await clear();
+    await makePlan(TOMORROW, 'confirmed');
+    await scheduler.sendNudge(profile({ plans_in: null }), at(20), { force: true });
+    check('an unset preference reads as evening', sent.length === 0, JSON.stringify(sent));
+
+    await clear();
+    await scheduler.sendNudge(profile({ plans_in: null }), at(20), { force: true });
+    check('and says so', sent[0].text === 'No plan for tomorrow yet.', sent[0].text);
+  }
+
   console.log('\none line, and only one');
   {
     // It used to name what had gone quiet on a second line, which needed a
@@ -91,7 +131,7 @@ const makePlan = async (date, status) => {
     await clear();
     await scheduler.sendNudge(profile(), at(20), { force: true });
     check('exactly one line', sent[0].text.split('\n').length === 1, JSON.stringify(sent[0].text));
-    check('it is the whole message', sent[0].text === scheduler.NUDGE_TEXT, sent[0].text);
+    check('it is the whole message', sent[0].text === scheduler.NUDGE_TEXT.evening, sent[0].text);
     check('nothing is named', !/quiet/.test(sent[0].text));
   }
 

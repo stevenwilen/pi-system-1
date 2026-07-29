@@ -126,6 +126,33 @@
         font-size:13px;color:var(--muted)}
   .undo b{color:var(--accent);font-weight:400}
 
+  /* the switch IS the label — no new control */
+  .dayswitch{display:flex;align-items:baseline;gap:9px;margin-bottom:14px;
+             font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+  .dayswitch .opt{color:#4A443C}
+  .dayswitch .opt.on{color:var(--text)}
+  .dayswitch .sep{color:#3A342D}
+  .dayswitch .date{letter-spacing:0;text-transform:none;font-size:11px;
+                   color:var(--faint);margin-left:4px}
+
+  /* a block that has already happened */
+  .past{background:transparent;border:1px solid var(--line)}
+  .past .t{color:var(--faint)}
+  .past .time{color:#544E46}
+  .askmiss{font-size:12px;color:var(--faint)}
+  .wasmissed{font-size:12px;color:var(--warn)}
+
+  /* where the day has got to */
+  .now{display:flex;align-items:center;gap:10px;margin:4px 0 13px}
+  .now .dot{width:5px;height:5px;border-radius:50%;background:var(--accent)}
+  .now .txt{font-size:10px;letter-spacing:.12em;color:var(--accent)}
+  .now .ln{flex:1;height:1px;background:#2B3646}
+
+  /* already in the day on screen */
+  .locked .title{color:var(--faint)}
+  .locked .meta{color:var(--faint);opacity:.7}
+  .inplan{font-size:12px;color:var(--accent)}
+
   .ends{display:flex;justify-content:space-between;align-items:baseline;
         margin-top:28px;padding-bottom:20px}
   .ends span{font-size:13px;color:var(--muted)}
@@ -162,20 +189,18 @@
 <div class="phone">
 
   <div class="section">
-    <div class="label">Yesterday <span class="date">Mon 27 Jul</span></div>
-    <div class="row between"><span class="title">Reading</span><span class="right">didn't happen</span></div>
-    <div class="row">
-      <div class="between"><span class="title done">Web services</span><span class="missed">missed</span></div>
-      <div class="reason">ran out of evening</div>
-    </div>
-  </div>
-
-  <div class="section">
     <div class="label">Things <span class="act">+ Add</span></div>
 
     <div class="row">
       <div class="row-top"><div class="title">UF application</div><div class="mark">!!!</div><div class="hint">&middot;&middot;&middot;</div></div>
       <div class="meta">project &middot; due in 6 days &middot; a few days</div>
+    </div>
+
+    <!-- already a block in the day on screen: it cannot be added twice, so the
+         row says where it is instead of offering to put it there again -->
+    <div class="row locked">
+      <div class="row-top"><div class="title">Spanish</div><div class="inplan">in tomorrow's plan</div><div class="hint">&middot;&middot;&middot;</div></div>
+      <div class="meta">habit &middot; 4 days since scheduled</div>
     </div>
 
     <div class="row">
@@ -197,33 +222,88 @@
   </div>
 
   <div>
-    <div class="label">Tomorrow <span class="date">Tue 28 Jul</span></div>
+    <!-- the switch IS the label: no new control, and either word can be
+         pressed. See public/switch.html, which is its reference. -->
+    <div class="dayswitch">
+      <span class="opt">Today</span><span class="sep">/</span><span class="opt on">Tomorrow</span>
+      <span class="date">Tue 28 Jul</span>
+    </div>
 
     <div class="cal">
       <h4>On your calendar</h4>
-      <p>Dentist, 13:00<br>Cancel Paramount</p>
+      <p>Dentist, 1:00 PM<br>Cancel Paramount</p>
     </div>
 
     <div class="inline">
       <span>Starts</span>
-      <div class="stepper"><div class="step">&minus;</div><div class="num">08:00</div><div class="step">+</div></div>
+      <div class="stepper"><div class="step">&minus;</div><div class="num">8:00 AM</div><div class="step">+</div></div>
     </div>
 
     <div style="height:14px"></div>
 
     <div class="block">
-      <div><div class="t">Reading</div><div class="time">08:00 &ndash; 09:00</div></div>
+      <div><div class="t">Reading</div><div class="time">8:00 AM &ndash; 9:00 AM</div></div>
       <div class="dur">1h</div>
     </div>
 
     <div class="block">
-      <div><div class="t">UF application</div><div class="time">09:00 &ndash; 11:00</div></div>
+      <div><div class="t">UF application</div><div class="time">9:00 AM &ndash; 11:00 AM</div></div>
       <div class="dur">2h</div>
     </div>
 
     <div class="addblock">+ Block</div>
 
-    <div class="ends"><span>Day ends</span><b>11:00</b></div>
+    <div class="ends"><span>Day ends</span><b>11:00 AM</b></div>
+
+    <div class="confirm">Confirm</div>
+  </div>
+
+</div>
+<div class="caption">Tomorrow &mdash; Starts shown, nothing past</div>
+</div>
+
+<div class="wrap">
+<div class="phone">
+
+  <div>
+    <div class="dayswitch">
+      <span class="opt on">Today</span><span class="sep">/</span><span class="opt">Tomorrow</span>
+      <span class="date">Mon 27 Jul</span>
+    </div>
+
+    <div class="cal">
+      <h4>On your calendar</h4>
+      <p>Dentist, 1:00 PM</p>
+    </div>
+
+    <!-- no Starts control: the day already started -->
+
+    <!-- what has been. An outline rather than a filled card, and the one thing
+         still worth saying about it in place of a length it no longer needs. -->
+    <div class="block past">
+      <div><div class="t">Reading</div><div class="time">8:00 AM &ndash; 9:00 AM</div></div>
+      <div class="askmiss">didn't happen?</div>
+    </div>
+
+    <div class="block past">
+      <div><div class="t">Gym</div><div class="time">9:00 AM &ndash; 10:00 AM</div></div>
+      <div class="wasmissed">missed</div>
+    </div>
+
+    <div class="now"><div class="dot"></div><div class="txt">NOW</div><div class="ln"></div></div>
+
+    <div class="block">
+      <div>
+        <div class="t">UF application</div>
+        <div class="time">11:00 AM &ndash; 1:00 PM</div>
+        <div class="note">personal statement draft</div>
+      </div>
+      <div class="dur">2h</div>
+    </div>
+
+    <div class="addblock">+ Block</div>
+
+    <div class="ends"><span>Day ends</span><b>1:00 PM</b></div>
 
     <div class="confirm">Confirm</div>
   </div>

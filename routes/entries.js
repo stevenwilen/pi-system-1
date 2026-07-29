@@ -35,7 +35,7 @@ router.get('/entries', async (req, res) => {
   try {
     const { data: profile } = await supabase
       .from('profile')
-      .select('timezone, default_wake_time')
+      .select('timezone, default_wake_time, plans_in')
       .eq('user_id', CURRENT_USER)
       .maybeSingle();
 
@@ -88,6 +88,9 @@ router.get('/entries', async (req, res) => {
       today,
       timezone: timeZone,
       wake_time: String((profile && profile.default_wake_time) || '07:00').slice(0, 5),
+      // Which day the screen opens on. Null reads as evening, which is what
+      // this did before the column existed.
+      plans_in: (profile && profile.plans_in) === 'morning' ? 'morning' : 'evening',
       items: items.sort((a, b) => b.days - a.days || a.title.localeCompare(b.title)),
     });
   } catch (err) {

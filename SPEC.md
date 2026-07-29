@@ -17,11 +17,10 @@ So the system's core move is to make the user **read instead of remember**.
 
 ## 1. What it is
 
-One screen, opened once in the evening. Three sections, top to bottom:
+One screen, opened once a day. Two sections, top to bottom:
 
-1. **Yesterday** — what was planned, each row one tap away from "didn't happen".
-2. **Things** — habits, projects and tasks in one list, coldest first.
-3. **Tomorrow** — the builder.
+1. **Things** — habits, projects and tasks in one list, coldest first.
+2. **The day** — the builder, showing today or tomorrow.
 
 Behind it: a Postgres notebook (Supabase), two read-only calendar feeds, and a
 Telegram bot that only ever sends.
@@ -145,20 +144,7 @@ Nothing about how the system behaves lives outside the database.
 
 ## 3. The screen
 
-### 3.1 Yesterday
-
-Yesterday's blocks, if the day was planned. An empty answer means yesterday was
-never planned, which is not a failure and is not scolded.
-
-Each row is a title and one tap: **didn't happen**. Tapped, the title goes
-struck-through and the row reads **missed** in the miss colour. Tapping again
-puts it back.
-
-A short reason may be typed under a missed block. It is optional and always has
-been — a miss with no explanation is still worth recording, and demanding one is
-how a review stops being done at all.
-
-### 3.2 Things
+### 3.1 Things
 
 Habits, projects and tasks in **one list**. A task left three weeks is the same
 problem as a project left three weeks, so they share a list rather than being
@@ -171,7 +157,7 @@ nothing, kept only because dropping a column cannot be undone.
 
 `blocks.sort_order` is a different column and is load-bearing. It is what holds
 the order of blocks within a plan, written on every confirm and read back by both
-`GET /plan/:date` and `/review`. The two share a name and nothing else.
+`GET /plan/:date` and the block reads. The two share a name and nothing else.
 
 Each row is two lines:
 
@@ -200,7 +186,7 @@ should undo the opening, not commit to something.
 
 The hint is faint rather than muted. It repeats down the whole list, and at
 muted it would draw a second column of emphasis competing with the titles. It
-is the same weight as *didn't happen* in Yesterday, which is the other
+is the same weight as *didn't happen?* on a past block, which is the other
 right-edge action on the screen.
 
 This was a long press with nothing on screen to suggest it, which meant three
@@ -245,7 +231,22 @@ Clearing the date clears the size with it.
 
 There is no why, no note about where something stands, and no free-text size.
 
-#### 3.2.1 Warning marks
+#### Already in the day
+
+A thing that already has a block in the day on screen is **locked**. Its row
+dims, and where the warning mark would sit it says **in today's plan** or **in
+tomorrow's plan** in the accent colour — both answer "does this need me", and
+this one answers no.
+
+Tapping it does nothing: it cannot be added twice. The `···` menu is unaffected —
+edit, done and delete all work. It is locked against being scheduled again, not
+against being changed.
+
+Read off the blocks the builder is holding rather than anything stored, so
+removing its block unlocks the row on the same render, and so the answer follows
+the switch: a thing in tomorrow is not locked while you are looking at today.
+
+#### 3.1.1 Warning marks
 
 Arithmetic, and only arithmetic (`warning.js`).
 
@@ -274,7 +275,66 @@ calendar advances. Nothing else moves it.
 **No mark means "nothing to say", never "fine."** A row with no due date, no
 size, or an unrecognised size shows nothing.
 
-### 3.3 Tomorrow
+### 3.2 The day
+
+#### Today / Tomorrow
+
+**The switch is the label.** There is no new control: the heading that used to
+name the day now chooses it. `Today / Tomorrow` followed by the date, on the
+same row and at the same height as any other section label, and either word can
+be pressed. The word you are not looking at is very faint (`#4A443C`) — legible
+as a way back and nothing more.
+
+Which one the app opens on is `profile.plans_in`:
+
+| | |
+|---|---|
+| `evening` (default, and what null means) | opens on **Tomorrow** |
+| `morning` | opens on **Today** |
+
+There is no settings UI. The column is set by hand.
+
+Switching replaces everything held about the day being built. Anything
+unconfirmed on the day being left is dropped, which is what a page reload does
+too.
+
+#### When today is showing
+
+- A block whose **end time has passed** renders as **past**: an outline rather
+  than a filled card, faint title, and no duration chip — it cannot be retimed,
+  so a control that could only mislead is not drawn.
+- A past block carries **didn't happen?** where the chip would be. One tap marks
+  it missed and it reads **missed** in the miss colour; tapping again undoes it.
+  **This replaces the Yesterday section.** Asking the next morning meant asking
+  about a day already gone; asking in place means the question arrives while the
+  answer is still obvious. The ordinary case is still no question at all — a
+  block is assumed done unless someone says otherwise.
+- A **NOW divider** sits between what has been and what is left: a dot, the word,
+  and a hairline. It is drawn once, and not at all on a day entirely behind or
+  entirely ahead, where it would be marking the edge of the list rather than a
+  place in the day.
+- The **Starts control is hidden.** The day has already started, so there is
+  nothing to decide about when it does.
+
+**The past does not flow.** A block that has already begun keeps the hour it
+began at, whatever the blocks above it do — the message naming that hour has
+usually gone out, and a plan that rewrote this morning as the afternoon would be
+a plan about a day nobody lived. Everything still to come flows from the later of
+where the last block ended and the **next half hour**, so a block added now lands
+ahead of now rather than back at the wake time.
+
+That means a day which has run late shows its remaining blocks pushed forward.
+When it does, the day on screen no longer matches the day stored, and **Confirm
+lights up again** — the times being shown are not the times delivery would use
+until it is pressed.
+
+Confirming today works exactly as confirming tomorrow, through the same id
+reconciliation. Delivered blocks keep their history and still refuse retiming,
+resizing and removal.
+
+#### When tomorrow is showing
+
+Exactly as it was: Starts visible, nothing past, no divider.
 
 #### The calendar aside
 
@@ -566,12 +626,18 @@ whatever text it is ever going to have.
 
 ### 4.2 The evening nudge
 
-At `profile.nudge_hour` (default 20:00), local time, if **tomorrow has no
-confirmed plan**:
+At `profile.nudge_hour` (default 20:00), local time, if the day this person plans
+has no confirmed plan:
 
-```
-No plan for tomorrow yet.
-```
+| `plans_in` | asks about | says |
+|---|---|---|
+| `evening` (default) | tomorrow | `No plan for tomorrow yet.` |
+| `morning` | today | `No plan for today yet.` |
+
+The hour is unchanged; only the day it asks about moves. Nudging an evening
+planner about today would name a day they are already halfway through, and
+nudging a morning planner about tomorrow would ask for a plan they do not make
+until they wake up.
 
 That is the entire message. One `sent_log` row per evening guards it, and an
 evening where the plan already exists is claimed too so the rest of the evening
@@ -624,9 +690,10 @@ npm test       # every suite, sequentially
 | `telegram.js` | the send |
 | `routes/entries.js` | Things: read, add, edit, finish, delete |
 | `routes/plan.js` | the calendar aside, and saving a day |
-| `routes/review.js` | yesterday, and marking a block missed |
+| `routes/blocks.js` | marking a block missed |
 | `public/index.html` | the whole app: markup, styles and script in one file |
 | `public/mockup.html` | the layout reference the page is built against |
+| `public/switch.html` | the reference for the Today / Tomorrow switch and past blocks |
 | `PLANNING-RULES.md` | **archive.** Notes from the pre-strip system, kept and marked as such |
 | `brain.js`, `usage.js`, `untrusted.js` | **wired and unused.** See 1. `brain.js` requires the other two |
 | `link.js`, `calendar-test.js`, `send-test.js` | run by hand, not part of the running system |
@@ -648,6 +715,7 @@ Run once each, by hand, in the Supabase SQL editor. All are safe to run twice.
 | `migration-nudge.sql` | `profile.nudge_hour` |
 | `migration-size.sql` | `entries.size`, and the check constraint on its five buckets |
 | `migration-note.sql` | `blocks.note` |
+| `migration-plans-in.sql` | `profile.plans_in`, and the check constraint on its two values |
 
 **No column or table has ever been dropped.** The strip retired
 `entries.why`, `entries.body`, `entries.priority`, `entries.sort_order`,
@@ -716,12 +784,18 @@ process start time, the Node version, and whether the scheduler is running.
 | `profile.default_wake_time` | where the builder starts the first block |
 | `profile.telegram_chat_id` | where outbound goes, or nowhere if unset |
 | `profile.nudge_hour` | the evening nudge hour, 0–23. Null means 20 |
+| `profile.plans_in` | `morning` or `evening`. Which day the app opens on, and which day the nudge asks about. Null means evening |
 
 ---
 
 ## 7. The look
 
-Reference: `public/mockup.html`.
+Reference: `public/mockup.html` for the screen, `public/switch.html` for the
+Today / Tomorrow switch and the shape of a past block.
+
+**Every time on the screen and in a message is twelve hour with AM/PM**, in
+tabular figures. Storage is untouched: the page still sends minutes, the row is
+still a 24-hour `time`, and one function on each side decides how a time reads.
 
 | | |
 |---|---|
@@ -736,17 +810,26 @@ Reference: `public/mockup.html`.
 
 The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
 
-- **A row is a row.** Yesterday and Things are plain rows with hairline dividers
-  between them. Only a builder block is a card, because a card says "this is an
-  object you move", and those are the only objects here that move.
+- **A row is a row.** Things is plain rows with hairline dividers between them.
+  Only a builder block is a card, because a card says "this is an object you
+  move", and those are the only objects here that move — and a block that has
+  already happened drops to an outline, because it has stopped being one.
 - **Sections are separated by space**, 36px of it — not by borders, not by nested
   containers.
 - **One label style:** 10px, uppercase, 0.14em tracking, muted. Actions like
   `+ Add` sit on its baseline and are **quieter** than it, never louder.
 - **Two text sizes per row:** 15px title, 12px muted meta on its own line with
   real space between them.
-- **Blue is actionable.** It appears on the steppers and on Confirm, and nowhere
-  else. Nothing decorative is ever blue.
+- **Blue is actionable, or it orients.** It appears on the Starts steppers, the
+  duration chip, Undo, Confirm and Save — everything a press acts on — and on
+  two things no press acts on: the **NOW** divider, and the *in today's / in
+  tomorrow's plan* badge. Both say *here is where you are*, which is the nearest
+  thing to an action that is not one. That is the whole list, enforced by name in
+  the layout check; nothing decorative is ever blue.
+
+  This rule used to be stricter — steppers and Confirm, full stop. It was relaxed
+  deliberately when the day switch arrived, and the two exceptions are named so a
+  third has to be argued for.
 - **The miss colour is for misses and warnings**, and nothing else.
 - **The calendar aside is a left rule with indented text**, in neutral warm grey.
   Reference material: not a card, not blue, not a warning.

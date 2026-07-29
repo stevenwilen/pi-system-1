@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Today / Tomorrow switch</title>
+<style>
+  :root{
+    --bg:#16130F; --card:#211D18; --line:#2C2721;
+    --text:#EDE7DE; --dim:#8B8177; --faint:#6B6459;
+    --accent:#6E8CB8; --warn:#C4694A;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:#0a0908;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    display:flex;justify-content:center;gap:20px;flex-wrap:wrap;
+    padding:28px 12px;
+  }
+  .wrap{text-align:center}
+  .caption{color:#8B8177;font-size:12px;margin-top:12px}
+  .phone{
+    width:340px;background:var(--bg);color:var(--text);
+    border-radius:28px;padding:24px 20px 30px;text-align:left;
+  }
+
+  .label{
+    font-size:10px;letter-spacing:.14em;color:var(--dim);
+    text-transform:uppercase;margin-bottom:14px;
+    display:flex;justify-content:space-between;align-items:baseline;
+  }
+  .label .act{letter-spacing:0;text-transform:none;font-size:12px;color:var(--dim)}
+
+  /* the switch IS the label — no new control */
+  .dayswitch{
+    display:flex;align-items:baseline;gap:9px;margin-bottom:14px;
+    font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  }
+  .dayswitch .opt{color:#4A443C}
+  .dayswitch .opt.on{color:var(--text)}
+  .dayswitch .sep{color:#3A342D}
+  .dayswitch .date{
+    letter-spacing:0;text-transform:none;font-size:11px;
+    color:var(--faint);margin-left:4px;
+  }
+
+  .section{margin-bottom:36px}
+  .row{padding:12px 0}
+  .row + .row{border-top:1px solid var(--line)}
+  .title{font-size:15px;flex:1;line-height:1.35}
+  .meta{font-size:12px;color:var(--dim);margin-top:5px}
+  .mark{font-size:14px;color:var(--warn);letter-spacing:1px}
+  .row-top{display:flex;align-items:baseline;gap:8px}
+  .dots{color:#4A443C;font-size:15px;letter-spacing:1px;padding-left:10px}
+
+  .cal{border-left:2px solid #4A423A;padding:8px 0 8px 13px;margin-bottom:22px}
+  .cal h4{font-size:12px;color:#9A8F80;font-weight:500}
+  .cal p{font-size:13px;color:#B0A79A;margin-top:6px;line-height:1.6}
+
+  .inline{display:flex;justify-content:space-between;align-items:center;padding:10px 0 18px}
+  .inline > span{font-size:13px;color:var(--dim)}
+  .chip{font-size:14px;color:var(--accent);font-variant-numeric:tabular-nums}
+
+  .block{
+    background:var(--card);border-radius:11px;padding:14px 15px;
+    margin-bottom:9px;display:flex;justify-content:space-between;align-items:center;
+  }
+  .block .t{font-size:15px}
+  .block .time{font-size:12px;color:var(--dim);margin-top:4px;font-variant-numeric:tabular-nums}
+  .block .note{font-size:12px;color:var(--dim);margin-top:6px;line-height:1.45}
+  .dur{font-size:13px;color:var(--accent);font-variant-numeric:tabular-nums}
+
+  /* a block that has already happened */
+  .past{background:transparent;border:1px solid var(--line)}
+  .past .t{color:var(--faint)}
+  .past .time{color:#544E46}
+  .askmiss{font-size:12px;color:var(--faint)}
+  .wasmissed{font-size:12px;color:var(--warn)}
+  .now{
+    display:flex;align-items:center;gap:10px;margin:4px 0 13px;
+  }
+  .now .dot{width:5px;height:5px;border-radius:50%;background:var(--accent)}
+  .now .ln{flex:1;height:1px;background:#2B3646}
+  .now .txt{font-size:10px;letter-spacing:.12em;color:var(--accent)}
+
+  .addblock{font-size:12px;color:var(--faint);padding-top:8px}
+  .ends{display:flex;justify-content:space-between;align-items:baseline;margin-top:26px;padding-bottom:20px}
+  .ends span{font-size:13px;color:var(--dim)}
+  .ends b{font-size:17px;font-weight:500;font-variant-numeric:tabular-nums}
+  .confirm{background:var(--accent);color:var(--bg);text-align:center;
+           padding:14px;border-radius:11px;font-size:14px;font-weight:600}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<div class="phone">
+  <div class="section">
+    <div class="label">Things <span class="act">+ Add</span></div>
+    <div class="row">
+      <div class="row-top"><div class="title">UF application</div><div class="mark">!!!</div><div class="dots">···</div></div>
+      <div class="meta">project &middot; due in 6 days &middot; a few days</div>
+    </div>
+    <div class="row">
+      <div class="row-top"><div class="title">Reading</div><div class="dots">···</div></div>
+      <div class="meta">habit &middot; 11 days since scheduled</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="dayswitch">
+      <span class="opt on">Today</span><span class="sep">/</span><span class="opt">Tomorrow</span>
+      <span class="date">Mon 28 Jul</span>
+    </div>
+
+    <div class="cal">
+      <h4>On your calendar</h4>
+      <p>Dentist, 1:00 PM</p>
+    </div>
+
+    <div class="block past">
+      <div><div class="t">Reading</div><div class="time">08:00 &ndash; 09:00</div></div>
+      <div class="askmiss">didn't happen?</div>
+    </div>
+
+    <div class="block past">
+      <div><div class="t">Gym</div><div class="time">09:00 &ndash; 10:00</div></div>
+      <div class="wasmissed">missed</div>
+    </div>
+
+    <div class="now"><div class="dot"></div><div class="txt">NOW</div><div class="ln"></div></div>
+
+    <div class="block">
+      <div>
+        <div class="t">UF application</div>
+        <div class="time">11:00 &ndash; 13:00</div>
+        <div class="note">personal statement draft</div>
+      </div>
+      <div class="dur">2h</div>
+    </div>
+
+    <div class="addblock">+ Block</div>
+    <div class="ends"><span>Day ends</span><b>13:00</b></div>
+    <div class="confirm">Confirm</div>
+  </div>
+</div>
+<div class="caption">Today &mdash; past blocks locked, NOW marker</div>
+</div>
+
+<div class="wrap">
+<div class="phone">
+  <div class="section">
+    <div class="label">Things <span class="act">+ Add</span></div>
+    <div class="row">
+      <div class="row-top"><div class="title">UF application</div><div class="mark">!!!</div><div class="dots">···</div></div>
+      <div class="meta">project &middot; due in 6 days &middot; a few days</div>
+    </div>
+    <div class="row">
+      <div class="row-top"><div class="title">Reading</div><div class="dots">···</div></div>
+      <div class="meta">habit &middot; 11 days since scheduled</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="dayswitch">
+      <span class="opt">Today</span><span class="sep">/</span><span class="opt on">Tomorrow</span>
+      <span class="date">Tue 29 Jul</span>
+    </div>
+
+    <div class="cal">
+      <h4>On your calendar</h4>
+      <p>Cancel Paramount</p>
+    </div>
+
+    <div class="inline">
+      <span>Starts</span>
+      <div class="chip">08:00</div>
+    </div>
+
+    <div class="block">
+      <div><div class="t">Reading</div><div class="time">08:00 &ndash; 09:00</div></div>
+      <div class="dur">1h</div>
+    </div>
+
+    <div class="block">
+      <div>
+        <div class="t">UF application</div>
+        <div class="time">09:00 &ndash; 11:00</div>
+        <div class="note">finish the essay outline</div>
+      </div>
+      <div class="dur">2h</div>
+    </div>
+
+    <div class="addblock">+ Block</div>
+    <div class="ends"><span>Day ends</span><b>11:00</b></div>
+    <div class="confirm">Confirm</div>
+  </div>
+</div>
+<div class="caption">Tomorrow &mdash; nothing past, Starts control shown</div>
+</div>
+
+</body>
+</html>
