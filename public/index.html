@@ -489,6 +489,52 @@
         padding: 8px 15px;
       }
 
+      /* The wait before the first day is on screen.
+
+         The page's own background, so it is not a panel over the app but the
+         app not yet being there. One small dot, breathing.
+
+         Faint rather than the accent: blue is actionable here and there is
+         nothing to act on yet. A dot rather than a word because there is no
+         word this system would use — "Loading…" is the kind of sentence it
+         spends its whole design not saying. */
+      #booting {
+        position: fixed;
+        inset: 0;
+        background: var(--bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 50;
+        transition: opacity 160ms ease-out;
+      }
+      #booting span {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--faint);
+        animation: breathe 1100ms ease-in-out infinite;
+      }
+      #booting.done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      @keyframes breathe {
+        0%, 100% { opacity: 0.25; }
+        50% { opacity: 1; }
+      }
+      /* Stillness is the setting, not a lesser version of it: the dot sits at
+         full strength rather than pulsing. */
+      @media (prefers-reduced-motion: reduce) {
+        #booting span {
+          animation: none;
+          opacity: 1;
+        }
+        #booting {
+          transition: none;
+        }
+      }
+
       /* Where the past ends: a dot and a rule running out to the edge. It
          carried a word between them once, and the word kept having to be a
          claim about one side of the line or the other. */
@@ -752,6 +798,19 @@
   </head>
 
   <body>
+    <!--
+      Over the page until the first day is on screen.
+
+      Without it the static markup is what you land on: the switch with no date,
+      "Day ends —", an empty builder and an empty list. That is the real screen
+      with every value missing, which reads as a day that has nothing in it
+      rather than a day that has not arrived — and then it pops into place.
+
+      Covering it is honest about the wait instead of showing a wrong answer
+      during it.
+    -->
+    <div id="booting"><span></span></div>
+
     <main>
       <!-- 1. THE DAY -------------------------------------------------------- -->
       <!--
@@ -2451,7 +2510,29 @@
         await load();
       };
 
-      load();
+      /**
+       * Take the cover off, whatever happened.
+       *
+       * `finally`, not `then`. A load that fails leaves the page empty, which
+       * is a poor screen — but a cover that never lifts is a worse one, because
+       * it claims something is still coming. The empty screen at least says
+       * what it knows.
+       *
+       * Faded out, then taken out of the layout. Opacity alone would leave a
+       * fixed, full-screen element sitting over the app: inert while it keeps
+       * `pointer-events: none`, and one careless edit away from swallowing
+       * every tap on the page.
+       */
+      function uncover() {
+        const cover = $('booting');
+        if (!cover) return;
+        cover.classList.add('done');
+        setTimeout(() => {
+          cover.style.display = 'none';
+        }, 200);
+      }
+
+      load().finally(uncover);
     </script>
   </body>
 </html>

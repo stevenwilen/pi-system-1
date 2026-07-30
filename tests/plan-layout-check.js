@@ -242,6 +242,35 @@ console.log('\n7. the warn colour warns; it does not narrate');
     !/--warn/.test(rule('.running')));
 }
 
+console.log('\n7a. the wait before the first day is on screen');
+{
+  // Without it you land on the static markup: the switch with no date, "Day
+  // ends —", an empty builder and an empty list. That is the real screen with
+  // every value missing, which reads as a day with nothing in it rather than a
+  // day that has not arrived — and then it pops into place.
+  const cover = rule('#booting');
+  check('there is a cover', cover.length > 0);
+  check('it is the page, not a panel over it',
+    /background: var\(--bg\)/.test(cover), cover);
+  check('and it covers the whole page', /position: fixed/.test(cover) && /inset: 0/.test(cover));
+
+  const dot = rule('#booting span');
+  check('one small dot', /border-radius: 50%/.test(dot));
+  check('faint, not blue: there is nothing to act on yet',
+    /background: var\(--faint\)/.test(dot), dot);
+  check('and no word, because this system would not say "Loading"',
+    !/Loading|loading/.test(body));
+
+  check('it lifts when the load settles, not only when it succeeds',
+    /load\(\)\.finally\(uncover\)/.test(code));
+  check('and leaves the layout rather than sitting invisible over it',
+    /style\.display = 'none'/.test(code));
+
+  // Motion is the default, stillness is the setting — not a lesser version.
+  check('reduced motion stops the pulse',
+    /prefers-reduced-motion[\s\S]{0,200}#booting span \{\s*animation: none/.test(css));
+}
+
 console.log('\n7b. the right edge of a block says one thing per state');
 {
   // Three states, and only one of them puts anything here now. Upcoming gets

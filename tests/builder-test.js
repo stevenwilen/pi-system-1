@@ -71,11 +71,31 @@ class El {
 }
 
 const html = fs.readFileSync(ROOT + '/public/index.html', 'utf8');
-// Strip the boot calls so the harness controls when loading happens.
-const SCRIPT = html
-  .match(/<script>([\s\S]*?)<\/script>/)[1]
-  .replace(/^\s*load\(\);\s*$/m, '')
+
+// Strip the boot call so the harness controls when loading happens.
+//
+// AND CHECK THAT IT WORKED. The pattern used to be an exact `load();`, and the
+// day the page started saying `load().finally(uncover)` it quietly stopped
+// matching — so every boot ran the page's own load AND the one the case asked
+// for. Two loads race, `if (!today)` decides which of them fills the builder,
+// and cases began passing or failing on microtask ordering. It cost an
+// afternoon to find, because the symptom was an empty builder three suites
+// away from the change.
+//
+// Anything from `load(` to the end of that line, and a throw if there was
+// nothing there to remove.
+const rawScript = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+const SCRIPT = rawScript
+  .replace(/^\s*load\(\)[^\n]*$/m, '')
   .replace(/^\s*loadReview\(\);\s*$/m, '');
+
+if (SCRIPT === rawScript) {
+  throw new Error(
+    'the harness could not find the page\'s boot call to strip. Every boot would ' +
+    'run a second, racing load. Update the pattern above to match how index.html ' +
+    'now starts itself.'
+  );
+}
 
 const ENTRIES = {
   today: '2026-07-27',
@@ -119,7 +139,7 @@ function atClock(hhmm) {
 /** Builds a fresh script instance with its own DOM. */
 function boot({
   calendar = [], plan = null, failed = [], reduced = false,
-  entries = null, now = null,
+  entries = null, now = null, failEntries = false,
 } = {}) {
   // Frozen by default, not just when a case asks.
   //
@@ -207,6 +227,7 @@ function boot({
       return {
         ok: true,
         json: async () => {
+          if (url === '/entries' && failEntries) throw new Error('offline');
           if (url.startsWith('/calendar')) return { items: calendar, failed };
           if (url.startsWith('/plan/')) return planFor(url);
           if (url === '/plan') return { date: 'x', blocks: 0, status: 'confirmed', ids: [] };
@@ -296,6 +317,33 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
 
     check('the end time follows', byId['end-time'].textContent === '9:00 AM',
       byId['end-time'].textContent);
+  }
+
+  console.log('\nthe cover comes off once the day is on screen');
+  {
+    const { ctx, byId } = boot();
+    check('it is over the page before anything loads', !byId.booting._class.has('done'));
+
+    await ctx.load();
+    ctx.uncover();
+    check('and lifts once the day is there', byId.booting._class.has('done'));
+
+    // Faded, then taken out of the layout. Opacity alone leaves a fixed
+    // full-screen element sitting over the app.
+    await wait(260);
+    check('then it stops occupying the page', byId.booting.style.display === 'none',
+      JSON.stringify(byId.booting.style));
+  }
+
+  console.log('\nand comes off even when the load fails');
+  {
+    // A cover that never lifts claims something is still coming. The empty
+    // screen at least says what it knows.
+    const { ctx, byId } = boot({ failEntries: true });
+    await ctx.load();
+    ctx.uncover();
+    check('the load gave up', true);
+    check('and the cover still lifted', byId.booting._class.has('done'));
   }
 
   console.log('\nan odd length from an older grid is pulled back onto it');
