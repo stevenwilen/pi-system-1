@@ -14,26 +14,25 @@ const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 // Telegram's HTML mode is used instead of MarkdownV2, which rejects
 // unescaped '.', '-', '(', ')' and '!' — characters every schedule is full of.
 //
-// Escape all three HTML-special characters first, then put back only the tags
-// this system is allowed to use. A stray '<' in ordinary prose therefore
+// Escape all three HTML-special characters first, then put back only the two
+// tags this system is allowed to use. A stray '<' in ordinary prose therefore
 // renders literally instead of breaking the whole message.
 //
-// `pre` joined `b` and `i` for the schedule sent at confirm time, which is a
-// list of times against titles. Telegram renders in a proportional font, so
-// spaces do not line anything up; a monospace block is the only way the times
-// form a real column rather than an approximate one.
+// `pre` was on this list briefly, for a schedule message that used a monospace
+// block to line its times into a column. That message is plain text now, so
+// the tag came back off: an allowlist that grants more than anything asks for
+// is the kind of thing nobody removes later.
 //
-// This is an allowlist and it has the allowlist's known consequence: a title
-// containing the literal text "<b>" comes out bold, and one containing
-// "</pre>" closes the block early. That has always been true of b and i, and
-// the failure is soft — Telegram rejects unbalanced tags, and the caller below
-// resends the same text with no parse_mode at all.
+// It is an allowlist and it has the allowlist's known consequence — a title
+// containing the literal text "<b>" comes out bold. The failure is soft:
+// Telegram rejects unbalanced tags, and the caller below resends the same text
+// with no parse_mode at all.
 function toTelegramHtml(text) {
   return String(text)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/&lt;(\/?)(b|i|pre)&gt;/g, '<$1$2>');
+    .replace(/&lt;(\/?)(b|i)&gt;/g, '<$1$2>');
 }
 
 async function post(chat_id, text, parse_mode) {

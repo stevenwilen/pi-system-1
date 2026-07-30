@@ -215,6 +215,35 @@ nothing on the page ever called it.
 Delete is last and is the only one in the warn colour. Between two ordinary
 actions it is a misclick waiting to happen.
 
+#### Done and Delete offer an undo, and write nothing until it lapses
+
+Both take the row off the list at once and show **Done · Undo** or
+**Deleted · Undo** for six seconds, the same bar the block swipes use. **Delete
+no longer asks first** — the undo replaces the confirm, and is the better of the
+two for the same reason it is on the swipes: a confirm interrupts every delete to
+catch the rare wrong one, the undo interrupts none of them and still catches it.
+
+**The write waits for the window to close.** This is forced rather than chosen.
+`status = 'deleted'` is a tombstone (§2.2) and `update_entry` refuses to revive
+one as anything, so there is no request that reverses a Delete — the only way for
+undo to restore *the same row* is for nothing to have happened to it yet. Undo
+does not reverse the write; it cancels it.
+
+Done goes the same way even though `done` → `active` would in fact be allowed.
+One mechanism, because two would differ only in ways nobody could see, and an
+invisible difference is the kind that rots.
+
+Three consequences, all of them deliberate:
+
+- **A second action commits the first.** Deleting two things in a row deletes
+  both; the bar can only ever describe one of them.
+- **Leaving the page commits.** A `pagehide` listener settles the offer, with
+  `keepalive` on the request so it survives the page going away. Without it,
+  deleting something and closing the tab would leave the row on the list.
+- **For six seconds the screen and the database disagree.** A reload inside the
+  window brings the row back. That is the price of the undo restoring the same
+  row rather than a new one.
+
 #### Adding and editing
 
 `+ Add` opens a sheet. **Edit** opens the same sheet with the row's values in
@@ -825,30 +854,24 @@ this is the other half, sent at the moment the day is agreed to.
 ```
 Today
 
-<pre>
- 9:30 AM  Morning routine
-11:30 AM  Automate mom's investment account
-12:00 PM  Eat
- 2:30 PM  Pack for trip
-</pre>
+9:30 AM — Morning routine
+11:30 AM — Automate mom's investment account
+12:00 PM — Eat
+2:30 PM — Pack for trip
 
 Ends 3:30 PM
 ```
 
-**Monospace, and not for decoration.** Telegram renders in a proportional font,
-where `9:30 AM` and `11:30 AM` are different widths and padded spaces line
-nothing up. A `<pre>` block is the only way the times form a real column rather
-than an approximate one. It costs the code-block surface Telegram draws around
-it — grey background, smaller type — which is the trade.
+**Plain text, and no markup at all.** It was a monospace `<pre>` block first, for
+the one thing monospace buys: Telegram renders in a proportional font, so
+`9:30 AM` and `11:30 AM` are different widths and padded spaces align nothing. A
+real column needs a code block — and a code block is what it looked like, sitting
+in a chat on its own grey surface in a smaller face. The ragged left edge is the
+cheaper price. This is a message and it should read like the other messages.
 
-`pre` was added to the tag allowlist in `telegram.js` for this. That list escapes
-everything and restores a fixed few, and it has the allowlist's known
-consequence: a title containing `</pre>` closes the block early. That has always
-been true of `<b>`, and it fails soft — Telegram rejects unbalanced tags and the
-sender resends the same text with no `parse_mode` at all.
-
-The **header and the closing time sit outside the block**, as ordinary text. They
-are prose, not table.
+`pre` was on the tag allowlist in `telegram.js` while that lasted, and **came
+back off with it**. An allowlist that grants more than anything asks for is the
+kind of thing nobody removes later.
 
 **Start times only.** Each block's end is the next one's start, so carrying both
 would say everything twice. The one end that is not implied is the day's, and

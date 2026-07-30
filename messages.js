@@ -93,18 +93,21 @@ function blocksStillToCome(rows, now) {
  * of them shows the shape of the day. This is the other half: what is coming,
  * in one place, at the moment it is agreed to.
  *
- * A `<pre>` block, so the times are a real column. Telegram renders in a
- * proportional font, where padded spaces line nothing up — "9:30 AM" and
- * "11:30 AM" are different widths, and without monospace the titles start at a
- * ragged edge. The times are right-aligned inside it, so a single-digit hour
- * indents by one and the colons stack.
+ * Ordinary message text, one line per block, a dash between the time and the
+ * title. Nothing lines up into a column and nothing pretends to.
  *
- * The header and the closing time sit OUTSIDE the block, as ordinary text.
- * They are prose, not table, and Telegram draws a `<pre>` on its own surface.
+ * IT WAS A `<pre>` BLOCK FIRST, for the one thing monospace buys: Telegram
+ * renders in a proportional font, so "9:30 AM" and "11:30 AM" are different
+ * widths and padded spaces align nothing. A real column needed a code block —
+ * and a code block is what it looked like, sitting in a chat on its own grey
+ * surface in a smaller face. A ragged left edge is the cheaper price. This is
+ * a message, and it should read like the other messages.
  *
  * Only start times. Each block's end is the next one's start, so saying both
  * would be saying everything twice; the one end that is not implied is the
  * day's, and that is the last line.
+ *
+ * No tags at all now, so nothing here depends on the escaping allowlist.
  *
  * Returns null when there is nothing left to say — a day already over sends no
  * message rather than a header with no lines under it.
@@ -112,15 +115,14 @@ function blocksStillToCome(rows, now) {
 function composeSchedule(blocks, label) {
   if (!blocks || !blocks.length) return null;
 
-  const starts = blocks.map((b) => clock(toMinutes(b.start_time)));
-  const width = Math.max(...starts.map((s) => s.length));
-
-  const lines = blocks.map((b, i) => `${starts[i].padStart(width)}  ${b.title}`);
+  const lines = blocks.map(
+    (b) => `${clock(toMinutes(b.start_time))} — ${b.title}`
+  );
   const ends = Math.max(
     ...blocks.map((b) => toMinutes(b.start_time) + b.duration_minutes)
   );
 
-  return `${label}\n\n<pre>\n${lines.join('\n')}\n</pre>\n\nEnds ${clock(ends)}`;
+  return `${label}\n\n${lines.join('\n')}\n\nEnds ${clock(ends)}`;
 }
 
 module.exports = { composeMessage, composeSchedule, blocksStillToCome };

@@ -140,11 +140,24 @@ function boot({
   const listeners = [];
 
   // A page that can be scrolled out from under a drag.
-  const win = { scrollY: 0 };
+  // Page-level listeners, kept so a case can fire one. `pagehide` is the hook
+  // that makes a deferred write survive a closed tab, and a stub without
+  // addEventListener would have the page throw on load rather than fail the
+  // case that cares.
+  const winListeners = [];
+  const win = {
+    scrollY: 0,
+    addEventListener: (type, fn) => winListeners.push({ type, fn }),
+    fire: (type) => winListeners.filter((l) => l.type === type).forEach((l) => l.fn()),
+  };
 
   // Every request that carried a body, so a case can read what the page sent
   // rather than infer it from what the page shows.
   const posted = [];
+
+  // Every confirm() the page raised. Delete used to ask before removing a
+  // thing; the undo replaced that, and this is how a case proves it.
+  const confirmed = [];
 
   // A plan per date, so a case can hand back different days and the switch
   // has something to switch between.
@@ -159,10 +172,27 @@ function boot({
     console, setTimeout, clearTimeout, Intl, Math, JSON,
     Date: clock,
     String, Number, Boolean, Array, Object,
-    alert: () => {}, confirm: () => true, prompt: () => 'Typed block',
+    alert: () => {},
+    // Recorded rather than merely answered, so a case can assert that Delete
+    // stopped asking.
+    confirm: (q) => {
+      confirmed.push(q);
+      return true;
+    },
+    prompt: () => 'Typed block',
     window: win,
     fetch: async (url, opts) => {
-      if (opts && opts.body) posted.push({ url, body: JSON.parse(opts.body) });
+      // Every POST, with or without a body: Done and Delete carry none, and a
+      // case has to be able to see that they went out at all. `keepalive`
+      // travels with it, because a write that has to survive the page closing
+      // is only doing its job if it is set.
+      if (opts && opts.method === 'POST') {
+        posted.push({
+          url,
+          body: opts.body ? JSON.parse(opts.body) : null,
+          keepalive: Boolean(opts.keepalive),
+        });
+      }
       return {
         ok: true,
         json: async () => {
@@ -211,7 +241,7 @@ function boot({
 
   return {
     ctx, byId, slots, cardOf, backingOf, rowOf, chipOf, noteOf, editorOf,
-    titleOf, titles, listeners, touchmoves, win, posted,
+    titleOf, titles, listeners, touchmoves, win, posted, confirmed,
     // Wind the frozen clock on without re-rendering, the way a page left
     // open on a phone experiences time passing.
     setClock: (hhmm) => clock.moveTo && clock.moveTo(hhmm),
@@ -231,6 +261,7 @@ const up = (card, x = 0, y = 0) =>
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const HELD = 460; // past HOLD_MS
 const SETTLED = 220; // past SETTLE_MS
+const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
 
 (async () => {
   console.log('duration: tap the chip to cycle');
@@ -1630,6 +1661,131 @@ const SETTLED = 220; // past SETTLE_MS
     const hint = row.children[0].children.find((c) => c._class.has('hint'));
     hint.onclick({ stopPropagation() {} });
     check('and the hint still opens it', !acts._class.has('hidden'));
+  }
+
+  console.log('\nDone and Delete offer an undo, and write nothing until it lapses');
+  {
+    // Built fresh per boot. The page holds the array the fetch stub handed it
+    // and splices that array, so one shared fixture would be emptied by the
+    // first case and every later one would start short. A real fetch parses
+    // new JSON each time; the stub does not.
+    const items = () => [
+      { id: 'e-a', type: 'task', title: 'Alpha', days: 1, mark: null, due: null, size: null, last_scheduled: null },
+      { id: 'e-b', type: 'task', title: 'Beta', days: 2, mark: null, due: null, size: null, last_scheduled: null },
+      { id: 'e-c', type: 'habit', title: 'Gamma', days: 3, mark: null, due: null, size: null, last_scheduled: null },
+    ];
+    const fresh = () => boot({
+      entries: utcEntries({ plans_in: 'morning', items: items() }), now: '11:00',
+    });
+
+    const rowsIn = (byId) => byId.things.children.filter((c) => c._class.has('row'));
+    const namesIn = (byId) =>
+      rowsIn(byId).map((r) => r.children[0].children[0].textContent).join();
+    const menuOf = (row) => row.children.find((c) => c._class.has('rowacts'));
+    const press = (row, word) => {
+      const b = menuOf(row).children.find((c) => c.textContent === word);
+      b.onclick({ stopPropagation() {} });
+    };
+    const undoBar = (byId) => byId['undo-host'].children[0];
+
+    {
+      // DELETE, undone. Nothing may have been written, because a delete cannot
+      // be reversed: status='deleted' is a tombstone the server will not revive.
+      const { ctx, byId, posted } = fresh();
+      await ctx.load();
+      posted.length = 0;
+
+      press(rowsIn(byId)[1], 'Delete');
+      check('the row goes at once', namesIn(byId) === 'Alpha,Gamma', namesIn(byId));
+      check('and the bar says what happened',
+        undoBar(byId).text().includes('Deleted'), undoBar(byId).text());
+      check('but NOTHING was posted yet', posted.length === 0,
+        JSON.stringify(posted.map((p) => p.url)));
+
+      undoBar(byId).children.find((c) => c.textContent === 'Undo').onclick();
+      check('undo puts it back where it was', namesIn(byId) === 'Alpha,Beta,Gamma',
+        namesIn(byId));
+      check('and still nothing was posted', posted.length === 0,
+        JSON.stringify(posted.map((p) => p.url)));
+      check('the bar is gone', byId['undo-host'].children.length === 0);
+    }
+
+    {
+      // DELETE, left alone. The write happens when the offer lapses.
+      const { ctx, byId, posted } = fresh();
+      await ctx.load();
+      posted.length = 0;
+
+      press(rowsIn(byId)[1], 'Delete');
+      await wait(UNDO_LAPSED);
+      check('the write lands after the window', posted.length === 1,
+        JSON.stringify(posted.map((p) => p.url)));
+      check('on the delete route, for that row',
+        posted[0] && posted[0].url === '/entries/e-b/delete', posted[0] && posted[0].url);
+      check('and the row stays gone', namesIn(byId) === 'Alpha,Gamma', namesIn(byId));
+      check('with the bar cleared', byId['undo-host'].children.length === 0);
+    }
+
+    {
+      // DONE, the same machinery.
+      const { ctx, byId, posted } = fresh();
+      await ctx.load();
+      posted.length = 0;
+
+      press(rowsIn(byId)[0], 'Done');
+      check('it says Done, not Deleted', undoBar(byId).text().includes('Done'),
+        undoBar(byId).text());
+      check('nothing posted yet', posted.length === 0);
+
+      await wait(UNDO_LAPSED);
+      check('then it posts to done', posted.length === 1 && posted[0].url === '/entries/e-a/done',
+        JSON.stringify(posted.map((p) => p.url)));
+    }
+
+    {
+      // A second action commits the first. Two deletes in a row must delete
+      // both, and one bar cannot describe two rows.
+      const { ctx, byId, posted } = fresh();
+      await ctx.load();
+      posted.length = 0;
+
+      press(rowsIn(byId)[0], 'Delete');
+      press(rowsIn(byId)[0], 'Delete');
+      check('the first is written when the second arrives',
+        posted.length === 1 && posted[0].url === '/entries/e-a/delete',
+        JSON.stringify(posted.map((p) => p.url)));
+      check('and both rows are off the list', namesIn(byId) === 'Gamma', namesIn(byId));
+
+      await wait(UNDO_LAPSED);
+      check('then the second is written too', posted.length === 2,
+        JSON.stringify(posted.map((p) => p.url)));
+      check('undoing now would be too late for either',
+        byId['undo-host'].children.length === 0);
+    }
+
+    {
+      // A closed tab inside the window still means it.
+      const { ctx, byId, posted, win } = fresh();
+      await ctx.load();
+      posted.length = 0;
+
+      press(rowsIn(byId)[0], 'Delete');
+      check('nothing posted while the offer stands', posted.length === 0);
+
+      win.fire('pagehide');
+      check('leaving the page writes it', posted.length === 1,
+        JSON.stringify(posted.map((p) => p.url)));
+      check('and it keeps the request alive past the page',
+        posted[0] && posted[0].keepalive === true, JSON.stringify(posted[0]));
+    }
+
+    {
+      // Delete no longer asks first — the undo replaces the confirm.
+      const { ctx, byId, confirmed } = fresh();
+      await ctx.load();
+      press(rowsIn(byId)[1], 'Delete');
+      check('nothing was confirmed', confirmed.length === 0, JSON.stringify(confirmed));
+    }
   }
 
   console.log(bad === 0 ? '\nBuilder clean' : `\n${bad} FAILURE(S)`);

@@ -399,7 +399,7 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
   check('the backing names the direction, and only that',
     /'Remove'/.test(code) && /'Note'/.test(code) &&
       !/didn't happen"/.test(code) && !/'happened'/.test(code));
-  check('removal offers an undo rather than a confirm', /offerUndo\(gone, i\)/.test(code));
+  check('removal offers an undo rather than a confirm', /offerUndo\('Removed'/.test(code));
   check('and nothing asks first', !/confirm\(`Remove/.test(code));
 
   // The clamp survives the simplification, pointing the other way. It used to

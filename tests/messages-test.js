@@ -153,30 +153,29 @@ const made = [];
     const lines = text.split('\n');
 
     check('the label is the first line', lines[0] === 'Today', lines[0]);
-    check('and stands outside the block, as prose', !/<pre>/.test(lines[0]));
 
-    // The whole point of the monospace block: Telegram's font is proportional,
-    // so "9:30 AM" and "11:30 AM" are different widths and padded spaces line
-    // nothing up. Inside <pre> they do.
-    check('the list is wrapped in pre', /<pre>\n/.test(text) && /\n<\/pre>/.test(text));
+    // PLAIN TEXT. This was a monospace <pre> block first, which lined the times
+    // into a real column — and read as a code block sitting in a chat, on its
+    // own grey surface in a smaller face. A ragged left edge is the cheaper
+    // price for a message that looks like the other messages.
+    check('there is no markup at all', !/[<>]/.test(text), text);
+    check('so it needs nothing from the escaping allowlist',
+      !/<pre>|<b>|<i>/.test(text));
 
-    const body = text.slice(text.indexOf('<pre>') + 6, text.indexOf('</pre>') - 1).split('\n');
+    const body = lines.slice(2, 6);
     check('one line per block', body.length === 4, `${body.length}`);
-    check('the times are right-aligned into a column',
-      body.every((l) => l.indexOf(':') === body[0].indexOf(':')),
-      JSON.stringify(body.map((l) => l.indexOf(':'))));
-    check('a single-digit hour is padded, not shifted',
-      body[0].startsWith(' 9:30 AM') && body[1].startsWith('11:30 AM'),
-      JSON.stringify(body.slice(0, 2)));
-    check('and the title follows the time', /9:30 AM {2}Morning routine$/.test(body[0]), body[0]);
+    check('each is a time, a dash, and the title',
+      body.every((l) => / — /.test(l)), JSON.stringify(body));
+    check('the first reads as written', body[0] === '9:30 AM — Morning routine', body[0]);
+    check('and nothing is padded to fake a column',
+      !body.some((l) => /^\s/.test(l)), JSON.stringify(body));
 
     // Start times only. Each end is the next start, and the one end that is
     // not implied is the day's.
-    check('no line carries an end time', !body.some((l) => /\bto\b|–/.test(l)),
+    check('no line carries an end time', !body.some((l) => /\bto\b/.test(l)),
       JSON.stringify(body));
     check('the last line is the day ending', lines[lines.length - 1] === 'Ends 3:30 PM',
       lines[lines.length - 1]);
-    check('and it is outside the block too', text.indexOf('</pre>') < text.indexOf('Ends'));
 
     // Nothing left to say.
     check('an empty day composes nothing', m.composeSchedule([], 'Today') === null);
@@ -186,7 +185,7 @@ const made = [];
     console.log('    ' + text.replace(/\n/g, '\n    ') + '\n');
   }
 
-  console.log('\nthe schedule survives escaping, and a title does not');
+  console.log('\nthe escaping allowlist is only as wide as something asks for');
   {
     const { toTelegramHtml } = require(ROOT + '/telegram.js');
 
@@ -196,16 +195,20 @@ const made = [];
     );
     const out = toTelegramHtml(text);
 
-    check('the pre tags come through as tags',
-      /<pre>/.test(out) && /<\/pre>/.test(out), out);
-    check('but a title\'s angle brackets are escaped',
+    check('a title\'s angle brackets are escaped',
       /&lt;Dune&gt;/.test(out) && !/<Dune>/.test(out), out);
     check('and its ampersand too', /&amp;/.test(out), out);
 
-    // The allowlist, stated. Anything not on it renders as text.
-    check('a tag that is not allowed stays text',
+    // `pre` was on the list while the schedule used a monospace block. The
+    // schedule is plain text now, so the tag came off — an allowlist granting
+    // more than anything asks for is the kind of thing nobody removes later.
+    check('pre is not restored, because nothing sends it',
+      toTelegramHtml('<pre>x</pre>') === '&lt;pre&gt;x&lt;/pre&gt;',
+      toTelegramHtml('<pre>x</pre>'));
+    check('nor is any other tag',
       /&lt;script&gt;/.test(toTelegramHtml('<script>')), toTelegramHtml('<script>'));
-    check('b and i still pass', toTelegramHtml('<b>x</b> <i>y</i>') === '<b>x</b> <i>y</i>',
+    check('b and i still pass, because block messages use them',
+      toTelegramHtml('<b>x</b> <i>y</i>') === '<b>x</b> <i>y</i>',
       toTelegramHtml('<b>x</b> <i>y</i>'));
   }
 

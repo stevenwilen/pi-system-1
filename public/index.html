@@ -1065,7 +1065,7 @@
        */
       async function showDay(which) {
         showing = which;
-        clearUndo();
+        settleUndo();
 
         const date = planDate();
         $('plan-date').textContent = prettyDate(date);
@@ -1213,7 +1213,8 @@
           done.textContent = 'Done';
           done.onclick = (e) => {
             e.stopPropagation();
-            finish(item.id);
+            acts.classList.add('hidden');
+            finish(item);
           };
           acts.append(done);
         }
@@ -1228,15 +1229,21 @@
         };
         acts.append(edit);
 
-        // Last, and the only one in the miss colour. Delete sitting between
+        // Last, and the only one in the warn colour. Delete sitting between
         // two ordinary actions is a misclick waiting to happen.
+        //
+        // It used to ask first. The undo replaces the confirm, and is the
+        // better of the two for the same reason it is on the block swipes: a
+        // confirm interrupts every delete to catch the rare wrong one, and the
+        // undo interrupts none of them and still catches it.
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'danger';
         del.textContent = 'Delete';
         del.onclick = (e) => {
           e.stopPropagation();
-          if (confirm(`Delete "${item.title}"?`)) remove(item.id);
+          acts.classList.add('hidden');
+          remove(item);
         };
         acts.append(del);
         row.append(acts);
@@ -1264,25 +1271,50 @@
         return row;
       }
 
-      async function finish(id) {
-        try {
-          await fetch(`/entries/${id}/done`, { method: 'POST' });
-        } catch {
-          return;
-        }
-        things = things.filter((t) => t.id !== id);
+      /**
+       * Off the list now, written when the offer to undo runs out.
+       *
+       * THE WRITE WAITS. Both of these used to post first and then take the row
+       * off the screen, which cannot be undone: `status = 'deleted'` is a
+       * tombstone and the server refuses to bring one back as anything, so
+       * there is no request that reverses a Delete. The only way for undo to
+       * restore the same row is for nothing to have happened to it yet.
+       *
+       * That is the cost, and it is worth naming: for six seconds the screen
+       * and the database disagree. A reload inside the window brings the row
+       * back, and the pagehide above is what stops a closed tab doing the same.
+       *
+       * Done goes the same way, though `done` → `active` would in fact be
+       * allowed. One mechanism, because two would differ only in ways nobody
+       * could see, and the invisible difference is the kind that rots.
+       */
+      function takeOff(item, what, path) {
+        const at = things.findIndex((t) => t.id === item.id);
+        if (at === -1) return;
+
+        things.splice(at, 1);
         renderThings();
+
+        offerUndo(
+          what,
+          () => {
+            // The same row, put back where it was. Nothing was written, so
+            // there is nothing to ask the server for.
+            things.splice(Math.min(at, things.length), 0, item);
+            renderThings();
+          },
+          () => {
+            fetch(`/entries/${item.id}${path}`, { method: 'POST', keepalive: true })
+              .catch(() => {
+                // The row is already off the screen. A failed write is
+                // corrected by the next load rather than by an alert.
+              });
+          }
+        );
       }
 
-      async function remove(id) {
-        try {
-          await fetch(`/entries/${id}/delete`, { method: 'POST' });
-        } catch {
-          return;
-        }
-        things = things.filter((t) => t.id !== id);
-        renderThings();
-      }
+      const finish = (item) => takeOff(item, 'Done', '/done');
+      const remove = (item) => takeOff(item, 'Deleted', '/delete');
 
       // --- 3. tomorrow ---------------------------------------------------------
 
@@ -1628,42 +1660,81 @@
         if (!gone) return;
         saved = false;
         renderBuilder();
-        offerUndo(gone, i);
+
+        // No commit. A block is not written until Confirm, so letting the
+        // offer lapse has nothing left to do.
+        offerUndo('Removed', () => {
+          // Back where it was, unless the day has since got shorter than that.
+          blocks.splice(Math.min(i, blocks.length), 0, gone);
+          saved = false;
+          renderBuilder();
+        });
       }
 
+      /**
+       * The offer on screen, and whatever it is still holding back.
+       *
+       * `commit` is the half that is new. A removed block is only in memory
+       * until Confirm, so its undo had nothing to finish — but Done and Delete
+       * on a thing are writes, and one of them cannot be taken back once made:
+       * `status = 'deleted'` is a tombstone the server refuses to revive.
+       *
+       * So the write does not happen while the offer stands. Undo does not
+       * reverse it; it cancels it, which is why the row that comes back is the
+       * same row rather than a new one carrying a new id.
+       */
       let undo = null;
 
-      function clearUndo() {
+      /** Let the offer go, doing the thing it was holding back. */
+      function settleUndo() {
+        if (!undo) return;
+        const { timer, commit } = undo;
+        clearTimeout(timer);
+        $('undo-host').replaceChildren();
+        undo = null;
+        if (commit) commit();
+      }
+
+      /** Let it go without doing that. Only the Undo button gets to. */
+      function cancelUndo() {
         if (!undo) return;
         clearTimeout(undo.timer);
         $('undo-host').replaceChildren();
         undo = null;
       }
 
-      function offerUndo(block, index) {
-        clearUndo();
+      function offerUndo(what, restore, commit = null) {
+        // A second action commits the first rather than discarding it. Deleting
+        // two things in a row must delete both, and the offer can only ever
+        // describe one of them.
+        settleUndo();
 
         const bar = document.createElement('div');
         bar.className = 'undo';
 
         const label = document.createElement('span');
-        label.textContent = 'Removed ·';
+        label.textContent = `${what} ·`;
 
         const button = document.createElement('button');
         button.type = 'button';
         button.textContent = 'Undo';
         button.onclick = () => {
-          // Back where it was, unless the day has since got shorter than that.
-          blocks.splice(Math.min(index, blocks.length), 0, block);
-          saved = false;
-          clearUndo();
-          renderBuilder();
+          cancelUndo();
+          restore();
         };
 
         bar.append(label, button);
         $('undo-host').replaceChildren(bar);
-        undo = { timer: setTimeout(clearUndo, UNDO_MS) };
+        undo = { timer: setTimeout(settleUndo, UNDO_MS), commit };
       }
+
+      // A tab closed inside the window still means it. Without this, swiping
+      // Delete and immediately shutting the phone would leave the row on the
+      // list — the screen said it was gone and nothing had been written.
+      //
+      // keepalive, because the page is going away and an ordinary fetch would
+      // be cancelled with it.
+      window.addEventListener('pagehide', settleUndo);
 
       // --- one pointer, one gesture -------------------------------------------
       //
@@ -2201,7 +2272,7 @@
         // A pending undo would put back a block holding the id of a row this
         // confirm has just deleted, and the next confirm would be refused for
         // naming an id the plan does not have.
-        clearUndo();
+        settleUndo();
 
         setSaved(true);
       };

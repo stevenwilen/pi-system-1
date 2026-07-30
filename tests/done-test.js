@@ -223,8 +223,15 @@ async function cleanup() {
     const fs = require('fs');
     const html = fs.readFileSync(ROOT + '/public/index.html', 'utf8');
     check('only on a task', /item\.type === 'task'/.test(html));
-    check('and it posts to the done route', /entries\/\$\{id\}\/done/.test(html));
-    check('Delete still asks first', /confirm\(`Delete/.test(html));
+    check('and it posts to the done route', /entries\/\$\{item\.id\}\$\{path\}/.test(html));
+    check('which Done names', /takeOff\(item, 'Done', '\/done'\)/.test(html));
+
+    // Delete used to ask first. The undo replaced the confirm — it interrupts
+    // no deletes at all and still catches the wrong one.
+    check('Delete no longer asks first', !/confirm\(`Delete/.test(html));
+    check('it offers an undo instead', /takeOff\(item, 'Deleted', '\/delete'\)/.test(html));
+    check('and the write waits for the offer to lapse',
+      /offerUndo\([\s\S]{0,400}fetch\(`\/entries\/\$\{item\.id\}\$\{path\}`/.test(html));
   }
 
   console.log('\ncleanup');
