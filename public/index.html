@@ -745,17 +745,17 @@
 
   <body>
     <main>
-      <!-- 1. THINGS --------------------------------------------------------- -->
+      <!-- 1. THE DAY -------------------------------------------------------- -->
+      <!--
+        First on the screen, because it is what the screen is opened to look at.
+        Things came first for as long as this was a page you read before you
+        planned: the cold list argued for what tomorrow should hold, and the
+        builder was where you answered it. Once a day is confirmed that reverses
+        — the answer is the thing worth seeing, and the list is where you go
+        when you want to add to it. Scrolling past the whole list to check what
+        is next is a toll paid every time to save one that was paid once.
+      -->
       <section class="section">
-        <div class="label">
-          Things
-          <button type="button" class="act" id="add-open">+ Add</button>
-        </div>
-        <div id="things"></div>
-      </section>
-
-      <!-- 2. THE DAY -------------------------------------------------------- -->
-      <section>
         <!-- The switch is the label. No new control: the heading that said
              which day this was now says which day you are looking at, and
              either word can be pressed. -->
@@ -794,6 +794,15 @@
         </div>
 
         <button type="button" class="confirm" id="confirm">Confirm</button>
+      </section>
+
+      <!-- 2. THINGS --------------------------------------------------------- -->
+      <section>
+        <div class="label">
+          Things
+          <button type="button" class="act" id="add-open">+ Add</button>
+        </div>
+        <div id="things"></div>
       </section>
     </main>
 

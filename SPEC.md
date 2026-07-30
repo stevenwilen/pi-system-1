@@ -19,8 +19,8 @@ So the system's core move is to make the user **read instead of remember**.
 
 One screen, opened once a day. Two sections, top to bottom:
 
-1. **Things** — habits, projects and tasks in one list, coldest first.
-2. **The day** — the builder, showing today or tomorrow.
+1. **The day** — the builder, showing today or tomorrow.
+2. **Things** — habits, projects and tasks in one list, coldest first.
 
 Behind it: a Postgres notebook (Supabase), two read-only calendar feeds, and a
 Telegram bot that only ever sends.
@@ -163,6 +163,16 @@ Nothing about how the system behaves lives outside the database.
 ---
 
 ## 3. The screen
+
+**The day is first, Things second.** Things led while this was a page you read
+*before* you planned: the cold list argued for what tomorrow should hold, and the
+builder was where you answered it. Once a day is confirmed that reverses — the
+answer is what you open the page to see, and the list is where you go when you
+want to add to it. Scrolling past the whole list to check what is next is a toll
+paid every time to save one that was paid once.
+
+The two sections are written up below in the order they were built, which is no
+longer the order they appear in. The screen is the authority; this is a document.
 
 ### 3.1 Things
 

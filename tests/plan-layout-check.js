@@ -24,9 +24,16 @@ const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 // The markup alone. The <script> lives inside <body>, so slicing to </body>
 // and calling it markup meant every "gone from the markup" check was really
 // reading the script as well — and passing or failing for the wrong reason.
+//
+// HTML comments go too, for the same reason the script's comments do below:
+// several checks assert that a removed feature is not mentioned, and the
+// markup explains at length which features were removed and why. A comment
+// saying the cold list used to sit here would fail the check that says the
+// cold list is gone.
 const body = html
   .slice(html.indexOf('<body>'), html.indexOf('</body>'))
-  .replace(/<script>[\s\S]*?<\/script>/, '');
+  .replace(/<script>[\s\S]*?<\/script>/, '')
+  .replace(/<!--[\s\S]*?-->/g, '');
 
 // The script with its comments stripped. Several checks below assert that a
 // removed feature is not mentioned, and this file explains at length which
@@ -131,7 +138,13 @@ console.log('\n4. sections are separated by space, not by boxes');
   // now, on today's own blocks as they pass.
   check('two sections, and only two', (body.match(/<section/g) || []).length === 2,
     String((body.match(/<section/g) || []).length));
-  check('things is first', body.indexOf('Things') < body.indexOf('dayswitch'));
+  // THE DAY IS FIRST. Things led for as long as this was a page you read
+  // before you planned — the list argued for what tomorrow should hold and the
+  // builder was where you answered. Once a day is confirmed that reverses: the
+  // answer is what you open the page to see, and scrolling the whole list to
+  // reach it is a toll paid every time to save one that was paid once.
+  check('the day is first', body.indexOf('dayswitch') < body.indexOf('Things'),
+    `dayswitch at ${body.indexOf('dayswitch')}, Things at ${body.indexOf('Things')}`);
   check('and there is no Yesterday', !/Yesterday/.test(body));
 }
 
@@ -333,8 +346,12 @@ console.log('\n12. the add form asks for exactly the five fields');
   }
 
   check('it is a sheet', /class="sheet"/.test(body));
-  check('opened from the Things label', /id="add-open"/.test(body) &&
-    body.indexOf('add-open') < body.indexOf('Tomorrow'));
+  // Inside the Things label, rather than merely before the day switch. It was
+  // the second of those, which was a proxy for the first and stopped being one
+  // the moment the day moved above Things on the screen.
+  const thingsLabel = body.slice(body.indexOf('Things'), body.indexOf('</div>', body.indexOf('Things')));
+  check('opened from the Things label',
+    /id="add-open"/.test(body) && /id="add-open"/.test(thingsLabel), thingsLabel.trim());
 }
 
 console.log('\n13. a row says it has more actions, rather than hiding them');
