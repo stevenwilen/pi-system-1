@@ -294,6 +294,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const HELD = 460; // past HOLD_MS
 const SETTLED = 220; // past SETTLE_MS
 const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
+const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
 (async () => {
   console.log('duration: tap the chip to cycle');
@@ -317,6 +318,25 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
 
     check('the end time follows', byId['end-time'].textContent === '9:00 AM',
       byId['end-time'].textContent);
+  }
+
+  console.log('\nreduced motion removes without the close');
+  {
+    // Stillness is the setting, not a slower version of the same thing: the
+    // block goes on release, with no gap to watch shut.
+    const { ctx, slots, cardOf, titles } = boot({ reduced: true });
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+
+    const card = cardOf(slots()[0]);
+    down(card, 200, 100);
+    move(card, 100, 100);
+    up(card, 100, 100);
+
+    check('it is gone at once, with nothing to wait for',
+      titles().join() === 'B', titles().join());
+    check('and nothing was left collapsing', slots().length === 1, String(slots().length));
   }
 
   console.log('\nan empty day still takes a day\'s worth of room');
@@ -463,6 +483,16 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
 
     move(card, 110, 100); // -90, past the 72 threshold
     up(card, 110, 100);
+
+    // The block goes at once; the day takes a moment to close over it, and the
+    // splice waits for that. So the removal is asynchronous now and a case has
+    // to let it finish.
+    check('the card is hidden the instant it is released',
+      cardOf(slots()[0]).style.visibility === 'hidden', cardOf(slots()[0]).style.visibility);
+    check('and its slot is collapsing', slots()[0].style.height === '0px',
+      slots()[0].style.height);
+
+    await wait(CLOSED);
 
     check('it is gone', slots().length === 1, `${slots().length}`);
     check('and the one below moved up', titleOf(slots()[0]) === 'B', titleOf(slots()[0]));
@@ -905,6 +935,7 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
     down(c2, 200, 100);
     move(c2, 100, 100);
     up(c2, 100, 100);
+    await wait(CLOSED);
     chip2.onclick();
     check('a swipe does not also cycle a duration', slots().length === 1, `${slots().length}`);
   }
@@ -1216,6 +1247,7 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
 
     move(card, 100, 100);
     up(card, 100, 100);
+    await wait(CLOSED);
     check('and it goes', titles().join() === 'Gym,UF application', titles().join());
   }
 
@@ -1335,6 +1367,7 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
     check('and its row is greyed', rowFor('Spanish')._class.has('locked'));
 
     rowFor('Spanish').onclick();
+    await wait(CLOSED);
     check('tapping it removes the block', titles().join() === '', `"${titles().join()}"`);
     check('and the row comes back to normal', !rowFor('Spanish')._class.has('locked'));
     check('undoably, like any other removal', byId['undo-host'].children.length === 1);
@@ -1351,6 +1384,7 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
     check('a tap on a free row puts it in',
       titles().join() === 'Spanish,Return the router', titles().join());
     rowFor('Return the router').onclick();
+    await wait(CLOSED);
     check('and the next tap takes it straight back out',
       titles().join() === 'Spanish', titles().join());
   }
@@ -1387,12 +1421,14 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
     check('the row is greyed', rowFor('UF application')._class.has('locked'));
 
     rowFor('UF application').onclick();
+    await wait(CLOSED);
     check('one tap takes the last of them',
       titles().join() === 'UF application,Email', titles().join());
     check('and the row stays greyed while one remains',
       rowFor('UF application')._class.has('locked'));
 
     rowFor('UF application').onclick();
+    await wait(CLOSED);
     check('the next tap takes the other', titles().join() === 'Email', titles().join());
     check('and now the row is free', !rowFor('UF application')._class.has('locked'));
   }
@@ -1420,12 +1456,14 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
     // remove a block whose message had gone out; it no longer does, so the row
     // no longer pretends otherwise.
     rowFor('Reading').onclick();
+    await wait(CLOSED);
     check('the one that is over comes out too', titles().join() === 'Gym,UF application',
       titles().join());
     check('and its row frees up', !rowFor('Reading')._class.has('locked'));
     check('with an undo, like any other removal', byId['undo-host'].children.length > 0);
 
     rowFor('UF application').onclick();
+    await wait(CLOSED);
     check('and so does the one still to come', titles().join() === 'Gym', titles().join());
     check('its row frees up as well', !rowFor('UF application')._class.has('locked'));
   }
@@ -1714,6 +1752,7 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
       down(card, 200, 100);
       move(card, 100, 100);
       up(card, 100, 100);
+      await wait(CLOSED);
       check('but it can still be removed', titles().join() === 'Earlier', titles().join());
       check('with an undo', byId['undo-host'].children.length > 0);
     }
@@ -1753,6 +1792,7 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
     posted.length = 0;
     move(card, 100, 100);
     up(card, 100, 100);
+      await wait(CLOSED);
 
     check('and the block goes', titles().join() === 'Reading,Errands', titles().join());
     check('with an undo offered', byId['undo-host'].children.length > 0);
@@ -1784,6 +1824,7 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
       backingOf(slots()[1]).textContent);
     move(card, 100, 100);
     up(card, 100, 100);
+      await wait(CLOSED);
     check('and it goes', titles().join() === 'Reading', titles().join());
   }
 

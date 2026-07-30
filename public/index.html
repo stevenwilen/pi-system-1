@@ -981,6 +981,11 @@
       // Settling a swipe back, and dropping a reorder.
       const SETTLE_MS = 180;
 
+      // How long the day takes to close over a removed block. The same as a
+      // settle, because it is the same kind of movement: the list resolving
+      // after a gesture rather than reacting during one.
+      const CLOSE_MS = 180;
+
       // Read each time rather than cached, so changing it in the OS takes
       // effect without a reload. Guarded because the suite runs this script in
       // a VM with no matchMedia.
@@ -1853,10 +1858,80 @@
        * The undo is the safety net, and it is a better one than a confirm: a
        * confirm interrupts every removal to catch the rare wrong one, and this
        * interrupts none of them and still catches it.
+       *
+       * The block goes at once and the day closes over it. Splicing and
+       * re-rendering in the same breath destroyed the row outright, so
+       * everything below jumped up a block's height with nothing to connect
+       * where they had been to where they now were.
+       *
+       * Tapping a greyed thing removes its block through here too, and closes
+       * the same way. One route animating and the other not would be a
+       * difference with nothing behind it.
        */
       function removeBlock(i) {
-        const [gone] = blocks.splice(i, 1);
+        const gone = blocks[i];
         if (!gone) return;
+
+        const slot = slotAt(i);
+        if (!slot || reduceMotion()) return dropBlock(gone);
+
+        closeOver(slot, () => dropBlock(gone));
+      }
+
+      /** The i-th block's slot. The divider is a child of the builder too. */
+      function slotAt(i) {
+        return [...$('builder').children].filter((c) => c.classList.contains('slot'))[i] || null;
+      }
+
+      /**
+       * The card goes, and the space it held closes.
+       *
+       * The height is measured and pinned before it is animated to zero. A
+       * transition out of `auto` does nothing at all, so without the number
+       * first the gap would snap shut and this would be exactly what it
+       * replaced.
+       *
+       * `onDone` is a timer rather than transitionend: a slot already at zero
+       * height fires no transition, and the callback would never arrive —
+       * taking the removal with it.
+       */
+      function closeOver(slot, onDone) {
+        const height = slot.getBoundingClientRect
+          ? slot.getBoundingClientRect().height
+          : 0;
+
+        // Gone where it stood, rather than travelling. What is animated is the
+        // day closing up, which is the part that used to jump.
+        for (const child of slot.children) child.style.visibility = 'hidden';
+
+        slot.style.height = `${height}px`;
+        slot.style.overflow = 'hidden';
+
+        // Read, to make the height above take before the change below. Without
+        // it both land in the same frame and there is nothing to animate.
+        void slot.offsetHeight;
+
+        slot.style.transition =
+          `height ${CLOSE_MS}ms ease-in, margin-bottom ${CLOSE_MS}ms ease-in`;
+        slot.style.height = '0px';
+        slot.style.marginBottom = '0px';
+
+        setTimeout(onDone, CLOSE_MS);
+      }
+
+      /**
+       * The block itself, gone.
+       *
+       * Found by identity rather than by the index it was removed at. That
+       * index is a frame old by the time the gap has closed, and anything that
+       * reordered or removed in between would make it point at a different
+       * block — the sort of thing that only goes wrong under a fast hand.
+       */
+      function dropBlock(gone) {
+        const at = blocks.indexOf(gone);
+        if (at === -1) return;
+
+        blocks.splice(at, 1);
         saved = false;
         renderBuilder();
 
@@ -1864,7 +1939,7 @@
         // offer lapse has nothing left to do.
         offerUndo('Removed', () => {
           // Back where it was, unless the day has since got shorter than that.
-          blocks.splice(Math.min(i, blocks.length), 0, gone);
+          blocks.splice(Math.min(at, blocks.length), 0, gone);
           saved = false;
           renderBuilder();
         });

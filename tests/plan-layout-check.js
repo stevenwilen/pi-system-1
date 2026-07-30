@@ -542,6 +542,27 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
   check('removal offers an undo rather than a confirm', /offerUndo\('Removed'/.test(code));
   check('and nothing asks first', !/confirm\(`Remove/.test(code));
 
+  // THE DAY CLOSES OVER IT. Splicing and re-rendering in one breath destroyed
+  // the row outright, so everything below jumped a block's height with nothing
+  // connecting where they had been to where they now were.
+  check('the card goes at once', /child\.style\.visibility = 'hidden'/.test(code));
+  check('and the space it held closes', /closeOver\(slot, \(\) => dropBlock\(gone\)\)/.test(code));
+  check('the height is pinned before it is animated, or there is nothing to animate',
+    /slot\.style\.height = `\$\{height\}px`[\s\S]{0,400}slot\.style\.height = '0px'/.test(code));
+  check('with a read between them to make the first take',
+    /void slot\.offsetHeight/.test(code));
+  check('the removal waits for it', /setTimeout\(onDone, CLOSE_MS\)/.test(code));
+
+  // A slot already at zero height fires no transition, so transitionend would
+  // never come and the removal would never happen.
+  check('on a timer rather than transitionend', !/transitionend/.test(code));
+
+  // The index is a frame old by the time the gap has closed.
+  check('and the block is found by identity, not by the index it had',
+    /const at = blocks\.indexOf\(gone\)/.test(code));
+
+  check('stillness skips it entirely', /if \(!slot \|\| reduceMotion\(\)\) return dropBlock/.test(code));
+
   // The clamp survives the simplification, pointing the other way. It used to
   // stop a delivered block being swiped away; removal is one rule now, and it
   // is the NOTE swipe that has nowhere to go on a block already under way.

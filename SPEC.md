@@ -565,7 +565,28 @@ on pointer release for exactly that reason.
 
 **Swipe left removes.** Any block — upcoming, in progress, or over. One rule, and
 the clock does not enter into it. It commits on release, with no confirmation,
-and offers **Removed · Undo** for six seconds. That is a better trade than a
+and offers **Removed · Undo** for six seconds.
+
+**The block goes at once and the day closes over it**, 180ms. It used to splice
+and re-render in the same breath, which destroyed the row outright — everything
+below jumped a block's height with nothing connecting where they had been to
+where they now were. The card is not animated out; what moves is the gap
+shutting, which is the part that used to jump.
+
+Three things this needs, each of which fails silently without the others: the
+row's height is **measured and pinned** before it is animated to zero, because a
+transition out of `auto` does nothing at all; a **read of `offsetHeight`** sits
+between the two so the first value takes rather than both landing in one frame;
+and the removal runs off a **timer, not `transitionend`**, because a row already
+at zero height fires no transition and the callback would never arrive.
+
+The block is then found **by identity, not by the index it had** — that index is
+a frame old by the time the gap has closed, and anything reordered or removed in
+between would make it point at a different block.
+
+Removal by tapping a greyed thing goes through the same path and closes the same
+way. Under `prefers-reduced-motion` the block goes on release with nothing to
+watch. That is a better trade than a
 confirm: a confirm interrupts every removal to catch the rare wrong one, and the
 undo interrupts none of them and still catches it.
 
