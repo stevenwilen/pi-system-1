@@ -134,6 +134,10 @@
   .past{background:transparent;border:1px solid var(--line)}
   .past .t{color:var(--faint)}
   .past .time{color:#544E46}
+  /* the room a block would take, on a day that has none. visibility, not
+     display: it has to keep its space while showing nothing */
+  .block.ghost{visibility:hidden}
+
   /* the block in progress. muted, not faint: it outranks a block that is over */
   /* the chip's padding, so the word sits where chip text sits rather than
      crowding the card edge, and the row keeps the same height */
@@ -310,6 +314,35 @@
 
 <!-- ================= states the screen above cannot show at once ================= -->
 <div class="phone">
+
+  <div class="section">
+    <div class="label">A day with nothing in it</div>
+
+    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:16px">
+      The builder holds a block's worth of room open. Without it Starts sits
+      against + Block and an empty day reads as a broken control rather than a
+      day with space in it. It is a real block card, hidden &mdash;
+      <code>visibility</code>, not <code>display</code>, because keeping the
+      space is the whole point.
+    </p>
+
+    <div class="inline">
+      <span>Starts</span>
+      <div class="stepper"><div class="step">&minus;</div><div class="num">8:00 AM</div><div class="step">+</div></div>
+    </div>
+
+    <div style="height:14px"></div>
+
+    <div class="block ghost">
+      <div class="brow">
+        <div><div class="t">&nbsp;</div><div class="time">&nbsp;</div></div>
+      </div>
+    </div>
+
+    <div class="addblock">+ Block</div>
+
+    <div class="ends"><span>Day ends</span><b>&mdash;</b></div>
+  </div>
 
   <div class="section">
     <div class="label">The block you are in</div>

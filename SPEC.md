@@ -487,6 +487,17 @@ refusing the statement precisely when there was something to state.
 - The **Starts control is hidden.** The day has already started, so there is
   nothing to decide about when it does.
 
+**A day with nothing in it still takes a day's worth of room.** The builder holds
+one block's height open, so **Starts** does not sit against **+ Block** — an
+empty day should read as a day with space in it, not as a broken control.
+
+It is a **real block card, hidden**, rather than a `min-height`. That number
+would have to be kept true against the card's padding, its two line heights and
+the gap below it, and would go wrong the first time any of those changed —
+silently, because nothing would fail. Built from the same parts it cannot drift.
+`visibility: hidden`, never `display: none`, because keeping the space is the
+entire purpose. `aria-hidden`, because it says nothing worth reading aloud.
+
 **The past does not flow.** A block that has already begun keeps the hour it
 began at, whatever the blocks above it do — the message naming that hour has
 usually gone out, and a plan that rewrote this morning as the afternoon would be

@@ -529,6 +529,13 @@
         animation: spin 700ms linear infinite;
       }
 
+      /* The room a block would take, on a day that has none. `visibility`
+         rather than `display: none`, which is the whole point: it has to keep
+         its space while showing nothing. */
+      .block.ghost {
+        visibility: hidden;
+      }
+
       /* The day, mid-switch. It holds roughly a block's worth of height so the
          page does not jump as the old day leaves and the new one arrives. */
       .waiting {
@@ -1675,6 +1682,9 @@
           box.append(blockCard(b, i, { begun, past }));
         }
 
+        // An empty day still takes up a day's worth of room.
+        if (!blocks.length) box.append(emptySpace());
+
         $('end-time').textContent = !blocks.length
           ? '—'
           : end >= 1440
@@ -1692,6 +1702,44 @@
         // locked has too. Removing a block unlocks its row on this render
         // rather than on the next load.
         renderThings();
+      }
+
+      /**
+       * The room a block would take, on a day that has none.
+       *
+       * With nothing scheduled the builder collapsed to nothing and Starts sat
+       * directly against + Block, so an empty day read as a broken control
+       * rather than as a day with space in it.
+       *
+       * A real block card, structured exactly like the others and hidden. Not a
+       * min-height: the number would have to be maintained against the card's
+       * padding, its two line heights and the gap below it, and it would be
+       * wrong the first time any of those changed — silently, because nothing
+       * would fail. Built from the same parts, it cannot drift.
+       *
+       * The non-breaking spaces are load-bearing: empty divs have no line box,
+       * so the card would collapse to its padding.
+       */
+      function emptySpace() {
+        const ghost = document.createElement('div');
+        ghost.className = 'block ghost';
+        ghost.setAttribute('aria-hidden', 'true');
+
+        const row = document.createElement('div');
+        row.className = 'brow';
+
+        const left = document.createElement('div');
+        const t = document.createElement('div');
+        t.className = 't';
+        t.textContent = ' ';
+        const time = document.createElement('div');
+        time.className = 'time';
+        time.textContent = ' ';
+
+        left.append(t, time);
+        row.append(left);
+        ghost.append(row);
+        return ghost;
       }
 
       /**

@@ -319,6 +319,42 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
       byId['end-time'].textContent);
   }
 
+  console.log('\nan empty day still takes a day\'s worth of room');
+  {
+    // With nothing scheduled the builder collapsed to nothing and Starts sat
+    // against + Block, which read as a broken control rather than a day with
+    // space in it.
+    const { ctx, byId, slots } = boot();
+    await ctx.load();
+
+    const ghosts = () => byId.builder.children.filter((c) => c._class.has('ghost'));
+    check('an empty day holds a space open', ghosts().length === 1,
+      String(ghosts().length));
+    check('and it is built as a block, so it cannot drift from one',
+      ghosts()[0]._class.has('block'));
+    check('hidden from anything reading the page aloud',
+      ghosts()[0]._attrs['aria-hidden'] === 'true',
+      JSON.stringify(ghosts()[0]._attrs));
+
+    // The line boxes are what give it height. Empty divs have none, so the
+    // card would collapse to its padding.
+    const row = ghosts()[0].children.find((c) => c._class.has('brow'));
+    const left = row.children[0];
+    check('with both lines carrying a non-breaking space',
+      left.children.every((c) => c.textContent === ' '),
+      JSON.stringify(left.children.map((c) => c.textContent)));
+
+    // The one that would bite: it must not read as a block anywhere.
+    check('it is not a slot, so nothing counts it as a block',
+      slots().length === 0, String(slots().length));
+    check('and the day still ends nowhere', byId['end-time'].textContent === '—',
+      byId['end-time'].textContent);
+
+    ctx.addBlock({ title: 'Real' });
+    check('a real block replaces it', ghosts().length === 0, String(ghosts().length));
+    check('and the day is one block long', slots().length === 1, String(slots().length));
+  }
+
   console.log('\nthe cover comes off once the day is on screen');
   {
     const { ctx, byId } = boot();

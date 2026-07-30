@@ -312,6 +312,28 @@ console.log('\n7a. the wait before the first day is on screen');
     /animation: none;\s*border-color: var\(--faint\)/.test(reduced));
 }
 
+console.log('\n7a-iii. an empty day keeps a block\'s worth of room');
+{
+  // Nothing scheduled collapsed the builder to nothing, putting Starts against
+  // + Block. Built from a real block card rather than a min-height: the number
+  // would have to be maintained against the card's padding, its two line
+  // heights and the gap below it, and would go wrong the first time any of
+  // those changed — silently, because nothing would fail.
+  const ghost = rule('.block.ghost');
+  check('there is a spacer', ghost.length > 0);
+  check('it is hidden, not removed — the space is the point',
+    /visibility: hidden/.test(ghost), ghost);
+  check('and not display:none, which would take the space with it',
+    !/display: none/.test(ghost), ghost);
+
+  check('it is a block card, so it cannot drift from one',
+    /ghost\.className = 'block ghost'/.test(code));
+  check('shown only when the day is empty',
+    /if \(!blocks\.length\) box\.append\(emptySpace\(\)\)/.test(code));
+  check('and hidden from a screen reader',
+    /setAttribute\('aria-hidden', 'true'\)/.test(code));
+}
+
 console.log('\n7a-ii. and the same dot when the day switch is fetching');
 {
   // Tapping Tomorrow left today's blocks on screen under the word Tomorrow
@@ -795,6 +817,7 @@ console.log('\n17. the mockup still describes the page');
     ['the add sheet', 'sheet'],
     ['the day switch', 'dayswitch'],
     ['a past block', 'past'],
+    ['the empty day spacer', 'ghost'],
     ['the block in progress', 'running'],
     ['the NOW divider', 'now'],
     ['a locked row', 'locked'],
