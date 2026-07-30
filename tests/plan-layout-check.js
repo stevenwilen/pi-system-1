@@ -258,6 +258,16 @@ console.log('\n7b. the right edge of a block says one thing per state');
   check('it has no pill border, unlike the chip it replaces', !/border/.test(act), act);
   check('and no background', !/background/.test(act), act);
 
+  // But it does keep the chip's BOX. Without the padding a bare label sits
+  // 15px closer to the card edge than chip text does, because the chip carries
+  // that inset inside its border — so "active" crowded the edge while every
+  // block above it looked comfortable. Matching it also keeps a begun block the
+  // same height as its neighbours.
+  const chip = rule('.dur');
+  const pad = (r) => (r.match(/padding: ([^;]+);/) || [])[1];
+  check('it borrows the chip\'s padding, so the word is not against the edge',
+    pad(act) === pad(chip), `${pad(act)} vs chip ${pad(chip)}`);
+
   check('the word is "active"', /className = 'running';[\s\S]{0,120}textContent = 'active'/.test(code));
   check('a block that has begun gets it',
     /\} else if \(begun\) \{\s*row\.append\(left, activeLabel\(\)\);/.test(code));
