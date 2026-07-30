@@ -119,16 +119,38 @@ async function alreadySent(user_id, job, date) {
   return Boolean(data);
 }
 
-async function markSent(user_id, job, date) {
+/**
+ * Take the once-a-day slot, and say whether we were the one who got it.
+ *
+ * The unique constraint on (user_id, job, sent_for_date) is the lock — which
+ * the schema has said all along, while this was used as a receipt written
+ * afterwards. Insert first and read the answer: 23505 is unique_violation,
+ * meaning somebody else holds the slot, and that is the constraint doing its
+ * job rather than a failure.
+ */
+async function claimSlot(user_id, job, date) {
   const { error } = await supabase
     .from('sent_log')
     .insert({ user_id, job, sent_for_date: date });
 
-  // 23505 is unique_violation: something already claimed this slot. That is
-  // the constraint doing its job, not a failure.
-  if (error && error.code !== '23505') {
-    console.error(`[SEND] ${job}: could not write sent_log: ${error.message}`);
-  }
+  if (!error) return true;
+  if (error.code === '23505') return false;
+
+  // Can't establish that we own it, so don't send.
+  console.error(`[SEND] ${job}: could not claim the slot: ${error.message}`);
+  return false;
+}
+
+/** Give the slot back, so a failed send is retried inside its window. */
+async function releaseSlot(user_id, job, date) {
+  const { error } = await supabase
+    .from('sent_log')
+    .delete()
+    .eq('user_id', user_id)
+    .eq('job', job)
+    .eq('sent_for_date', date);
+
+  if (error) console.error(`[SEND] ${job}: could not release the slot: ${error.message}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,21 +199,70 @@ async function dueBlocks(user_id, date) {
   return data || [];
 }
 
-async function markBlockSent(id) {
-  const { error } = await supabase
+/**
+ * Take this block out of the queue, and say whether we were the one who did.
+ *
+ * `.is('message_sent_at', null)` in the filter is what makes this safe. The
+ * database compares and sets in one statement, so of two callers arriving
+ * together exactly one updates a row and the other updates none — and it is
+ * told so, because the update reports what it changed.
+ *
+ * THE MARK USED TO BE WRITTEN AFTER THE SEND CAME BACK. That left the row
+ * sitting unclaimed for exactly as long as the Telegram call took, and the
+ * queue is "message_sent_at IS NULL" — so anything else looking in that window
+ * saw an unsent block and sent it a second time. Two things put a second
+ * reader there: a Railway deploy overlaps the old container and the new one,
+ * and this module runs a tick the moment it is required, so every start
+ * re-checks the whole grace window rather than waiting for the next quarter
+ * hour. Neither is a fault. Checking and then acting was.
+ *
+ * Claiming first means a crash between the claim and the send loses that
+ * message rather than repeating it. That is the right way round: a message
+ * that never arrives is a gap in a day, and one that arrives twice is the
+ * system looking broken.
+ */
+async function claimBlock(id) {
+  const { data, error } = await supabase
     .from('blocks')
     .update({ message_sent_at: new Date().toISOString() })
+    .eq('id', id)
+    .is('message_sent_at', null)
+    .select('id');
+
+  if (error) {
+    // Can't establish that we own it, so don't send. A missed block is
+    // recoverable on the next tick; a duplicate is not recoverable at all.
+    console.error(`[SEND] block ${id}: could not claim: ${error.message}`);
+    return false;
+  }
+
+  return Boolean(data && data.length);
+}
+
+/**
+ * Put a claimed block back in the queue.
+ *
+ * Only after a send that failed. The claim is what stops a second sender, so
+ * releasing it is what allows the retry the failure deserves — and the retry
+ * is bounded anyway, because the block leaves the queue for good once it is
+ * past the grace window.
+ */
+async function releaseBlock(id) {
+  const { error } = await supabase
+    .from('blocks')
+    .update({ message_sent_at: null })
     .eq('id', id);
 
-  if (error) console.error(`[SEND] block ${id}: could not mark sent: ${error.message}`);
+  if (error) console.error(`[SEND] block ${id}: could not release: ${error.message}`);
 }
 
 /**
  * One user, one tick.
  *
- * Marking a block sent is what makes this safe to run every fifteen minutes:
- * a block leaves the queue the moment it is delivered, so a slow tick or an
- * overlapping one cannot send it twice.
+ * Claiming a block is what makes this safe to run every fifteen minutes, and
+ * safe to run twice over: the claim is a compare-and-set at the database, so a
+ * slow tick, an overlapping one, or a second container mid-deploy cannot send
+ * the same block twice. See claimBlock.
  *
  * There is no longer a grace window for a block whose text has not been
  * written yet. The text is composed in code and inserted with the block, so a
@@ -211,24 +282,32 @@ async function deliverDue(profile, now) {
       // Long past. Retire it rather than delivering a message about a block
       // the person has already lived through.
       //
+      // Claimed rather than plainly marked, so the warning below is written by
+      // whichever caller actually retired it and not once per caller.
+      //
       // Logged loudly and under its own tag on purpose. From the phone end,
       // a message that never arrives looks the same whether the block expired
       // or the scheduler is dead, and those need opposite responses. This line
       // says the loop ran, found the block, and chose not to send.
-      console.warn(
-        `[EXPIRED] "${block.title}" was due at ${hhmm(block.start_time)} and is ${late} minutes late, past the ${GRACE_MINUTES} minute window. Not sent, and it will not be retried. The scheduler is running normally.`
-      );
-      await markBlockSent(block.id);
+      if (await claimBlock(block.id)) {
+        console.warn(
+          `[EXPIRED] "${block.title}" was due at ${hhmm(block.start_time)} and is ${late} minutes late, past the ${GRACE_MINUTES} minute window. Not sent, and it will not be retried. The scheduler is running normally.`
+        );
+      }
       continue;
     }
+
+    // Before the send, not after. Whoever takes the row owns the delivery, and
+    // everyone else moves on without one.
+    if (!(await claimBlock(block.id))) continue;
 
     const result = await deliver(profile.user_id, composeMessage(block));
 
     if (result.sent) {
-      await markBlockSent(block.id);
       console.log(`[SEND] ${block.title}`);
     } else {
-      // No mark, so the next tick retries while the block is still in grace.
+      // Back in the queue, so the next tick retries while it is still in grace.
+      await releaseBlock(block.id);
       console.error(`[SEND] ${block.title}: ${JSON.stringify(result)}`);
     }
   }
@@ -293,19 +372,28 @@ async function sendNudge(profile, now, { force = false } = {}) {
 
   if (plan) {
     // Claimed anyway, so the rest of the evening does not ask again.
-    if (!force) await markSent(profile.user_id, 'nudge', now.date);
+    if (!force) await claimSlot(profile.user_id, 'nudge', now.date);
     console.log(`[NUDGE] ${asks} is already confirmed, sending nothing`);
     return;
   }
+
+  // The lock, immediately before the send rather than after it.
+  //
+  // The check above is an early-out and not a guard: between reading it and
+  // sending there was a window as wide as the plan query plus the Telegram
+  // call, and a second container — one mid-deploy, or one that had just
+  // started and ticked on require — sat inside it and sent the nudge again.
+  // Only one caller can insert this row, so only one gets past here.
+  if (!force && !(await claimSlot(profile.user_id, 'nudge', now.date))) return;
 
   const text = NUDGE_TEXT[kind];
   const sent = await deliver(profile.user_id, text);
 
   if (sent.sent) {
-    if (!force) await markSent(profile.user_id, 'nudge', now.date);
     console.log(`[NUDGE] sent: ${text}`);
   } else {
-    // No mark, so the next tick inside the window tries again.
+    // Slot back, so the next tick inside the window tries again.
+    if (!force) await releaseSlot(profile.user_id, 'nudge', now.date);
     console.error(`[NUDGE] ${JSON.stringify(sent)}`);
   }
 }

@@ -20,8 +20,15 @@ const supabase = H.db;
 const telegram = require(ROOT + '/telegram.js');
 const sent = [];
 let sendFails = false;
+
+// How long the stubbed send takes. Zero everywhere except the case about two
+// ticks overlapping, where the window being tested is exactly as wide as this
+// call — an instant stub closes it and the case proves nothing.
+let sendDelay = 0;
+
 telegram.sendTelegram = async (user_id, text) => {
   if (sendFails) return { error: 'telegram is down' };
+  if (sendDelay) await new Promise((r) => setTimeout(r, sendDelay));
   sent.push({ user_id, text });
   return { sent: true, stubbed: true };
 };
@@ -180,6 +187,34 @@ const makePlan = async (date, status) => {
     const { count } = await supabase
       .from('sent_log').select('*', { count: 'exact', head: true }).eq('user_id', U).eq('job', 'nudge');
     check('and the evening is marked resolved', count === 1, `${count}`);
+  }
+
+  console.log('\ntwo ticks at once nudge once');
+  {
+    // Same shape as the block duplicate. The sent_log row was written after
+    // the send returned, so between reading "not sent yet" and writing it
+    // there was a window as wide as the plan query plus the Telegram call.
+    // A Railway deploy overlaps two containers, and scheduler.js ticks the
+    // moment it is required, so a second caller really does arrive there.
+    //
+    // The unique constraint on (user_id, job, sent_for_date) has been the lock
+    // the whole time — it was just being used as a receipt.
+    await clear();
+    await makePlan(TOMORROW, 'pending');
+    sendDelay = 250;
+
+    await Promise.all([
+      scheduler.sendNudge(profile(), at(20)),
+      scheduler.sendNudge(profile(), at(20)),
+    ]);
+    sendDelay = 0;
+
+    check('one nudge, not two', sent.length === 1,
+      `${sent.length}: ${JSON.stringify(sent.map((s) => s.text))}`);
+
+    const { count } = await supabase
+      .from('sent_log').select('*', { count: 'exact', head: true }).eq('user_id', U).eq('job', 'nudge');
+    check('and one row holding the slot', count === 1, `${count}`);
   }
 
   console.log('\nfailure behaviour');

@@ -726,6 +726,50 @@ today's confirmed plan have started and not been sent. A block more than 30
 minutes late is marked sent without being sent and logged under `[EXPIRED]`,
 because "Gym, 08:00" arriving at 14:00 is worse than nothing.
 
+#### Nothing is sent twice, because the queue is claimed before the send
+
+A block is taken out of the queue **first**, and only then delivered:
+
+```sql
+update blocks set message_sent_at = now()
+ where id = ? and message_sent_at is null
+returning id
+```
+
+One statement, so the database does the comparing. Of two callers arriving
+together exactly one updates a row; the other updates none and is told so, and
+takes that as "somebody else has this one".
+
+**The mark used to be written after the send came back.** That left the row
+unclaimed for exactly as long as the Telegram call took, and the queue is
+`message_sent_at IS NULL` — so anything looking in that window found an unsent
+block and sent it again. This produced real duplicates: the same block appearing
+twice, and once three times, in one day's logs.
+
+Two things put a second reader in that window, and **neither is a fault**:
+
+- A Railway deploy overlaps the old container and the new one, so for a moment
+  two schedulers are running.
+- `scheduler.js` ticks the moment it is required, so every start re-checks the
+  whole grace window instead of waiting for the next quarter hour. That is what
+  makes a redeploy not swallow a message.
+
+Checking and then acting was the fault. Claiming first fixes it for any number
+of callers, without either of those having to change.
+
+**A failed send releases the claim**, so the next tick retries it while the
+block is still inside the grace window. What that ordering costs is a crash
+between the claim and the send, which loses that one message rather than
+repeating it — the right way round, because a message that never arrives is a
+gap in a day and one that arrives twice makes the system look broken.
+
+The **evening nudge** has the same shape and the same fix: `sent_log`'s unique
+constraint on `(user_id, job, sent_for_date)` is the lock, and the row is now
+inserted *before* the send rather than written afterwards as a receipt. A
+`23505` unique violation is the answer "somebody else has the slot", not an
+error. The cheap `alreadySent` read stays in front of it as an early-out, but it
+is no longer what guarantees anything.
+
 Delivery is gated on `status = 'confirmed'`, and that gate is **defensive
 rather than descriptive**. `plans.status` allows `'pending'` and the column
 defaults to it, but nothing in this system writes that value: there is no draft,
@@ -753,9 +797,10 @@ planner about today would name a day they are already halfway through, and
 nudging a morning planner about tomorrow would ask for a plan they do not make
 until they wake up.
 
-That is the entire message. One `sent_log` row per evening guards it, and an
-evening where the plan already exists is claimed too so the rest of the evening
-does not ask again.
+That is the entire message. One `sent_log` row per evening guards it, claimed
+before the send rather than written after it (§4.1), and an evening where the
+plan already exists is claimed too so the rest of the evening does not ask
+again.
 
 The one thing this system cannot do for someone is notice that they never opened
 it. Every other message is about something they already decided; this one is

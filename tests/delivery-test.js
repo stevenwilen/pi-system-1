@@ -18,7 +18,16 @@ const supabase = H.db;
 // time, so the patch has to be on the cached module first.
 const telegram = require(ROOT + '/telegram.js');
 const sent = [];
+
+// How long the stubbed send takes. Zero for every ordinary case, because they
+// only care what came out — but the window in which a block is sent and not
+// yet marked is exactly as wide as this call, so a case about that window has
+// to make it real. A Telegram round trip is a few hundred milliseconds; an
+// instant stub closes the window the bug lives in.
+let sendDelay = 0;
+
 telegram.sendTelegram = async (user_id, text) => {
+  if (sendDelay) await new Promise((r) => setTimeout(r, sendDelay));
   sent.push({ user_id, text });
   return { sent: true, stubbed: true };
 };
@@ -188,6 +197,44 @@ const statusOf = async (planId) => {
   sent.length = 0;
   await scheduler.deliverDue(profile, { ...now, date: '2031-06-09' });
   check('a day with no plan is quiet', sent.length === 0);
+
+  console.log('\ntwo ticks at once send one message, not two');
+  {
+    // THE DUPLICATE. The queue is "message_sent_at IS NULL" and the mark is
+    // written after the send returns, so the row sits unclaimed for exactly as
+    // long as the Telegram call takes. Anything else looking in that window
+    // sees an unsent block and sends it again.
+    //
+    // Two things put a second reader there in production. Railway overlaps the
+    // old and new containers on a deploy, so for a moment there are two
+    // schedulers; and scheduler.js runs a tick immediately on require, so every
+    // container start re-checks the whole grace window rather than waiting for
+    // the next quarter hour.
+    //
+    // Two concurrent calls is the same shape and needs no timers: both read the
+    // queue, both find the block, both send.
+    const raced = await makePlan('2031-06-10', 'confirmed', [
+      { title: 'Sent once', start_time: at(-5), duration_minutes: 30, note: null, created_at: old },
+    ]);
+    sent.length = 0;
+    sendDelay = 250;
+
+    await Promise.all([
+      scheduler.deliverDue(profile, { ...now, date: '2031-06-10' }),
+      scheduler.deliverDue(profile, { ...now, date: '2031-06-10' }),
+    ]);
+    sendDelay = 0;
+
+    check('the block went out exactly once', sent.length === 1,
+      `${sent.length} sends: ${JSON.stringify(sent.map((s) => s.text.split('\n')[0]))}`);
+    check('and it is marked sent', (await statusOf(raced))[0].message_sent_at !== null);
+
+    // And a third pass afterwards, which is the restart case: a container that
+    // boots inside the grace window must find nothing left to do.
+    sent.length = 0;
+    await scheduler.deliverDue(profile, { ...now, date: '2031-06-10' });
+    check('a tick after the fact sends nothing', sent.length === 0, `${sent.length}`);
+  }
 
   console.log('\ncleanup');
   for (const id of made) await supabase.from('plans').delete().eq('user_id', U).eq('id', id);
