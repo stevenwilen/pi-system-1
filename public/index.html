@@ -508,17 +508,25 @@
         z-index: 50;
         transition: opacity 160ms ease-out;
       }
-      /* One dot, two waits: the whole page before the first day, and the day
+      /* One mark, two waits: the whole page before the first day, and the day
          section alone when the switch fetches another. Declared together
          because they are the same statement — something is on its way — and
-         two copies would drift. */
+         two copies would drift.
+
+         A quarter of a circle's outline, turning. The ring is transparent on
+         three sides, so what shows is genuinely an arc rather than a full ring
+         with one bright quarter — a ring would read as a shape, and this has to
+         read as motion.
+
+         Faint, like everything else that is waiting rather than offering. */
       #booting span,
       .waiting span {
-        width: 6px;
-        height: 6px;
+        width: 15px;
+        height: 15px;
         border-radius: 50%;
-        background: var(--faint);
-        animation: breathe 1100ms ease-in-out infinite;
+        border: 1.5px solid transparent;
+        border-top-color: var(--faint);
+        animation: spin 700ms linear infinite;
       }
 
       /* The day, mid-switch. It holds roughly a block's worth of height so the
@@ -533,17 +541,18 @@
         opacity: 0;
         pointer-events: none;
       }
-      @keyframes breathe {
-        0%, 100% { opacity: 0.25; }
-        50% { opacity: 1; }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
       }
-      /* Stillness is the setting, not a lesser version of it: the dot sits at
-         full strength rather than pulsing. */
+      /* Stillness is the setting, not a lesser version of it. A quarter arc
+         held still reads as something half-drawn, so it closes into the whole
+         outline: a complete shape, plainly deliberate, saying the same thing
+         without moving. */
       @media (prefers-reduced-motion: reduce) {
         #booting span,
         .waiting span {
           animation: none;
-          opacity: 1;
+          border-color: var(--faint);
         }
         #booting {
           transition: none;

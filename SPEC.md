@@ -166,8 +166,8 @@ Nothing about how the system behaves lives outside the database.
 
 ### 3.0 Before it has loaded
 
-A cover in the page's own background with **one small faint dot**, breathing,
-until the first day is on screen.
+A cover in the page's own background with **a quarter of a circle's outline,
+turning**, until the first day is on screen.
 
 Without it you land on the static markup — the switch with no date, `Day ends —`,
 an empty builder and an empty list. That is the real screen with every value
@@ -175,9 +175,16 @@ missing, which reads as a day that has nothing in it rather than a day that has
 not arrived, and then it pops into place. Covering it is honest about the wait
 instead of showing a wrong answer during it.
 
-**Faint, not the accent.** Blue is actionable and there is nothing to act on yet.
-**A dot, not a word:** *Loading…* is the kind of sentence this system spends its
-whole design not saying.
+**An arc, not a full ring.** The circle is transparent on three sides, so what
+shows is genuinely a fraction rather than a whole ring with one bright quarter —
+a ring reads as a shape, and this has to read as motion. **Faint, not the
+accent:** blue is actionable and there is nothing to act on yet. **No word:**
+*Loading…* is the kind of sentence this system spends its whole design not
+saying.
+
+Under `prefers-reduced-motion` it **closes into the whole outline** rather than
+freezing mid-turn. A quarter arc held still reads as something half-drawn;
+stillness is the setting, not a lesser version of it.
 
 It lifts when the load **settles**, not when it succeeds. A failed load leaves an
 empty page, which is a poor screen — but a cover that never lifts is a worse one,
@@ -185,9 +192,9 @@ because it claims something is still coming. It then leaves the layout rather
 than fading to invisible and staying: a fixed, full-screen element over the app
 is inert only while it keeps `pointer-events: none`.
 
-**The same dot appears in the day section when the switch is fetching**, and it
-is declared once for both — two copies of a 6px faint circle would drift the
-first time either was adjusted. Tapping Tomorrow left today's blocks on screen,
+**The same mark appears in the day section when the switch is fetching**, and it
+is declared once for both — two copies of a turning arc would drift the first
+time either was adjusted. Tapping Tomorrow left today's blocks on screen,
 under the word Tomorrow, until two requests came back; on a phone that is long
 enough to read the wrong day and believe it. The **end time goes back to `—`**
 with them, because it is computed from the blocks and would otherwise be the one

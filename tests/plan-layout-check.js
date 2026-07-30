@@ -282,10 +282,17 @@ console.log('\n7a. the wait before the first day is on screen');
     /background: var\(--bg\)/.test(cover), cover);
   check('and it covers the whole page', /position: fixed/.test(cover) && /inset: 0/.test(cover));
 
+  // A quarter of a circle's outline, turning. Transparent on three sides, so
+  // what shows is an arc rather than a full ring with one bright quarter — a
+  // ring reads as a shape, and this has to read as motion.
   const dot = rule('#booting span');
-  check('one small dot', /border-radius: 50%/.test(dot));
+  check('a circle outline', /border-radius: 50%/.test(dot));
+  check('and only a fraction of it is drawn',
+    /border: 1\.5px solid transparent/.test(dot) &&
+      /border-top-color: var\(--faint\)/.test(dot), dot);
   check('faint, not blue: there is nothing to act on yet',
-    /background: var\(--faint\)/.test(dot), dot);
+    !/--accent/.test(dot), dot);
+  check('it turns', /animation: spin/.test(dot));
   check('and no word, because this system would not say "Loading"',
     !/Loading|loading/.test(body));
 
@@ -294,13 +301,15 @@ console.log('\n7a. the wait before the first day is on screen');
   check('and leaves the layout rather than sitting invisible over it',
     /style\.display = 'none'/.test(code));
 
-  // Motion is the default, stillness is the setting — not a lesser version.
+  // Motion is the default, stillness is the setting — not a lesser version. A
+  // quarter arc held still reads as something half-drawn, so it closes into
+  // the whole outline: a complete shape, plainly deliberate.
   const reduced = css.slice(css.indexOf('prefers-reduced-motion: reduce'));
-  check('reduced motion stops the pulse',
+  check('reduced motion stops the turn',
     /#booting span,\s*\.waiting span \{\s*animation: none/.test(reduced),
     reduced.slice(0, 120));
-  check('and holds the dot at full strength rather than mid-fade',
-    /animation: none;\s*opacity: 1/.test(reduced));
+  check('and closes the arc into a whole circle rather than freezing it',
+    /animation: none;\s*border-color: var\(--faint\)/.test(reduced));
 }
 
 console.log('\n7a-ii. and the same dot when the day switch is fetching');
@@ -313,10 +322,10 @@ console.log('\n7a-ii. and the same dot when the day switch is fetching');
   check('centred', /justify-content: center/.test(wait));
   check('and holding height, so the page does not jump', /padding: 30px 0/.test(wait));
 
-  // Declared once for both. Two copies of a 6px faint circle would drift the
-  // first time one of them was adjusted.
-  check('it is the same dot as the boot cover, declared once',
-    /#booting span,\s*\.waiting span \{[^}]*background: var\(--faint\)/.test(css));
+  // Declared once for both. Two copies of a turning arc would drift the first
+  // time either was adjusted.
+  check('it is the same mark as the boot cover, declared once',
+    /#booting span,\s*\.waiting span \{[^}]*border-top-color: var\(--faint\)/.test(css));
 
   check('the switch shows it before it fetches',
     /showWaiting\(\);\s*\n\s*await loadCalendar/.test(code));
