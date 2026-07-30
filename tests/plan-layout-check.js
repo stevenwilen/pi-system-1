@@ -621,8 +621,14 @@ console.log('\n17. today and tomorrow');
   check('and a drifted day is not called confirmed', /if \(saved && drifted\(\)\) saved = false/.test(code));
 
   console.log('   which day opens');
-  check('the preference comes from the server', /data\.plans_in === 'morning'/.test(code));
-  check('and there is no settings UI for it', !/plans_in/.test(body));
+  // ALWAYS TODAY. It followed plans_in, so an evening planner landed on
+  // tomorrow — which made the page a planning tool first and a companion
+  // second, and it is used the other way round. Planning tomorrow is one
+  // deliberate visit a day; the rest are glances at what is happening.
+  check('it opens on today', /await showDay\('today'\)/.test(code));
+  check('and the preference no longer decides that',
+    !/plans_in/.test(code), (code.match(/.*plans_in.*/) || [''])[0].trim());
+  check('nor is there a settings UI for it', !/plans_in/.test(body));
 
   console.log('   a thing already in the day');
   // Greying is the whole signal. It used to also say "in today's plan" beside

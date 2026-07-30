@@ -121,7 +121,18 @@ function boot({
   calendar = [], plan = null, failed = [], reduced = false,
   entries = null, now = null,
 } = {}) {
-  const clock = now ? atClock(now) : Date;
+  // Frozen by default, not just when a case asks.
+  //
+  // The stub says today is 2026-07-27 and atClock freezes to that same date, so
+  // a boot on the real clock was running the stub's date against the machine's
+  // time. That was invisible while the page opened on TOMORROW — nothing looked
+  // at the hour. It opens on today now, where the hour decides which blocks have
+  // begun, what has a chip, and where the day starts reflowing from, so an
+  // unfrozen boot would pass or fail by what time the suite ran at.
+  //
+  // 07:00 UTC is 03:00 in the stub's New York, comfortably before the 08:00
+  // wake, so a day boots clean with nothing begun.
+  const clock = atClock(now || '07:00');
   // Every id the markup declares, read from the file rather than listed here.
   const byId = {};
   for (const id of new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]))) {
@@ -910,26 +921,55 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
     });
     await ctx.load();
 
-    check('an evening planner opens on tomorrow', byId['pick-tomorrow']._class.has('on'));
-    check('and today is the quiet one', !byId['pick-today']._class.has('on'));
-    check('the date says which', byId['plan-date'].textContent === 'Tue 28 Jul',
+    // IT OPENS ON TODAY, whatever plans_in says. The screen is opened to look
+    // at the day you are in; planning tomorrow is one deliberate visit and the
+    // switch is one tap away.
+    check('it opens on today', byId['pick-today']._class.has('on'));
+    check('and tomorrow is the quiet one', !byId['pick-tomorrow']._class.has('on'));
+    check('the date says which', byId['plan-date'].textContent === 'Mon 27 Jul',
       byId['plan-date'].textContent);
-    check("tomorrow's plan is the one loaded", titles().join() === 'Spanish', titles().join());
-    check('and the Starts control is there', !byId.starts._class.has('hidden'));
-
-    await byId['pick-today'].onclick();
-    check('tapping Today switches', byId['pick-today']._class.has('on'));
-    check('and tomorrow goes quiet', !byId['pick-tomorrow']._class.has('on'));
-    check('the date follows', byId['plan-date'].textContent === 'Mon 27 Jul',
-      byId['plan-date'].textContent);
-    check("today's plan is loaded", titles().join() === 'Reading,Gym,UF application',
-      titles().join());
+    check("today's plan is the one loaded",
+      titles().join() === 'Reading,Gym,UF application', titles().join());
     check('and Starts is hidden, because the day already started',
       byId.starts._class.has('hidden'));
 
     await byId['pick-tomorrow'].onclick();
-    check('and back again', titles().join() === 'Spanish', titles().join());
-    check('with Starts shown again', !byId.starts._class.has('hidden'));
+    check('tapping Tomorrow switches', byId['pick-tomorrow']._class.has('on'));
+    check('and today goes quiet', !byId['pick-today']._class.has('on'));
+    check('the date follows', byId['plan-date'].textContent === 'Tue 28 Jul',
+      byId['plan-date'].textContent);
+    check("tomorrow's plan is loaded", titles().join() === 'Spanish', titles().join());
+    check('and the Starts control is there', !byId.starts._class.has('hidden'));
+
+    await byId['pick-today'].onclick();
+    check('and back again', titles().join() === 'Reading,Gym,UF application',
+      titles().join());
+    check('with Starts hidden again', byId.starts._class.has('hidden'));
+  }
+
+  console.log('\nan evening planner still opens on today');
+  {
+    // plans_in used to decide this and no longer does. It still decides which
+    // day the evening nudge asks about, which is a different question: what you
+    // are shown, against what you are reminded to plan.
+    const evening = boot({
+      plan: twoDays(), entries: utcEntries({ plans_in: 'evening' }), now: '11:00',
+    });
+    await evening.ctx.load();
+    check('evening opens on today', evening.byId['pick-today']._class.has('on'));
+
+    const morning = boot({
+      plan: twoDays(), entries: utcEntries({ plans_in: 'morning' }), now: '11:00',
+    });
+    await morning.ctx.load();
+    check('and so does morning', morning.byId['pick-today']._class.has('on'));
+
+    const unset = boot({
+      plan: twoDays(), entries: utcEntries(), now: '11:00',
+    });
+    await unset.ctx.load();
+    check('and so does a profile that never said',
+      unset.byId['pick-today']._class.has('on'));
   }
 
   console.log('\nconfirm sends the date of the day on screen');
@@ -958,17 +998,17 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
       typeof body.date);
     check('in the shape the server accepts', /^\d{4}-\d{2}-\d{2}$/.test(String(body.date)),
       String(body.date));
-    check("and it is tomorrow's date, the day on screen", body.date === TOMORROW,
-      `${body.date} vs ${TOMORROW}`);
+    check("and it is today's date, the day on screen", body.date === TODAY,
+      `${body.date} vs ${TODAY}`);
 
     // The switch has to carry through to the payload too, or a confirm on one
     // day would save over the other.
-    await byId['pick-today'].onclick();
+    await byId['pick-tomorrow'].onclick();
     posted.length = 0;
     await byId['confirm'].onclick();
-    const todayBody = posted.find((p) => p.url === '/plan').body;
-    check('switching to Today sends today instead', todayBody.date === TODAY,
-      `${todayBody.date} vs ${TODAY}`);
+    const tomorrowBody = posted.find((p) => p.url === '/plan').body;
+    check('switching to Tomorrow sends tomorrow instead', tomorrowBody.date === TOMORROW,
+      `${tomorrowBody.date} vs ${TOMORROW}`);
   }
 
   console.log('\na morning planner opens on today');
@@ -1109,6 +1149,11 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
       plan: twoDays(), entries: utcEntries(), now: '11:00',
     });
     await ctx.load();
+
+    // Reached rather than landed on. The page opens on today now, so a case
+    // about tomorrow has to say so.
+    await byId['pick-tomorrow'].onclick();
+
     check('nothing is past', slots().every((s) => !cardOf(s)._class.has('past')));
     check('and there is no divider',
       byId.builder.children.filter((c) => c._class.has('now')).length === 0);
@@ -1165,6 +1210,9 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
     });
     await ctx.load();
 
+    // The page opens on today, so a case about tomorrow's plan reaches it.
+    await byId['pick-tomorrow'].onclick();
+
     const rows = () => byId.things.children.filter((c) => c._class.has('row'));
     const rowFor = (t) => rows().find((r) => r.text().includes(t));
 
@@ -1212,6 +1260,9 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
       },
     });
     await ctx.load();
+
+    // The plan under test is tomorrow's, and the page opens on today.
+    await byId['pick-tomorrow'].onclick();
 
     const rowFor = (t) => byId.things.children.filter((c) => c._class.has('row'))
       .find((r) => r.text().includes(t));

@@ -980,7 +980,7 @@
       // because the day boundary that matters is theirs.
       let today = null;
       let timeZone = 'UTC';
-      let showing = 'tomorrow';
+      let showing = 'today';
 
       const planDateFor = (which) => (which === 'today' ? today : addDays(today, 1));
       const planDate = () => planDateFor(showing);
@@ -1062,11 +1062,20 @@
           timeZone = data.timezone || 'UTC';
           wake = toMinutes(data.wake_time || '08:00');
 
-          // Which day the screen opens on. An evening planner is here to plan
-          // tomorrow; a morning planner is here to plan the day they are in.
-          showing = data.plans_in === 'morning' ? 'today' : 'tomorrow';
-
-          await showDay(showing);
+          // Always today. The screen opens on the day you are in, because that
+          // is what it is opened to look at — what is on now, what is next.
+          //
+          // It used to follow `plans_in`, so an evening planner arrived on
+          // tomorrow. That made the page a planning tool first and a companion
+          // second, and it is used the other way round: planning tomorrow is
+          // one deliberate visit a day, and the rest are glances at what is
+          // happening. One tap reaches Tomorrow when the deliberate visit
+          // comes.
+          //
+          // `plans_in` still decides which day the evening nudge asks about.
+          // The two used to be one setting and are now two questions: which day
+          // you are shown, and which day you are reminded to plan.
+          await showDay('today');
         }
 
         renderThings();
@@ -1496,6 +1505,10 @@
 
         const now = onToday() ? nowMinutes() : null;
         let markedNow = false;
+        // Whether anything above the current block is over. The divider marks
+        // the edge of the past, so there has to be a past for it to be the edge
+        // of. See below.
+        let seenPast = false;
 
         for (const [i, b] of blocks.entries()) {
           // Two different lines, and the difference is the whole of this.
@@ -1533,10 +1546,19 @@
           // A day entirely behind or entirely ahead gets no divider, because it
           // would be marking the end of the list rather than a place in the
           // day.
-          if (onToday() && !past && !markedNow && i > 0) {
+          //
+          // "Entirely ahead" is what `seenPast` is for, and `i > 0` was standing
+          // in for it. The two agree only by accident: on a day where nothing
+          // has started, the first block skips the divider for being at index
+          // zero and the SECOND one draws it — a line through the middle of a
+          // day that has not begun. It could not be reached while the screen
+          // opened on tomorrow, where none of this runs, and became reachable
+          // the moment today became the day you land on.
+          if (onToday() && !past && !markedNow && seenPast) {
             box.append(nowDivider());
             markedNow = true;
           }
+          if (past) seenPast = true;
 
           box.append(blockCard(b, i, { begun, past }));
         }

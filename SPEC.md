@@ -351,14 +351,19 @@ same row and at the same height as any other section label, and either word can
 be pressed. The word you are not looking at is very faint (`#4A443C`) — legible
 as a way back and nothing more.
 
-Which one the app opens on is `profile.plans_in`:
+**It opens on Today**, always, for every profile. The screen is opened to look
+at the day you are in — what is on now, what is next — and planning tomorrow is
+one deliberate visit a day against a great many glances. One tap reaches Tomorrow
+when the deliberate visit comes.
 
-| | |
-|---|---|
-| `evening` (default, and what null means) | opens on **Tomorrow** |
-| `morning` | opens on **Today** |
+This used to follow `profile.plans_in`, so an evening planner landed on Tomorrow.
+That made the page a planning tool first and a companion second, and it is used
+the other way round.
 
-There is no settings UI. The column is set by hand.
+`plans_in` still decides **which day the evening nudge asks about** (§4.2), and
+now decides only that. They were one setting answering two questions — which day
+you are shown, and which day you are reminded to plan — and the answers are not
+the same. There is still no settings UI; the column is set by hand.
 
 Switching replaces everything held about the day being built. Anything
 unconfirmed on the day being left is dropped, which is what a page reload does
@@ -1036,7 +1041,7 @@ process start time, the Node version, and whether the scheduler is running.
 | `profile.default_wake_time` | where the builder starts the first block |
 | `profile.telegram_chat_id` | where outbound goes, or nowhere if unset |
 | `profile.nudge_hour` | the evening nudge hour, 0–23. Null means 20 |
-| `profile.plans_in` | `morning` or `evening`. Which day the app opens on, and which day the nudge asks about. Null means evening |
+| `profile.plans_in` | `morning` or `evening`. Which day the evening nudge asks about. It no longer decides which day the app opens on — that is always today. Null means evening |
 
 ---
 
