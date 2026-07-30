@@ -384,19 +384,23 @@ refusing the statement precisely when there was something to state.
   **hidden, not lost**: the row still holds it, the confirm still sends it, and
   the message that already went out carried it. Blocks in progress and still to
   come show theirs as before.
-- A **Next divider** sits between what has been and what is left: a dot, the
-  word, and a hairline. It is drawn once, and not at all on a day entirely behind
-  or entirely ahead, where it would be marking the edge of the list rather than a
-  place in the day.
+- A **divider** marks where the past ends: a dot and a hairline, **and no word**.
+  It is drawn once, above the first block that **has not ended** — so everything
+  above it has happened, and everything below is happening or still to come. Not
+  drawn at all on a day entirely behind or entirely ahead, where it would be
+  marking the end of the list rather than a place in the day.
 
-  It reads **Next**, and it used to read **NOW**. The word changed where it
-  sits. *NOW* named the moment, and was true wherever the line fell; *Next* is a
-  claim about the block directly underneath it. So the line moved down by one:
-  it is drawn above the first block that **has not started**, where it used to
-  be drawn above the first that **had not finished**. Those differ by exactly
-  one block — the one in progress — and with the old placement the divider would
-  have called a running block the next one while that block's own right edge
-  said *active*.
+  It carried a word twice and has lost it twice over. **NOW** named the moment
+  and was true wherever the line fell. **Next** was a claim about the block
+  directly underneath, which forced the line *below* the running block — a block
+  you are in the middle of is not the next one. Removing the word removes the
+  claim, and the line goes back to the division that was wanted: past above,
+  present and future below.
+
+  The lesson is worth keeping. A caption on a line across a day has to be about
+  one side of it, and whichever side it names, it is wrong for something. The
+  blocks either side already say which they are — a past block is an outline, a
+  running one says *active* — so the line does not need to say it for them.
 - The **Starts control is hidden.** The day has already started, so there is
   nothing to decide about when it does.
 
@@ -980,9 +984,12 @@ The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
   real space between them.
 - **Blue is actionable, with one exception.** It appears on the Starts steppers,
   the duration chip, Undo, Confirm and Save — everything a press acts on — and on
-  the **Next** divider, which no press acts on and which says *here is where you
-  are*. That is the whole list, enforced by name in the layout check; nothing
-  decorative is ever blue.
+  the **dot of the divider**, which no press acts on and which says *here is
+  where you are*. That is the whole list, enforced by name in the layout check;
+  nothing decorative is ever blue.
+
+  The exception used to be two selectors, the dot and the word beside it. The
+  word is gone, so it is one.
 
   The near miss is the **active** label. It says much the same thing as the
   divider a line above it, so blue is the obvious reach — and it is wrong,

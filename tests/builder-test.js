@@ -982,11 +982,13 @@ const SETTLED = 220; // past SETTLE_MS
     check('between the past and what is left',
       byId.builder.children.indexOf(divider[0]) === 2,
       String(byId.builder.children.indexOf(divider[0])));
-    check('it carries a dot and the word',
+    check('it carries a dot and a rule',
       divider[0].children.some((c) => c._class.has('dot')) &&
-        divider[0].text().includes('Next'));
-    check('and the word is not NOW any more', !divider[0].text().includes('NOW'),
-      divider[0].text());
+        divider[0].children.some((c) => c._class.has('ln')));
+    check('and no word at all', divider[0].text().trim() === '',
+      JSON.stringify(divider[0].text()));
+    check('so nothing there claims a side of the line',
+      !/NOW|Next/i.test(divider[0].text()), divider[0].text());
 
     check('a past block keeps the hour it happened at',
       slots()[0].text().includes('8:00 AM – 9:00 AM'), slots()[0].text().trim());
@@ -1400,15 +1402,23 @@ const SETTLED = 220; // past SETTLE_MS
     check('the one that is over does not', !actIn(slots()[0]));
     check('nor does the one still to come', !actIn(slots()[2]));
 
-    // And the divider clears it. The word is "Next", which is a claim about
-    // the block underneath — so it has to sit below the one in progress, not
-    // above it. Above, it would be calling the running block the next one
-    // while the block's own right edge said "active".
+    // And the divider sits ABOVE it. The line separates what has happened from
+    // what has not, so a block you are in the middle of belongs below it with
+    // the rest of what is left.
+    //
+    // It sat below the running block for a while, which the word forced: "Next"
+    // is a claim about the block underneath, and a block already running is not
+    // next. With the word gone the line goes back to marking the edge of the
+    // past, which is the division that was wanted all along.
     const kids = byId.builder.children;
     const line = kids.filter((c) => c._class.has('now'));
     check('there is one divider', line.length === 1, String(line.length));
-    check('and it sits below the block in progress, not above it',
-      kids.indexOf(line[0]) === 2, String(kids.indexOf(line[0])));
+    check('and it sits above the block in progress',
+      kids.indexOf(line[0]) === 1, String(kids.indexOf(line[0])));
+    check('so the running block is below the line, with what is still to come',
+      kids.indexOf(line[0]) < kids.indexOf(slots()[1]));
+    check('and the block that is over is above it',
+      kids.indexOf(slots()[0]) < kids.indexOf(line[0]));
 
     // Holding it must not pick it up.
     const card = cardOf(slots()[1]);

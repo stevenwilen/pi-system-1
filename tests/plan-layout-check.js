@@ -160,7 +160,10 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // that is not one. It is listed by name so a second has to be argued for
   // here rather than added quietly.
   const acts = /\.step|\.dur|\.undo button|\.confirm|\.sheet-actions \.save/;
-  const orients = /\.now \.dot|\.now \.txt/;
+  // Just the dot. The divider carried a word in the accent colour too, and the
+  // word is gone — a line across the day needs no caption, and every caption
+  // it was given turned out to be a claim about one side of it.
+  const orients = /\.now \.dot/;
   check('blue appears only on the controls that act, or the one that orients',
     blue.every((s) => acts.test(s) || orients.test(s)), blue.join(' | '));
   check('and nothing decorative has it',

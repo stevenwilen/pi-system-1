@@ -481,8 +481,9 @@
         white-space: nowrap;
       }
 
-      /* Where the day is now: a dot, the word, and a rule running out to the
-         edge. It sits between what has been and what is left. */
+      /* Where the past ends: a dot and a rule running out to the edge. It
+         carried a word between them once, and the word kept having to be a
+         claim about one side of the line or the other. */
       .now {
         display: flex;
         align-items: center;
@@ -494,11 +495,6 @@
         height: 5px;
         border-radius: 50%;
         background: var(--accent);
-      }
-      .now .txt {
-        font-size: 10px;
-        letter-spacing: 0.12em;
-        color: var(--accent);
       }
       .now .ln {
         flex: 1;
@@ -1475,20 +1471,20 @@
           const begun = blockBegun(b);
           const past = begun && b.start + b.duration <= now;
 
-          // Once, above the first block that has not STARTED — not the first
-          // that has not finished. The two differ by exactly one block, the one
-          // in progress, and the word decides which is right: it used to read
-          // NOW, which was true of the moment either way, and it now reads
-          // Next, which is a claim about the block underneath it. A block you
-          // are in the middle of is not next, and it says "active" on its own
-          // right-hand edge, so the divider sitting above it would be
-          // contradicting the line below it.
+          // Once, above the first block that has not ENDED. What is above the
+          // line has happened; what is below it is happening or still to come.
+          //
+          // It carried a word for a while and the word decided this. NOW was
+          // true wherever the line fell, then Next was a claim about the block
+          // underneath — which pushed the line below the running block, because
+          // a block you are in the middle of is not the next one. With no word
+          // there is nothing to contradict, and the line goes back to marking
+          // the edge of the past, which is the division that matters.
           //
           // A day entirely behind or entirely ahead gets no divider, because it
-          // would be marking the edge of the list rather than a place in the
-          // day. Nothing begun yet means the first block is already the next
-          // one, and the whole list is what is left.
-          if (onToday() && !begun && !markedNow && i > 0) {
+          // would be marking the end of the list rather than a place in the
+          // day.
+          if (onToday() && !past && !markedNow && i > 0) {
             box.append(nowDivider());
             markedNow = true;
           }
@@ -1515,19 +1511,25 @@
         renderThings();
       }
 
+      /**
+       * Where the past ends: a dot and a rule, and no word.
+       *
+       * It read NOW, then Next. A word here has to be a claim about one side of
+       * the line or the other, and it kept being the wrong one — Next named the
+       * block below it, which is not next when that block is already running.
+       * A line drawn across the day needs no caption; the blocks on either side
+       * of it say which side they are on.
+       */
       function nowDivider() {
         const bar = document.createElement('div');
         bar.className = 'now';
 
         const dot = document.createElement('div');
         dot.className = 'dot';
-        const txt = document.createElement('div');
-        txt.className = 'txt';
-        txt.textContent = 'Next';
         const ln = document.createElement('div');
         ln.className = 'ln';
 
-        bar.append(dot, txt, ln);
+        bar.append(dot, ln);
         return bar;
       }
 
