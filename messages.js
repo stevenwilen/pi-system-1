@@ -63,4 +63,64 @@ function composeMessage(block) {
   return block.note ? `${header}\n\n${block.note}` : header;
 }
 
-module.exports = { composeMessage };
+/**
+ * What is still to come, in the order the day runs.
+ *
+ * `now` in minutes past midnight, or **null** for a day that is not today —
+ * tomorrow has no "now" inside it, so the whole of it is still to come.
+ *
+ * A block is still to come until it has ENDED. The one in progress is included,
+ * because the message is "what is going on now until finish" and what is going
+ * on now is that block. Ending exactly at `now` is over; starting exactly at
+ * `now` has begun and is going on.
+ *
+ * Sorted here rather than trusted, because the payload arrives in whatever
+ * order the screen last showed and the message is a reading of the day.
+ */
+function blocksStillToCome(rows, now) {
+  const sorted = [...(rows || [])].sort(
+    (a, b) => toMinutes(a.start_time) - toMinutes(b.start_time)
+  );
+
+  if (now === null || now === undefined) return sorted;
+  return sorted.filter((b) => toMinutes(b.start_time) + b.duration_minutes > now);
+}
+
+/**
+ * The day as a whole, sent once when it is confirmed.
+ *
+ * The per-block messages arrive one at a time, each at its own hour, and none
+ * of them shows the shape of the day. This is the other half: what is coming,
+ * in one place, at the moment it is agreed to.
+ *
+ * A `<pre>` block, so the times are a real column. Telegram renders in a
+ * proportional font, where padded spaces line nothing up — "9:30 AM" and
+ * "11:30 AM" are different widths, and without monospace the titles start at a
+ * ragged edge. The times are right-aligned inside it, so a single-digit hour
+ * indents by one and the colons stack.
+ *
+ * The header and the closing time sit OUTSIDE the block, as ordinary text.
+ * They are prose, not table, and Telegram draws a `<pre>` on its own surface.
+ *
+ * Only start times. Each block's end is the next one's start, so saying both
+ * would be saying everything twice; the one end that is not implied is the
+ * day's, and that is the last line.
+ *
+ * Returns null when there is nothing left to say — a day already over sends no
+ * message rather than a header with no lines under it.
+ */
+function composeSchedule(blocks, label) {
+  if (!blocks || !blocks.length) return null;
+
+  const starts = blocks.map((b) => clock(toMinutes(b.start_time)));
+  const width = Math.max(...starts.map((s) => s.length));
+
+  const lines = blocks.map((b, i) => `${starts[i].padStart(width)}  ${b.title}`);
+  const ends = Math.max(
+    ...blocks.map((b) => toMinutes(b.start_time) + b.duration_minutes)
+  );
+
+  return `${label}\n\n<pre>\n${lines.join('\n')}\n</pre>\n\nEnds ${clock(ends)}`;
+}
+
+module.exports = { composeMessage, composeSchedule, blocksStillToCome };

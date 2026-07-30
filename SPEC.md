@@ -816,6 +816,63 @@ days-since alone would name something every single night, including the nights
 when nothing was actually neglected — and a nudge that always fires is a digest,
 which this is deliberately not.
 
+### 4.3 The schedule, at confirm time
+
+Pressing **Confirm** sends the day as one message. The block messages arrive one
+at a time, each at its own hour, and none of them shows the shape of the day;
+this is the other half, sent at the moment the day is agreed to.
+
+```
+Today
+
+<pre>
+ 9:30 AM  Morning routine
+11:30 AM  Automate mom's investment account
+12:00 PM  Eat
+ 2:30 PM  Pack for trip
+</pre>
+
+Ends 3:30 PM
+```
+
+**Monospace, and not for decoration.** Telegram renders in a proportional font,
+where `9:30 AM` and `11:30 AM` are different widths and padded spaces line
+nothing up. A `<pre>` block is the only way the times form a real column rather
+than an approximate one. It costs the code-block surface Telegram draws around
+it — grey background, smaller type — which is the trade.
+
+`pre` was added to the tag allowlist in `telegram.js` for this. That list escapes
+everything and restores a fixed few, and it has the allowlist's known
+consequence: a title containing `</pre>` closes the block early. That has always
+been true of `<b>`, and it fails soft — Telegram rejects unbalanced tags and the
+sender resends the same text with no `parse_mode` at all.
+
+The **header and the closing time sit outside the block**, as ordinary text. They
+are prose, not table.
+
+**Start times only.** Each block's end is the next one's start, so carrying both
+would say everything twice. The one end that is not implied is the day's, and
+that is the last line.
+
+**From what is going on now until finish.** On today, a block that has already
+ended is left out; the one in progress is kept, because it is what is going on.
+On any other day there is no *now* inside it, so the whole day goes. The two
+boundaries are decided rather than left to chance: a block ending exactly at now
+is over, and one starting exactly at now has begun.
+
+**Every confirm sends one.** Confirm, change something, confirm again, and two
+schedules arrive. That is the intended reading — the newest message is the plan —
+and the rule is small enough to hold in your head, which the alternatives were
+not.
+
+**A day with nothing left sends nothing.** Confirming at six in the evening a day
+whose last block ended at three would otherwise send a header, no lines, and an
+ending time already past.
+
+**It cannot fail the confirm.** The plan is saved before this runs, and a
+Telegram outage must not turn a saved day into an error that says it did not
+save. Anything that goes wrong is logged under `[SCHEDULE]` and swallowed.
+
 ---
 
 ## 5. Non-goals
@@ -848,7 +905,7 @@ npm test       # every suite, sequentially
 | `clock.js` | dates and clock times as numbers, in the person's own timezone |
 | `staleness.js` | entry → the most recent plan date it still has a block on |
 | `warning.js` | the mark: size against time left, and nothing else |
-| `messages.js` | what Telegram sends for a block: the header and the note, read off the row |
+| `messages.js` | what Telegram sends: a block's header and note, and the whole-day schedule at confirm time |
 | `scheduler.js` | the 15-minute tick: block delivery and the evening nudge |
 | `telegram.js` | the send |
 | `routes/entries.js` | Things: read, add, edit, finish, delete |

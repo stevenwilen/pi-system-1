@@ -108,6 +108,107 @@ const made = [];
     check('and message_text is not read', !/message_text/.test(src));
   }
 
+  console.log('\nwhat is still to come');
+  {
+    // 09:00-10:00 over, 10:00-11:00 running, 11:00-12:00 ahead. It is 10:30.
+    const day = [
+      { title: 'Third', start_time: '11:00:00', duration_minutes: 60 },
+      { title: 'First', start_time: '09:00:00', duration_minutes: 60 },
+      { title: 'Second', start_time: '10:00:00', duration_minutes: 60 },
+    ];
+    const names = (rows) => rows.map((r) => r.title).join(',');
+
+    check('the payload order is not trusted',
+      names(m.blocksStillToCome(day, null)) === 'First,Second,Third',
+      names(m.blocksStillToCome(day, null)));
+
+    const at1030 = m.blocksStillToCome(day, 10 * 60 + 30);
+    check('a block that has ended is gone', !names(at1030).includes('First'), names(at1030));
+    check('the one in progress stays, because it is what is going on',
+      names(at1030) === 'Second,Third', names(at1030));
+
+    // The two boundaries, which are the only places this can be wrong.
+    check('ending exactly now is over',
+      names(m.blocksStillToCome(day, 10 * 60)) === 'Second,Third',
+      names(m.blocksStillToCome(day, 10 * 60)));
+    check('starting exactly now has begun, and is going on',
+      names(m.blocksStillToCome(day, 11 * 60)) === 'Third',
+      names(m.blocksStillToCome(day, 11 * 60)));
+
+    check('a day entirely past comes to nothing',
+      m.blocksStillToCome(day, 23 * 60).length === 0);
+    check('and null means the whole day, for a day that is not today',
+      m.blocksStillToCome(day, null).length === 3);
+  }
+
+  console.log('\nthe schedule sent at confirm time');
+  {
+    const day = [
+      { title: 'Morning routine', start_time: '09:30:00', duration_minutes: 120 },
+      { title: 'Automate mom\'s investment account', start_time: '11:30:00', duration_minutes: 30 },
+      { title: 'Eat', start_time: '12:00:00', duration_minutes: 60 },
+      { title: 'Pack for trip', start_time: '14:30:00', duration_minutes: 60 },
+    ];
+    const text = m.composeSchedule(day, 'Today');
+    const lines = text.split('\n');
+
+    check('the label is the first line', lines[0] === 'Today', lines[0]);
+    check('and stands outside the block, as prose', !/<pre>/.test(lines[0]));
+
+    // The whole point of the monospace block: Telegram's font is proportional,
+    // so "9:30 AM" and "11:30 AM" are different widths and padded spaces line
+    // nothing up. Inside <pre> they do.
+    check('the list is wrapped in pre', /<pre>\n/.test(text) && /\n<\/pre>/.test(text));
+
+    const body = text.slice(text.indexOf('<pre>') + 6, text.indexOf('</pre>') - 1).split('\n');
+    check('one line per block', body.length === 4, `${body.length}`);
+    check('the times are right-aligned into a column',
+      body.every((l) => l.indexOf(':') === body[0].indexOf(':')),
+      JSON.stringify(body.map((l) => l.indexOf(':'))));
+    check('a single-digit hour is padded, not shifted',
+      body[0].startsWith(' 9:30 AM') && body[1].startsWith('11:30 AM'),
+      JSON.stringify(body.slice(0, 2)));
+    check('and the title follows the time', /9:30 AM {2}Morning routine$/.test(body[0]), body[0]);
+
+    // Start times only. Each end is the next start, and the one end that is
+    // not implied is the day's.
+    check('no line carries an end time', !body.some((l) => /\bto\b|–/.test(l)),
+      JSON.stringify(body));
+    check('the last line is the day ending', lines[lines.length - 1] === 'Ends 3:30 PM',
+      lines[lines.length - 1]);
+    check('and it is outside the block too', text.indexOf('</pre>') < text.indexOf('Ends'));
+
+    // Nothing left to say.
+    check('an empty day composes nothing', m.composeSchedule([], 'Today') === null);
+    check('and so does a missing one', m.composeSchedule(null, 'Today') === null);
+
+    console.log('\n    as Telegram would receive it:');
+    console.log('    ' + text.replace(/\n/g, '\n    ') + '\n');
+  }
+
+  console.log('\nthe schedule survives escaping, and a title does not');
+  {
+    const { toTelegramHtml } = require(ROOT + '/telegram.js');
+
+    const text = m.composeSchedule(
+      [{ title: 'Read <Dune> & think', start_time: '09:00:00', duration_minutes: 60 }],
+      'Today'
+    );
+    const out = toTelegramHtml(text);
+
+    check('the pre tags come through as tags',
+      /<pre>/.test(out) && /<\/pre>/.test(out), out);
+    check('but a title\'s angle brackets are escaped',
+      /&lt;Dune&gt;/.test(out) && !/<Dune>/.test(out), out);
+    check('and its ampersand too', /&amp;/.test(out), out);
+
+    // The allowlist, stated. Anything not on it renders as text.
+    check('a tag that is not allowed stays text',
+      /&lt;script&gt;/.test(toTelegramHtml('<script>')), toTelegramHtml('<script>'));
+    check('b and i still pass', toTelegramHtml('<b>x</b> <i>y</i>') === '<b>x</b> <i>y</i>',
+      toTelegramHtml('<b>x</b> <i>y</i>'));
+  }
+
   console.log('\nnothing in this path reaches the model');
   {
     const src = require('fs')
