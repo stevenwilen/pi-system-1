@@ -995,6 +995,37 @@ const UNDO_LAPSED = 6200; // past UNDO_MS, so the offer has been let go
     check('with Starts hidden again', byId.starts._class.has('hidden'));
   }
 
+  console.log('\nthe switch shows a wait rather than the day you are leaving');
+  {
+    // Tapping Tomorrow used to leave today's blocks on screen, under the word
+    // Tomorrow, until two fetches came back. Long enough on a phone to read the
+    // wrong day and believe it.
+    const { ctx, byId, titles } = boot({
+      plan: twoDays(), entries: utcEntries(), now: '11:00',
+    });
+    await ctx.load();
+    check('today is on screen', titles().join() === 'Reading,Gym,UF application',
+      titles().join());
+
+    // Started, not awaited: the point is what is on screen DURING the fetch.
+    const switching = byId['pick-tomorrow'].onclick();
+
+    const waiting = byId.builder.children.filter((c) => c._class.has('waiting'));
+    check('the old day is gone at once', titles().length === 0, titles().join());
+    check('and a dot is there instead', waiting.length === 1, String(waiting.length));
+    check('one dot, nothing else in the builder',
+      byId.builder.children.length === 1, String(byId.builder.children.length));
+    check('the end time stops claiming the old hour',
+      byId['end-time'].textContent === '—', byId['end-time'].textContent);
+
+    await switching;
+    check('then tomorrow arrives', titles().join() === 'Spanish', titles().join());
+    check('and the dot is gone',
+      byId.builder.children.filter((c) => c._class.has('waiting')).length === 0);
+    check('with its real end time back', byId['end-time'].textContent === '9:00 AM',
+      byId['end-time'].textContent);
+  }
+
   console.log('\nan evening planner still opens on today');
   {
     // plans_in used to decide this and no longer does. It still decides which

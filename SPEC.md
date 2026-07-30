@@ -185,6 +185,17 @@ because it claims something is still coming. It then leaves the layout rather
 than fading to invisible and staying: a fixed, full-screen element over the app
 is inert only while it keeps `pointer-events: none`.
 
+**The same dot appears in the day section when the switch is fetching**, and it
+is declared once for both — two copies of a 6px faint circle would drift the
+first time either was adjusted. Tapping Tomorrow left today's blocks on screen,
+under the word Tomorrow, until two requests came back; on a phone that is long
+enough to read the wrong day and believe it. The **end time goes back to `—`**
+with them, because it is computed from the blocks and would otherwise be the one
+number on screen still confidently wrong.
+
+The calendar aside is left alone through the switch. It is the only part that
+visibly reloads on its own, and blanking it made the section flicker twice.
+
 **The day is first, Things second.** Things led while this was a page you read
 *before* you planned: the cold list argued for what tomorrow should hold, and the
 builder was where you answered it. Once a day is confirmed that reverses — the

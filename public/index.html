@@ -508,12 +508,26 @@
         z-index: 50;
         transition: opacity 160ms ease-out;
       }
-      #booting span {
+      /* One dot, two waits: the whole page before the first day, and the day
+         section alone when the switch fetches another. Declared together
+         because they are the same statement — something is on its way — and
+         two copies would drift. */
+      #booting span,
+      .waiting span {
         width: 6px;
         height: 6px;
         border-radius: 50%;
         background: var(--faint);
         animation: breathe 1100ms ease-in-out infinite;
+      }
+
+      /* The day, mid-switch. It holds roughly a block's worth of height so the
+         page does not jump as the old day leaves and the new one arrives. */
+      .waiting {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 30px 0;
       }
       #booting.done {
         opacity: 0;
@@ -526,7 +540,8 @@
       /* Stillness is the setting, not a lesser version of it: the dot sits at
          full strength rather than pulsing. */
       @media (prefers-reduced-motion: reduce) {
-        #booting span {
+        #booting span,
+        .waiting span {
           animation: none;
           opacity: 1;
         }
@@ -1164,11 +1179,40 @@
         blocks = [];
         saved = false;
 
+        // The day being left stays on screen until the new one arrives
+        // otherwise, so tapping Tomorrow shows today's blocks under the word
+        // Tomorrow for as long as the fetch takes. Two requests, and on a phone
+        // that is long enough to read the wrong day and believe it.
+        //
+        // The same dot as the boot cover, because it is the same statement.
+        showWaiting();
+
         await loadCalendar(date);
         await loadPlan(date);
 
         renderWake();
         renderThings();
+      }
+
+      /**
+       * The day section, waiting for the day it has been asked for.
+       *
+       * The end time goes back to "—" with it. It is computed from the blocks,
+       * so leaving it would leave the old day's last hour sitting under the new
+       * day's name — the one number on screen that would still be confidently
+       * wrong.
+       *
+       * The calendar aside is left alone: it is the only part that reloads
+       * visibly on its own, and blanking it made the section flicker twice.
+       */
+      function showWaiting() {
+        const dot = document.createElement('span');
+        const box = document.createElement('div');
+        box.className = 'waiting';
+        box.append(dot);
+
+        $('builder').replaceChildren(box);
+        $('end-time').textContent = '—';
       }
 
       // The promise is returned rather than dropped. Nothing in the browser

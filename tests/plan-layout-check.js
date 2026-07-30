@@ -18,7 +18,22 @@ const check = (label, ok, detail = '') => {
 };
 
 const html = fs.readFileSync(ROOT + '/public/index.html', 'utf8');
-const css = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+
+// The stylesheet with its comments stripped, for the same two reasons the
+// markup and the script are:
+//
+// A rule is found by reading the text before its `{` as a selector list, and a
+// comment sitting above a rule is part of that text — so `#booting span` was
+// being read as "…not saying. */ #booting span", which matches nothing anyone
+// would look up. Every rule in this file carries a paragraph above it, so this
+// is not an edge case.
+//
+// And several checks assert that a removed thing is not mentioned, while the
+// comments explain at length what was removed and why.
+const css = html
+  .slice(html.indexOf('<style>'), html.indexOf('</style>'))
+  .replace(/\/\*[\s\S]*?\*\//g, '');
+
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 
 // The markup alone. The <script> lives inside <body>, so slicing to </body>
@@ -43,11 +58,24 @@ const code = script
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/^\s*\/\/.*$/gm, '');
 
-// One rule's declarations, by exact selector.
+// One rule's declarations, by selector.
+//
+// Grouped selectors count. `#booting span, .waiting span { … }` is one rule
+// answering for both, and looking only for `#booting span {` found nothing —
+// so a check would report the property missing when it was simply shared.
+// Silent, and in the direction that reads as a real failure.
 const rule = (selector) => {
   const at = css.indexOf(`\n      ${selector} {`);
-  if (at === -1) return '';
-  return css.slice(at, css.indexOf('\n      }', at));
+  if (at !== -1) return css.slice(at, css.indexOf('\n      }', at));
+
+  // A group: the selector is one of a comma-separated list. Returns the whole
+  // rule, selectors included, which is what the direct hit above returns —
+  // two shapes from one helper would have callers comparing unlike things.
+  for (const m of css.matchAll(/\n {6}([^{@\n][^{]*?)\{([^}]*)\}/g)) {
+    const names = m[1].split(',').map((s) => s.trim().replace(/\s+/g, ' '));
+    if (names.includes(selector)) return m[0];
+  }
+  return '';
 };
 
 // Every rule whose declarations mention a value, by selector. Used to prove a
@@ -267,8 +295,33 @@ console.log('\n7a. the wait before the first day is on screen');
     /style\.display = 'none'/.test(code));
 
   // Motion is the default, stillness is the setting — not a lesser version.
+  const reduced = css.slice(css.indexOf('prefers-reduced-motion: reduce'));
   check('reduced motion stops the pulse',
-    /prefers-reduced-motion[\s\S]{0,200}#booting span \{\s*animation: none/.test(css));
+    /#booting span,\s*\.waiting span \{\s*animation: none/.test(reduced),
+    reduced.slice(0, 120));
+  check('and holds the dot at full strength rather than mid-fade',
+    /animation: none;\s*opacity: 1/.test(reduced));
+}
+
+console.log('\n7a-ii. and the same dot when the day switch is fetching');
+{
+  // Tapping Tomorrow left today's blocks on screen under the word Tomorrow
+  // until two fetches came back. On a phone that is long enough to read the
+  // wrong day and believe it.
+  const wait = rule('.waiting');
+  check('the day gets a waiting state', wait.length > 0);
+  check('centred', /justify-content: center/.test(wait));
+  check('and holding height, so the page does not jump', /padding: 30px 0/.test(wait));
+
+  // Declared once for both. Two copies of a 6px faint circle would drift the
+  // first time one of them was adjusted.
+  check('it is the same dot as the boot cover, declared once',
+    /#booting span,\s*\.waiting span \{[^}]*background: var\(--faint\)/.test(css));
+
+  check('the switch shows it before it fetches',
+    /showWaiting\(\);\s*\n\s*await loadCalendar/.test(code));
+  check('and the end time goes back to a dash with it',
+    /showWaiting[\s\S]{0,400}\$\('end-time'\)\.textContent = '—'/.test(code));
 }
 
 console.log('\n7b. the right edge of a block says one thing per state');
