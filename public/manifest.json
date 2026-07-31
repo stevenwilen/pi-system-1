@@ -1,13 +1,13 @@
 {
-  "name": "Planner",
-  "short_name": "Planner",
-  "description": "A personal planning system.",
+  "name": "Schedule",
+  "short_name": "Schedule",
+  "description": "Your day, and the things waiting for one.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#16130F",
-  "theme_color": "#16130F",
+  "background_color": "#F5F1E8",
+  "theme_color": "#F5F1E8",
   "icons": [
     {
       "src": "/icon.svg",

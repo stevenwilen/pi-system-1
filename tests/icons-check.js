@@ -40,8 +40,33 @@ console.log('\nthe manifest is coherent');
   check('an svg for any size', manifest.icons.some((i) => i.sizes === 'any' && i.type === 'image/svg+xml'));
   check('192 and 512 pngs', [192, 512].every((s) => manifest.icons.some((i) => i.sizes === `${s}x${s}`)));
   check('one maskable', manifest.icons.some((i) => i.purpose === 'maskable'));
-  check('the theme colour is the app background', manifest.theme_color.toLowerCase() === '#16130f', manifest.theme_color);
-  check('and the page agrees', /name="theme-color" content="#16130F"/i.test(html));
+
+  // THE INSTALL COLOURS ARE THE PAPER. background_color paints the splash the
+  // system shows while the page loads, and theme_color the status bar around
+  // it. They were still the dark build's #16130F after the theme changed, so
+  // installing gave a near-black splash that opened into a paper app — a flash
+  // of the previous design on every cold start.
+  const paper = '#f5f1e8';
+  check('the theme colour is the app background',
+    manifest.theme_color.toLowerCase() === paper, manifest.theme_color);
+  check('the splash is the same paper',
+    manifest.background_color.toLowerCase() === paper, manifest.background_color);
+  check('and the page agrees',
+    new RegExp(`name="theme-color" content="${paper}"`, 'i').test(html));
+
+  // THE NAME IS IN FOUR PLACES and they have to agree, because each is read by
+  // a different installer: Android takes short_name for the home screen and
+  // name for the install prompt, iOS ignores the manifest entirely and reads
+  // apple-mobile-web-app-title, falling back to <title>. Three of the four can
+  // be right while the icon on the phone says something else.
+  const NAME = 'Schedule';
+  check('the manifest name', manifest.name === NAME, manifest.name);
+  check('and its short name, which is what Android puts on the home screen',
+    manifest.short_name === NAME, manifest.short_name);
+  check('the page title, which is what iOS falls back to',
+    new RegExp(`<title>${NAME}</title>`).test(html));
+  check('and the iOS title, which is what iOS actually uses',
+    new RegExp(`name="apple-mobile-web-app-title" content="${NAME}"`).test(html));
 }
 
 console.log('\nthe pngs are the svg');
