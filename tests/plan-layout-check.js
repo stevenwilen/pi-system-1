@@ -205,13 +205,40 @@ console.log('\n3. rows are rows; only builder blocks are cards');
     !/border:/.test(row) && css.indexOf('.row + .row') > -1);
 
   const block = rule('.block');
-  check('a block IS a card', /background: var\(--card\)/.test(block));
+  // The paper sits on the layer behind the text, so that is where to look for
+  // it. See the deckle checks below for why it is not on the slip itself.
+  check('a block IS a card', /background: var\(--card\)/.test(rule('.block::after')));
   // NO RADIUS. The edge is torn rather than cut — the deckle filter displaces
   // the whole shape through turbulence, so no two slips share an edge. A
   // rounded rectangle behind a torn edge is two different ideas about one
   // object.
   check('but not a radius: paper is torn, not cut', !/border-radius/.test(block), block);
-  check('its edge is displaced rather than drawn', /filter: url\(#deckle\)/.test(block));
+  check('its edge is displaced rather than drawn',
+    /filter: url\(#deckle\)/.test(rule('.block::after')));
+
+  // THE DECKLE NEVER TOUCHES TEXT, and this is the check that matters most in
+  // this theme.
+  //
+  // A CSS filter applies to an element and everything inside it. Put the
+  // deckle on the slip and feDisplacementMap pushes the title and the time
+  // through the same turbulence as the edge — every glyph bent, reading as a
+  // strange handwritten typeface. It is close to untraceable from the symptom:
+  // the property is named for an edge and the damage is to the words.
+  //
+  // So every filtered thing is a pseudo-element holding a background and
+  // nothing else. Any rule that carries a deckle must be a ::before or an
+  // ::after.
+  for (const m of css.matchAll(/\n {6,8}([^{@\n][^{]*?)\{([^}]*)\}/g)) {
+    if (!/url\(#deckle/.test(m[2])) continue;
+    const selector = m[1].trim().replace(/\s+/g, ' ');
+    check(`the deckle on ${selector} is on a layer, not on the text`,
+      /::(before|after)\s*$/.test(selector), selector);
+  }
+
+  check('and the slip itself carries none of it',
+    !/filter/.test(rule('.block')), rule('.block'));
+  check('nor does the undo bar, which had the same fault',
+    !/filter/.test(rule('.undo')), rule('.undo'));
   check('and the filter really exists in the markup',
     /<filter id="deckle">/.test(body) && /feDisplacementMap/.test(body));
   check('the slot does not clip it flat',
@@ -800,10 +827,10 @@ console.log('\n17. today and tomorrow');
   // outline is a drawing of a thing, and this theme lays things down and takes
   // them away rather than drawing them.
   check('a finished slip settles toward the page rather than becoming an outline',
-    /background: var\(--card-spent\)/.test(rule('.block.past')) &&
-      !/border:/.test(rule('.block.past')), rule('.block.past'));
+    /background: var\(--card-spent\)/.test(rule('.block.past::after')) &&
+      !/border:/.test(rule('.block.past::after')), rule('.block.past::after'));
   check('its edge goes soft with handling',
-    /filter: url\(#deckle-soft\)/.test(rule('.block.past')));
+    /filter: url\(#deckle-soft\)/.test(rule('.block.past::after')));
   check('with a lightened title', /color: #8e8a82/.test(rule('.block.past .t')));
   // Not just a past one. A block you are in the middle of kept its chip, and
   // shrinking it below the time already elapsed moved it into the past — an

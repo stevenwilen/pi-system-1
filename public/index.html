@@ -474,17 +474,29 @@
       }
 
       /* A slip of paper laid on the page.
-         No radius — the edge is torn, not cut. #deckle in the markup displaces
-         the whole shape through real turbulence, so no two slips share an edge
-         and none of them is quite a rectangle. */
+         No radius — the edge is torn, not cut. #deckle displaces the shape
+         through real turbulence, so no two slips share an edge and none of
+         them is quite a rectangle.
+
+         THE PAPER IS A LAYER BEHIND THE TEXT, and that is the whole reason
+         this is not simply `filter` on the slip. A CSS filter applies to an
+         element AND EVERYTHING INSIDE IT: put the deckle on the card and
+         feDisplacementMap pushes the title and the time through the same
+         turbulence as the edge, bending every letter. It reads as a strange
+         handwritten typeface, which is a hard thing to trace back to a
+         property named for an edge.
+
+         So the slip itself is unfiltered and holds only text. `::after` draws
+         the paper underneath it, and the filter lives there. `isolation`
+         keeps that negative layer inside the slip rather than letting it fall
+         behind the page. */
       .block {
         position: relative;
-        background: var(--card);
+        isolation: isolate;
         padding: 16px 17px 17px;
         display: flex;
         flex-direction: column;
         align-items: stretch;
-        filter: url(#deckle) drop-shadow(0 1px 1px rgba(43, 42, 40, 0.07));
         /* Vertical pans belong to the page, horizontal ones are ours. This one
            line is what lets a swipe and a scroll live on the same element
            without arbitrating between them in script. */
@@ -492,6 +504,18 @@
         user-select: none;
         -webkit-user-select: none;
       }
+
+      /* The sheet the slip is written on. Everything the deckle touches lives
+         here and nothing else does, so the torn edge never reaches the text. */
+      .block::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background: var(--card);
+        filter: url(#deckle) drop-shadow(0 1px 1px rgba(43, 42, 40, 0.07));
+      }
+
       /* The block's own line: what it is, and how long. A note, when there is
          one, sits under this rather than beside it. */
       .brow {
@@ -560,7 +584,7 @@
          The dark build made this an outline. An outline is a drawing of a
          thing, and this theme does not draw: it lays things down and takes
          them away. */
-      .block.past {
+      .block.past::after {
         background: var(--card-spent);
         filter: url(#deckle-soft) drop-shadow(0 1px 1px rgba(43, 42, 40, 0.03));
       }
@@ -748,9 +772,9 @@
         overflow: visible;
         z-index: 3;
       }
-      .block.lifted {
+      .block.lifted::after {
         background: var(--card-raised);
-        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+        filter: url(#deckle) drop-shadow(0 10px 18px rgba(43, 42, 40, 0.16));
       }
       .slot.dimmed {
         opacity: 0.55;
@@ -794,8 +818,19 @@
         padding: 13px 18px;
         font-size: 13px;
         color: var(--text);
-        filter: url(#deckle) drop-shadow(0 2px 6px rgba(43, 42, 40, 0.14));
         z-index: 20;
+        isolation: isolate;
+      }
+
+      /* The slip it is written on, behind the words. Same reason as a block:
+         a filter on the bar itself would bend its own text. */
+      .undo::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background: var(--card-raised);
+        filter: url(#deckle) drop-shadow(0 2px 6px rgba(43, 42, 40, 0.14));
       }
       .undo button {
         background: none;
@@ -1025,7 +1060,7 @@
         .block {
           transition: none !important;
         }
-        .block.lifted {
+        .block.lifted::after {
           filter: url(#deckle);
         }
       }
