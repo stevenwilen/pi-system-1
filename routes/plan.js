@@ -20,12 +20,14 @@ const router = express.Router();
 const NOTE_MAX = 500;
 
 /**
- * Everything on both calendar feeds for one date.
+ * What is on the calendar for one date.
  *
- * Both feeds together, undifferentiated. They used to mean different things —
- * one was things to know and the other things to do, and the second fed events
- * into the day automatically — and now they are one list of what is already
- * happening. A timed event carries its time; an all-day entry carries none.
+ * ONE calendar, read as reference. There were two, meaning things to know and
+ * things to do, and the second fed events into the day as blocks. Both the
+ * second feed and the automatic placing are gone: this is a list of what is
+ * already happening, shown beside the day so a person can build around it.
+ *
+ * A timed event carries its time; an all-day entry carries none.
  */
 router.get('/calendar/:date', async (req, res) => {
   const { db, userId } = req.auth;
@@ -42,10 +44,10 @@ router.get('/calendar/:date', async (req, res) => {
 
   const timeZone = (profile && profile.timezone) || 'UTC';
 
-  // readCalendar returns what it could read and names what it could not, so a
-  // feed that is down costs its own events and never the whole builder — but
-  // the failure travels with the answer instead of looking like a quiet day.
-  const { events, failed } = await readCalendar(db, userId, date);
+  // readCalendar returns what it could read and says whether it failed, so a
+  // feed that is down never costs the builder — but the failure travels with
+  // the answer instead of leaving an empty list to speak for itself.
+  const { events, failed, configured } = await readCalendar(db, userId, date);
 
   const items = events.map((e) => ({
     title: e.title,
@@ -67,9 +69,14 @@ router.get('/calendar/:date', async (req, res) => {
   res.json({
     date,
     items,
-    // Named feeds, so the screen can say which calendar it could not reach
-    // rather than leaving an empty day to speak for itself.
+    // A fact, not a list. There is one calendar, and the only thing the screen
+    // needs to know is whether this empty list means a quiet day or a feed it
+    // could not reach. Those are the same list and must not be the same
+    // sentence.
     failed,
+    // And the third case: an account with no calendar set up at all, which is
+    // not having a quiet day either.
+    configured,
   });
 });
 

@@ -160,45 +160,45 @@ change to make later, in the place hardest to notice it was needed.
 
 Nothing about how the system behaves lives outside the database.
 
-### 2.7 A calendar and a chat belong to a person, not to the deployment
+### 2.7 The calendar is reference, and there is one of it
 
-Both feed URLs live on `profile.calendar_ics_url` and
-`profile.calendar_action_ics_url`, and the Telegram chat on
-`profile.telegram_chat_id`. They were environment variables, which is the same
-assumption `PI_USER_ID` was: workable with one person, unable to express two.
+`profile.calendar_ics_url`, read and shown at the top of the day as what is
+already happening. **Nothing on it is ever placed into the day, pinned, claimed,
+or written to a plan.** Every block in a day is one the person put there. The
+calendar is a thing to look at while deciding, and the deciding is theirs.
 
-Both feeds are **optional**. An account with neither gets an empty aside and no
-error — a person who keeps no calendar is ordinary, not misconfigured, and a
-screen that says a feed is broken to someone who never had one is lying.
+There were two, meaning things to KNOW and things to DO, and the calendar an
+event sat on decided whether the day was built around it or the event was fed
+into the day as work. That asked people to file their life twice — once in
+Google and again in their head — to answer a question this system stopped asking
+when auto-placement was removed. One calendar says the same thing with nothing
+to maintain.
 
-**The Telegram bot stays global.** One token, one bot, in the environment,
-because that is a fact about the deployment. Only the chat id is per person.
+`profile.calendar_action_ics_url` remains in the schema, holding nothing, read
+by nothing, and deliberately not writable from the settings sheet — a screen
+that could still fill it would keep the dead feed alive in the data long after
+it left the code. Dropping a column is the one move that cannot be undone.
 
-**Linking sends.** A chat id is a number, so every typo is well-formed and
-indistinguishable from a correct value until the first message fails to arrive
-at nine in the morning — by which point nobody connects the silence to a number
-typed days earlier. `POST /telegram` therefore writes the row and *then* sends a
-message, and answers with both facts: `delivered: true`, or `delivered: false`
-with Telegram's own words. Saved-but-unproved is a state you can see and act on;
-proved-but-unsaved would be a lie.
+Nothing is filtered by TRANSP, by calendar name, or by anything inside the
+event. What is on the calendar is what is shown. It is optional: an account with
+no url has an empty aside, not a broken one.
 
-Written before sent, deliberately. The other order leaves someone whose test
-message arrived but whose row was never written with a bot that answers once and
-then goes quiet forever.
+**Three ways to have nothing to show, and three sentences.** The list is empty
+in all of them, so the list cannot be what says which:
 
-**An unlinked account is a third outcome, not a failure.** `sendTelegram`
-returns `{ skipped }`, and the scheduler neither releases the claim nor logs an
-error. Treated as a failure it cost a claim released and re-taken on every tick
-for the whole grace window, an error line each time, and finally an `[EXPIRED]`
-warning about a delivery that was never going to happen.
+| | |
+|---|---|
+| nothing on it | *Nothing on it.* |
+| could not be read | *Could not reach your calendar.* in the warn colour |
+| never set up | *No calendar yet. Add one in setup.* |
 
-**The feed cache is keyed by user and URL.** The URL alone is what makes it
-safe — different people have different URLs, and the entry holds the raw parsed
-file rather than anything filtered per person. The user id is a second belt over
-a fastened one and is **not load-bearing**; nothing about isolation depends on
-it. What *would* leak is keying on the feed's `source`, which is the tempting
-mistake now that the URL is a variable and the source is the constant.
-`calendar-feeds-test.js` goes red if anyone makes it.
+A calendar broken for a week reads exactly like a free week, and an account that
+never set one up reads like both. A partial read — some events *and* a failure —
+says *this may not be all of it*, because "nothing on it" would be a lie in the
+other direction.
+
+The feed is cached for sixty seconds, keyed by user and url. See 2.8 for why the
+url is what makes that safe.
 
 ### 2.8 Setup verifies itself, or it has not happened
 
@@ -261,7 +261,7 @@ contains a fenced JSON block, and a template literal full of escaped backticks
 is a string the next edit breaks.
 
 It is strictly linear and refuses to move on: Telegram first — the fiddliest
-step, done while motivation is highest — then the two calendars, then the
+step, done while motivation is highest — then the calendar, then the
 interview about projects, habits and tasks. Each step is verified by asking the
 person to paste the value back, never by asking "got it?". After each step it
 restates progress on one line — `Done: Telegram. Now: calendars 1 of 2.
@@ -690,10 +690,10 @@ Everything on **both** feeds for that date, read-only. Timed events show their
 time; all-day entries show the title alone. Timed first in clock order, then the
 rest.
 
-**Nothing is auto-placed, nothing is pinned, nothing is stored.** The feeds used
-to mean different things — one was things to know, the other things to do, and
-the second fed all-day events into the day as blocks that had to be argued with
-if you did not want them. Both are now read the same way and shown the same way.
+**Nothing is auto-placed, nothing is pinned, nothing is stored.** There were two
+feeds meaning different things — one things to know, the other things to do —
+and the second fed all-day events into the day as blocks that had to be argued
+with if you did not want them. Both the second feed and the placing are gone.
 What to do about what is already on the calendar is the person's decision, and it
 is the one decision this system had been quietly taking.
 

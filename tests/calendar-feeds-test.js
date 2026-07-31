@@ -1,12 +1,12 @@
-// Both calendar feeds, read into one list.
+// The calendar, read as reference and nothing else.
 //
-// The feeds used to mean different things: one was things to know, the other
-// things to do, and the second fed all-day events into the day as blocks. That
-// distinction is gone. Both are now read the same way and shown the same way,
-// and nothing on either is placed, pinned, claimed or stored.
+// There were two feeds once, meaning things to know and things to do, and the
+// second fed all-day events into the day as blocks. Both the second feed and
+// the placing are gone. One calendar is read, shown at the top of the day, and
+// forgotten: nothing on it is placed, pinned, claimed or stored.
 //
-// Both feeds are served from a local ICS server, so the assertions are about
-// this code rather than about what happens to be in anyone's real calendar.
+// The feed is served from a local ICS server, so the assertions are about this
+// code rather than about what happens to be in anyone's real calendar.
 const H = require('./harness');
 // The test account, discovered rather than written down. It is a real auth
 // user now, created by the harness, so its id is not knowable until it
@@ -135,35 +135,34 @@ const clearClaims = async () => {
   server = H.spawnServer(PORT);
   if (!(await H.waitFor(BASE))) throw new Error('server never came up');
 
-  await H.setProfile('a', {
-    calendar_ics_url: `${FEED}/dates.ics`,
-    calendar_action_ics_url: `${FEED}/action.ics`,
-  });
+  await H.setProfile('a', { calendar_ics_url: `${FEED}/dates.ics` });
 
-  // The feeds are cached for a minute inside tools.js, so each case uses its
+  // The feed is cached for a minute inside tools.js, so each case uses its
   // own dates rather than trying to change what one date returns.
   awareness = ics([
     allDay('know-1', 'Mums birthday', DATE),
     timed('know-2', 'Dentist', DATE, '1400', '1500'),
-  ]);
-  action = ics([
     allDay('do-1', 'Cancel Paramount', DATE),
     timed('do-3', 'Standup', DATE, '0900', '0915'),
   ]);
 
-  console.log('both feeds read into one list');
+  console.log('the calendar reads into one list');
   {
     const r = await get(`/calendar/${DATE}`);
     check('the day reads', r.status === 200, JSON.stringify(r.body).slice(0, 100));
 
     const titles = r.body.items.map((e) => e.title);
-    check('everything on both feeds is there', titles.length === 4, titles.join(', '));
-    check('from the awareness feed', titles.includes('Mums birthday') && titles.includes('Dentist'));
-    check('and from the action feed', titles.includes('Cancel Paramount') && titles.includes('Standup'));
+    check('everything on it is there', titles.length === 4, titles.join(', '));
+    check('timed and all-day alike',
+      titles.includes('Mums birthday') && titles.includes('Dentist') &&
+        titles.includes('Cancel Paramount') && titles.includes('Standup'));
 
-    // Which feed a thing is on no longer decides anything about it.
+    // There is one calendar, and an event carries nothing about where it came
+    // from. `source` was 'awareness' or 'action' and decided whether the day
+    // was built around a thing or the thing was fed into the day as work.
     check('nothing says which feed anything came from',
       r.body.items.every((e) => e.source === undefined));
+    check('and the day is reported as configured', r.body.configured === true);
 
     const byTitle = Object.fromEntries(r.body.items.map((e) => [e.title, e]));
 
@@ -184,14 +183,14 @@ const clearClaims = async () => {
       `${byTitle['Standup'].start_minutes}, expected ${expected}`);
     check('an all-day entry carries none', byTitle['Cancel Paramount'].start_minutes === null,
       String(byTitle['Cancel Paramount'].start_minutes));
-    check('an all-day entry on either feed reads the same',
+    check('every all-day entry reads the same',
       byTitle['Mums birthday'].start_minutes === null &&
         byTitle['Cancel Paramount'].start_minutes === null);
 
     check('timed first, in order, then all-day',
       titles.slice(0, 2).join(',') === 'Standup,Dentist', titles.join(','));
 
-    check('nothing is reported as failed', r.body.failed.length === 0, JSON.stringify(r.body.failed));
+    check('nothing is reported as failed', r.body.failed === false, JSON.stringify(r.body.failed));
   }
 
   console.log('\nreading a day claims nothing');
@@ -224,47 +223,32 @@ const clearClaims = async () => {
     // the row at a url that has never been fetched is a cold slot without a
     // wait — which is what the second server was really buying.
     //
-    // BOTH urls, and that is the part collapsing three servers into one
-    // changes. Each case used to get a fresh process and therefore an empty
-    // cache; now the cache outlives a case, so any case that changes what a
-    // feed RETURNS needs a url that has never been asked for. Leaving the
-    // action feed on its old url served this case the previous case's events,
-    // and the check below went red saying it could read nothing.
-    await H.setProfile('a', {
-      calendar_ics_url: `${FEED}/broken.ics`,
-      calendar_action_ics_url: `${FEED}/action-later.ics`,
-    });
-
-    action = ics([allDay('do-5', 'Still here', '2031-03-20')]);
+    await H.setProfile('a', { calendar_ics_url: `${FEED}/broken.ics` });
 
     const r = await (await authed(`${BASE}/calendar/2031-03-20`)).json();
-    check('the request still succeeds', Array.isArray(r.items));
-    check('and the dead feed is named', r.failed.length === 1, JSON.stringify(r.failed));
-    check('by a name a person would recognise',
-      r.failed.length === 1 && r.failed[0].label === 'Dates', JSON.stringify(r.failed));
-    check('the working feed is not blamed',
-      !r.failed.some((f) => f.source === 'action'), JSON.stringify(r.failed));
-    check('and it still returns what it could read',
-      r.items.map((t) => t.title).join(',') === 'Still here', JSON.stringify(r.items));
+
+    check('the request still succeeds', Array.isArray(r.items), JSON.stringify(r).slice(0, 80));
+    check('and the failure is reported', r.failed === true, JSON.stringify(r.failed));
+    check('the calendar is still configured', r.configured === true, JSON.stringify(r.configured));
+
+    // THE WHOLE POINT. Empty and unreachable are the same list, so the list
+    // cannot be what tells them apart.
+    check('an empty list plus a failure is not an empty day',
+      r.items.length === 0 && r.failed === true, JSON.stringify(r));
   }
 
-  console.log('\nwith no action feed, nothing changes');
+  console.log('\na working calendar reads clean after a broken one');
   {
-    // Cleared rather than never set, and a fresh awareness url so the slot is
-    // cold. Null is what a person who only keeps one calendar has.
-    await H.setProfile('a', {
-      calendar_ics_url: `${FEED}/solo.ics`,
-      calendar_action_ics_url: null,
-    });
+    // A fresh url, so the slot is cold: the broken one above is cached as a
+    // failure for a minute.
+    await H.setProfile('a', { calendar_ics_url: `${FEED}/solo.ics` });
 
     awareness = ics([allDay('know-9', 'Anniversary', '2031-04-01')]);
     const r = await (await authed(`${BASE}/calendar/2031-04-01`)).json();
 
-    check('the one feed still reads', r.items.map((a) => a.title).join(',') === 'Anniversary',
+    check('it reads', r.items.map((a) => a.title).join(',') === 'Anniversary',
       JSON.stringify(r.items));
-    check('and nothing is reported broken', r.failed.length === 0, JSON.stringify(r.failed));
-    check('the unset feed is not reported as failed either',
-      !r.failed.some((f) => f.source === 'action'), JSON.stringify(r.failed));
+    check('and nothing is reported broken', r.failed === false, JSON.stringify(r.failed));
   }
 
   console.log('\nan account with no calendar at all gets an empty aside');
@@ -273,28 +257,42 @@ const clearClaims = async () => {
     // yet, is an ordinary account — and the answer has to be an empty list
     // rather than a failure, or the screen would say a feed is broken to
     // someone who never had one.
-    await H.setProfile('a', { calendar_ics_url: null, calendar_action_ics_url: null });
+    await H.setProfile('a', { calendar_ics_url: null });
 
     const r = await get('/calendar/2031-05-02');
     check('it answers', r.status === 200, String(r.status));
     check('with nothing on', r.body.items.length === 0, JSON.stringify(r.body.items));
-    check('and nothing blamed', r.body.failed.length === 0, JSON.stringify(r.body.failed));
+    check('and nothing blamed', r.body.failed === false, JSON.stringify(r.body.failed));
     check('there is no error', r.body.error === undefined, JSON.stringify(r.body.error));
 
-    // Put the feeds back for anything after this.
-    await H.setProfile('a', {
-      calendar_ics_url: `${FEED}/dates.ics`,
-      calendar_action_ics_url: `${FEED}/action.ics`,
-    });
+    // THE THIRD STATE. Not set up is not the same as a quiet day, and the
+    // screen says something different for each.
+    check('and it says there is no calendar rather than none on it',
+      r.body.configured === false, JSON.stringify(r.body.configured));
+
+    // Put the feed back for anything after this.
+    await H.setProfile('a', { calendar_ics_url: `${FEED}/dates.ics` });
   }
 
-  console.log('\nthe page shows the failure rather than an empty day');
+  console.log('\nthe page has a different sentence for each way of showing nothing');
   {
+    // THREE STATES, ONE EMPTY LIST. A calendar that has been broken for a week
+    // reads exactly like a free week, and an account that never set one up
+    // reads like both — unless the page says which, which is what these are.
     const fs = require('fs');
     const html = fs.readFileSync(ROOT + '/public/index.html', 'utf8');
-    check('it says which feed it could not read', /could not be read/.test(html));
+    check('it says it could not reach the calendar',
+      /Could not reach your calendar/.test(html));
     check('in the miss colour', /\.cal \.failed \{[^}]*var\(--warn\)/.test(html));
-    check('and an empty calendar says so plainly', /Nothing on it/.test(html));
+    check('an empty calendar says so plainly', /Nothing on it/.test(html));
+    check('and no calendar at all says something else again',
+      /No calendar yet/.test(html));
+
+    // A partial read is its own thing: some events came back AND the fetch
+    // failed. Saying "nothing on it" there would be a lie in the other
+    // direction.
+    check('a partial read warns that it may not be all of it',
+      /this may not be all of it/.test(html));
   }
 
   console.log('\ntwo people, two calendars, and the cache between them');
@@ -308,14 +306,8 @@ const clearClaims = async () => {
     // different days".
     const SHARED = '2031-06-10';
 
-    await H.setProfile('a', {
-      calendar_ics_url: `${FEED}/a-only.ics`,
-      calendar_action_ics_url: null,
-    });
-    await H.setProfile('b', {
-      calendar_ics_url: `${FEED}/b-only.ics`,
-      calendar_action_ics_url: null,
-    });
+    await H.setProfile('a', { calendar_ics_url: `${FEED}/a-only.ics` });
+    await H.setProfile('b', { calendar_ics_url: `${FEED}/b-only.ics` });
 
     const authedB = H.as((await H.setup()).b);
 

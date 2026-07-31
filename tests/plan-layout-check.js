@@ -1050,6 +1050,44 @@ console.log('\n18. every time on the page is twelve hour');
   check('and still reads them', /toMinutes/.test(code));
 }
 
+console.log('\n19. a sheet is inside its scrim');
+{
+  // THE BUG THIS EXISTS FOR, and it was visible on the first tap.
+  //
+  // The settings sheet was written as a SIBLING of its scrim, wrapped in a
+  // class — `.sheet-wrap` — that had no rule anywhere behind it. So the scrim
+  // did its job, greying the screen and covering it, while the sheet itself
+  // laid out in ordinary document flow at the foot of the page: you had to
+  // scroll past the whole planner to find it, and every tap on it landed on
+  // the fixed scrim in front and closed the thing you were reaching for.
+  //
+  // `.scrim` is not a backdrop, it is the flex box that HOLDS the sheet
+  // against the bottom of the window. A sheet outside one has no position at
+  // all.
+  const sheets = [...body.matchAll(/<div class="scrim[^"]*"[^>]*>([\s\S]*?)<div class="sheet"/g)];
+  const allSheets = (body.match(/<div class="sheet"/g) || []).length;
+
+  check('there are sheets to check', allSheets > 0, String(allSheets));
+  check('and every one of them sits inside a scrim', sheets.length === allSheets,
+    `${sheets.length} of ${allSheets}`);
+
+  // No class may be used in the markup that the stylesheet never defines. That
+  // is what made the above survive being looked at: `.sheet-wrap` read as
+  // deliberate.
+  const used = new Set();
+  for (const m of body.matchAll(/class="([^"]+)"/g)) {
+    for (const name of m[1].split(/\s+/)) if (name) used.add(name);
+  }
+  const undefinedClasses = [...used].filter((name) => !new RegExp(`\\.${name}[\\s,:.{>]`).test(css));
+  check('no class is used that the stylesheet does not define',
+    undefinedClasses.length === 0, undefinedClasses.join(', '));
+
+  // And a tap inside a sheet must not close it. Both scrims guard on the
+  // target being the scrim itself.
+  const guards = (code.match(/if \(e\.target === \$\('[a-z-]+'\)\) close/g) || []).length;
+  check('a tap inside a sheet does not close it', guards >= 2, `${guards} guard(s)`);
+}
+
 console.log('\n17. the mockup still describes the page');
 {
   // A reference artifact that no longer matches is worse than none: it is a

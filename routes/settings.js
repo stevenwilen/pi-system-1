@@ -27,10 +27,11 @@ const router = express.Router();
 // the way to the wire and is never parsed into a number.
 const CHAT_ID = /^-?\d{1,20}$/;
 
-const FEEDS = [
-  { key: 'calendar_ics_url', label: 'things to know' },
-  { key: 'calendar_action_ics_url', label: 'things to do' },
-];
+// One calendar, and one column. `calendar_action_ics_url` is still in the
+// schema and is deliberately not written here: nothing reads it, and a settings
+// screen that could still fill it would keep the second feed alive in the data
+// long after it went out of the code.
+const CALENDAR_COLUMN = 'calendar_ics_url';
 
 /**
  * Enough to recognise, not enough to use.
@@ -65,7 +66,7 @@ function chatHint(id) {
 async function profileOf(db, userId) {
   const { data, error } = await db
     .from('profile')
-    .select('telegram_chat_id, calendar_ics_url, calendar_action_ics_url, timezone')
+    .select(`telegram_chat_id, ${CALENDAR_COLUMN}, timezone`)
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -79,13 +80,9 @@ function stateOf(profile) {
       set: Boolean(profile && profile.telegram_chat_id),
       hint: chatHint(profile && profile.telegram_chat_id),
     },
-    calendar_ics_url: {
-      set: Boolean(profile && profile.calendar_ics_url),
-      hint: hint(profile && profile.calendar_ics_url),
-    },
-    calendar_action_ics_url: {
-      set: Boolean(profile && profile.calendar_action_ics_url),
-      hint: hint(profile && profile.calendar_action_ics_url),
+    calendar: {
+      set: Boolean(profile && profile[CALENDAR_COLUMN]),
+      hint: hint(profile && profile[CALENDAR_COLUMN]),
     },
     timezone: (profile && profile.timezone) || 'UTC',
   };
@@ -188,33 +185,27 @@ router.post('/settings/calendar', async (req, res) => {
   const { db, userId } = req.auth;
   const body = req.body || {};
 
-  const which = String(body.which || '');
-  const feed = FEEDS.find((f) => f.key === which);
-  if (!feed) {
-    return res.status(400).json({ error: `which must be one of ${FEEDS.map((f) => f.key).join(', ')}` });
-  }
-
   // null and '' both mean "clear it".
   const url = body.url === null ? '' : String(body.url || '').trim();
 
   if (!url) {
     const { data, error } = await db
       .from('profile')
-      .update({ [feed.key]: null })
+      .update({ [CALENDAR_COLUMN]: null })
       .eq('user_id', userId)
       .select('user_id')
       .maybeSingle();
 
     if (error) return res.status(500).json({ error: error.message });
     if (!data) return res.status(404).json({ error: 'no profile for this account' });
-    return res.json({ which, cleared: true });
+    return res.json({ cleared: true });
   }
 
   const probe = await probeFeed(url);
 
   const { data, error } = await db
     .from('profile')
-    .update({ [feed.key]: url })
+    .update({ [CALENDAR_COLUMN]: url })
     .eq('user_id', userId)
     .select('user_id')
     .maybeSingle();
@@ -222,7 +213,7 @@ router.post('/settings/calendar', async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
   if (!data) return res.status(404).json({ error: 'no profile for this account' });
 
-  res.json({ which, hint: hint(url), ...probe });
+  res.json({ hint: hint(url), ...probe });
 });
 
 // --- the paste ---------------------------------------------------------------
@@ -307,7 +298,7 @@ async function inspect(paste) {
     return { error: 'that is JSON, but not an object' };
   }
 
-  const plan = { telegram: null, feeds: [], items: [], problems: [] };
+  const plan = { telegram: null, calendar: null, items: [], problems: [] };
 
   // --- telegram
   if (value.telegram_chat_id !== undefined && value.telegram_chat_id !== null) {
@@ -319,12 +310,15 @@ async function inspect(paste) {
     }
   }
 
-  // --- feeds
-  for (const feed of FEEDS) {
-    if (value[feed.key] === undefined || value[feed.key] === null) continue;
-    const url = String(value[feed.key]).trim();
-    if (!url) continue;
-    plan.feeds.push({ key: feed.key, label: feed.label, url, hint: hint(url) });
+  // --- calendar
+  //
+  // `calendar_action_ics_url` in a paste is ignored rather than refused. A
+  // setup conversation held somewhere else may be working from an older copy
+  // of the prompt, and rejecting the whole paste over a key that no longer
+  // means anything would be refusing a correct answer on a technicality.
+  if (value[CALENDAR_COLUMN] !== undefined && value[CALENDAR_COLUMN] !== null) {
+    const url = String(value[CALENDAR_COLUMN]).trim();
+    if (url) plan.calendar = { url, hint: hint(url) };
   }
 
   // --- items
@@ -348,7 +342,7 @@ async function inspect(paste) {
 
 /** Try everything the plan proposes, without writing anything. */
 async function proveOut(plan) {
-  const checks = { telegram: null, feeds: [] };
+  const checks = { telegram: null, calendar: null };
 
   if (plan.telegram) {
     const proof = await sendToChat(plan.telegram.chat_id, 'Linked. Your day will arrive here.');
@@ -357,8 +351,8 @@ async function proveOut(plan) {
       : { delivered: false, hint: plan.telegram.hint, error: proof.error || 'it did not arrive' };
   }
 
-  for (const feed of plan.feeds) {
-    checks.feeds.push({ key: feed.key, label: feed.label, hint: feed.hint, ...(await probeFeed(feed.url)) });
+  if (plan.calendar) {
+    checks.calendar = { hint: plan.calendar.hint, ...(await probeFeed(plan.calendar.url)) };
   }
 
   return checks;
@@ -370,7 +364,7 @@ router.post('/settings/preview', async (req, res) => {
 
   res.json({
     telegram: plan.telegram ? { hint: plan.telegram.hint } : null,
-    feeds: plan.feeds.map((f) => ({ key: f.key, label: f.label, hint: f.hint })),
+    calendar: plan.calendar ? { hint: plan.calendar.hint } : null,
     items: plan.items,
     problems: plan.problems,
     checks: plan.problems.length ? null : await proveOut(plan),
@@ -405,7 +399,7 @@ router.post('/settings/import', async (req, res) => {
 
   const patch = {};
   if (plan.telegram) patch.telegram_chat_id = plan.telegram.chat_id;
-  for (const feed of plan.feeds) patch[feed.key] = feed.url;
+  if (plan.calendar) patch[CALENDAR_COLUMN] = plan.calendar.url;
 
   if (Object.keys(patch).length) {
     const { data, error } = await db

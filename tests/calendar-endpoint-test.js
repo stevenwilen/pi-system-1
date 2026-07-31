@@ -92,10 +92,7 @@ let feedServer;
   // to keep this process alive.
   feedServer.unref();
 
-  await H.setProfile('a', {
-    calendar_ics_url: `${FEED}/endpoint.ics`,
-    calendar_action_ics_url: null,
-  });
+  await H.setProfile('a', { calendar_ics_url: `${FEED}/endpoint.ics` });
 
   for (let i = 0; i < 60; i++) {
     try { await fetch(BASE + '/version'); break; } catch { await new Promise((r) => setTimeout(r, 250)); }
@@ -181,9 +178,13 @@ let feedServer;
       JSON.stringify(again.items) === JSON.stringify(data.items));
   }
 
-  console.log('\na failed feed is named rather than swallowed');
-  check('failures travel with the answer', Array.isArray(data.failed),
+  console.log('\na failure travels with the answer rather than being swallowed');
+  // A plain fact now, not a list of named feeds: there is one calendar, and
+  // the only question is whether this list can be trusted.
+  check('it says whether the feed could be read', data.failed === false,
     JSON.stringify(data.failed));
+  check('and whether there is a calendar at all', data.configured === true,
+    JSON.stringify(data.configured));
 
   // A week out, to prove the shape holds on a second day.
   //

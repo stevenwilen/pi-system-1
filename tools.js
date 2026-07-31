@@ -124,28 +124,27 @@ async function update_profile(db, user_id, fields) {
 
 // --- calendar ---------------------------------------------------------------
 //
-// Two feeds, and which one an event is on is the whole signal.
+// ONE FEED, and it is REFERENCE ONLY. profile.calendar_ics_url, read and shown
+// at the top of the day as what is already happening. Nothing on it is placed
+// into the day, pinned, claimed, or written to a plan. It is a thing to look at
+// while you decide, and the deciding is yours.
 //
-//   awareness  profile.calendar_ics_url         things to KNOW
-//   action     profile.calendar_action_ics_url  things to DO
+// There were two, meaning things to KNOW and things to DO, and the calendar an
+// event sat on decided whether the day was built around it or it was fed into
+// the day as work. That distinction asked people to file their life twice —
+// once in Google and again in their head — to answer a question this system
+// stopped asking when auto-placement went. One calendar says the same thing
+// with nothing to maintain.
 //
-// Nothing is filtered by TRANSP, by calendar name, or by anything written
-// inside the event. The person sorts their own life by putting a thing on one
-// calendar or the other, and this reads that decision rather than second
-// guessing it.
+// `calendar_action_ics_url` is still in the schema, holding nothing, read by
+// nothing. Dropping a column is the one move that cannot be undone.
 //
-// ON THE ROW, NOT IN THE ENVIRONMENT. These were CALENDAR_ICS_URL and
-// CALENDAR_ACTION_ICS_URL, which is the same assumption PI_USER_ID was: fine
-// while there was one person, and unable to express two. A feed URL is a fact
-// about a person.
+// Nothing is filtered by TRANSP, by calendar name, or by anything inside the
+// event. What is on the calendar is what is shown.
 //
-// Both are optional. No awareness URL and no action URL is an ordinary account
-// with an empty calendar, not a broken one.
+// Optional. An account with no url has an empty aside, not a broken one.
 
-const FEEDS = [
-  { source: 'awareness', column: 'calendar_ics_url', label: 'Dates' },
-  { source: 'action', column: 'calendar_action_ics_url', label: 'Personal' },
-];
+const CALENDAR_COLUMN = 'calendar_ics_url';
 
 // Each feed is refetched at most this often. One brain turn can call
 // get_calendar several times; without this each call re-downloads the file.
@@ -166,10 +165,11 @@ const CALENDAR_TIMEOUT_MS = 10000;
  * a second belt over a fastened one, cheap at this scale, and what it actually
  * buys is that the invariant survives a future edit that gets the key wrong.
  *
- * What WOULD leak is keying on `source` — 'awareness' / 'action' — which is
- * the tempting mistake now that the url is a variable and the source is the
- * constant. tests/calendar-feeds-test.js has a case that goes red if anyone
- * makes it.
+ * What WOULD leak is dropping the url from the key and leaving something
+ * constant in its place. There were two feeds once and their names —
+ * 'awareness' and 'action' — were exactly that trap; there is one now, so the
+ * constant would be nothing at all, which is worse.
+ * tests/calendar-feeds-test.js has a case that goes red if anyone tries it.
  */
 const calendarCache = new Map();
 
@@ -323,31 +323,24 @@ async function timezoneFor(db, user_id) {
 async function calendarSettings(db, user_id) {
   const { data } = await db
     .from('profile')
-    .select('timezone, calendar_ics_url, calendar_action_ics_url')
+    .select(`timezone, ${CALENDAR_COLUMN}`)
     .eq('user_id', user_id)
     .maybeSingle();
 
   return {
     timeZone: (data && data.timezone) || 'UTC',
-    urls: {
-      calendar_ics_url: (data && data.calendar_ics_url) || null,
-      calendar_action_ics_url: (data && data.calendar_action_ics_url) || null,
-    },
+    url: (data && data[CALENDAR_COLUMN]) || null,
   };
 }
 
-function event(id, title, start, end, source) {
+function event(id, title, start, end) {
   return {
-    // Stable across reads of the same feed, so a placement can be remembered
-    // without storing the event itself. A recurring series repeats its uid on
-    // every occurrence, so the occurrence start is part of the identity.
+    // Stable across reads of the same feed. A recurring series repeats its uid
+    // on every occurrence, so the occurrence start is part of the identity.
     id,
     title: title || '(untitled)',
     start: start.toISOString(),
     end: end.toISOString(),
-    // 'awareness' or 'action'. Which feed it came from is the only thing that
-    // decides whether it is a fact to know or a thing to do.
-    source,
   };
 }
 
@@ -358,7 +351,7 @@ function isAllDay(startMs, endMs, date, timeZone) {
 }
 
 /** Every event on one date from one parsed feed. */
-function eventsOn(parsed, source, date, timeZone) {
+function eventsOn(parsed, date, timeZone) {
   const dayStart = startOfDay(date, timeZone);
   const dayEnd = startOfDay(nextDay(date), timeZone);
   const out = [];
@@ -373,7 +366,7 @@ function eventsOn(parsed, source, date, timeZone) {
     if (!ev.rrule) {
       const end = ev.end || new Date(ev.start.getTime() + duration);
       if (ev.start < dayEnd && end > dayStart) {
-        out.push(event(uid, ev.summary, ev.start, end, source));
+        out.push(event(uid, ev.summary, ev.start, end));
       }
       continue;
     }
@@ -400,7 +393,7 @@ function eventsOn(parsed, source, date, timeZone) {
 
       if (start < dayEnd && end > dayStart) {
         out.push(
-          event(`${uid}:${isoId}`, override ? override.summary : ev.summary, start, end, source)
+          event(`${uid}:${isoId}`, override ? override.summary : ev.summary, start, end)
         );
       }
     }
@@ -418,35 +411,38 @@ function eventsOn(parsed, source, date, timeZone) {
  * quiet Tuesday are the same value and must not look the same on screen.
  */
 async function readCalendar(db, user_id, date) {
-  const result = { events: [], failed: [], configured: [] };
+  // THREE STATES, and `failed` is what keeps two of them apart. An empty list
+  // means a quiet day; an empty list with `failed` set means the calendar could
+  // not be read and nobody knows what is on it. They are the same array and
+  // must never be the same answer.
+  //
+  // `configured` says whether there is a url at all, which is the third: an
+  // account that has not set one up is not having a quiet day either.
+  const result = { events: [], failed: false, configured: false };
   if (!user_id || !date) return result;
 
-  const { timeZone, urls } = await calendarSettings(db, user_id);
+  const { timeZone, url: stored } = await calendarSettings(db, user_id);
 
-  for (const feed of FEEDS) {
-    // The angle-bracket strip is kept from when these came out of a .env file,
-    // where a url pasted from a mail client arrives wrapped in them.
-    const url = String(urls[feed.column] || '').replace(/[<>]/g, '').trim();
-    if (!url) continue;
+  // The angle-bracket strip is kept from when this came out of a .env file,
+  // where a url pasted from a mail client arrives wrapped in them.
+  const url = String(stored || '').replace(/[<>]/g, '').trim();
+  if (!url) return result;
 
-    result.configured.push(feed.source);
+  result.configured = true;
 
-    try {
-      const parsed = await loadFeed(user_id, url);
-      for (const e of eventsOn(parsed, feed.source, date, timeZone)) {
-        result.events.push({
-          ...e,
-          all_day: isAllDay(Date.parse(e.start), Date.parse(e.end), date, timeZone),
-        });
-      }
-    } catch (err) {
-      // Loud, and named by feed. Without this a calendar that has been broken
-      // for a week looks exactly like a week with nothing on.
-      console.error(
-        `[CALENDAR] could not read the ${feed.label} feed (${feed.env}): ${err.message}`
-      );
-      result.failed.push({ source: feed.source, label: feed.label });
+  try {
+    const parsed = await loadFeed(user_id, url);
+    for (const e of eventsOn(parsed, date, timeZone)) {
+      result.events.push({
+        ...e,
+        all_day: isAllDay(Date.parse(e.start), Date.parse(e.end), date, timeZone),
+      });
     }
+  } catch (err) {
+    // Loud. Without this a calendar that has been broken for a week looks
+    // exactly like a week with nothing on.
+    console.error(`[CALENDAR] could not read the feed: ${err.message}`);
+    result.failed = true;
   }
 
   result.events.sort((a, b) => a.start.localeCompare(b.start));

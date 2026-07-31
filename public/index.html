@@ -845,22 +845,74 @@
         cursor: pointer;
       }
 
-      /* A note under a field: what is set now, or what a value is for. */
+      /* A note under a field: what a value is for, in a sentence. */
       .field-note {
-        margin: 0 0 8px;
+        margin: 0 0 10px;
         font-size: 12px;
+        line-height: 1.55;
         color: var(--muted);
       }
       .warn-note {
-        margin-top: 18px;
+        margin: 16px 0 26px;
         color: var(--faint);
+      }
+
+      /* THE CHECKLIST. Three lines that answer "what have I not done yet"
+         before anything asks to be filled in. */
+      .checklist {
+        margin: 4px 0 0;
+        border-top: 1px solid var(--line);
+      }
+      .srow {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        width: 100%;
+        background: none;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        padding: 15px 2px;
+        font-family: inherit;
+        font-size: 14px;
+        text-align: left;
+        color: var(--text);
+        cursor: pointer;
+      }
+      .srow-name {
+        flex: 1;
+      }
+      /* Set or not, as the only thing on the line with a colour to it. Faint
+         when there is nothing there, ink when there is: a row you still have
+         to deal with reads lighter than one you have dealt with, which is the
+         opposite of how an unfilled form usually shouts. */
+      .srow-state {
+        font-size: 12px;
+        color: var(--faint);
+        text-align: right;
+        overflow-wrap: anywhere;
+      }
+      .srow-state.on {
+        color: var(--text);
+      }
+      /* The open one keeps its name but loses the line under it, so the panel
+         below reads as belonging to it rather than following it. */
+      .srow.open {
+        border-bottom-color: transparent;
+      }
+      .sdetail {
+        padding: 2px 2px 20px;
+        border-bottom: 1px solid var(--line);
+      }
+      .sdetail.hidden {
+        display: none;
       }
 
       .row-actions {
         display: flex;
         align-items: center;
-        gap: 14px;
-        margin-top: 8px;
+        gap: 18px;
+        margin-top: 10px;
       }
       .row-actions .minor {
         background: none;
@@ -871,14 +923,63 @@
         color: var(--accent);
         cursor: pointer;
       }
-      /* The one that commits the whole paste. Ink, like the seal, because it
-         is the same kind of act. */
+      /* The one that does the thing. Ink, like the seal, because saving here
+         is the same kind of act: it commits, and it goes out over the wire. */
       .row-actions .go {
         color: var(--warn);
         font-weight: 500;
       }
-      .row-actions .minor.hidden {
-        display: none;
+      /* And the one that undoes it, kept plainly lesser. Clear sits beside
+         Save on every row, and two identical blue words would make the
+         destructive one exactly as easy to hit as the other. */
+      .row-actions .quiet {
+        color: var(--faint);
+        font-size: 12px;
+      }
+      /* A PRESSABLE THING, rather than a word that happens to be blue.
+         Copy is the one action on this sheet you take before you know what
+         the sheet is for — it is how you leave and come back with an answer —
+         and a text link asks to be recognised before it can be pressed.
+
+         A torn paper chit, the same object the undo bar is: raised stock, an
+         uneven bite at the edge, a shadow of a shadow under it. The deckle is
+         on the layer beneath, never on the button, because a filter warps the
+         text of the element it is set on — which cost an afternoon once. */
+      .paperbtn {
+        position: relative;
+        isolation: isolate;
+        background: none;
+        border: 0;
+        padding: 11px 15px;
+        font-family: inherit;
+        font-size: 13px;
+        color: var(--text);
+        cursor: pointer;
+        transition: transform 90ms ease-out;
+      }
+      .paperbtn::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background: var(--card-raised);
+        filter: url(#deckle) drop-shadow(0 1px 2px rgba(43, 42, 40, 0.10));
+      }
+      /* Pressed: it settles into the paper, the same movement the seal makes. */
+      .paperbtn:active {
+        transform: scale(0.98);
+      }
+
+      /* The bulk path, set apart as its own block on the card colour so it
+         reads as an alternative to the list above rather than a fourth item
+         in it. */
+      .allatonce {
+        background: var(--card-spent);
+        padding: 16px 16px 18px;
+        margin-bottom: 24px;
+      }
+      .allatonce .label {
+        margin-bottom: 6px;
       }
 
       /* WHAT HAPPENED, in three readings that must not look alike:
@@ -899,16 +1000,10 @@
       .said.thin { color: var(--faint); }
       .said.bad { color: var(--warn); }
 
-      .sheet-rule {
-        height: 1px;
-        background: var(--line);
-        margin: 24px 0;
-      }
-
       .preview {
         margin-top: 12px;
         padding: 12px 14px;
-        background: var(--card-spent);
+        background: var(--bg);
         font-size: 12px;
         line-height: 1.6;
       }
@@ -1320,6 +1415,13 @@
         .block {
           transition: none !important;
         }
+        /* The chit stops settling; it is still plainly a thing you press. */
+        .paperbtn {
+          transition: none;
+        }
+        .paperbtn:active {
+          transform: none;
+        }
         .block.lifted::after {
           filter: url(#deckle);
         }
@@ -1500,74 +1602,90 @@
       tell. It must not be recoverable from a screenshot, a screen share, or
       the browser's own memory.
     -->
-    <div class="scrim hidden" id="settings-scrim"></div>
-    <div class="sheet-wrap hidden" id="settings-wrap">
+    <!-- The sheet lives INSIDE the scrim, which is the fixed, full-screen flex
+         box that holds it against the bottom of the window. It was a sibling
+         for one build, with a wrapper class that had no rule behind it: the
+         scrim greyed the screen while the sheet itself laid out in normal flow
+         at the foot of the document, so it had to be scrolled to and every tap
+         on it landed on the scrim in front and closed it. -->
+    <div class="scrim hidden" id="settings-scrim">
       <div class="sheet">
-        <div class="sheet-title">Setup</div>
+        <div class="label">Setup</div>
 
-        <!-- 1. from a conversation ------------------------------------------ -->
-        <div class="field">
-          <label for="paste">Paste from a setup conversation</label>
-          <p class="field-note">
-            Copy the prompt below into any AI chat, answer its questions, and
-            paste what it gives you back here.
-          </p>
-          <div class="row-actions">
-            <button type="button" class="minor" id="copy-prompt">Copy setup prompt</button>
-            <span class="said" id="copy-said"></span>
+        <!-- WHAT IS DONE, first and as a list.
+             This sheet used to open with the paste box — the biggest thing on
+             it and the one used once — and put each field's state in the
+             faintest text under a heading. But the question you open settings
+             with is "what have I not set up yet", and three lines answer it at
+             a glance. The controls are behind them, because changing something
+             is the rarer act than checking it. -->
+        <div class="checklist">
+          <button type="button" class="srow" id="chat-row" aria-expanded="false">
+            <span class="srow-name">Telegram</span>
+            <span class="srow-state" id="chat-state">Not linked</span>
+          </button>
+          <div class="sdetail hidden" id="chat-detail">
+            <p class="field-note">
+              Where your day arrives: each block a few minutes before it starts.
+              Message <b>@userinfobot</b> on Telegram and it replies with your id.
+            </p>
+            <input type="text" id="f-chat" inputmode="numeric" autocomplete="off"
+                   placeholder="Your chat id — a number" />
+            <div class="row-actions">
+              <button type="button" class="minor go" id="save-chat">Save and send a test</button>
+              <button type="button" class="minor quiet" id="clear-chat">Clear</button>
+            </div>
+            <div class="said" id="chat-said"></div>
           </div>
-          <textarea id="paste" rows="4" placeholder="Paste the whole reply — fenced or not."></textarea>
-          <div class="row-actions">
-            <button type="button" class="minor" id="paste-check">See what this would do</button>
-            <button type="button" class="minor go hidden" id="paste-save">Save all of it</button>
-          </div>
-          <div class="preview hidden" id="paste-preview"></div>
-        </div>
 
-        <div class="sheet-rule"></div>
-
-        <!-- 2. or one at a time --------------------------------------------- -->
-        <div class="field">
-          <label for="f-chat">Telegram chat</label>
-          <p class="field-note" id="chat-state">Not linked.</p>
-          <input type="text" id="f-chat" inputmode="numeric" autocomplete="off"
-                 placeholder="Message @userinfobot to get your id" />
-          <div class="row-actions">
-            <button type="button" class="minor" id="save-chat">Save and send a test</button>
-            <button type="button" class="minor" id="clear-chat">Clear</button>
+          <button type="button" class="srow" id="cal-row" aria-expanded="false">
+            <span class="srow-name">Calendar</span>
+            <span class="srow-state" id="cal-state">Not set</span>
+          </button>
+          <div class="sdetail hidden" id="cal-detail">
+            <p class="field-note">
+              Shown at the top of the day as reference — what is already
+              happening, so you can build around it. Nothing on it is ever
+              turned into a block or changed by this system.
+            </p>
+            <input type="url" id="f-cal" autocomplete="off"
+                   placeholder="Secret iCal address" />
+            <div class="row-actions">
+              <button type="button" class="minor go" id="save-cal">Save and check</button>
+              <button type="button" class="minor quiet" id="clear-cal">Clear</button>
+            </div>
+            <div class="said" id="cal-said"></div>
           </div>
-          <div class="said" id="chat-said"></div>
-        </div>
-
-        <div class="field">
-          <label for="f-cal-know">Calendar — things to know</label>
-          <p class="field-note" id="know-state">Not set.</p>
-          <input type="url" id="f-cal-know" autocomplete="off" placeholder="Secret iCal address" />
-          <div class="row-actions">
-            <button type="button" class="minor" id="save-know">Save and check</button>
-            <button type="button" class="minor" id="clear-know">Clear</button>
-          </div>
-          <div class="said" id="know-said"></div>
-        </div>
-
-        <div class="field">
-          <label for="f-cal-do">Calendar — things to do</label>
-          <p class="field-note" id="do-state">Not set.</p>
-          <input type="url" id="f-cal-do" autocomplete="off" placeholder="Secret iCal address" />
-          <div class="row-actions">
-            <button type="button" class="minor" id="save-do">Save and check</button>
-            <button type="button" class="minor" id="clear-do">Clear</button>
-          </div>
-          <div class="said" id="do-said"></div>
         </div>
 
         <p class="field-note warn-note">
           A secret iCal address grants read access to that whole calendar, to
-          anyone who has the address. Treat it like a password: it is stored
+          anyone who has the address. Treat it like a password — it is stored
           against your account and never shown back to you here.
         </p>
 
-        <div class="sheet-rule"></div>
+        <!-- ALL AT ONCE. Below the list rather than above it: for someone
+             coming back to change one thing this is not what they want, and for
+             someone new the three "Not set" lines above are the question this
+             answers. -->
+        <div class="allatonce">
+          <div class="label">All at once</div>
+          <p class="field-note">
+            Copy the prompt into any AI chat, answer its questions, and paste
+            the reply here. It sets up everything above and your first list of
+            things.
+          </p>
+          <div class="row-actions">
+            <button type="button" class="paperbtn" id="copy-prompt">Copy setup prompt</button>
+            <span class="said" id="copy-said"></span>
+          </div>
+          <textarea id="paste" rows="3" placeholder="Paste the whole reply — fenced or not."></textarea>
+          <div class="row-actions">
+            <button type="button" class="minor" id="paste-check">See what this would do</button>
+            <button type="button" class="paperbtn go hidden" id="paste-save">Save all of it</button>
+          </div>
+          <div class="preview hidden" id="paste-preview"></div>
+        </div>
 
         <div class="signout">
           <span id="whoami"></span>
@@ -1598,7 +1716,7 @@ order exists because each step is easier once the one before it is finished.
 
 After every completed step, restate progress on one line, exactly like this:
 
-  Done: Telegram. Now: calendars 1 of 2. Remaining: your things.
+  Done: Telegram. Now: your calendar. Remaining: your things.
 
 That line is how a paused conversation is resumed. If someone opens with a
 line like that, continue from it and do not repeat completed steps.
@@ -1632,13 +1750,17 @@ Then restate progress.
 
 ---
 
-STEP 2 — CALENDARS (two of them)
+STEP 2 — CALENDAR
 
-Why two: the system reads one calendar as things to KNOW and the other as
-things to DO. Which calendar an event sits on is the only signal — nothing
-guesses from the title. A dentist appointment is a thing to know: it is
-already fixed and the day has to fit around it. "Draft the proposal" is a
-thing to do: it needs a block of time chosen for it.
+Why: it is shown at the top of the day as reference — what is already
+happening, so they can build the rest of the day around it.
+
+Say clearly what it does NOT do, because people expect otherwise: nothing on
+that calendar is ever turned into a block, moved, pinned, or written to. The
+system reads it and shows it. Every block in a day is one the person put there.
+
+One calendar, whichever they actually live out of. If they keep several, ask
+for the one with their appointments on it.
 
 Say plainly, before they paste anything:
 
@@ -1646,18 +1768,16 @@ Say plainly, before they paste anything:
   who has the address. There is no password on it and no way to see who used
   it. Treat it like a password.
 
-Both are optional. Someone with no calendar can skip either or both — say so,
-and if they skip, record null for that one.
+It is optional. Someone with no calendar can skip it — say so, and record null.
 
-For each, tell them:
+Tell them:
   1. Google Calendar on a computer, not the phone app.
   2. Settings, then the calendar's own Settings and sharing.
   3. Scroll to "Integrate calendar".
   4. Copy the "Secret address in iCal format".
 
-VERIFY each one separately: ask them to paste the address back, and check it
-begins with https:// and ends with .ics. Say which of the two it is for. Do
-step 2 of 2 only after 1 of 2 is verified or explicitly skipped.
+VERIFY: ask them to paste the address back, and check it begins with https://
+and ends with .ics. Do not accept "done".
 
 Then restate progress.
 
@@ -1708,7 +1828,7 @@ Then restate progress.
 
 FINALLY
 
-Only when Telegram is verified, both calendars are verified or explicitly
+Only when Telegram is verified, the calendar is verified or explicitly
 skipped, and the list has been read back and confirmed: output the JSON.
 
 Rules for the output:
@@ -1722,7 +1842,6 @@ Rules for the output:
 {
   "telegram_chat_id": "123456789",
   "calendar_ics_url": "https://calendar.google.com/calendar/ical/.../basic.ics",
-  "calendar_action_ics_url": null,
   "items": [
     { "type": "habit", "title": "Read before bed", "frequency": "daily" },
     { "type": "project", "title": "Rewire the study", "due": "2026-09-30", "size": "a few weeks" },
@@ -2478,15 +2597,29 @@ Rules for the output:
 
         const box = $('cal-list');
         box.replaceChildren();
-        box.textContent = lines.length ? lines.join('\n') : 'Nothing on it.';
 
-        // A feed that is down and a quiet Tuesday produce the same empty list,
-        // so a failure is said out loud rather than left to look like a free
-        // day.
-        for (const f of data.failed || []) {
+        // THREE WAYS TO HAVE NOTHING TO SHOW, and they are three sentences.
+        // The list is empty in all of them, so the list cannot be what says
+        // which — a calendar that has been broken for a week reads exactly
+        // like a free week, and a person who never set one up reads like both.
+        if (lines.length) {
+          box.textContent = lines.join('\n');
+        } else if (data.failed) {
+          box.textContent = '';
+        } else if (data.configured === false) {
+          box.textContent = 'No calendar yet. Add one in setup.';
+        } else {
+          box.textContent = 'Nothing on it.';
+        }
+
+        // Said out loud, and in the warn colour, whether or not anything else
+        // came back: half a calendar is still a calendar you cannot trust.
+        if (data.failed) {
           const warn = document.createElement('span');
           warn.className = 'failed';
-          warn.textContent = `\n${f.label} could not be read.`;
+          warn.textContent = lines.length
+            ? '\nCould not reach your calendar — this may not be all of it.'
+            : 'Could not reach your calendar.';
           box.append(warn);
         }
       }
@@ -3823,12 +3956,32 @@ Rules for the output:
         }
 
         const say = (id, on, hint, off) => {
-          $(id).textContent = on ? `Set · ${hint}` : off;
+          $(id).textContent = on ? hint : off;
+          $(id).className = `srow-state ${on ? 'on' : ''}`;
         };
 
-        say('chat-state', s.telegram.set, s.telegram.hint, 'Not linked.');
-        say('know-state', s.calendar_ics_url.set, s.calendar_ics_url.hint, 'Not set.');
-        say('do-state', s.calendar_action_ics_url.set, s.calendar_action_ics_url.hint, 'Not set.');
+        say('chat-state', s.telegram.set, s.telegram.hint, 'Not linked');
+        say('cal-state', s.calendar.set, s.calendar.hint, 'Not set');
+      }
+
+      /**
+       * One row open at a time.
+       *
+       * Not a preference: the sheet is three rows and a paste box on a phone,
+       * and two panels open at once puts the thing you are typing into off the
+       * bottom of the screen behind the keyboard.
+       */
+      function openRow(which) {
+        for (const name of ['chat', 'cal']) {
+          const open = name === which && $(`${name}-detail`).classList.contains('hidden');
+          $(`${name}-detail`).classList.toggle('hidden', !open);
+          $(`${name}-row`).classList.toggle('open', open);
+          $(`${name}-row`).setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+      }
+
+      for (const name of ['chat', 'cal']) {
+        $(`${name}-row`).onclick = () => openRow(name);
       }
 
       // What a save reported, under the field it was about. Three states, and
@@ -3847,25 +4000,30 @@ Rules for the output:
 
       function openSettings() {
         $('settings-scrim').classList.remove('hidden');
-        $('settings-wrap').classList.remove('hidden');
-        for (const id of ['chat-said', 'know-said', 'do-said', 'copy-said']) said(id, '');
+        for (const id of ['chat-said', 'cal-said', 'copy-said']) said(id, '');
         $('paste-preview').classList.add('hidden');
         $('paste-save').classList.add('hidden');
+        // Every row shut. The sheet opens on the list, which is the answer to
+        // the question it is usually opened with.
+        openRow(null);
         loadSettings();
       }
 
       function closeSettings() {
         $('settings-scrim').classList.add('hidden');
-        $('settings-wrap').classList.add('hidden');
         // The boxes are emptied on the way out. A pasted setup blob holds a
         // calendar url, and leaving it sitting in a field is the same leak the
         // hints exist to avoid.
-        for (const id of ['f-chat', 'f-cal-know', 'f-cal-do', 'paste']) $(id).value = '';
+        for (const id of ['f-chat', 'f-cal', 'paste']) $(id).value = '';
       }
 
       $('settings-open').onclick = openSettings;
       $('settings-close').onclick = closeSettings;
-      $('settings-scrim').onclick = closeSettings;
+      // Only a tap on the scrim ITSELF, the same guard the add sheet uses.
+      // Without it every tap inside the sheet bubbles up and closes it.
+      $('settings-scrim').onclick = (e) => {
+        if (e.target === $('settings-scrim')) closeSettings();
+      };
 
       // --- one field at a time
 
@@ -3895,39 +4053,36 @@ Rules for the output:
         loadSettings();
       };
 
-      const feed = (which, field, saidId) => async () => {
-        const url = $(field).value.trim();
-        if (!url) return said(saidId, 'Paste the address first.', 'bad');
+      $('save-cal').onclick = async () => {
+        const url = $('f-cal').value.trim();
+        if (!url) return said('cal-said', 'Paste the address first.', 'bad');
 
-        said(saidId, 'Checking…');
+        said('cal-said', 'Checking…');
         const res = await api('/settings/calendar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ which, url }),
+          body: JSON.stringify({ url }),
         });
         const body = await res.json();
 
-        if (body.error && !body.which) return said(saidId, body.error, 'bad');
-        said(saidId, ...feedResult(body));
+        if (body.error && body.reachable === undefined) {
+          return said('cal-said', body.error, 'bad');
+        }
+        said('cal-said', ...feedResult(body));
 
-        $(field).value = '';
+        $('f-cal').value = '';
         loadSettings();
       };
 
-      const clearFeed = (which, saidId) => async () => {
+      $('clear-cal').onclick = async () => {
         await api('/settings/calendar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ which, url: null }),
+          body: JSON.stringify({ url: null }),
         });
-        said(saidId, 'Cleared.', '');
+        said('cal-said', 'Cleared.', '');
         loadSettings();
       };
-
-      $('save-know').onclick = feed('calendar_ics_url', 'f-cal-know', 'know-said');
-      $('clear-know').onclick = clearFeed('calendar_ics_url', 'know-said');
-      $('save-do').onclick = feed('calendar_action_ics_url', 'f-cal-do', 'do-said');
-      $('clear-do').onclick = clearFeed('calendar_action_ics_url', 'do-said');
 
       // --- the prompt
 
@@ -3976,9 +4131,9 @@ Rules for the output:
           else line(`  · nothing arrived: ${t.error}`, 'bad');
         }
 
-        for (const f of p.feeds || []) {
-          const check = ((p.checks && p.checks.feeds) || []).find((c) => c.key === f.key) || {};
-          line(`Calendar — ${f.label} · ${f.hint}`);
+        if (p.calendar) {
+          const check = (p.checks && p.checks.calendar) || {};
+          line(`Calendar · ${p.calendar.hint}`);
           const [text, tone] = feedResult(check);
           line(`  · ${text}`, tone);
         }
