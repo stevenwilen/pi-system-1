@@ -680,6 +680,21 @@ question which one is in your hand. Drag vertically and the others part to show
 the gap it will drop into. Release settles it into place over 180ms rather than
 snapping.
 
+**It cannot be carried above the divider.** The drop target's floor is the far
+side of the last block that has begun, so a block still to come cannot be
+dropped into the part of the day that already happened.
+
+That floor used to be index 0, and the damage went past the screen telling a
+lie. `reflow` holds a begun block at its **stored** hour and flows everything
+else from the next half hour — so a block dropped at the top took, say, 10:30 AM
+while the finished block beneath it kept 8:00 AM. **The day rendered backwards**,
+two blocks collided on the same hour, and the divider went looking for an edge
+that was no longer there.
+
+The floor is found by scanning for the last begun block rather than assuming the
+begun ones come first. They always do in a day this app built — but this is the
+guard against an order being wrong, so it cannot lean on the order being right.
+
 #### Which gesture wins
 
 Four things share one finger, so which is happening is decided once, early, and

@@ -1608,6 +1608,70 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       String(body.blocks[0].start_minutes));
   }
 
+  console.log('\na block cannot be carried into the part of the day that happened');
+  {
+    // THE BUG. The drop target clamped at index 0 and knew nothing about the
+    // past, so an upcoming block could be dragged above every finished one and
+    // dropped there.
+    //
+    // It was not only that the screen said something untrue. reflow holds a
+    // begun block at its stored hour and flows the rest from the next half
+    // hour, so a block dropped at the top took the next half hour and the
+    // finished block beneath it kept 8:00 AM — the day rendered backwards, and
+    // the divider went looking for an edge that was no longer there.
+    const { ctx, byId, slots, cardOf, titles } = boot({
+      entries: utcEntries({ plans_in: 'morning' }),
+      now: '10:15',
+      plan: {
+        [TODAY]: {
+          plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+          blocks: [
+            { id: 'p1', title: 'Reading', entryId: null, start_minutes: 480, duration_minutes: 60, sent: true },
+            { id: 'p2', title: 'Gym', entryId: null, start_minutes: 540, duration_minutes: 60, sent: true },
+            { id: 'p3', title: 'Errands', entryId: null, start_minutes: 660, duration_minutes: 60 },
+            { id: 'p4', title: 'Email', entryId: null, start_minutes: 720, duration_minutes: 60 },
+          ],
+        },
+      },
+    });
+    await ctx.load();
+
+    check('two are finished', cardOf(slots()[0])._class.has('past') &&
+      cardOf(slots()[1])._class.has('past'));
+    check('and two are still to come', !cardOf(slots()[2])._class.has('past') &&
+      !cardOf(slots()[3])._class.has('past'));
+
+    // Carry the last block as far up as the list allows.
+    const card = cardOf(slots()[3]);
+    down(card, 100, 400);
+    await wait(HELD);
+    move(card, 100, 400 - SLOT * 3);
+    up(card, 100, 400 - SLOT * 3);
+    await wait(SETTLED);
+
+    check('it stops at the first free place, not at the top',
+      titles().join() === 'Reading,Gym,Email,Errands', titles().join());
+    check('so the finished blocks are still the first two',
+      titles().slice(0, 2).join() === 'Reading,Gym', titles().join());
+
+    // The real damage was here: the day used to run backwards afterwards.
+    const hours = slots().map((s) => s.text().match(/\d+:\d+ [AP]M/)[0]);
+    const at = hours.map((h) => {
+      const [, hh, mm, ap] = h.match(/(\d+):(\d+) ([AP]M)/);
+      return ((Number(hh) % 12) + (ap === 'PM' ? 12 : 0)) * 60 + Number(mm);
+    });
+    check('and the day still runs forwards', at.every((m, i) => i === 0 || m >= at[i - 1]),
+      JSON.stringify(hours));
+
+    check('the finished ones kept the hours they happened at',
+      hours[0] === '8:00 AM' && hours[1] === '9:00 AM', JSON.stringify(hours));
+
+    const line = byId.builder.children.filter((c) => c._class.has('now'));
+    check('and there is still exactly one divider', line.length === 1, String(line.length));
+    check('below the two that are over', byId.builder.children.indexOf(line[0]) === 2,
+      String(byId.builder.children.indexOf(line[0])));
+  }
+
   console.log('\na block you are in the middle of is locked');
   {
     // 09:30, so Deep work (09:00–10:00) has begun and has not finished. It

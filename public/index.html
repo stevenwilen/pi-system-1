@@ -2086,9 +2086,39 @@
       }
 
       /** Where a block dragged `dy` from `from` would land. */
-      function targetIndex(from, dy, step, count) {
+      /**
+       * Where a block dragged `dy` from `from` would land.
+       *
+       * `floor` is the first index a carried block may occupy. On today that is
+       * the far side of the divider: a block that has not begun cannot be
+       * dropped into the part of the day that already happened.
+       *
+       * It used to clamp at 0, which let an upcoming block be carried above
+       * every past one. The damage was not only that the screen said something
+       * untrue — reflow holds a begun block at its stored hour and flows the
+       * rest from the next half hour, so a block dropped at the top took, say,
+       * 3:00 PM and the past block beneath it kept 8:00 AM. The day rendered
+       * backwards, and the divider went looking for an edge that was no longer
+       * there.
+       */
+      function targetIndex(from, dy, step, count, floor = 0) {
         const moved = Math.round(dy / step);
-        return Math.max(0, Math.min(count - 1, from + moved));
+        return Math.max(floor, Math.min(count - 1, from + moved));
+      }
+
+      /**
+       * The first index a block may be carried to: past the last begun one.
+       *
+       * Read by scanning rather than by assuming the begun blocks are the first
+       * ones. They are, in every day the app builds — but this is the guard for
+       * an order being wrong, so it cannot lean on the order being right.
+       */
+      function firstFree() {
+        let at = 0;
+        for (let i = 0; i < blocks.length; i++) {
+          if (blockBegun(blocks[i])) at = i + 1;
+        }
+        return at;
       }
 
       function cycleDuration(i) {
@@ -2700,7 +2730,9 @@
             card.style.transform =
               `translateY(${carried}px)` + (reduceMotion() ? '' : ' scale(1.03)');
 
-            const to = targetIndex(gesture.from, carried, gesture.step, blocks.length);
+            const to = targetIndex(
+              gesture.from, carried, gesture.step, blocks.length, firstFree()
+            );
             if (to !== gesture.to) {
               gesture.to = to;
               part(gesture.from, to, gesture.step);
