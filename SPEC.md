@@ -390,19 +390,25 @@ same row and at the same height as any other section label, and either word can
 be pressed. The word you are not looking at is very faint (`#4A443C`) — legible
 as a way back and nothing more.
 
-**It opens on Today**, always, for every profile. The screen is opened to look
-at the day you are in — what is on now, what is next — and planning tomorrow is
-one deliberate visit a day against a great many glances. One tap reaches Tomorrow
-when the deliberate visit comes.
+**It opens on Today through the day, and on Tomorrow from `profile.nudge_hour`
+(default 20:00).** Almost every visit is a glance at what is on now and what is
+next, which is why it lands on today. But by the nudge hour today is spent, and
+the question worth opening the page for has become tomorrow — which is exactly
+what the nudge is about to ask.
 
-This used to follow `profile.plans_in`, so an evening planner landed on Tomorrow.
-That made the page a planning tool first and a companion second, and it is used
-the other way round.
+The hour is **read from the profile rather than written on the page**, because it
+is the same idea in both places: the moment this system stops being about the day
+you are in. A constant in the client would be a copy of `nudge_hour` waiting to
+be forgotten when the setting moves. `GET /entries` returns it for that reason
+alone.
 
-`plans_in` still decides **which day the evening nudge asks about** (§4.2), and
-now decides only that. They were one setting answering two questions — which day
-you are shown, and which day you are reminded to plan — and the answers are not
-the same. There is still no settings UI; the column is set by hand.
+Past midnight is a new today, not a late yesterday — the comparison is against
+the local wall clock, so 00:30 opens on the day it is.
+
+**Who you are does not decide this; what time it is does.** It used to follow
+`profile.plans_in`, so an evening planner landed on Tomorrow at eleven in the
+morning. `plans_in` now decides only **which day the evening nudge asks about**
+(§4.2). There is still no settings UI for either column; both are set by hand.
 
 Switching replaces everything held about the day being built. Anything
 unconfirmed on the day being left is dropped, which is what a page reload does
@@ -1075,7 +1081,7 @@ process start time, the Node version, and whether the scheduler is running.
 | `profile.timezone` | which day and which hour everything is measured in |
 | `profile.default_wake_time` | where the builder starts the first block |
 | `profile.telegram_chat_id` | where outbound goes, or nowhere if unset |
-| `profile.nudge_hour` | the evening nudge hour, 0–23. Null means 20 |
+| `profile.nudge_hour` | the evening nudge hour, 0–23, and the hour the screen starts opening on Tomorrow. Null means 20 |
 | `profile.plans_in` | `morning` or `evening`. Which day the evening nudge asks about. It no longer decides which day the app opens on — that is always today. Null means evening |
 
 ---

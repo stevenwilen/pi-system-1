@@ -755,14 +755,22 @@ console.log('\n17. today and tomorrow');
   check('and a drifted day is not called confirmed', /if \(saved && drifted\(\)\) saved = false/.test(code));
 
   console.log('   which day opens');
-  // ALWAYS TODAY. It followed plans_in, so an evening planner landed on
-  // tomorrow — which made the page a planning tool first and a companion
-  // second, and it is used the other way round. Planning tomorrow is one
-  // deliberate visit a day; the rest are glances at what is happening.
-  check('it opens on today', /await showDay\('today'\)/.test(code));
-  check('and the preference no longer decides that',
+  // TODAY THROUGH THE DAY, TOMORROW ONCE THE EVENING TURNS. Almost every visit
+  // is a glance at what is on now, which is why it lands on today — but by the
+  // nudge hour today is spent and the question worth opening the page for has
+  // become tomorrow.
+  //
+  // It followed plans_in once, so an evening planner landed on tomorrow at any
+  // hour. That is what this is not: who you are does not decide it, the clock
+  // does.
+  check('the day it opens on is decided by the hour',
+    /showDay\(nowMinutes\(\) >= tomorrowFrom \* 60 \? 'tomorrow' : 'today'\)/.test(code));
+  check('and the hour comes from the profile, not a constant on the page',
+    /tomorrowFrom = Number\.isInteger\(data\.nudge_hour\)/.test(code));
+  check('which is the same hour the nudge uses', /data\.nudge_hour/.test(code));
+  check('the preference does not decide it',
     !/plans_in/.test(code), (code.match(/.*plans_in.*/) || [''])[0].trim());
-  check('nor is there a settings UI for it', !/plans_in/.test(body));
+  check('nor is there a settings UI for either', !/plans_in|nudge_hour/.test(body));
 
   console.log('   a thing already in the day');
   // Greying is the whole signal. It used to also say "in today's plan" beside

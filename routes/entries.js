@@ -35,7 +35,7 @@ router.get('/entries', async (req, res) => {
   try {
     const { data: profile } = await supabase
       .from('profile')
-      .select('timezone, default_wake_time, plans_in')
+      .select('timezone, default_wake_time, plans_in, nudge_hour')
       .eq('user_id', CURRENT_USER)
       .maybeSingle();
 
@@ -88,9 +88,15 @@ router.get('/entries', async (req, res) => {
       today,
       timezone: timeZone,
       wake_time: String((profile && profile.default_wake_time) || '07:00').slice(0, 5),
-      // Which day the screen opens on. Null reads as evening, which is what
-      // this did before the column existed.
+      // Which day the evening nudge asks about. Null reads as evening, which
+      // is what this did before the column existed. It no longer decides which
+      // day the screen opens on.
       plans_in: (profile && profile.plans_in) === 'morning' ? 'morning' : 'evening',
+      // The hour the system starts asking about tomorrow, which is also the
+      // hour the screen starts opening on it. Sent so those two cannot drift:
+      // they are the same idea, and a second constant on the page would be a
+      // copy of this one waiting to be forgotten.
+      nudge_hour: Number.isInteger(profile && profile.nudge_hour) ? profile.nudge_hour : 20,
       items: items.sort((a, b) => b.days - a.days || a.title.localeCompare(b.title)),
     });
   } catch (err) {

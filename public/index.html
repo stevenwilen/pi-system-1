@@ -1077,6 +1077,11 @@
       let timeZone = 'UTC';
       let showing = 'today';
 
+      // The hour the screen starts opening on tomorrow, read from the profile
+      // on load. Twenty until the server says otherwise, matching the nudge's
+      // own default.
+      let tomorrowFrom = 20;
+
       const planDateFor = (which) => (which === 'today' ? today : addDays(today, 1));
       const planDate = () => planDateFor(showing);
 
@@ -1157,20 +1162,23 @@
           timeZone = data.timezone || 'UTC';
           wake = toMinutes(data.wake_time || '08:00');
 
-          // Always today. The screen opens on the day you are in, because that
-          // is what it is opened to look at — what is on now, what is next.
+          // Today through the day, tomorrow once the evening turns.
           //
-          // It used to follow `plans_in`, so an evening planner arrived on
-          // tomorrow. That made the page a planning tool first and a companion
-          // second, and it is used the other way round: planning tomorrow is
-          // one deliberate visit a day, and the rest are glances at what is
-          // happening. One tap reaches Tomorrow when the deliberate visit
-          // comes.
+          // Almost every visit is a glance at what is on now and what is next,
+          // which is why it lands on today. But by the nudge hour today is
+          // spent, and the question worth opening the page for has become
+          // tomorrow — which is exactly what the nudge is about to ask.
           //
-          // `plans_in` still decides which day the evening nudge asks about.
-          // The two used to be one setting and are now two questions: which day
-          // you are shown, and which day you are reminded to plan.
-          await showDay('today');
+          // The hour comes from `profile.nudge_hour` rather than a constant
+          // here, because it is the same idea in both places: the moment this
+          // system stops being about the day you are in. A second copy on the
+          // page would be one to forget when the setting moves.
+          //
+          // It followed `plans_in` once, so an evening planner landed on
+          // tomorrow at any hour of the day. That is the thing this is not:
+          // who you are does not decide it, what time it is does.
+          tomorrowFrom = Number.isInteger(data.nudge_hour) ? data.nudge_hour : 20;
+          await showDay(nowMinutes() >= tomorrowFrom * 60 ? 'tomorrow' : 'today');
         }
 
         renderThings();

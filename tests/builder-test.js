@@ -1093,29 +1093,41 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       byId['end-time'].textContent);
   }
 
-  console.log('\nan evening planner still opens on today');
+  console.log('\ntoday through the day, tomorrow once the evening turns');
   {
-    // plans_in used to decide this and no longer does. It still decides which
-    // day the evening nudge asks about, which is a different question: what you
-    // are shown, against what you are reminded to plan.
-    const evening = boot({
-      plan: twoDays(), entries: utcEntries({ plans_in: 'evening' }), now: '11:00',
-    });
-    await evening.ctx.load();
-    check('evening opens on today', evening.byId['pick-today']._class.has('on'));
+    const openedOn = async (at, extra = {}) => {
+      const b = boot({ plan: twoDays(), entries: utcEntries(extra), now: at });
+      await b.ctx.load();
+      return b.byId['pick-tomorrow']._class.has('on') ? 'tomorrow' : 'today';
+    };
 
-    const morning = boot({
-      plan: twoDays(), entries: utcEntries({ plans_in: 'morning' }), now: '11:00',
-    });
-    await morning.ctx.load();
-    check('and so does morning', morning.byId['pick-today']._class.has('on'));
+    check('the morning opens on today', (await openedOn('08:00')) === 'today');
+    check('and the afternoon does too', (await openedOn('15:30')) === 'today');
 
-    const unset = boot({
-      plan: twoDays(), entries: utcEntries(), now: '11:00',
-    });
-    await unset.ctx.load();
-    check('and so does a profile that never said',
-      unset.byId['pick-today']._class.has('on'));
+    // The boundary. Nudge hour is 20:00 by default, and the screen turns with
+    // it rather than a minute either side.
+    check('19:59 is still today', (await openedOn('19:59')) === 'today');
+    check('20:00 is tomorrow', (await openedOn('20:00')) === 'tomorrow');
+    check('and so is later', (await openedOn('23:30')) === 'tomorrow');
+
+    // Past midnight is a new today, not a late yesterday.
+    check('half past midnight is today again', (await openedOn('00:30')) === 'today');
+
+    // The hour follows the profile, because it is the same hour the nudge uses.
+    check('a later nudge hour moves the turn with it',
+      (await openedOn('20:00', { nudge_hour: 22 })) === 'today');
+    check('and the screen turns when that hour comes',
+      (await openedOn('22:00', { nudge_hour: 22 })) === 'tomorrow');
+    check('an earlier one turns earlier',
+      (await openedOn('18:00', { nudge_hour: 18 })) === 'tomorrow');
+
+    // plans_in decided this once. It decides nothing about it now.
+    check('who you are does not enter into it',
+      (await openedOn('11:00', { plans_in: 'morning' })) === 'today' &&
+        (await openedOn('11:00', { plans_in: 'evening' })) === 'today');
+    check('nor in the evening',
+      (await openedOn('21:00', { plans_in: 'morning' })) === 'tomorrow' &&
+        (await openedOn('21:00', { plans_in: 'evening' })) === 'tomorrow');
   }
 
   console.log('\nconfirm sends the date of the day on screen');
