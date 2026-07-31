@@ -45,9 +45,15 @@ const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 // markup explains at length which features were removed and why. A comment
 // saying the cold list used to sit here would fail the check that says the
 // cold list is gone.
+// EVERY script element, not just the first and not just the bare ones. The
+// page carries a second one now — `<script type="text/plain">` holding the
+// setup prompt, which the browser will not run and which exists to be copied.
+// It is prose, and it was being read as markup: the prompt says "a paused
+// conversation" and "Why:", so the checks that prove the pause feature and the
+// why field are gone both failed on an English sentence in a text box.
 const body = html
   .slice(html.indexOf('<body>'), html.indexOf('</body>'))
-  .replace(/<script>[\s\S]*?<\/script>/, '')
+  .replace(/<script[\s\S]*?<\/script>/g, '')
   .replace(/<!--[\s\S]*?-->/g, '');
 
 // The script with its comments stripped. Several checks below assert that a
@@ -305,8 +311,13 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // the other door — the one press on that screen that is not the seal — and a
   // focused field is where the caret is, which is the orienting job the divider
   // does for the day. Named here so a third has to be argued for.
+  //
+  // AND THE SETUP SHEET ADDS FOUR, all the same idea again. `.row-actions
+  // .minor` is that sheet's own buttons, `#paste:focus` is where the caret is,
+  // and the two `.good` classes are a check that came back working — which is
+  // the one thing on that screen you can act on the strength of.
   const acts =
-    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus/;
+    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.pline\.good|#paste:focus/;
   // The divider: the knot and the line it fastens. Both are indigo now, where
   // the dark build tinted the line with a separate near-blue that belonged to
   // nothing — one fewer colour on the page, and the two halves of one object
@@ -317,8 +328,15 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   const orients = /\.now \.dot|\.now \.ln/;
   check('blue appears only on the controls that act, or the one that orients',
     blue.every((s) => acts.test(s) || orients.test(s)), blue.join(' | '));
+  // WHOLE CLASS NAMES. `\b` is not a class boundary in CSS: a hyphen ends a
+  // word, so `\.row\b` matched `.row-actions`, and the setup sheet's buttons
+  // were reported as a decorative element wearing the action colour. The
+  // lookahead refuses a following letter, digit or hyphen, which is what
+  // "this class and not one that merely starts with it" actually means.
+  const whole = (name) => new RegExp(`\\.${name}(?![\\w-])`);
   check('and nothing decorative has it',
-    !blue.some((s) => /\.cal|\.backing|\.block\b|\.row\b/.test(s)), blue.join(' | '));
+    !blue.some((s) => ['cal', 'backing', 'block', 'row'].some((n) => whole(n).test(s))),
+    blue.join(' | '));
 
   check('the start steppers are blue', /color: var\(--accent\)/.test(rule('.step')));
   check('the duration chip is blue, because it is now the control',
@@ -416,7 +434,13 @@ console.log('\n7. the warn colour warns; it does not narrate');
   // `.gate-problem` is the same job as `.problem` in the add sheet: a form
   // saying why it will not accept what it was given. Not a new use of the
   // colour, the same one on a second form.
-  const allowed = /\.mark|\.ends\.late|\.failed|\.danger|\.problem|\.confirm|\.gate-problem/;
+  //
+  // The setup sheet's three. `.said.bad` and `.pline.bad` are a check that
+  // came back broken, which is the job `.failed` already does for a feed on
+  // the day screen. `.row-actions .go` is the button that commits a whole
+  // pasted setup — ink, like the seal, because it is the same kind of act.
+  const allowed =
+    /\.mark|\.ends\.late|\.failed|\.danger|\.problem|\.confirm|\.gate-problem|\.said\.bad|\.pline\.bad|\.row-actions \.go/;
   check('used only on marks, failures, Delete and the seal',
     warn.every((s) => allowed.test(s)), warn.join(' | '));
   check('and nothing is left claiming a miss', !/askmiss|wasmissed/.test(css));
@@ -626,7 +650,17 @@ console.log('\n11. everything cut is really cut');
   // the removed field is a check that will be silenced rather than fixed.
   for (const [what, pattern] of [
     ['summarize', /summari[sz]e/i],
-    ['the setup interview', /setup-prompt|plan-intent|\/import/i],
+    // `plan-intent` alone now. It used to also forbid `setup-prompt` and
+    // `/import`, and both of those names have since come back meaning
+    // something else: a text box holding a prompt you copy into your own AI
+    // chat, and the endpoint that saves what you paste back. Neither is the
+    // removed interview — that was a conversation this system conducted
+    // itself, through the model, over several endpoints.
+    //
+    // `plan-intent` is the identifier that actually named it, and
+    // step1-verify.js still proves /plan-intent/setup-prompt answers 404,
+    // which is the guarantee this line is standing in for.
+    ['the setup interview', /plan-intent/i],
     ['pause and unpause', /\/pause|paused_at|\bpaused\b/i],
     ['the why field', /f-why|\.why\b|why:/i],
     ['where it stands', /f-state|\.state\b|state:/i],

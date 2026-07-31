@@ -93,7 +93,12 @@ async function chatIdOf(which) {
       const body = await res.json();
 
       check('it is accepted', res.status === 200, String(res.status));
-      check('and reports the chat it linked', body.chat_id === '8906223785', JSON.stringify(body));
+      // MASKED ON THE WAY BACK, like everything else the settings route
+      // reports. The caller just typed it, so echoing it leaks nothing new —
+      // but the sheet renders whatever comes back, and a screen that prints a
+      // whole chat id is one screenshot away from someone else's bot.
+      check('and reports which chat, without printing it', body.chat_id === '…3785',
+        JSON.stringify(body));
       check('and that the message arrived', body.delivered === true, JSON.stringify(body));
 
       // THE POINT OF THE WHOLE ENDPOINT. A chat id is a number and every typo
@@ -173,7 +178,9 @@ async function chatIdOf(which) {
       check("and left B's alone", (await chatIdOf('b')) === '222222222',
         String(await chatIdOf('b')));
 
-      const src = require('fs').readFileSync(ROOT + '/routes/telegram.js', 'utf8');
+      // routes/settings.js now. The linking endpoints moved there when the setup
+      // sheet arrived: one file for everything that sheet writes.
+      const src = require('fs').readFileSync(ROOT + '/routes/settings.js', 'utf8');
       check('the token is not per user', !/telegram_bot_token/i.test(src));
       check('and the route names no user but the caller',
         !/req\.body[^\n]*user/i.test(src));

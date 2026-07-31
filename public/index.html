@@ -830,6 +830,110 @@
         cursor: pointer;
       }
 
+      /* The way into setup. Faint, because it is the one control on this
+         screen that is not about today — present, and never competing with
+         the day for attention. */
+      .settings-open {
+        margin-left: auto;
+        background: none;
+        border: 0;
+        padding: 0 2px;
+        font-family: inherit;
+        font-size: 15px;
+        line-height: 1;
+        color: var(--faint);
+        cursor: pointer;
+      }
+
+      /* A note under a field: what is set now, or what a value is for. */
+      .field-note {
+        margin: 0 0 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .warn-note {
+        margin-top: 18px;
+        color: var(--faint);
+      }
+
+      .row-actions {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 8px;
+      }
+      .row-actions .minor {
+        background: none;
+        border: 0;
+        padding: 4px 0;
+        font-family: inherit;
+        font-size: 13px;
+        color: var(--accent);
+        cursor: pointer;
+      }
+      /* The one that commits the whole paste. Ink, like the seal, because it
+         is the same kind of act. */
+      .row-actions .go {
+        color: var(--warn);
+        font-weight: 500;
+      }
+      .row-actions .minor.hidden {
+        display: none;
+      }
+
+      /* WHAT HAPPENED, in three readings that must not look alike:
+         good  it works, and here is what was in it
+         thin  it works, and there was nothing in it
+         bad   it does not work, and here is what it said
+         The middle one is why this is not a colour pair. An empty calendar and
+         a dead url both show nothing on the day screen, and someone who cannot
+         tell them apart goes looking for a bug in the wrong place. */
+      .said {
+        margin-top: 8px;
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--muted);
+        white-space: pre-wrap;
+      }
+      .said.good { color: var(--accent); }
+      .said.thin { color: var(--faint); }
+      .said.bad { color: var(--warn); }
+
+      .sheet-rule {
+        height: 1px;
+        background: var(--line);
+        margin: 24px 0;
+      }
+
+      .preview {
+        margin-top: 12px;
+        padding: 12px 14px;
+        background: var(--card-spent);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .preview.hidden { display: none; }
+      .pline { color: var(--muted); }
+      .pline.good { color: var(--accent); }
+      .pline.thin { color: var(--faint); }
+      .pline.bad { color: var(--warn); }
+
+      #paste {
+        width: 100%;
+        box-sizing: border-box;
+        background: none;
+        border: 1px solid var(--line);
+        padding: 10px;
+        font-family: inherit;
+        font-size: 16px; /* under 16 and iOS zooms the page on focus */
+        color: var(--text);
+        resize: vertical;
+      }
+      #paste:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+
       /* Below the whole page, and deliberately hard to hit by accident. */
       .signout {
         display: flex;
@@ -1333,6 +1437,10 @@
           <span class="sep">/</span>
           <button type="button" class="opt" id="pick-tomorrow">Tomorrow</button>
           <span class="date" id="plan-date"></span>
+          <!-- The only thing on this screen that is not about today. Three
+               dots, the same mark the Things rows use for "more about this
+               one", here meaning "more about all of it". -->
+          <button type="button" class="settings-open" id="settings-open" aria-label="Settings">···</button>
         </div>
 
         <div class="cal" id="cal">
@@ -1374,19 +1482,255 @@
         <div id="things"></div>
       </section>
 
-      <!-- Last, and quiet. Signing out is a thing you do rarely and never by
-           accident, so it sits below everything with nothing drawing the eye
-           to it. -->
-      <div class="signout">
-        <span id="whoami"></span>
-        <button type="button" id="sign-out">Sign out</button>
-      </div>
     </main>
 
     <!-- Where the "Removed · Undo" bar lives. A fixed element needs somewhere
          to be appended, and appending to <body> would be the one place the
          script reaches outside an id it declared. -->
     <div id="undo-host"></div>
+
+    <!-- the settings sheet ---------------------------------------------------
+      Everything that has to be true before the system can do its job, in one
+      place, with nothing that needs a database client to set.
+
+      EVERY FIELD IS WRITE-ONLY. What is stored is never sent back — the sheet
+      is told a host and a last path segment, or the last four digits, and that
+      is all it can show. A calendar url is a bearer credential: whoever holds
+      the string reads that calendar for ever, with no sign-in and no way to
+      tell. It must not be recoverable from a screenshot, a screen share, or
+      the browser's own memory.
+    -->
+    <div class="scrim hidden" id="settings-scrim"></div>
+    <div class="sheet-wrap hidden" id="settings-wrap">
+      <div class="sheet">
+        <div class="sheet-title">Setup</div>
+
+        <!-- 1. from a conversation ------------------------------------------ -->
+        <div class="field">
+          <label for="paste">Paste from a setup conversation</label>
+          <p class="field-note">
+            Copy the prompt below into any AI chat, answer its questions, and
+            paste what it gives you back here.
+          </p>
+          <div class="row-actions">
+            <button type="button" class="minor" id="copy-prompt">Copy setup prompt</button>
+            <span class="said" id="copy-said"></span>
+          </div>
+          <textarea id="paste" rows="4" placeholder="Paste the whole reply — fenced or not."></textarea>
+          <div class="row-actions">
+            <button type="button" class="minor" id="paste-check">See what this would do</button>
+            <button type="button" class="minor go hidden" id="paste-save">Save all of it</button>
+          </div>
+          <div class="preview hidden" id="paste-preview"></div>
+        </div>
+
+        <div class="sheet-rule"></div>
+
+        <!-- 2. or one at a time --------------------------------------------- -->
+        <div class="field">
+          <label for="f-chat">Telegram chat</label>
+          <p class="field-note" id="chat-state">Not linked.</p>
+          <input type="text" id="f-chat" inputmode="numeric" autocomplete="off"
+                 placeholder="Message @userinfobot to get your id" />
+          <div class="row-actions">
+            <button type="button" class="minor" id="save-chat">Save and send a test</button>
+            <button type="button" class="minor" id="clear-chat">Clear</button>
+          </div>
+          <div class="said" id="chat-said"></div>
+        </div>
+
+        <div class="field">
+          <label for="f-cal-know">Calendar — things to know</label>
+          <p class="field-note" id="know-state">Not set.</p>
+          <input type="url" id="f-cal-know" autocomplete="off" placeholder="Secret iCal address" />
+          <div class="row-actions">
+            <button type="button" class="minor" id="save-know">Save and check</button>
+            <button type="button" class="minor" id="clear-know">Clear</button>
+          </div>
+          <div class="said" id="know-said"></div>
+        </div>
+
+        <div class="field">
+          <label for="f-cal-do">Calendar — things to do</label>
+          <p class="field-note" id="do-state">Not set.</p>
+          <input type="url" id="f-cal-do" autocomplete="off" placeholder="Secret iCal address" />
+          <div class="row-actions">
+            <button type="button" class="minor" id="save-do">Save and check</button>
+            <button type="button" class="minor" id="clear-do">Clear</button>
+          </div>
+          <div class="said" id="do-said"></div>
+        </div>
+
+        <p class="field-note warn-note">
+          A secret iCal address grants read access to that whole calendar, to
+          anyone who has the address. Treat it like a password: it is stored
+          against your account and never shown back to you here.
+        </p>
+
+        <div class="sheet-rule"></div>
+
+        <div class="signout">
+          <span id="whoami"></span>
+          <button type="button" id="sign-out">Sign out</button>
+        </div>
+
+        <div class="sheet-actions">
+          <button type="button" class="cancel" id="settings-close">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!--
+      THE SETUP PROMPT — engine text.
+
+      Identical for every user and containing nothing about anyone. It is
+      written here rather than built in the script for one practical reason: it
+      contains a fenced JSON block, and a template literal holding backticks is
+      a string that gets broken by the next person to edit it. A script element
+      with a non-JavaScript type is inert — the browser will not run it and the
+      page can read its text exactly as written.
+    -->
+    <script type="text/plain" id="prompt-text">
+You are setting up a personal planning system for one person. Work through the
+steps below IN ORDER. Do not move to the next step until the current one is
+DONE and VERIFIED. Do not skip ahead even if the person asks — tell them the
+order exists because each step is easier once the one before it is finished.
+
+After every completed step, restate progress on one line, exactly like this:
+
+  Done: Telegram. Now: calendars 1 of 2. Remaining: your things.
+
+That line is how a paused conversation is resumed. If someone opens with a
+line like that, continue from it and do not repeat completed steps.
+
+Do not produce the final JSON until every step is verified. If asked for it
+early, refuse and name what is still missing.
+
+---
+
+STEP 1 — TELEGRAM
+
+Why: this is how the system reaches them. Each block of their day arrives as a
+message a few minutes before it starts, and there is an evening nudge if
+tomorrow has no plan. Without it the system is a screen they have to remember
+to open, which is the thing it exists to replace.
+
+Do this first. It is the fiddliest step and the one most likely to be
+abandoned, so it should happen while motivation is highest.
+
+Tell them:
+  1. Open Telegram and search for the bot they were given, or the one they set
+     up. Press Start.
+  2. In Telegram, search for @userinfobot and press Start.
+  3. It replies with an Id — a number, sometimes ten digits, sometimes
+     negative for a group.
+
+VERIFY: ask them to paste the number back. Do not accept "done" or "got it".
+If what they paste is not a plain number, say what is wrong and ask again.
+
+Then restate progress.
+
+---
+
+STEP 2 — CALENDARS (two of them)
+
+Why two: the system reads one calendar as things to KNOW and the other as
+things to DO. Which calendar an event sits on is the only signal — nothing
+guesses from the title. A dentist appointment is a thing to know: it is
+already fixed and the day has to fit around it. "Draft the proposal" is a
+thing to do: it needs a block of time chosen for it.
+
+Say plainly, before they paste anything:
+
+  A secret iCal address grants read access to that entire calendar to anyone
+  who has the address. There is no password on it and no way to see who used
+  it. Treat it like a password.
+
+Both are optional. Someone with no calendar can skip either or both — say so,
+and if they skip, record null for that one.
+
+For each, tell them:
+  1. Google Calendar on a computer, not the phone app.
+  2. Settings, then the calendar's own Settings and sharing.
+  3. Scroll to "Integrate calendar".
+  4. Copy the "Secret address in iCal format".
+
+VERIFY each one separately: ask them to paste the address back, and check it
+begins with https:// and ends with .ics. Say which of the two it is for. Do
+step 2 of 2 only after 1 of 2 is verified or explicitly skipped.
+
+Then restate progress.
+
+---
+
+STEP 3 — THEIR THINGS
+
+Now interview them. This is a conversation, not a form. Ask about one kind at
+a time and explain what each kind is for before asking.
+
+HABITS — things that recur and are never finished. Exercise, reading, a
+language. Each needs a frequency: daily, few times a week, weekly, or monthly.
+A habit never has a deadline; the frequency is what it has instead.
+
+PROJECTS — bodies of work with an end, that take more than one sitting. A
+project is never finished in one go, so the system never offers to tick one
+off in a single step.
+
+TASKS — single things that are done once and then gone.
+
+For projects and tasks, ask whether there is a real deadline. If there is:
+  - The date, as YYYY-MM-DD.
+  - How big it is, which must be one of exactly these five:
+    "a day", "a few days", "a week", "a few weeks", "months".
+
+Explain why the size matters, because it is not obvious: the system compares
+how long a thing will take against how long is left, and warns when those two
+are close. A week of work due in three days is urgent; a week of work due in
+two months is not. Without the size it cannot tell those apart, so a deadline
+with no size is refused.
+
+If there is no deadline, there is no size. Say so rather than inventing one.
+
+Also explain what happens to things with no deadline at all: the system counts
+the days since each one was last scheduled and shows the coldest first. That
+is the whole point of listing them — the thing you have not thought about in
+three weeks is exactly the thing you will not think of today.
+
+Aim for a real picture, not a long one. Eight to fifteen things is a good
+first list. Do not invent anything they did not say.
+
+VERIFY: read the whole list back grouped by kind, with frequencies, deadlines
+and sizes, and ask them to confirm or correct it.
+
+Then restate progress.
+
+---
+
+FINALLY
+
+Only when Telegram is verified, both calendars are verified or explicitly
+skipped, and the list has been read back and confirmed: output the JSON.
+
+Rules for the output:
+  - One fenced json block, and NOTHING after it. No summary, no sign-off.
+  - Use null for a skipped calendar. Do not use "" or omit the key.
+  - Omit "frequency" for anything that is not a habit.
+  - Omit "due" and "size" for anything with no deadline.
+  - "size" must be one of the five phrases exactly.
+
+```json
+{
+  "telegram_chat_id": "123456789",
+  "calendar_ics_url": "https://calendar.google.com/calendar/ical/.../basic.ics",
+  "calendar_action_ics_url": null,
+  "items": [
+    { "type": "habit", "title": "Read before bed", "frequency": "daily" },
+    { "type": "project", "title": "Rewire the study", "due": "2026-09-30", "size": "a few weeks" },
+    { "type": "task", "title": "Return the router" }
+  ]
+}
+```
+    </script>
 
     <!-- the add sheet ------------------------------------------------------- -->
     <div class="scrim hidden" id="add-scrim">
@@ -3459,6 +3803,245 @@
           cover.style.display = 'none';
         }, 200);
       }
+
+      // --- the setup sheet -----------------------------------------------------
+
+      /**
+       * What is configured, as the server is willing to describe it.
+       *
+       * Never the values themselves. The sheet asks for a hint — a host and a
+       * last path segment, or the last four digits — because a calendar url is
+       * a bearer credential and the one thing a settings screen must not do is
+       * put one back on a screen that can be photographed.
+       */
+      async function loadSettings() {
+        let s;
+        try {
+          s = await (await api('/settings')).json();
+        } catch {
+          return;
+        }
+
+        const say = (id, on, hint, off) => {
+          $(id).textContent = on ? `Set · ${hint}` : off;
+        };
+
+        say('chat-state', s.telegram.set, s.telegram.hint, 'Not linked.');
+        say('know-state', s.calendar_ics_url.set, s.calendar_ics_url.hint, 'Not set.');
+        say('do-state', s.calendar_action_ics_url.set, s.calendar_action_ics_url.hint, 'Not set.');
+      }
+
+      // What a save reported, under the field it was about. Three states, and
+      // they read differently on purpose: worked, worked but empty, did not.
+      function said(id, text, tone) {
+        const box = $(id);
+        box.textContent = text;
+        box.className = `said ${tone || ''}`;
+      }
+
+      const feedResult = (r) => {
+        if (!r.reachable) return [`Could not read it: ${r.error}`, 'bad'];
+        if (!r.events) return ['Reachable, but there is nothing on it.', 'thin'];
+        return [`Reachable — ${r.events} event${r.events === 1 ? '' : 's'} on it.`, 'good'];
+      };
+
+      function openSettings() {
+        $('settings-scrim').classList.remove('hidden');
+        $('settings-wrap').classList.remove('hidden');
+        for (const id of ['chat-said', 'know-said', 'do-said', 'copy-said']) said(id, '');
+        $('paste-preview').classList.add('hidden');
+        $('paste-save').classList.add('hidden');
+        loadSettings();
+      }
+
+      function closeSettings() {
+        $('settings-scrim').classList.add('hidden');
+        $('settings-wrap').classList.add('hidden');
+        // The boxes are emptied on the way out. A pasted setup blob holds a
+        // calendar url, and leaving it sitting in a field is the same leak the
+        // hints exist to avoid.
+        for (const id of ['f-chat', 'f-cal-know', 'f-cal-do', 'paste']) $(id).value = '';
+      }
+
+      $('settings-open').onclick = openSettings;
+      $('settings-close').onclick = closeSettings;
+      $('settings-scrim').onclick = closeSettings;
+
+      // --- one field at a time
+
+      $('save-chat').onclick = async () => {
+        const chat_id = $('f-chat').value.trim();
+        if (!chat_id) return said('chat-said', 'Type the id first.', 'bad');
+
+        said('chat-said', 'Sending…');
+        const res = await api('/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id }),
+        });
+        const body = await res.json();
+
+        if (body.error && !body.chat_id) return said('chat-said', body.error, 'bad');
+        if (body.delivered) said('chat-said', 'Saved. The test message arrived.', 'good');
+        else said('chat-said', `Saved, but nothing arrived: ${body.error}`, 'bad');
+
+        $('f-chat').value = '';
+        loadSettings();
+      };
+
+      $('clear-chat').onclick = async () => {
+        await api('/telegram/clear', { method: 'POST' });
+        said('chat-said', 'Cleared. Nothing will be sent.', '');
+        loadSettings();
+      };
+
+      const feed = (which, field, saidId) => async () => {
+        const url = $(field).value.trim();
+        if (!url) return said(saidId, 'Paste the address first.', 'bad');
+
+        said(saidId, 'Checking…');
+        const res = await api('/settings/calendar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ which, url }),
+        });
+        const body = await res.json();
+
+        if (body.error && !body.which) return said(saidId, body.error, 'bad');
+        said(saidId, ...feedResult(body));
+
+        $(field).value = '';
+        loadSettings();
+      };
+
+      const clearFeed = (which, saidId) => async () => {
+        await api('/settings/calendar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ which, url: null }),
+        });
+        said(saidId, 'Cleared.', '');
+        loadSettings();
+      };
+
+      $('save-know').onclick = feed('calendar_ics_url', 'f-cal-know', 'know-said');
+      $('clear-know').onclick = clearFeed('calendar_ics_url', 'know-said');
+      $('save-do').onclick = feed('calendar_action_ics_url', 'f-cal-do', 'do-said');
+      $('clear-do').onclick = clearFeed('calendar_action_ics_url', 'do-said');
+
+      // --- the prompt
+
+      /**
+       * Copied from the page's own inert copy.
+       *
+       * Read synchronously, because Safari only allows a clipboard write
+       * inside the gesture that asked for it — an `await` before the write is
+       * a copy that silently does nothing on a phone.
+       */
+      $('copy-prompt').onclick = () => {
+        const text = $('prompt-text').textContent.trim();
+        try {
+          navigator.clipboard.writeText(text);
+          said('copy-said', 'Copied.', 'good');
+        } catch {
+          said('copy-said', 'Could not copy — select it from the page instead.', 'bad');
+        }
+      };
+
+      // --- the paste
+
+      function renderPreview(p) {
+        const box = $('paste-preview');
+        box.replaceChildren();
+        box.classList.remove('hidden');
+
+        const line = (text, tone) => {
+          const el = document.createElement('div');
+          el.className = `pline ${tone || ''}`;
+          el.textContent = text;
+          box.append(el);
+        };
+
+        if (p.problems && p.problems.length) {
+          line('Nothing will be saved:', 'bad');
+          for (const problem of p.problems) line(`· ${problem}`, 'bad');
+          $('paste-save').classList.add('hidden');
+          return;
+        }
+
+        if (p.telegram) {
+          const t = (p.checks && p.checks.telegram) || {};
+          line(`Telegram ${p.telegram.hint}`);
+          if (t.delivered) line('  · the test message arrived', 'good');
+          else line(`  · nothing arrived: ${t.error}`, 'bad');
+        }
+
+        for (const f of p.feeds || []) {
+          const check = ((p.checks && p.checks.feeds) || []).find((c) => c.key === f.key) || {};
+          line(`Calendar — ${f.label} · ${f.hint}`);
+          const [text, tone] = feedResult(check);
+          line(`  · ${text}`, tone);
+        }
+
+        line(`${p.items.length} thing${p.items.length === 1 ? '' : 's'} to add:`);
+        for (const item of p.items) {
+          const bits = [item.type, item.frequency, item.due, item.size].filter(Boolean);
+          line(`  · ${item.title} (${bits.join(', ')})`);
+        }
+
+        $('paste-save').classList.remove('hidden');
+      }
+
+      $('paste-check').onclick = async () => {
+        const paste = $('paste').value.trim();
+        if (!paste) return;
+
+        $('paste-preview').classList.remove('hidden');
+        $('paste-preview').textContent = 'Checking…';
+
+        const res = await api('/settings/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paste }),
+        });
+        const body = await res.json();
+
+        if (body.error) {
+          $('paste-preview').textContent = body.error;
+          $('paste-save').classList.add('hidden');
+          return;
+        }
+        renderPreview(body);
+      };
+
+      $('paste-save').onclick = async () => {
+        const paste = $('paste').value.trim();
+        if (!paste) return;
+
+        $('paste-save').disabled = true;
+        try {
+          const res = await api('/settings/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paste }),
+          });
+          const body = await res.json();
+
+          if (!body.saved) {
+            $('paste-preview').textContent =
+              body.error + (body.problems ? `\n${body.problems.join('\n')}` : '');
+            return;
+          }
+
+          $('paste').value = '';
+          $('paste-save').classList.add('hidden');
+          $('paste-preview').textContent = `Saved. ${body.added.length} thing${body.added.length === 1 ? '' : 's'} added.`;
+          await loadSettings();
+          await load();
+        } finally {
+          $('paste-save').disabled = false;
+        }
+      };
 
       // --- the gate ------------------------------------------------------------
 

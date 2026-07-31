@@ -200,7 +200,77 @@ it. What *would* leak is keying on the feed's `source`, which is the tempting
 mistake now that the URL is a variable and the source is the constant.
 `calendar-feeds-test.js` goes red if anyone makes it.
 
-### 2.8 A request is whoever its token says, and nothing else
+### 2.8 Setup verifies itself, or it has not happened
+
+Everything a person must configure sits in one sheet behind the `···` in the day
+header, and none of it needs SQL: the Telegram chat, both calendar feeds, the
+paste from a setup conversation, and Sign out.
+
+**Saving tests what it was given and reports what happened.** Every value here
+looks correct when it is wrong — a mistyped chat id is still ten digits, a
+revoked calendar url is still a url — and neither says anything until a message
+does not arrive or an aside is empty, days after the paste that caused it. So a
+save sends a real Telegram message, and fetches each feed once.
+
+**Three outcomes, kept apart everywhere:**
+
+| | |
+|---|---|
+| reachable, with events | it works, and here is how much is on it |
+| reachable, empty | it works, and there is nothing on it |
+| unreachable | it does not, and here is what it said |
+
+The middle one is why this is not a boolean. An empty calendar and a dead url
+both show nothing on the day screen, and someone who cannot tell them apart goes
+looking for a bug in the wrong place. `probeFeed` checks for `BEGIN:VCALENDAR`
+before parsing for exactly that reason: handed an HTML login page the ICS parser
+throws nothing and returns no events, which would arrive as "reachable, empty".
+
+**A failed check never blocks the save, and never passes for success.** A feed
+can be unreachable for a minute for reasons that have nothing to do with the
+url, and making someone paste it again would be punishing them for the network.
+It is stored, and reported as failing.
+
+**Nothing stored is ever sent back.** The sheet is told a host and a last path
+segment, or the last four digits, and no more. A secret iCal address is a bearer
+credential — whoever holds the string reads that calendar for ever, with no
+sign-in and no audit — so the settings screen must not become the easiest place
+in the system to photograph one. The sheet says this in as many words, and so
+does the prompt.
+
+**A paste is one answer, applied whole or not at all.** One malformed item stops
+the chat id and the calendars being written too. Half a paste in the notebook is
+worse than none: you cannot tell which half, and running it again duplicates
+whatever landed. The preview runs every check the import runs, so the two cannot
+disagree, and it writes nothing.
+
+**The paste is read bare, fenced, or buried in prose**, taking the LAST balanced
+object — a setup conversation shows the shape before it fills it in, so the first
+object in a transcript is an example and the last one is the answer.
+
+`entry-shape.js` holds the rules for what a habit, project or task may be, shared
+by the add form and the paste. Two ways into one list must not be able to
+disagree about what belongs in it.
+
+#### The setup prompt
+
+A `<script type="text/plain">` block in the page, copied to the clipboard by a
+button. **Engine text**: identical for every user, nothing interpolated into it,
+naming nobody. It is inert markup rather than a JavaScript string because it
+contains a fenced JSON block, and a template literal full of escaped backticks
+is a string the next edit breaks.
+
+It is strictly linear and refuses to move on: Telegram first — the fiddliest
+step, done while motivation is highest — then the two calendars, then the
+interview about projects, habits and tasks. Each step is verified by asking the
+person to paste the value back, never by asking "got it?". After each step it
+restates progress on one line — `Done: Telegram. Now: calendars 1 of 2.
+Remaining: your things.` — which is how a paused conversation is resumed. It
+refuses to produce the JSON until every step is verified and names what is
+missing, explains what a size bucket is for and why staleness matters, and ends
+with the fenced block and nothing after it.
+
+### 2.9 A request is whoever its token says, and nothing else
 
 There is no default user. `PI_USER_ID` is gone, and so is the fixed uuid it fell
 back to. Every request carries `Authorization: Bearer <token>`, the server asks
@@ -1114,6 +1184,8 @@ npm test       # every suite, sequentially
 | `public/switch.html` | the reference for the Today / Tomorrow switch and past blocks |
 | `PLANNING-RULES.md` | **archive.** Notes from the pre-strip system, kept and marked as such |
 | `brain.js`, `usage.js`, `untrusted.js` | **wired and unused.** See 1. `brain.js` requires the other two |
+| `entry-shape.js` | what a habit, project or task may be. Shared by the add form and the setup paste |
+| `routes/settings.js` | the setup sheet: linking, feeds, and the paste |
 | `calendar-test.js`, `send-test.js` | run by hand, not part of the running system |
 | `make-icons.js` | regenerates the PNGs from the SVG |
 

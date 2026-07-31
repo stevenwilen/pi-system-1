@@ -198,6 +198,70 @@ async function loadFeed(user_id, url) {
   return parsed;
 }
 
+/**
+ * Try a feed url once and say what came back.
+ *
+ * For the settings sheet, where the question is not "what is on Tuesday" but
+ * "did I paste the right thing". Three outcomes, and keeping them apart is the
+ * whole point:
+ *
+ *   reachable, with events   the url is right and the calendar has things in it
+ *   reachable, empty         the url is right and the calendar is empty
+ *   unreachable              the url is wrong, revoked, or the network is down
+ *
+ * The middle one is the reason this returns a count rather than a boolean. An
+ * empty calendar and a dead url both produce no events on screen, and someone
+ * who cannot tell them apart will go looking for a bug in the wrong place.
+ *
+ * NOT CACHED, deliberately. The cache exists so a day's reads share one fetch;
+ * this is a person asking whether the thing they just pasted works, and an
+ * answer from sixty seconds ago is an answer about the url they pasted before.
+ */
+async function probeFeed(url) {
+  const clean = String(url || '').replace(/[<>]/g, '').trim();
+  if (!clean) return { reachable: false, error: 'no url' };
+
+  if (!/^https?:\/\//i.test(clean)) {
+    return { reachable: false, error: 'a calendar url has to start with http:// or https://' };
+  }
+
+  let res;
+  try {
+    res = await fetch(clean, { signal: AbortSignal.timeout(CALENDAR_TIMEOUT_MS) });
+  } catch (err) {
+    return {
+      reachable: false,
+      error: /abort|timeout/i.test(err.message) ? 'it did not answer in time' : err.message,
+    };
+  }
+
+  if (!res.ok) return { reachable: false, error: `it answered ${res.status}` };
+
+  const text = await res.text();
+
+  // IS THIS EVEN A CALENDAR? Asked before parsing, because the parser does not
+  // answer it: handed an HTML login page it throws nothing and returns an
+  // empty object, which arrives here as "reachable, nothing on it" — the one
+  // reading that would send someone to check their calendar rather than their
+  // url. Every iCalendar file begins with this line; nothing else does.
+  if (!/BEGIN:VCALENDAR/i.test(text)) {
+    return {
+      reachable: false,
+      error: 'it answered, but not with a calendar. Check it is the secret iCal address and not a sharing link.',
+    };
+  }
+
+  let parsed;
+  try {
+    parsed = await ical.async.parseICS(text);
+  } catch (err) {
+    return { reachable: false, error: `it answered, but not with a calendar (${err.message})` };
+  }
+
+  const events = Object.values(parsed).filter((e) => e && e.type === 'VEVENT');
+  return { reachable: true, events: events.length };
+}
+
 // Milliseconds between UTC and `timeZone` at a given instant.
 function offsetAt(instant, timeZone) {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -480,4 +544,5 @@ module.exports = {
   update_entry,
   update_profile,
   timezoneFor,
+  probeFeed,
 };

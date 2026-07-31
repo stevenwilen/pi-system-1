@@ -51,7 +51,10 @@ let authed = () => {
   throw new Error('the account is not signed in yet');
 };
 
-const FEED_PORT = 3987;
+// 3979, not 3987: step1-verify.js already serves on that one. The suites run
+// one at a time so a clash only bites when a server is slow to let go of its
+// socket, which is exactly the kind of failure that looks like something else.
+const FEED_PORT = 3979;
 const FEED = `http://127.0.0.1:${FEED_PORT}`;
 
 // Two events on whatever day the suite asks about, one timed and one all day,

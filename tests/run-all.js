@@ -140,6 +140,7 @@ const SUITES = [
   ['messages-test.js', 180],
   ['delivery-test.js', 240],
   ['telegram-link-test.js', 180],
+  ['settings-test.js', 240],
   // The two this whole change exists for. Last, because they are the slowest
   // and the most likely to be the reason a run is being watched.
   ['auth-test.js', 180],
