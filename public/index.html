@@ -908,15 +908,25 @@
 
          The freckles are the ink not taking evenly, which is what separates a
          stamp from a rectangle. */
+      /* THE HANKO: ink pressed onto paper.
+         No ring around it. The reference carved one — a real seal is relief, so
+         the border stands and the cut prints white — but that reads as a line
+         drawn around a button, and the one thing this theme does not do is
+         draw. What makes it a stamp instead of a rectangle is the EDGE: ink
+         pressed by hand does not land square, so the deckle gives it an uneven
+         bite, and the freckles are the ink not taking evenly across the middle.
+
+         Both live on the layer beneath, because the button carries a word and a
+         filter on the button would bend it. */
       .confirm {
         display: block;
         position: relative;
+        isolation: isolate;
         width: 100%;
-        background: var(--warn);
+        background: none;
         color: var(--bg);
         text-align: center;
         padding: 17px;
-        border-radius: 3px;
         font-size: 12px;
         letter-spacing: 0.22em;
         text-transform: uppercase;
@@ -924,34 +934,40 @@
         border: 0;
         font-family: inherit;
         cursor: pointer;
-        box-shadow:
-          inset 0 0 0 3px rgba(245, 241, 232, 0.92),
-          inset 0 0 0 4.5px var(--warn);
       }
       .confirm::after {
         content: '';
         position: absolute;
         inset: 0;
-        border-radius: 3px;
+        z-index: -1;
         pointer-events: none;
+        background-color: var(--warn);
         background-image:
           radial-gradient(circle at 14% 26%, rgba(245, 241, 232, 0.16) 0 3px, transparent 4px),
           radial-gradient(circle at 71% 68%, rgba(245, 241, 232, 0.13) 0 2.5px, transparent 3.5px),
           radial-gradient(circle at 43% 22%, rgba(245, 241, 232, 0.1) 0 2px, transparent 3px),
           radial-gradient(circle at 88% 34%, rgba(245, 241, 232, 0.12) 0 2px, transparent 3px);
+        filter: url(#deckle);
       }
       /* Nothing to seal yet: the seal is not inked. The ring stays, so the
          shape is plainly the same object waiting rather than a different
          control. */
+      /* CONFIRMED: the seal already pressed, and still ink.
+         It used to go to paper and grey, which read as the button having been
+         taken away rather than the day having been sealed — and a day you have
+         agreed to should look agreed to.
+
+         The same persimmon, so the contrast is the same both ways round. What
+         separates it from the unpressed seal is that the ink has settled: the
+         edge is the softer bite, and the freckles are gone because the ink has
+         had time to spread into the paper. That, and the word says Confirmed. */
       .confirm:disabled {
-        background: var(--card);
-        color: var(--faint);
-        box-shadow:
-          inset 0 0 0 3px rgba(245, 241, 232, 0.92),
-          inset 0 0 0 4.5px var(--card);
+        color: var(--bg);
+        cursor: default;
       }
       .confirm:disabled::after {
-        display: none;
+        background-image: none;
+        filter: url(#deckle-soft);
       }
 
       /* --- the add sheet --------------------------------------------------- */

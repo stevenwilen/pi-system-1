@@ -244,12 +244,12 @@ console.log('\n3. rows are rows; only builder blocks are cards');
   check('the slot does not clip it flat',
     !/overflow: hidden/.test(rule('.slot')), rule('.slot'));
 
-  // Nothing else may take the card background. It is the mark of an object
-  // you manipulate — plus the disabled Confirm, and the undo bar, which is a
-  // surface floating over the page rather than a row in it.
+  // Nothing else may take the card background. It is the mark of an object you
+  // manipulate. The disabled Confirm was on this list and has come off it: a
+  // sealed day is still ink, not paper.
   const carded = selectorsUsing('var(--card)').filter((s) => !/^:root/.test(s));
   check('nothing else uses the card background',
-    carded.every((s) => /\.block|\.confirm:disabled|\.undo/.test(s)), carded.join(' | '));
+    carded.every((s) => /\.block|\.undo/.test(s)), carded.join(' | '));
 }
 
 console.log('\n4. sections are separated by space, not by boxes');
@@ -322,6 +322,31 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // deliberate widening this theme asks for: see section 7.
   check('confirm is not indigo, because it is a seal',
     !/var\(--accent\)/.test(rule('.confirm')), rule('.confirm'));
+
+  // THE SEAL HAS NO RING. A real hanko is carved in relief, so its border
+  // stands and prints while the cut stays paper — which is what the reference
+  // drew. On screen that reads as a line drawn around a button, and drawing is
+  // the one thing this theme does not do. What makes it a stamp is the edge:
+  // pressed by hand, ink does not land square.
+  check('no ring is drawn around it', !/box-shadow/.test(rule('.confirm')), rule('.confirm'));
+  check('its edge is pressed rather than cut',
+    /filter: url\(#deckle\)/.test(rule('.confirm::after')));
+  check('and the ink is uneven across it',
+    /radial-gradient/.test(rule('.confirm::after')));
+
+  // A SEALED DAY IS STILL INK. It used to go paper-and-grey when confirmed,
+  // which read as the button being taken away rather than the day being
+  // agreed to. Same persimmon, so the contrast holds both ways round; what
+  // changes is that the ink has settled — softer bite, and the freckles gone
+  // because it has had time to spread.
+  check('confirmed stays persimmon rather than going to paper',
+    !/background/.test(rule('.confirm:disabled')), rule('.confirm:disabled'));
+  check('and keeps its full contrast',
+    /color: var\(--bg\)/.test(rule('.confirm:disabled')));
+  check('the pressed seal settles: softer edge, no freckles',
+    /filter: url\(#deckle-soft\)/.test(rule('.confirm:disabled::after')) &&
+      /background-image: none/.test(rule('.confirm:disabled::after')),
+    rule('.confirm:disabled::after'));
   check('undo is blue, because undoing is an action',
     /color: var\(--accent\)/.test(rule('.undo button')));
 

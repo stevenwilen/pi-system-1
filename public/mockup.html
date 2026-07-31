@@ -162,10 +162,13 @@
   .ends span{font-size:13px;color:var(--muted)}
   .ends b{font-size:17px;font-weight:500;font-variant-numeric:tabular-nums}
 
-  .confirm{
-    background:var(--accent);color:var(--bg);text-align:center;
-    padding:14px;border-radius:11px;font-size:14px;font-weight:600;
-  }
+  /* ink pressed onto paper: no ring, an uneven bite, and it stays ink once
+     the day is sealed */
+  .confirm{position:relative;isolation:isolate;color:var(--bg);text-align:center;
+           padding:17px;font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+           font-weight:500}
+  .confirm::after{content:'';position:absolute;inset:0;z-index:-1;
+                  background-color:var(--warn);filter:url(#deckle)}
 
   /* the add / edit sheet */
   .sheet{background:var(--bg);border-radius:18px;padding:22px 20px 24px;
