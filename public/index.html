@@ -936,38 +936,36 @@
         color: var(--faint);
         font-size: 12px;
       }
-      /* A PRESSABLE THING, rather than a word that happens to be blue.
-         Copy is the one action on this sheet you take before you know what
-         the sheet is for — it is how you leave and come back with an answer —
-         and a text link asks to be recognised before it can be pressed.
+      /* THE SEAL, USED TWICE MORE. Both buttons in this block are the same
+         object the day is confirmed with, and for the same reason: one takes
+         the prompt away with you, the other commits a whole pasted setup, and
+         both are things you press once and mean. A smaller, quieter control
+         for either would have been a second grammar for "this is the button".
 
-         A torn paper chit, the same object the undo bar is: raised stock, an
-         uneven bite at the edge, a shadow of a shadow under it. The deckle is
-         on the layer beneath, never on the button, because a filter warps the
-         text of the element it is set on — which cost an afternoon once. */
-      .paperbtn {
-        position: relative;
-        isolation: isolate;
-        background: none;
-        border: 0;
-        padding: 11px 15px;
-        font-family: inherit;
-        font-size: 13px;
-        color: var(--text);
-        cursor: pointer;
-        transition: transform 90ms ease-out;
+         There was a paper chit here for one build — raised stock with a torn
+         edge, the undo bar's object. It read as a button, but it read as a
+         lesser one than the seal on the day screen, which is not the ranking
+         these two deserve. */
+
+      /* THIS ONE HUGS ITS WORDS. The seal on the day screen is full width
+         because it is the end of the whole screen — there is one thing to do
+         and it spans everything. Copy is not that: it sits inside a block, it
+         is one of two, and stretched to the block's width it stopped reading
+         as a stamp and started reading as a bar.
+
+         Full width also ran its torn edge the entire length of the block, a
+         hair inside the block's own edge, which reads as an outline around it
+         rather than as the ragged bite of a stamp. Pulled in to the width of
+         its words, the edge is just the edge again. */
+      #copy-prompt {
+        display: inline-block;
+        width: auto;
+        padding: 14px 20px;
       }
-      .paperbtn::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        z-index: -1;
-        background: var(--card-raised);
-        filter: url(#deckle) drop-shadow(0 1px 2px rgba(43, 42, 40, 0.10));
-      }
-      /* Pressed: it settles into the paper, the same movement the seal makes. */
-      .paperbtn:active {
-        transform: scale(0.98);
+      /* Its answer goes under it, not beside it — the button is a block-level
+         box on its own line either way. */
+      #copy-prompt + .said {
+        margin-top: 12px;
       }
 
       /* The bulk path, set apart as its own block on the card colour so it
@@ -978,8 +976,14 @@
         padding: 16px 16px 18px;
         margin-bottom: 24px;
       }
-      .allatonce .label {
-        margin-bottom: 6px;
+      /* Both seals in this block stand clear of what is above them. Full width
+         and inked, they read as the end of a thought rather than another line
+         of one. */
+      .allatonce .confirm {
+        margin-top: 16px;
+      }
+      #paste-save {
+        margin-top: 18px;
       }
 
       /* WHAT HAPPENED, in three readings that must not look alike:
@@ -1014,15 +1018,23 @@
       .pline.bad { color: var(--warn); }
 
       #paste {
+        display: block;
         width: 100%;
         box-sizing: border-box;
-        background: none;
+        /* Clear of the seal above it. A control butted against the thing that
+           produced it reads as one control. */
+        margin-top: 22px;
+        background: var(--bg);
         border: 1px solid var(--line);
         padding: 10px;
         font-family: inherit;
         font-size: 16px; /* under 16 and iOS zooms the page on focus */
         color: var(--text);
-        resize: vertical;
+        /* NOT RESIZABLE. Nothing is composed in here: a reply is pasted whole
+           and then checked or cleared. A drag handle offers to help with
+           editing that nobody does, and on a phone it is a corner that eats
+           taps meant for the button under it. */
+        resize: none;
       }
       #paste:focus {
         outline: none;
@@ -1257,6 +1269,21 @@
         background: var(--warn);
         filter: url(#deckle);
       }
+      /* NO RING AFTER A TAP. A pressed button keeps focus, and the browser
+         draws its own outline around it — a hard pale rectangle sitting over
+         a torn edge, which is the one shape this seal is built not to have.
+         Every other control on the page already turns it off.
+
+         Only the pointer's, though. `:focus-visible` is what a keyboard gets,
+         and it keeps a ring, because a keyboard user with no focus indicator
+         cannot see where they are. */
+      .confirm:focus {
+        outline: none;
+      }
+      .confirm:focus-visible {
+        outline: 2px solid var(--text);
+        outline-offset: 3px;
+      }
       /* CONFIRMED: the seal already pressed, and still ink.
          It used to go to paper and grey, which read as the button having been
          taken away rather than the day having been sealed — and a day you have
@@ -1414,13 +1441,6 @@
         .slot,
         .block {
           transition: none !important;
-        }
-        /* The chit stops settling; it is still plainly a thing you press. */
-        .paperbtn {
-          transition: none;
-        }
-        .paperbtn:active {
-          transform: none;
         }
         .block.lifted::after {
           filter: url(#deckle);
@@ -1630,7 +1650,7 @@
               Message <b>@userinfobot</b> on Telegram and it replies with your id.
             </p>
             <input type="text" id="f-chat" inputmode="numeric" autocomplete="off"
-                   placeholder="Your chat id — a number" />
+                   placeholder="Your chat id, a number" />
             <div class="row-actions">
               <button type="button" class="minor go" id="save-chat">Save and send a test</button>
               <button type="button" class="minor quiet" id="clear-chat">Clear</button>
@@ -1644,7 +1664,7 @@
           </button>
           <div class="sdetail hidden" id="cal-detail">
             <p class="field-note">
-              Shown at the top of the day as reference — what is already
+              Shown at the top of the day as reference: what is already
               happening, so you can build around it. Nothing on it is ever
               turned into a block or changed by this system.
             </p>
@@ -1660,7 +1680,7 @@
 
         <p class="field-note warn-note">
           A secret iCal address grants read access to that whole calendar, to
-          anyone who has the address. Treat it like a password — it is stored
+          anyone who has the address. Treat it like a password. It is stored
           against your account and never shown back to you here.
         </p>
 
@@ -1669,22 +1689,29 @@
              someone new the three "Not set" lines above are the question this
              answers. -->
         <div class="allatonce">
-          <div class="label">All at once</div>
           <p class="field-note">
             Copy the prompt into any AI chat, answer its questions, and paste
             the reply here. It sets up everything above and your first list of
             things.
           </p>
-          <div class="row-actions">
-            <button type="button" class="paperbtn" id="copy-prompt">Copy setup prompt</button>
-            <span class="said" id="copy-said"></span>
-          </div>
-          <textarea id="paste" rows="3" placeholder="Paste the whole reply — fenced or not."></textarea>
+          <button type="button" class="confirm" id="copy-prompt">Copy setup prompt</button>
+          <div class="said" id="copy-said"></div>
+
+          <!-- Paste-only. There is nothing to compose in here — a reply is
+               dropped in whole and then either checked or cleared — so it does
+               not offer a drag handle for editing that nobody does. -->
+          <textarea id="paste" rows="3" placeholder="Paste the whole reply, fenced or not."></textarea>
+
           <div class="row-actions">
             <button type="button" class="minor" id="paste-check">See what this would do</button>
-            <button type="button" class="paperbtn go hidden" id="paste-save">Save all of it</button>
           </div>
+
           <div class="preview hidden" id="paste-preview"></div>
+
+          <!-- AFTER the preview, not beside the check. You read what it says it
+               will do, and then the seal to commit it is the next thing under
+               your thumb. -->
+          <button type="button" class="confirm hidden" id="paste-save">Save all of it</button>
         </div>
 
         <div class="signout">
@@ -3995,7 +4022,7 @@ Rules for the output:
       const feedResult = (r) => {
         if (!r.reachable) return [`Could not read it: ${r.error}`, 'bad'];
         if (!r.events) return ['Reachable, but there is nothing on it.', 'thin'];
-        return [`Reachable — ${r.events} event${r.events === 1 ? '' : 's'} on it.`, 'good'];
+        return [`Reachable. ${r.events} event${r.events === 1 ? '' : 's'} on it.`, 'good'];
       };
 
       function openSettings() {
@@ -4099,7 +4126,7 @@ Rules for the output:
           navigator.clipboard.writeText(text);
           said('copy-said', 'Copied.', 'good');
         } catch {
-          said('copy-said', 'Could not copy — select it from the page instead.', 'bad');
+          said('copy-said', 'Could not copy. Select it from the page instead.', 'bad');
         }
       };
 
