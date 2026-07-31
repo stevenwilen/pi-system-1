@@ -331,21 +331,24 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   check('no ring is drawn around it', !/box-shadow/.test(rule('.confirm')), rule('.confirm'));
   check('its edge is pressed rather than cut',
     /filter: url\(#deckle\)/.test(rule('.confirm::after')));
-  check('and the ink is uneven across it',
-    /radial-gradient/.test(rule('.confirm::after')));
+
+  // AND NOTHING ACROSS THE MIDDLE. It carried four pale flecks, meant as ink
+  // not taking evenly. At this size and softness they did not read as texture —
+  // they read as bubbles trapped under a sticker, which is a defect rather than
+  // a mark. The uneven edge is what says stamp; the middle is solid ink.
+  check('the ink is solid, with no flecks in it',
+    !/gradient/.test(rule('.confirm::after')), rule('.confirm::after'));
 
   // A SEALED DAY IS STILL INK. It used to go paper-and-grey when confirmed,
   // which read as the button being taken away rather than the day being
   // agreed to. Same persimmon, so the contrast holds both ways round; what
-  // changes is that the ink has settled — softer bite, and the freckles gone
-  // because it has had time to spread.
+  // changes is that the ink has settled into a softer bite.
   check('confirmed stays persimmon rather than going to paper',
     !/background/.test(rule('.confirm:disabled')), rule('.confirm:disabled'));
   check('and keeps its full contrast',
     /color: var\(--bg\)/.test(rule('.confirm:disabled')));
-  check('the pressed seal settles: softer edge, no freckles',
-    /filter: url\(#deckle-soft\)/.test(rule('.confirm:disabled::after')) &&
-      /background-image: none/.test(rule('.confirm:disabled::after')),
+  check('the sealed day settles into a softer edge',
+    /filter: url\(#deckle-soft\)/.test(rule('.confirm:disabled::after')),
     rule('.confirm:disabled::after'));
   // UNDER THE HAND. Saving is a round trip, so the seal used to say nothing
   // for about a second after the tap, which reads as a tap that missed.

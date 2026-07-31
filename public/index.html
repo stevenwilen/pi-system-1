@@ -894,30 +894,29 @@
         color: var(--warn);
       }
 
-      /* Blue, because it is the one thing on this page that commits. */
-      /* THE HANKO. A seal pressed onto the day to say it is agreed.
-         Persimmon ground with the paper showing through as an inset ring,
-         which is how a carved seal prints: the border is relief, the gap is
-         the cut.
+      /* THE HANKO: ink pressed onto paper, to say the day is agreed.
 
-         RECTANGULAR, and full width. The reference drew it as a 74px square,
-         which is the shape of a real name seal but the wrong shape for the
-         only button on the page — a square asks to be aimed at, and a button
-         this important should be impossible to miss. It keeps the seal's
-         proportion in its border and its letterspacing, not in its outline.
+         RECTANGULAR, and full width. The reference drew a 74px square, which is
+         the shape of a real name seal but the wrong shape for the only button
+         on the page — a square asks to be aimed at, and this one should be
+         impossible to miss. It keeps the seal's proportion in its letterspacing
+         rather than in its outline.
 
-         The freckles are the ink not taking evenly, which is what separates a
-         stamp from a rectangle. */
-      /* THE HANKO: ink pressed onto paper.
-         No ring around it. The reference carved one — a real seal is relief, so
+         NO RING around it. The reference carved one — a real seal is relief, so
          the border stands and the cut prints white — but that reads as a line
          drawn around a button, and the one thing this theme does not do is
-         draw. What makes it a stamp instead of a rectangle is the EDGE: ink
-         pressed by hand does not land square, so the deckle gives it an uneven
-         bite, and the freckles are the ink not taking evenly across the middle.
+         draw.
 
-         Both live on the layer beneath, because the button carries a word and a
-         filter on the button would bend it. */
+         So the EDGE is the whole of it: ink pressed by hand does not land
+         square, and the deckle gives it an uneven bite. Nothing across the
+         middle. It carried four pale flecks there, meant as ink not taking
+         evenly — at this size and this softness they did not read as texture,
+         they read as bubbles under a sticker, which is a defect rather than a
+         mark. Uneven at the edge, solid in the middle, which is what a stamp
+         actually leaves.
+
+         On the layer beneath, because the button carries a word and a filter on
+         the button would bend it. */
       .confirm {
         display: block;
         position: relative;
@@ -942,12 +941,7 @@
         inset: 0;
         z-index: -1;
         pointer-events: none;
-        background-color: var(--warn);
-        background-image:
-          radial-gradient(circle at 14% 26%, rgba(245, 241, 232, 0.16) 0 3px, transparent 4px),
-          radial-gradient(circle at 71% 68%, rgba(245, 241, 232, 0.13) 0 2.5px, transparent 3.5px),
-          radial-gradient(circle at 43% 22%, rgba(245, 241, 232, 0.1) 0 2px, transparent 3px),
-          radial-gradient(circle at 88% 34%, rgba(245, 241, 232, 0.12) 0 2px, transparent 3px);
+        background: var(--warn);
         filter: url(#deckle);
       }
       /* CONFIRMED: the seal already pressed, and still ink.
@@ -957,14 +951,13 @@
 
          The same persimmon, so the contrast is the same both ways round. What
          separates it from the unpressed seal is that the ink has settled: the
-         edge is the softer bite, and the freckles are gone because the ink has
-         had time to spread into the paper. That, and the word says Confirmed. */
+         edge is the softer bite, because it has had time to spread into the
+         paper. That, and the word says Confirmed. */
       .confirm:disabled {
         color: var(--bg);
         cursor: default;
       }
       .confirm:disabled::after {
-        background-image: none;
         filter: url(#deckle-soft);
       }
       /* BEING PRESSED. The save is a round trip, so for about a second after
