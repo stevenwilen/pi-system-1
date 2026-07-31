@@ -1179,6 +1179,79 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       `${tomorrowBody.date} vs ${TOMORROW}`);
   }
 
+  console.log('\nthe seal stays pressed for as long as the day is saving');
+  {
+    // WHAT THIS IS FOR. Saving is a round trip, and until it came back the
+    // button looked exactly as it had before it was touched — about a second
+    // of nothing, which reads as a tap that did not register.
+    const { ctx, byId } = boot({
+      plan: twoDays(), entries: utcEntries(), now: '11:00',
+    });
+    await ctx.load();
+
+    const seal = byId['confirm'];
+    const real = ctx.fetch;
+
+    // Read from inside the request rather than after it, because after it is
+    // exactly when the state is supposed to be gone.
+    let midFlight = null;
+    ctx.fetch = async (url, opts) => {
+      if (url === '/plan') midFlight = seal._class.has('pressing');
+      return real(url, opts);
+    };
+
+    await seal.onclick();
+    check('pressed while the request is out', midFlight === true);
+    check('and released once the day is saved', !seal._class.has('pressing'));
+
+    // The two ways a save is known to go wrong. Both give up early, and a seal
+    // left pressed after either is a button that has stopped answering.
+    ctx.fetch = async (url, opts) => {
+      if (url === '/plan') throw new Error('offline');
+      return real(url, opts);
+    };
+    await seal.onclick();
+    check('a request that never lands releases it', !seal._class.has('pressing'));
+
+    ctx.fetch = async (url, opts) => {
+      if (url === '/plan') return { ok: true, json: async () => ({ error: 'refused' }) };
+      return real(url, opts);
+    };
+    await seal.onclick();
+    check('and so does a refusal from the server', !seal._class.has('pressing'));
+
+    // AND THE WAY THAT IS NOT KNOWN. Both cases above return rather than
+    // throw, so a release on the line after the save would have covered them
+    // and this case is the only one that says why it is a `finally` instead:
+    // the seal has to let go on every way out of the save, including one
+    // nobody anticipated. Stuck pressed, it stays stuck until a reload.
+    ctx.fetch = async (url, opts) => {
+      if (url === '/plan') {
+        return { ok: true, json: async () => ({ get error() { throw new Error('boom'); } }) };
+      }
+      return real(url, opts);
+    };
+    let threw = false;
+    try {
+      await seal.onclick();
+    } catch {
+      threw = true;
+    }
+    check('the unexpected still reaches the surface', threw);
+    check('and the seal lets go anyway', !seal._class.has('pressing'));
+
+    // The press itself is the pointer's, not the click's: iOS fires `:active`
+    // only under conditions this button does not always meet, and it would end
+    // at the release anyway — which is where the waiting starts.
+    seal.onpointerdown();
+    check('a finger down presses it', seal._class.has('pressing'));
+    seal.onpointercancel();
+    check('a press stolen by a scroll lets go', !seal._class.has('pressing'));
+    seal.onpointerdown();
+    seal.onpointerleave();
+    check('and so does a finger slid off the button', !seal._class.has('pressing'));
+  }
+
   console.log('\na morning planner opens on today');
   {
     const { ctx, byId } = boot({

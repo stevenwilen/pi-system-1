@@ -934,6 +934,7 @@
         border: 0;
         font-family: inherit;
         cursor: pointer;
+        transition: transform 90ms ease-out;
       }
       .confirm::after {
         content: '';
@@ -949,9 +950,6 @@
           radial-gradient(circle at 88% 34%, rgba(245, 241, 232, 0.12) 0 2px, transparent 3px);
         filter: url(#deckle);
       }
-      /* Nothing to seal yet: the seal is not inked. The ring stays, so the
-         shape is plainly the same object waiting rather than a different
-         control. */
       /* CONFIRMED: the seal already pressed, and still ink.
          It used to go to paper and grey, which read as the button having been
          taken away rather than the day having been sealed — and a day you have
@@ -968,6 +966,25 @@
       .confirm:disabled::after {
         background-image: none;
         filter: url(#deckle-soft);
+      }
+      /* BEING PRESSED. The save is a round trip, so for about a second after
+         the tap the seal said nothing — and a stamp that answers a second late
+         reads as a stamp that missed.
+
+         Leaning on a real one drives more ink into the paper and seats it, so
+         that is the whole of it: the ink deepens and the stamp sits a hair
+         smaller. Brightness rather than a second persimmon, so there is still
+         one red in the file and it cannot drift from the other.
+
+         After the disabled rules, and deliberately: the two carry the same
+         weight, so source order decides, and the seal should stay pressed
+         until the answer is actually in rather than lighten the instant the
+         word changes. */
+      .confirm.pressing::after {
+        filter: url(#deckle) brightness(0.82);
+      }
+      .confirm.pressing {
+        transform: scale(0.985);
       }
 
       /* --- the add sheet --------------------------------------------------- */
@@ -1094,6 +1111,13 @@
         }
         .block.lifted::after {
           filter: url(#deckle);
+        }
+        /* The deepening ink still answers the tap; only the seating goes. */
+        .confirm {
+          transition: none;
+        }
+        .confirm.pressing {
+          transform: none;
         }
       }
     </style>
@@ -2871,8 +2895,27 @@
         button.disabled = saved || !blocks.length;
       }
 
-      $('confirm').onclick = async () => {
-        if (!blocks.length) return;
+      /**
+       * The seal, under the hand.
+       *
+       * A stamp answers the moment you lean on it, and this one took the round
+       * trip to the server before it said anything at all — about a second of a
+       * button that looked exactly as it had before it was touched, which reads
+       * as a press that did not register.
+       *
+       * Driven from the pointer rather than left to `:active`, which iOS only
+       * fires under conditions this button does not always meet, and which
+       * would end at the release anyway — the wait starts there.
+       *
+       * The release removes it and the click immediately puts it back, in the
+       * same turn of the loop, so there is nothing to see between them.
+       */
+      $('confirm').onpointerdown = () => $('confirm').classList.add('pressing');
+      $('confirm').onpointerup = () => $('confirm').classList.remove('pressing');
+      $('confirm').onpointercancel = () => $('confirm').classList.remove('pressing');
+      $('confirm').onpointerleave = () => $('confirm').classList.remove('pressing');
+
+      async function saveDay() {
         reflow();
 
         let res;
@@ -2932,6 +2975,25 @@
         settleUndo();
 
         setSaved(true);
+      }
+
+      $('confirm').onclick = async () => {
+        if (!blocks.length) return;
+
+        // Held down for as long as the day is being saved, so the wait belongs
+        // to the press instead of looking like nothing happened.
+        //
+        // Released in a finally rather than on the line after. saveDay's own
+        // failures return rather than throw, so either would do for those —
+        // but the release has to hold for every way out, including one nobody
+        // wrote down. A seal left pressed is a button that stopped answering,
+        // and it would be stuck until the page was reloaded.
+        $('confirm').classList.add('pressing');
+        try {
+          await saveDay();
+        } finally {
+          $('confirm').classList.remove('pressing');
+        }
       };
 
       // --- the add sheet -------------------------------------------------------

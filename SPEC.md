@@ -549,7 +549,10 @@ endpoint and no `placed:` rows.
 - **+ Block** adds a manual block.
 - **Day ends** is live, and reads `HH:MM next day` in the warn colour past
   midnight.
-- **Confirm** saves the plan. Any edit afterwards un-saves it.
+- **Confirm** saves the plan. Any edit afterwards un-saves it. It stays visibly
+  pressed from the tap until the save answers — the round trip takes about a
+  second, and a seal that says nothing for that long reads as a tap that
+  missed.
 
 #### A block is worked by gesture
 

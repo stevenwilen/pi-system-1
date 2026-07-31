@@ -347,6 +347,32 @@ console.log('\n6. blue is actionable, and nothing else is blue');
     /filter: url\(#deckle-soft\)/.test(rule('.confirm:disabled::after')) &&
       /background-image: none/.test(rule('.confirm:disabled::after')),
     rule('.confirm:disabled::after'));
+  // UNDER THE HAND. Saving is a round trip, so the seal used to say nothing
+  // for about a second after the tap, which reads as a tap that missed.
+  // Leaning on a real stamp drives more ink in and seats it, and that is the
+  // whole of the feedback.
+  // Read once and asserted non-empty first, because "no second red in it" is
+  // true of a rule that is not there at all.
+  const pressed = rule('.confirm.pressing::after');
+  check('the pressed seal is styled at all', pressed !== '');
+  check('it deepens its ink', /brightness\(/.test(pressed), pressed);
+  check('deepened rather than given a second red',
+    !/#[0-9a-f]{6}/i.test(pressed), pressed);
+  check('and it is still the same torn edge',
+    /url\(#deckle\)/.test(pressed), pressed);
+  check('the stamp seats a hair into the paper',
+    /transform: scale\(0\.9/.test(rule('.confirm.pressing')), rule('.confirm.pressing'));
+
+  // Source order is what decides here: `.confirm.pressing::after` and
+  // `.confirm:disabled::after` carry the same weight, and the seal has to stay
+  // pressed until the answer is in rather than lighten the moment the word
+  // changes to Confirmed. Both indexes checked, or a missing settled rule
+  // would read as the pressed one winning.
+  const atPressed = css.indexOf('.confirm.pressing::after');
+  const atSettled = css.indexOf('.confirm:disabled::after');
+  check('the pressed seal outranks the settled one',
+    atSettled !== -1 && atPressed > atSettled, `${atSettled} then ${atPressed}`);
+
   check('undo is blue, because undoing is an action',
     /color: var\(--accent\)/.test(rule('.undo button')));
 
@@ -453,6 +479,12 @@ console.log('\n7a. the wait before the first day is on screen');
     reduced.slice(0, 120));
   check('and closes the arc into a whole circle rather than freezing it',
     /animation: none;\s*border-color: var\(--text\)/.test(reduced));
+
+  // The seal's answer survives the setting. Only the seating is movement; the
+  // ink deepening is not, and dropping it would leave the press unanswered
+  // for exactly the people least served by that.
+  check('a still seal keeps its answer and loses only the seating',
+    /\.confirm\.pressing \{\s*transform: none/.test(reduced), reduced.slice(-260));
 }
 
 console.log('\n7a-iii. an empty day keeps a block\'s worth of room');
