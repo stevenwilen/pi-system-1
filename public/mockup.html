@@ -16,14 +16,14 @@
 -->
 <style>
   :root{
-    --bg:#16130F; --card:#211D18; --line:#2C2721;
-    --text:#EDE7DE; --muted:#8B8177; --faint:#6B6459;
-    --accent:#6E8CB8; --warn:#C4694A;
-    --cal-rule:#4A423A; --cal-head:#9A8F80; --cal-text:#B0A79A;
+    --bg:#F5F1E8; --card:#E7E0D2; --line:#DED7C8;
+    --text:#2B2A28; --muted:#5F5A52; --faint:#8A857C;
+    --accent:#37516E; --warn:#B8492A;
+    --cal-rule:#C9BFA8; --cal-head:#5F5A52; --cal-text:#3A3733;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{
-    background:#0a0908;
+    background:#DFD9CB;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
     display:flex;justify-content:center;flex-wrap:wrap;gap:20px;padding:28px 12px;
   }
@@ -77,7 +77,7 @@
 
   /* blocks ARE cards — they're objects you manipulate */
   .block{
-    background:var(--card);border-radius:11px;padding:14px 15px;
+    background:var(--card);padding:14px 15px;
     margin-bottom:9px;display:flex;justify-content:space-between;align-items:center;
   }
   .block .t{font-size:15px}
@@ -91,7 +91,7 @@
 
   /* a block mid-swipe: the card rides the finger and uncovers a backing that
      says what letting go will do */
-  .slot{position:relative;border-radius:11px;overflow:hidden;margin-bottom:9px}
+  .slot{position:relative;overflow:hidden;margin-bottom:9px}
   /* one surface for both swipes, and the edge the label sits at is the only
      difference. left is remove, on any block; right is the note. the removing
      side used to fill with the warn colour, which turned the whole card red */
@@ -111,7 +111,7 @@
             border-bottom:1px solid var(--line);padding:2px 0 5px}
 
   /* picked up: lighter, raised, and everything else steps back */
-  .block.lifted{background:#2A2620;box-shadow:0 10px 24px rgba(0,0,0,.45);
+  .block.lifted{background:#EFE9DC;box-shadow:0 10px 24px rgba(0,0,0,.45);
                 transform:scale(1.03)}
   .dimmed{opacity:.55}
 
@@ -124,16 +124,17 @@
   /* the switch IS the label — no new control */
   .dayswitch{display:flex;align-items:baseline;gap:9px;margin-bottom:14px;
              font-size:10px;letter-spacing:.14em;text-transform:uppercase}
-  .dayswitch .opt{color:#4A443C}
+  .dayswitch .opt{color:#B6AE9F}
   .dayswitch .opt.on{color:var(--text)}
-  .dayswitch .sep{color:#3A342D}
+  .dayswitch .sep{color:#D3CCBE}
   .dayswitch .date{letter-spacing:0;text-transform:none;font-size:11px;
                    color:var(--faint);margin-left:4px}
 
   /* a block that has already happened */
-  .past{background:transparent;border:1px solid var(--line)}
+  /* still paper, handled rather than withdrawn */
+  .past{background:#EFEAE0}
   .past .t{color:var(--faint)}
-  .past .time{color:#544E46}
+  .past .time{color:#A29E95}
   /* the room a block would take, on a day that has none. visibility, not
      display: it has to keep its space while showing nothing */
   .block.ghost{visibility:hidden}
@@ -146,7 +147,7 @@
   /* where the day has got to */
   .now{display:flex;align-items:center;gap:10px;margin:4px 0 13px}
   .now .dot{width:5px;height:5px;border-radius:50%;background:var(--accent)}
-  .now .ln{flex:1;height:1px;background:#2B3646}
+  .now .ln{flex:1;height:1px;background:#37516E}
 
   /* already in the day on screen — greying is the whole signal */
   .locked .title{color:var(--faint)}

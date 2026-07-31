@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Washi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --washi:#F5F1E8;
+    --fibre:#E7E0D2;
+    --sumi:#2B2A28;
+    --grey:#7C7871;
+    --indigo:#37516E;
+    --persimmon:#C2512E;
+    --hair:#DED7C8;
+    --sans:'Zen Kaku Gothic New',-apple-system,'Hiragino Sans',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:#DFD9CB;font-family:var(--sans);font-weight:300;
+    display:flex;justify-content:center;gap:22px;flex-wrap:wrap;padding:30px 12px;
+  }
+  .wrap{text-align:center}
+  .cap{color:#6F6A61;font-size:12px;margin-top:12px;font-weight:400}
+
+  .phone{
+    width:356px;background:var(--washi);color:var(--sumi);
+    border-radius:18px;overflow:hidden;text-align:left;
+    padding:30px 24px 32px;position:relative;
+    box-shadow:0 1px 0 rgba(0,0,0,.07);
+  }
+  .phone::before{
+    content:"";position:absolute;inset:0;pointer-events:none;opacity:.55;
+    background-image:
+      repeating-linear-gradient(84deg, rgba(124,120,113,.045) 0 1px, transparent 1px 26px),
+      repeating-linear-gradient(-77deg, rgba(124,120,113,.035) 0 1px, transparent 1px 41px),
+      radial-gradient(circle, rgba(124,120,113,.05) .5px, transparent .6px);
+    background-size:auto,auto,7px 7px;
+  }
+  .phone > *{position:relative;z-index:1}
+
+  .lbl{font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--grey);font-weight:400}
+
+  .head{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:26px}
+  .day{display:flex;align-items:baseline;gap:11px;font-size:16px;font-weight:400}
+  .day .opt{color:#C4BDAF}
+  .day .opt.on{color:var(--sumi);font-weight:500}
+  .day .sep{color:#D3CCBE;font-size:12px}
+  .date{font-size:11px;letter-spacing:.14em;color:var(--grey);font-weight:400}
+
+  .aside{padding-bottom:26px}
+  .aside .b{font-size:14px;color:var(--sumi);line-height:1.85;margin-top:8px;font-weight:300}
+
+  .starts{display:flex;justify-content:space-between;align-items:center;padding-bottom:26px}
+  .ctrls{display:flex;align-items:center;gap:20px}
+  .st{color:var(--indigo);font-size:16px;line-height:1;font-weight:300}
+  .stime{font-size:17px;font-weight:400;letter-spacing:.03em}
+
+  .slip{
+    position:relative;margin-bottom:16px;
+    background:var(--fibre);padding:17px 18px 18px;
+    filter:url(#deckle) drop-shadow(0 1px 1px rgba(43,42,40,.07));
+  }
+  .srow{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+  .stt{font-size:16px;font-weight:400;line-height:1.5;letter-spacing:.01em}
+  .stime2{font-size:11px;letter-spacing:.16em;color:var(--grey);margin-top:7px;font-weight:400}
+  .snote{font-size:13px;color:var(--grey);margin-top:9px;line-height:1.75;font-weight:300}
+  .dur{font-size:11px;letter-spacing:.16em;color:var(--indigo);white-space:nowrap;
+       padding-top:3px;font-weight:400}
+
+  .slip.live{padding-left:26px}
+  .cord{position:absolute;left:9px;top:13px;bottom:13px;width:7px;pointer-events:none}
+  .cord i{position:absolute;top:0;bottom:0;width:2px;border-radius:1px}
+  .cord i:nth-child(1){left:0;background:repeating-linear-gradient(160deg,#37516E 0 3px,#4A6786 3px 6px)}
+  .cord i:nth-child(2){left:2.5px;background:repeating-linear-gradient(160deg,#C2512E 0 3px,#D46A47 3px 6px)}
+  .cord i:nth-child(3){left:5px;background:repeating-linear-gradient(160deg,#C9BFA8 0 3px,#DCD3BF 3px 6px)}
+
+  .slip.past{
+    background:#EFEAE0;
+    filter:url(#deckle-soft) drop-shadow(0 1px 1px rgba(43,42,40,.03));
+  }
+  .slip.past .stt{color:#8E8A82;font-weight:300}
+  .slip.past .stime2{color:#A29E95}
+  .slip.past .dur{color:#9A968D}
+
+  .knot{display:flex;align-items:center;padding:14px 0 24px}
+  .knot svg{flex:none}
+  .knot .ln{flex:1;height:1px;background:var(--indigo);opacity:.42}
+  .knot .t{font-size:9.5px;letter-spacing:.24em;color:var(--indigo);opacity:.75;
+           padding-left:12px;font-weight:400}
+
+  .add{font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--indigo);
+       padding-bottom:28px;font-weight:400}
+
+  .ends{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:30px}
+  .ends .v{font-size:17px;font-weight:400;letter-spacing:.03em}
+
+  .hankowrap{display:flex;justify-content:center;padding-bottom:14px}
+  .hanko{
+    width:74px;height:74px;position:relative;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--persimmon);border-radius:5px;
+    box-shadow:inset 0 0 0 3px rgba(245,241,232,.92), inset 0 0 0 4.5px var(--persimmon);
+  }
+  .hanko::after{
+    content:"";position:absolute;inset:0;border-radius:5px;pointer-events:none;
+    background:
+      radial-gradient(circle at 22% 18%, rgba(245,241,232,.16) 0 3px, transparent 4px),
+      radial-gradient(circle at 78% 71%, rgba(245,241,232,.13) 0 2.5px, transparent 3.5px),
+      radial-gradient(circle at 63% 26%, rgba(245,241,232,.10) 0 2px, transparent 3px),
+      radial-gradient(circle at 34% 82%, rgba(245,241,232,.12) 0 2px, transparent 3px);
+  }
+  .hanko .t{
+    position:relative;z-index:1;color:var(--washi);font-size:10px;
+    letter-spacing:.2em;text-transform:uppercase;font-weight:500;text-align:center;line-height:1.5;
+  }
+
+  .sechead{display:flex;justify-content:space-between;align-items:baseline;
+           margin-top:8px;padding-bottom:16px}
+  .trow{display:flex;align-items:flex-start;gap:14px;padding:17px 0;
+        border-top:1px solid var(--hair)}
+  .tmid{flex:1;min-width:0}
+  .ttt{font-size:15px;font-weight:400;line-height:1.5}
+  .tmeta{font-size:11px;letter-spacing:.1em;color:var(--grey);margin-top:7px;font-weight:300}
+  .taken .ttt{color:#A39F96}
+  .taken .tmeta{color:#B4B0A7}
+  .ast{color:var(--persimmon);font-size:12px;letter-spacing:.05em;padding-top:5px;font-weight:400}
+  .dots{color:#C4BDAF;font-size:14px;letter-spacing:.14em;padding-top:3px}
+
+  .dlbl{font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--grey);
+        margin:26px 0 12px;font-weight:400}
+  .prose{font-size:14px;line-height:1.95;font-weight:300;color:var(--sumi)}
+  .prose + .prose{margin-top:15px}
+  .prose b{font-weight:500;font-size:11px;letter-spacing:.16em;text-transform:uppercase}
+  .enso{display:flex;justify-content:center;padding:10px 0 6px}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <filter id="deckle">
+    <feTurbulence type="fractalNoise" baseFrequency="0.028 0.09" numOctaves="3" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="4" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="deckle-soft">
+    <feTurbulence type="fractalNoise" baseFrequency="0.02 0.07" numOctaves="3" seed="3" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="6" xChannelSelector="R" yChannelSelector="G"/>
+    <feGaussianBlur stdDeviation="0.35"/>
+  </filter>
+</svg>
+
+<div class="wrap">
+<div class="phone">
+
+  <div class="head">
+    <div class="day"><span class="opt on">Today</span><span class="sep">/</span><span class="opt">Tomorrow</span></div>
+    <div class="date">28 JUL</div>
+  </div>
+
+  <div class="aside">
+    <div class="lbl">On your calendar</div>
+    <div class="b">Dentist, 1:00 PM<br>Cancel Paramount</div>
+  </div>
+
+  <div class="starts">
+    <span class="lbl">Day starts</span>
+    <span class="ctrls">
+      <span class="st">&minus;</span>
+      <span class="stime">8:00 AM</span>
+      <span class="st">+</span>
+    </span>
+  </div>
+
+  <div class="slip past">
+    <div class="srow">
+      <div>
+        <div class="stt">Web services</div>
+        <div class="stime2">8:00 &ndash; 9:00 AM</div>
+      </div>
+      <div class="dur">1 H</div>
+    </div>
+  </div>
+
+  <div class="slip live">
+    <div class="cord"><i></i><i></i><i></i></div>
+    <div class="srow">
+      <div>
+        <div class="stt">UF application</div>
+        <div class="stime2">9:00 &ndash; 11:00 AM</div>
+        <div class="snote">personal statement draft</div>
+      </div>
+      <div class="dur">2 H</div>
+    </div>
+  </div>
+
+  <div class="knot">
+    <svg width="17" height="14" viewBox="0 0 17 14" fill="none">
+      <path d="M2 7 C2 3.4 5 2 7.6 4 C10.2 6 13 4.6 13 7 C13 9.4 10.2 8 7.6 10 C5 12 2 10.6 2 7 Z"
+            stroke="#37516E" stroke-width="1.05" opacity=".8"/>
+    </svg>
+    <span class="t">NOW 10:24</span>
+    <span class="ln" style="margin-left:12px"></span>
+  </div>
+
+  <div class="slip">
+    <div class="srow">
+      <div>
+        <div class="stt">Reading</div>
+        <div class="stime2">11:00 &ndash; 11:30 AM</div>
+      </div>
+      <div class="dur">30 M</div>
+    </div>
+  </div>
+
+  <div class="add">&#43;&nbsp;&nbsp;Add a block</div>
+
+  <div class="ends">
+    <span class="lbl">Day ends</span>
+    <span class="v">11:30 AM</span>
+  </div>
+
+  <div class="hankowrap">
+    <div class="hanko"><span class="t">Con<br>firm</span></div>
+  </div>
+
+  <div class="sechead">
+    <span class="lbl">Things</span>
+    <span class="add" style="padding:0">&#43;&nbsp;&nbsp;Add</span>
+  </div>
+
+  <div class="trow taken">
+    <div class="tmid">
+      <div class="ttt">UF application</div>
+      <div class="tmeta">PROJECT &nbsp;&middot;&nbsp; DUE IN 6 DAYS</div>
+    </div>
+    <div class="ast">&#10033;&#10033;&#10033;</div>
+    <div class="dots">&middot;&middot;&middot;</div>
+  </div>
+
+  <div class="trow">
+    <div class="tmid">
+      <div class="ttt">Spanish</div>
+      <div class="tmeta">HABIT &nbsp;&middot;&nbsp; 11 DAYS</div>
+    </div>
+    <div class="dots">&middot;&middot;&middot;</div>
+  </div>
+
+  <div class="trow">
+    <div class="tmid">
+      <div class="ttt">Web services business</div>
+      <div class="tmeta">PROJECT &nbsp;&middot;&nbsp; DUE IN 22 DAYS</div>
+    </div>
+    <div class="ast">&#10033;</div>
+    <div class="dots">&middot;&middot;&middot;</div>
+  </div>
+
+  <div class="trow">
+    <div class="tmid">
+      <div class="ttt">Cancel the domain</div>
+      <div class="tmeta">TASK &nbsp;&middot;&nbsp; 3 DAYS</div>
+    </div>
+    <div class="dots">&middot;&middot;&middot;</div>
+  </div>
+
+</div>
+<div class="cap">Washi &mdash; paper, ink, restraint</div>
+</div>
+
+<div class="wrap">
+<div class="phone">
+
+  <div class="dlbl" style="margin-top:0">The deckle</div>
+  <div class="prose">
+    Every slip is displaced by real turbulence &mdash; an SVG filter, not a
+    border. No two edges are alike, and a spent slip is displaced
+    further and blurred a fraction, so its edge has gone soft with
+    handling.
+  </div>
+
+  <div class="dlbl">Three states</div>
+  <div class="slip past" style="margin-bottom:14px">
+    <div class="srow"><div><div class="stt">Spent</div><div class="stime2">FADED, EDGE SOFTENED</div></div></div>
+  </div>
+  <div class="slip live" style="margin-bottom:14px">
+    <div class="cord"><i></i><i></i><i></i></div>
+    <div class="srow"><div><div class="stt">Running</div><div class="stime2">MIZUHIKI CORD, THREE STRANDS</div></div></div>
+  </div>
+  <div class="slip" style="margin-bottom:4px">
+    <div class="srow"><div><div class="stt">Ahead</div><div class="stime2">PLAIN PAPER</div></div></div>
+  </div>
+
+  <div class="dlbl">Ens&#333; &mdash; loading</div>
+  <div class="enso">
+    <svg width="66" height="66" viewBox="0 0 66 66" fill="none">
+      <path d="M46 12 C57 18 61 33 54 44 C46 57 28 60 17 52 C6 44 4 27 13 17 C20 9 32 6 42 9"
+            stroke="#2B2A28" stroke-width="4.2" stroke-linecap="round" opacity=".82"/>
+      <path d="M42 9 C44 9.6 45.4 10.6 46 12" stroke="#2B2A28" stroke-width="2.2" stroke-linecap="round" opacity=".45"/>
+    </svg>
+  </div>
+  <div class="prose" style="text-align:center;font-size:12px;color:var(--grey)">
+    open where the brush lifted
+  </div>
+
+  <div class="dlbl">The discipline</div>
+  <div class="prose">
+    <b>Indigo acts.</b> The steppers, add, the knot at the divider.
+    Nothing else is blue.
+  </div>
+  <div class="prose">
+    <b>Persimmon marks.</b> The hanko and the marginal asterisks, and
+    nowhere else. It is the only warm thing on the page.
+  </div>
+  <div class="prose">
+    <b>Almost nothing is drawn.</b> No borders, no fills except the
+    slips themselves, one hairline between things. Space does the
+    separating.
+  </div>
+  <div class="prose" style="color:var(--grey)">
+    <b style="color:var(--grey)">Underneath, unchanged.</b> Tap to
+    schedule, tap the duration to cycle, swipe to remove, hold to
+    reorder.
+  </div>
+
+</div>
+<div class="cap">The paper, the states, and the rules</div>
+</div>
+
+</body>
+</html>

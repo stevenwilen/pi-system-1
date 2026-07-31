@@ -89,30 +89,92 @@ function selectorsUsing(value) {
   return out;
 }
 
+// THE PALETTE, declared once for the whole file.
+//
+// Section 1 grades it for contrast and section 17 checks the mockup carries
+// the same inks. Written out in both places it drifted the first time the
+// theme moved: eight checks went on reporting failures about colours neither
+// file still contained.
+const want = {
+  '--bg': '#f5f1e8',
+  '--card': '#e7e0d2',
+  '--line': '#ded7c8',
+  '--text': '#2b2a28',
+  '--muted': '#5f5a52',
+  '--faint': '#8a857c',
+  '--accent': '#37516e',
+  '--warn': '#b8492a',
+};
+
 console.log('1. the palette is exactly the one specified');
 {
   const root = rule(':root');
-  const want = {
-    '--bg': '#16130f',
-    '--card': '#211d18',
-    '--line': '#2c2721',
-    '--text': '#ede7de',
-    '--muted': '#8b8177',
-    '--faint': '#6b6459',
-    '--accent': '#6e8cb8',
-    '--warn': '#c4694a',
-  };
   for (const [name, value] of Object.entries(want)) {
     check(`${name} is ${value}`, new RegExp(`${name}:\\s*${value}\\s*;`, 'i').test(root));
   }
+
+  // CONTRAST, because this is the failure the theme is most prone to and the
+  // one that cost the reference its legibility. Paper is the look; readable is
+  // the requirement, and where they disagree the requirement wins.
+  //
+  // WCAG relative luminance, then the contrast ratio against the paper.
+  const lum = (hex) => {
+    const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+    const [r, g, b] = c.map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const against = (hex, bg = '#f5f1e8') =>
+    (Math.max(lum(hex), lum(bg)) + 0.05) / (Math.min(lum(hex), lum(bg)) + 0.05);
+
+  const ratio = (hex) => Math.round(against(hex) * 10) / 10;
+
+  // Read out of the STYLESHEET, not out of the map above.
+  //
+  // Grading the expected value only ever proves the constant in this file is
+  // legible. It happens to be equivalent while the equality checks above pass
+  // — but the moment they fail, every ratio below would be quietly grading a
+  // colour the page had stopped using, and reporting it as fine.
+  const ink = (name) => {
+    const found = root.match(new RegExp(`${name}:\\s*(#[0-9a-f]{6})\\s*;`, 'i'));
+    if (!found) throw new Error(`${name} is not declared in :root`);
+    return found[1].toLowerCase();
+  };
+
+  check('body ink clears 4.5:1 on the paper',
+    against(ink('--text')) >= 4.5, `${ratio(ink('--text'))}:1`);
+  check('and the secondary ink does too, which is what the reference missed',
+    against(ink('--muted')) >= 4.5,
+    `${ratio(ink('--muted'))}:1 (reference was #7C7871 at ${ratio('#7c7871')}:1)`);
+  check('indigo clears it, because it carries words and not just lines',
+    against(ink('--accent')) >= 4.5, `${ratio(ink('--accent'))}:1`);
+  check('persimmon clears it as ink on the page',
+    against(ink('--warn')) >= 4.5, `${ratio(ink('--warn'))}:1`);
+  // The hanko is the other direction: paper-coloured text on a persimmon
+  // ground. Same pair, and it has to clear the bar both ways round.
+  check('and the hanko clears it the other way, paper on persimmon',
+    against(ink('--bg'), ink('--warn')) >= 4.5,
+    `${Math.round(against(ink('--bg'), ink('--warn')) * 10) / 10}:1`);
+  check('the faint ink clears 3:1, which is all it is asked to carry',
+    against(ink('--faint')) >= 3, `${ratio(ink('--faint'))}:1`);
+
+  // Nothing under 15px may be lighter than 400. The reference set 11px meta at
+  // weight 300 on a textured ground, which is the other half of why it was
+  // hard to read.
+  check('nothing small is set at weight 300', !/font-weight:\s*300/.test(css),
+    (css.match(/.*font-weight:\s*300.*/) || [''])[0].trim());
 }
 
 console.log('\n2. one label style, and the action is quieter than it');
 {
   const label = rule('.label');
-  check('10px', /font-size: 10px/.test(label));
+  // Smaller and tracked wider than the dark build. Letterspacing is how a
+  // printed page makes a word quieter without making it fainter, which is the
+  // trade this theme keeps having to make.
+  check('9.5px', /font-size: 9\.5px/.test(label));
   check('uppercase', /text-transform: uppercase/.test(label));
-  check('0.14em tracking', /letter-spacing: 0\.14em/.test(label));
+  check('0.26em tracking', /letter-spacing: 0\.26em/.test(label));
+  check('and set at 400, because 300 disappears at this size',
+    /font-weight: 400/.test(label));
   check('muted', /color: var\(--muted\)/.test(label));
 
   // Baseline, so the action sits on the label's line rather than centred
@@ -144,7 +206,16 @@ console.log('\n3. rows are rows; only builder blocks are cards');
 
   const block = rule('.block');
   check('a block IS a card', /background: var\(--card\)/.test(block));
-  check('with a radius', /border-radius/.test(block));
+  // NO RADIUS. The edge is torn rather than cut — the deckle filter displaces
+  // the whole shape through turbulence, so no two slips share an edge. A
+  // rounded rectangle behind a torn edge is two different ideas about one
+  // object.
+  check('but not a radius: paper is torn, not cut', !/border-radius/.test(block), block);
+  check('its edge is displaced rather than drawn', /filter: url\(#deckle\)/.test(block));
+  check('and the filter really exists in the markup',
+    /<filter id="deckle">/.test(body) && /feDisplacementMap/.test(body));
+  check('the slot does not clip it flat',
+    !/overflow: hidden/.test(rule('.slot')), rule('.slot'));
 
   // Nothing else may take the card background. It is the mark of an object
   // you manipulate — plus the disabled Confirm, and the undo bar, which is a
@@ -183,7 +254,9 @@ console.log('\n5. two text sizes in a row, with real space between them');
   const meta = rule('.row .meta');
   check('the meta is 12px', /font-size: 12px/.test(meta));
   check('and muted', /color: var\(--muted\)/.test(meta));
-  check('on its own line, with space above it', /margin-top: 5px/.test(meta));
+  check('on its own line, with space above it', /margin-top: 7px/.test(meta));
+  check('and letterspaced, the way a catalogue sets its particulars',
+    /letter-spacing: 0\.08em/.test(meta));
 }
 
 console.log('\n6. blue is actionable, and nothing else is blue');
@@ -200,11 +273,15 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // It says "here is where you are", which is the nearest thing to an action
   // that is not one. It is listed by name so a second has to be argued for
   // here rather than added quietly.
-  const acts = /\.step|\.dur|\.undo button|\.confirm|\.sheet-actions \.save/;
-  // Just the dot. The divider carried a word in the accent colour too, and the
-  // word is gone — a line across the day needs no caption, and every caption
-  // it was given turned out to be a claim about one side of it.
-  const orients = /\.now \.dot/;
+  const acts = /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save/;
+  // The divider: the knot and the line it fastens. Both are indigo now, where
+  // the dark build tinted the line with a separate near-blue that belonged to
+  // nothing — one fewer colour on the page, and the two halves of one object
+  // finally the same colour.
+  //
+  // It says "here is where you are", which is the nearest thing to an action
+  // that is not one. Listed by name so a third has to be argued for here.
+  const orients = /\.now \.dot|\.now \.ln/;
   check('blue appears only on the controls that act, or the one that orients',
     blue.every((s) => acts.test(s) || orients.test(s)), blue.join(' | '));
   check('and nothing decorative has it',
@@ -213,7 +290,11 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   check('the start steppers are blue', /color: var\(--accent\)/.test(rule('.step')));
   check('the duration chip is blue, because it is now the control',
     /color: var\(--accent\)/.test(rule('.dur')));
-  check('confirm is blue', /background: var\(--accent\)/.test(rule('.confirm')));
+  // Confirm is NOT indigo any more — it is the hanko, and a seal is stamped in
+  // persimmon. That moves it under the warn colour's list, which is the one
+  // deliberate widening this theme asks for: see section 7.
+  check('confirm is not indigo, because it is a seal',
+    !/var\(--accent\)/.test(rule('.confirm')), rule('.confirm'));
   check('undo is blue, because undoing is an action',
     /color: var\(--accent\)/.test(rule('.undo button')));
 
@@ -241,8 +322,12 @@ console.log('\n7. the warn colour warns; it does not narrate');
   // both: a missed block, which is a concept that no longer exists, and the
   // swipe backing, which filled the whole card while a finger was on it.
   const warn = selectorsUsing('var(--warn)').filter((s) => !/^:root/.test(s));
-  const allowed = /\.mark|\.ends\.late|\.failed|\.danger|\.problem/;
-  check('used only on marks, failures and Delete',
+  // THE HANKO JOINS THE LIST, and it is the only addition this theme makes.
+  // A seal is stamped in persimmon; it is the one warm thing on the page and
+  // the one press that commits a day. Listed by name so a second addition has
+  // to be argued for here rather than added quietly.
+  const allowed = /\.mark|\.ends\.late|\.failed|\.danger|\.problem|\.confirm/;
+  check('used only on marks, failures, Delete and the seal',
     warn.every((s) => allowed.test(s)), warn.join(' | '));
   check('and nothing is left claiming a miss', !/askmiss|wasmissed/.test(css));
 
@@ -287,11 +372,13 @@ console.log('\n7a. the wait before the first day is on screen');
   // ring reads as a shape, and this has to read as motion.
   const dot = rule('#booting span');
   check('a circle outline', /border-radius: 50%/.test(dot));
+  // AN ENSŌ: a circle left open where the brush lifted, which is what the
+  // turning arc already was. Ink rather than faint — a brushstroke is the one
+  // thing on this page allowed to be dark, because it IS ink.
   check('and only a fraction of it is drawn',
-    /border: 1\.5px solid transparent/.test(dot) &&
-      /border-top-color: var\(--faint\)/.test(dot), dot);
-  check('faint, not blue: there is nothing to act on yet',
-    !/--accent/.test(dot), dot);
+    /border: 2\.6px solid var\(--text\)/.test(dot) &&
+      /border-right-color: transparent/.test(dot), dot);
+  check('not indigo: there is nothing to act on yet', !/--accent/.test(dot), dot);
   check('it turns', /animation: spin/.test(dot));
   check('and no word, because this system would not say "Loading"',
     !/Loading|loading/.test(body));
@@ -309,7 +396,7 @@ console.log('\n7a. the wait before the first day is on screen');
     /#booting span,\s*\.waiting span \{\s*animation: none/.test(reduced),
     reduced.slice(0, 120));
   check('and closes the arc into a whole circle rather than freezing it',
-    /animation: none;\s*border-color: var\(--faint\)/.test(reduced));
+    /animation: none;\s*border-color: var\(--text\)/.test(reduced));
 }
 
 console.log('\n7a-iii. an empty day keeps a block\'s worth of room');
@@ -347,7 +434,7 @@ console.log('\n7a-ii. and the same dot when the day switch is fetching');
   // Declared once for both. Two copies of a turning arc would drift the first
   // time either was adjusted.
   check('it is the same mark as the boot cover, declared once',
-    /#booting span,\s*\.waiting span \{[^}]*border-top-color: var\(--faint\)/.test(css));
+    /#booting span,\s*\.waiting span \{[^}]*border-right-color: transparent/.test(css));
 
   check('the switch shows it before it fetches',
     /showWaiting\(\);\s*\n\s*await loadCalendar/.test(code));
@@ -401,8 +488,8 @@ console.log('\n8. the calendar aside is a left rule, not a card');
   check('and its body too', /color: var\(--cal-text\)/.test(rule('.cal p')));
 
   const root = rule(':root');
-  check('which is a warm grey, not a blue', /--cal-head:\s*#9a8f80/i.test(root));
-  check('and not the miss colour either', !/--cal-head:\s*#c4694a/i.test(root));
+  check('which is a warm grey, not a blue', /--cal-head:\s*#5f5a52/i.test(root));
+  check('and not persimmon either', !/--cal-head:\s*#b8492a/i.test(root));
 }
 
 console.log('\n9. tabular figures on every time');
@@ -700,15 +787,24 @@ console.log('\n17. today and tomorrow');
   check('same type as any other label', /font-size: 10px/.test(sw) &&
     /letter-spacing: 0\.14em/.test(sw) && /text-transform: uppercase/.test(sw));
   check('and the same space under it', /margin-bottom: 14px/.test(sw));
-  check('the inactive word is very faint',
-    /color: #4a443c/.test(rule('.dayswitch .opt')), rule('.dayswitch .opt'));
+  // Lighter than the paper's own ink rather than darker than it — on paper the
+  // way to recede is toward the page, not away from it.
+  check('the inactive word recedes toward the paper',
+    /color: #b6ae9f/.test(rule('.dayswitch .opt')), rule('.dayswitch .opt'));
   check('the active one is full text', /color: var\(--text\)/.test(rule('.dayswitch .opt.on')));
 
   console.log('   today');
-  check('a finished block renders as an outline, not a card',
-    /background: transparent/.test(rule('.block.past')) &&
-      /border: 1px solid var\(--line\)/.test(rule('.block.past')));
-  check('with a faint title', /color: var\(--faint\)/.test(rule('.block.past .t')));
+  // STILL PAPER, handled rather than withdrawn. It settles nearer the page and
+  // its edge is displaced further and softened, which is what an edge does
+  // after a day of being carried around. The dark build drew an outline; an
+  // outline is a drawing of a thing, and this theme lays things down and takes
+  // them away rather than drawing them.
+  check('a finished slip settles toward the page rather than becoming an outline',
+    /background: var\(--card-spent\)/.test(rule('.block.past')) &&
+      !/border:/.test(rule('.block.past')), rule('.block.past'));
+  check('its edge goes soft with handling',
+    /filter: url\(#deckle-soft\)/.test(rule('.block.past')));
+  check('with a lightened title', /color: #8e8a82/.test(rule('.block.past .t')));
   // Not just a past one. A block you are in the middle of kept its chip, and
   // shrinking it below the time already elapsed moved it into the past — an
   // action the server refuses on a delivered block anyway.
@@ -826,7 +922,11 @@ console.log('\n17. the mockup still describes the page');
   // and that every element the page grew has a counterpart there.
   const mock = fs.readFileSync(ROOT + '/public/mockup.html', 'utf8');
 
-  for (const value of ['#16130F', '#211D18', '#2C2721', '#EDE7DE', '#8B8177', '#6B6459', '#6E8CB8', '#C4694A']) {
+  // Read from the palette the page actually declares rather than written out
+  // again here. Listed twice, the two lists drift — and this one drifted the
+  // moment the theme changed, reporting eight failures about inks neither file
+  // still contained.
+  for (const value of Object.values(want)) {
     check(`${value} is in both`,
       new RegExp(value, 'i').test(mock) && new RegExp(value, 'i').test(css));
   }
@@ -874,7 +974,7 @@ console.log('\n17. the mockup still describes the page');
     /class="dayswitch"/.test(sw));
   check('it shows both states', /opt on">Today/.test(sw) && /opt on">Tomorrow/.test(sw));
   check('and the page uses its inactive colour',
-    /#4A443C/i.test(sw) && /#4a443c/i.test(rule('.dayswitch .opt')));
+    /#B6AE9F/i.test(sw) && /#b6ae9f/i.test(rule('.dayswitch .opt')));
 
   // What was replaced must not survive in the reference either.
   check('no tab bar', !/class="tabs"/.test(mock));
