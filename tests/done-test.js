@@ -246,7 +246,17 @@ async function cleanup() {
     check('Delete no longer asks first', !/confirm\(`Delete/.test(html));
     check('it offers an undo instead', /takeOff\(item, 'Deleted', '\/delete'\)/.test(html));
     check('and the write waits for the offer to lapse',
-      /offerUndo\([\s\S]{0,400}fetch\(`\/entries\/\$\{item\.id\}\$\{path\}`/.test(html));
+      /offerUndo\([\s\S]{0,700}apiNow\(`\/entries\/\$\{item\.id\}\$\{path\}`/.test(html));
+
+    // apiNow, NOT api, and the difference is the whole reason this write
+    // survives a closed tab. `api` awaits a possible token refresh first, and
+    // an await inside a pagehide handler is a request that never leaves —
+    // keepalive cannot keep alive something that was never started. This
+    // caught it once already, as three failing cases in builder-test.
+    check('and it goes out without waiting on a refresh first',
+      !/offerUndo\([\s\S]{0,700}[^w]api\(`\/entries\/\$\{item\.id\}\$\{path\}`/.test(html));
+    check('which is what keeps it alive past a closed tab',
+      /keepalive: true/.test(html));
   }
 
   console.log('\ncleanup');
