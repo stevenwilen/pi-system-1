@@ -95,8 +95,12 @@
   /* one surface for both swipes, and the edge the label sits at is the only
      difference. left is remove, on any block; right is the note. the removing
      side used to fill with the warn colour, which turned the whole card red */
-  .backing{position:absolute;inset:0;display:flex;align-items:center;
-           padding:0 18px;font-size:13px;background:var(--line);color:var(--text)}
+  .backing{position:absolute;inset:0;isolation:isolate;display:flex;align-items:center;
+           padding:0 18px;font-size:13px;color:var(--text)}
+  /* the paper under a slip, torn the same way. on a layer because the backing
+     carries a word, and a filter here would bend it */
+  .backing::after{content:'';position:absolute;inset:0;z-index:-1;
+                  background:var(--line);filter:url(#deckle-soft)}
   .backing.left{justify-content:flex-end}
   .backing.right{justify-content:flex-start}
   .slot .block{position:relative;margin-bottom:0}

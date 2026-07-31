@@ -363,7 +363,11 @@ console.log('\n7. the warn colour warns; it does not narrate');
   // was not what made it safe — it was just loud, and loudest on a past block,
   // where taking the block out is how the day is recorded rather than damage.
   const backing = rule('.backing');
-  check('the backing is the neutral surface', /background: var\(--line\)/.test(backing));
+  // On its layer, like every other sheet of paper here.
+  check('the backing is the neutral surface',
+    /background: var\(--line\)/.test(rule('.backing::after')));
+  check('and it is torn like the slip that covers it, not a hard rectangle',
+    /filter: url\(#deckle/.test(rule('.backing::after')));
   check('not the warn colour', !/--warn/.test(backing), backing);
   check('nor blue', !/--accent/.test(backing), backing);
   check('and the loud variant is gone, not merely unused',

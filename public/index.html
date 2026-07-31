@@ -455,16 +455,32 @@
          two different things depending on the clock. Left means one thing now
          and neither swipe is loud, so the axis is gone rather than left in
          place holding a single value. */
+      /* What is under a slip when you slide it aside: more paper, torn the same
+         way. It was a hard-edged rectangle, which made the one moment the theme
+         is most visible — a slip actually moving — the one moment it broke.
+
+         The paper is on a layer again, for the reason it is everywhere else:
+         this element carries the word Remove, and a filter here would bend it. */
       .backing {
         position: absolute;
         inset: 0;
+        isolation: isolate;
         display: flex;
         align-items: center;
         padding: 0 18px;
         font-size: 13px;
         opacity: 0;
-        background: var(--line);
         color: var(--text);
+      }
+      .backing::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background: var(--line);
+        /* The softer one. This sheet is beneath the slip and a little further
+           from the eye, and the edge that shows is the one being uncovered. */
+        filter: url(#deckle-soft);
       }
       .backing.left {
         justify-content: flex-end;
