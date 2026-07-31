@@ -202,9 +202,22 @@ url is what makes that safe.
 
 ### 2.8 Setup verifies itself, or it has not happened
 
-Everything a person must configure sits in one sheet behind the `···` in the day
-header, and none of it needs SQL: the Telegram chat, both calendar feeds, the
-paste from a setup conversation, and Sign out.
+Everything a person must configure sits on one screen behind the `···` in the day
+header, and none of it needs SQL: the Telegram chat, the calendar, the paste from
+a setup conversation, and Sign out.
+
+**A full page, not a sheet.** A sheet is a card held against the bottom of the
+window with the day greyed out behind it, and its shape says "answer this and get
+back to what you were doing" — right for the add form, wrong here. Setup is a
+handful of things worked through, some of which send a message and wait on it,
+and a scrim over a half-visible day makes that feel like an interruption to
+itself. So it takes the screen, at the same width as the day, with Back at the
+top instead of Close at the bottom.
+
+It has no tap-outside-to-close, and the absence is deliberate: a sheet has an
+outside and tapping it is how you dismiss one, but a page has none. Every pixel
+belongs to it, so a stray tap on the background would close a screen someone was
+reading with no way to tell why.
 
 **Saving tests what it was given and reports what happened.** Every value here
 looks correct when it is wrong — a mistyped chat id is still ten digits, a

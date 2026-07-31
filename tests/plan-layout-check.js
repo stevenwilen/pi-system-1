@@ -316,8 +316,11 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // .minor` is that sheet's own buttons, `#paste:focus` is where the caret is,
   // and the two `.good` classes are a check that came back working — which is
   // the one thing on that screen you can act on the strength of.
+  //
+  // `.back` is the fifth, and the plainest of them: it is the way out of the
+  // setup screen, and leaving a place is an action.
   const acts =
-    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.pline\.good|#paste:focus/;
+    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.pline\.good|#paste:focus|\.back/;
   // The divider: the knot and the line it fastens. Both are indigo now, where
   // the dark build tinted the line with a separate near-blue that belonged to
   // nothing — one fewer colour on the page, and the two halves of one object
@@ -1082,10 +1085,24 @@ console.log('\n19. a sheet is inside its scrim');
   check('no class is used that the stylesheet does not define',
     undefinedClasses.length === 0, undefinedClasses.join(', '));
 
-  // And a tap inside a sheet must not close it. Both scrims guard on the
-  // target being the scrim itself.
+  // A tap inside a sheet must not close it: a scrim guards on the target
+  // being the scrim itself, or every tap on the sheet bubbles up and dismisses
+  // the thing being reached for.
+  //
+  // ONE GUARD PER SCRIM, counted rather than fixed at a number. It was `>= 2`,
+  // which went red the day setup stopped being a sheet — correctly, in that
+  // something had changed, but for the wrong reason: nothing had lost a guard,
+  // there was simply one fewer scrim. Setup is a full page now and has no
+  // outside to tap.
+  const scrims = (body.match(/class="scrim[^"]*"/g) || []).length;
   const guards = (code.match(/if \(e\.target === \$\('[a-z-]+'\)\) close/g) || []).length;
-  check('a tap inside a sheet does not close it', guards >= 2, `${guards} guard(s)`);
+  check('every scrim guards against a tap inside it', guards >= scrims,
+    `${guards} guard(s) for ${scrims} scrim(s)`);
+
+  // And the page has no such handler, deliberately: every pixel belongs to it,
+  // so a stray tap on the background would close a screen someone was reading.
+  check('the full-screen page has no tap-outside to close',
+    !/\$\('settings-scrim'\)\.onclick/.test(code));
 }
 
 console.log('\n17. the mockup still describes the page');

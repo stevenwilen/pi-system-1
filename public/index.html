@@ -857,6 +857,67 @@
         color: var(--faint);
       }
 
+      /* SETUP IS A PLACE, NOT A DRAWER.
+         It was a sheet: a card held against the bottom of the window with the
+         day greyed out behind it. That shape says "answer this and get back to
+         what you were doing", which is right for the add form and wrong here —
+         setup is a handful of things you work through, some of which send a
+         message and wait for it, and a scrim over a half-visible day makes the
+         whole business feel like an interruption to itself.
+
+         So it takes the screen. Same paper, same width as the day, no scrim to
+         look past, and a Back at the top rather than a Close at the bottom,
+         because you leave a place by going back from it. */
+      .page {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: var(--bg);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        /* Scrolling stops at this page's own ends. Without it, reaching the
+           bottom hands the gesture to the day underneath, which then scrolls
+           behind a screen that fills the window — invisible while it happens,
+           and the day is somewhere else when you come back. */
+        overscroll-behavior: contain;
+      }
+      .page.hidden {
+        display: none;
+      }
+      .page-inner {
+        max-width: 480px;
+        margin: 0 auto;
+        padding: 0 20px calc(40px + env(safe-area-inset-bottom));
+      }
+      /* Sticky, so Back is reachable from anywhere down the page rather than
+         only from the top of it. On the page colour, so nothing shows through
+         it as it passes underneath. */
+      .page-top {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        background: var(--bg);
+        padding: calc(18px + env(safe-area-inset-top)) 0 18px;
+      }
+      .page-top .label {
+        margin: 0;
+      }
+      .back {
+        background: none;
+        border: 0;
+        padding: 0;
+        font-family: inherit;
+        font-size: 13px;
+        color: var(--accent);
+        cursor: pointer;
+      }
+      .back:focus {
+        outline: none;
+      }
+
       /* THE CHECKLIST. Three lines that answer "what have I not done yet"
          before anything asks to be filled in. */
       .checklist {
@@ -1628,9 +1689,12 @@
          scrim greyed the screen while the sheet itself laid out in normal flow
          at the foot of the document, so it had to be scrolled to and every tap
          on it landed on the scrim in front and closed it. -->
-    <div class="scrim hidden" id="settings-scrim">
-      <div class="sheet">
-        <div class="label">Setup</div>
+    <div class="page hidden" id="settings-scrim">
+      <div class="page-inner">
+        <div class="page-top">
+          <button type="button" class="back" id="settings-close">‹ Back</button>
+          <span class="label">Setup</span>
+        </div>
 
         <!-- WHAT IS DONE, first and as a list.
              This sheet used to open with the paste box — the biggest thing on
@@ -1717,10 +1781,6 @@
         <div class="signout">
           <span id="whoami"></span>
           <button type="button" id="sign-out">Sign out</button>
-        </div>
-
-        <div class="sheet-actions">
-          <button type="button" class="cancel" id="settings-close">Close</button>
         </div>
       </div>
     </div>
@@ -4030,9 +4090,13 @@ Rules for the output:
         for (const id of ['chat-said', 'cal-said', 'copy-said']) said(id, '');
         $('paste-preview').classList.add('hidden');
         $('paste-save').classList.add('hidden');
-        // Every row shut. The sheet opens on the list, which is the answer to
-        // the question it is usually opened with.
+        // Every row shut. It opens on the list, which is the answer to the
+        // question it is usually opened with.
         openRow(null);
+        // At the top, however far down it was left last time. It is its own
+        // scrolling box, so it keeps its position otherwise, and arriving
+        // halfway down a screen you have just opened reads as a glitch.
+        $('settings-scrim').scrollTop = 0;
         loadSettings();
       }
 
@@ -4046,11 +4110,12 @@ Rules for the output:
 
       $('settings-open').onclick = openSettings;
       $('settings-close').onclick = closeSettings;
-      // Only a tap on the scrim ITSELF, the same guard the add sheet uses.
-      // Without it every tap inside the sheet bubbles up and closes it.
-      $('settings-scrim').onclick = (e) => {
-        if (e.target === $('settings-scrim')) closeSettings();
-      };
+
+      // NO TAP-OUTSIDE-TO-CLOSE any more, and its absence is the point. A
+      // sheet has an outside — the greyed day behind it — and tapping that is
+      // how you dismiss it. A page has none: every pixel belongs to it, so a
+      // stray tap on the background would close the screen a person was
+      // reading, with no way to tell why. Back is the only way out.
 
       // --- one field at a time
 
