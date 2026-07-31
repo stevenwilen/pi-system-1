@@ -172,7 +172,7 @@ console.log('\n2. one label style, and the action is quieter than it');
   // trade this theme keeps having to make.
   check('9.5px', /font-size: 9\.5px/.test(label));
   check('uppercase', /text-transform: uppercase/.test(label));
-  check('0.16em tracking', /letter-spacing: 0\.16em/.test(label));
+  check('0.26em tracking', /letter-spacing: 0\.26em/.test(label));
   check('and set at 400, because 300 disappears at this size',
     /font-weight: 400/.test(label));
   check('muted', /color: var\(--muted\)/.test(label));
@@ -255,12 +255,8 @@ console.log('\n5. two text sizes in a row, with real space between them');
   check('the meta is 12px', /font-size: 12px/.test(meta));
   check('and muted', /color: var\(--muted\)/.test(meta));
   check('on its own line, with space above it', /margin-top: 7px/.test(meta));
-  // TRACKING BELONGS TO SMALL UPPERCASE LABELS and nowhere else. Caps have no
-  // ascenders or descenders to space them, so letterspacing helps; applied to
-  // ordinary sentence-case text it just pulls the word apart, which is what it
-  // was doing to every time, duration and meta line on the page.
-  check('and NOT letterspaced, because it is not a label',
-    !/letter-spacing/.test(meta), meta);
+  check('and letterspaced, the way a catalogue sets its particulars',
+    /letter-spacing: 0\.08em/.test(meta));
 }
 
 console.log('\n6. blue is actionable, and nothing else is blue');

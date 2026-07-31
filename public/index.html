@@ -121,12 +121,7 @@
         background: var(--bg);
         color: var(--text);
         font: 15px/1.5 var(--face);
-        /* No -webkit-font-smoothing here, and that is deliberate.
-           It thins glyph edges, which reads as crisp for light text on a dark
-           ground and as washed-out for dark text on paper. It was right for the
-           dark build and wrong the moment the theme inverted. The default —
-           subpixel, where the device offers it — is what makes ink on paper
-           look like ink. */
+        -webkit-font-smoothing: antialiased;
         overscroll-behavior-y: none;
         -webkit-tap-highlight-color: transparent;
       }
@@ -189,7 +184,7 @@
          Weight 400, not 300 — at this size and tracking, 300 disappears. */
       .label {
         font-size: 9.5px;
-        letter-spacing: 0.16em;
+        letter-spacing: 0.26em;
         text-transform: uppercase;
         color: var(--muted);
         font-weight: 400;
@@ -293,6 +288,7 @@
          so the tracking alone does the work. */
       .row .meta {
         font-size: 12px;
+        letter-spacing: 0.08em;
         color: var(--muted);
         margin-top: 7px;
         line-height: 1.5;
@@ -520,6 +516,7 @@
          because the hours have to stack when you read down the day. */
       .block .time {
         font-size: 12px;
+        letter-spacing: 0.14em;
         color: var(--muted);
         margin-top: 6px;
         font-variant-numeric: tabular-nums;
@@ -598,6 +595,7 @@
          section label, and an unscoped .act here bled onto it. */
       .running {
         font-size: 12px;
+        letter-spacing: 0.14em;
         color: var(--muted);
         white-space: nowrap;
         padding: 8px 4px 8px 15px;
@@ -775,6 +773,7 @@
          and this theme does not draw — the word is the control. */
       .dur {
         font-size: 12px;
+        letter-spacing: 0.16em;
         font-variant-numeric: tabular-nums;
         color: var(--accent);
         background: none;
@@ -820,7 +819,7 @@
          the words are the control. */
       .addblock {
         font-size: 10px;
-        letter-spacing: 0.16em;
+        letter-spacing: 0.24em;
         text-transform: uppercase;
         color: var(--accent);
         padding-top: 12px;
@@ -876,7 +875,7 @@
         padding: 17px;
         border-radius: 3px;
         font-size: 12px;
-        letter-spacing: 0.16em;
+        letter-spacing: 0.22em;
         text-transform: uppercase;
         font-weight: 500;
         border: 0;
