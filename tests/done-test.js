@@ -132,7 +132,7 @@ async function cleanup() {
     const kept = await entry('habit', 'Gym done');
     await planWith('2031-01-10', [[kept, true]]);
 
-    const seen = await lastScheduled(U);
+    const seen = await lastScheduled(H.db, U);
     check('it counts', seen.get(kept) === '2031-01-10', String(seen.get(kept)));
   }
 
@@ -144,7 +144,7 @@ async function cleanup() {
     const flagged = await entry('habit', 'Gym dodged');
     await planWith('2031-01-11', [[flagged, false]]);
 
-    const seen = await lastScheduled(U);
+    const seen = await lastScheduled(H.db, U);
     check('a row marked otherwise is excluded', !seen.has(flagged),
       String(seen.get(flagged)));
   }
@@ -226,7 +226,7 @@ async function cleanup() {
 
     // The tool the brain holds has to refuse it too, not just the route.
     const { update_entry } = require(ROOT + '/tools.js');
-    const viaTool = await update_entry(U, gone, { status: 'done' });
+    const viaTool = await update_entry(H.db, U, gone, { status: 'done' });
     check('and the tool refuses it as well', Boolean(viaTool.error), JSON.stringify(viaTool).slice(0, 80));
 
     const { data: still } = await H.db.from('entries').select('status').eq('id', gone).single();

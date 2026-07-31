@@ -15,6 +15,14 @@ process.chdir(ROOT);
 
 const tools = require(ROOT + '/tools.js');
 
+// The tools take a client now, and this suite hands them the harness's guarded
+// one. That is the service client underneath, so these cases exercise the tool
+// logic rather than row level security — which is the right split: the policies
+// are proved in isolation-accounts-test.js, against the client a route actually
+// builds, and proving them here as well would mean proving them wherever a tool
+// happens to be called. What the guarded handle still gives is the write guard,
+// which is what keeps this suite off anybody else's rows.
+
 let bad = 0;
 const check = (label, ok, detail = '') => {
   console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? '  ' + detail : ''}`);
@@ -27,7 +35,7 @@ const check = (label, ok, detail = '') => {
   await H.ensureProfile();
 
   console.log('creating');
-  const t = await tools.create_entry(U, {
+  const t = await tools.create_entry(H.db, U, {
     type: 'task',
     title: 'Return the router to the post office',
   });
@@ -50,14 +58,14 @@ const check = (label, ok, detail = '') => {
   check('an old task is created', !oe, oe ? oe.message : `created ${o.created_at.slice(0, 10)}`);
 
   console.log('\nsearching');
-  const open = await tools.search_entries(U, null, 'task', 50);
+  const open = await tools.search_entries(H.db, U, null, 'task', 50);
   check('both open tasks come back', Array.isArray(open) && open.length === 2, Array.isArray(open) ? `${open.length}` : open.error);
 
   console.log('\ncompleting');
-  const done = await tools.update_entry(U, t.id, { status: 'done' });
+  const done = await tools.update_entry(H.db, U, t.id, { status: 'done' });
   check('a task can be marked done', !done.error && done.status === 'done', done.error || done.status);
 
-  const after = await tools.search_entries(U, null, 'task', 50);
+  const after = await tools.search_entries(H.db, U, null, 'task', 50);
   check('a done task drops out of the search', after.length === 1, `${after.length}`);
   check('and the one left is the old one', after[0].id === o.id);
 
