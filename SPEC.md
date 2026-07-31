@@ -160,7 +160,47 @@ change to make later, in the place hardest to notice it was needed.
 
 Nothing about how the system behaves lives outside the database.
 
-### 2.7 A request is whoever its token says, and nothing else
+### 2.7 A calendar and a chat belong to a person, not to the deployment
+
+Both feed URLs live on `profile.calendar_ics_url` and
+`profile.calendar_action_ics_url`, and the Telegram chat on
+`profile.telegram_chat_id`. They were environment variables, which is the same
+assumption `PI_USER_ID` was: workable with one person, unable to express two.
+
+Both feeds are **optional**. An account with neither gets an empty aside and no
+error — a person who keeps no calendar is ordinary, not misconfigured, and a
+screen that says a feed is broken to someone who never had one is lying.
+
+**The Telegram bot stays global.** One token, one bot, in the environment,
+because that is a fact about the deployment. Only the chat id is per person.
+
+**Linking sends.** A chat id is a number, so every typo is well-formed and
+indistinguishable from a correct value until the first message fails to arrive
+at nine in the morning — by which point nobody connects the silence to a number
+typed days earlier. `POST /telegram` therefore writes the row and *then* sends a
+message, and answers with both facts: `delivered: true`, or `delivered: false`
+with Telegram's own words. Saved-but-unproved is a state you can see and act on;
+proved-but-unsaved would be a lie.
+
+Written before sent, deliberately. The other order leaves someone whose test
+message arrived but whose row was never written with a bot that answers once and
+then goes quiet forever.
+
+**An unlinked account is a third outcome, not a failure.** `sendTelegram`
+returns `{ skipped }`, and the scheduler neither releases the claim nor logs an
+error. Treated as a failure it cost a claim released and re-taken on every tick
+for the whole grace window, an error line each time, and finally an `[EXPIRED]`
+warning about a delivery that was never going to happen.
+
+**The feed cache is keyed by user and URL.** The URL alone is what makes it
+safe — different people have different URLs, and the entry holds the raw parsed
+file rather than anything filtered per person. The user id is a second belt over
+a fastened one and is **not load-bearing**; nothing about isolation depends on
+it. What *would* leak is keying on the feed's `source`, which is the tempting
+mistake now that the URL is a variable and the source is the constant.
+`calendar-feeds-test.js` goes red if anyone makes it.
+
+### 2.8 A request is whoever its token says, and nothing else
 
 There is no default user. `PI_USER_ID` is gone, and so is the fixed uuid it fell
 back to. Every request carries `Authorization: Bearer <token>`, the server asks
@@ -1074,7 +1114,7 @@ npm test       # every suite, sequentially
 | `public/switch.html` | the reference for the Today / Tomorrow switch and past blocks |
 | `PLANNING-RULES.md` | **archive.** Notes from the pre-strip system, kept and marked as such |
 | `brain.js`, `usage.js`, `untrusted.js` | **wired and unused.** See 1. `brain.js` requires the other two |
-| `link.js`, `calendar-test.js`, `send-test.js` | run by hand, not part of the running system |
+| `calendar-test.js`, `send-test.js` | run by hand, not part of the running system |
 | `make-icons.js` | regenerates the PNGs from the SVG |
 
 `tools.js` is the exception to "unused": nothing calls its brain-facing tools,
@@ -1117,9 +1157,8 @@ Set in Railway, and in a local `.env` that is never committed.
 | `SUPABASE_URL` | the project |
 | `SUPABASE_ANON_KEY` | **required.** Every route builds its client from this key plus the caller's token, so row level security applies. Also served to the browser by `GET /config` |
 | `SUPABASE_SERVICE_KEY` | bypasses row level security. **Only the scheduler and the command line tools may hold it** |
-| `TELEGRAM_BOT_TOKEN` | outbound only |
-| `CALENDAR_ICS_URL` | a read-only ICS feed |
-| `CALENDAR_ACTION_ICS_URL` | *optional.* A second one. Both are read the same way |
+| `TELEGRAM_BOT_TOKEN` | outbound only. One bot for everyone; only the chat id is per person, on `profile` |
+| `TELEGRAM_API_BASE` | *optional.* Where the API lives. Only the suite sets it, so a test run cannot make a real phone buzz |
 | `ANTHROPIC_API_KEY` | the brain. **Nothing calls it.** Kept so the wiring stays live. Read by the SDK, not by any file here, so grepping the repo for it finds nothing |
 | `PORT` | assigned by the host |
 | `SCHEDULER_DISABLED` | *optional.* `1` loads the scheduler without starting cron |

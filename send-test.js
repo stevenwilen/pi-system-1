@@ -6,6 +6,7 @@
 // than about a person. Sign-in decides who exists; a utility cannot know.
 
 const { sendTelegram } = require('./telegram');
+const { service } = require('./db');
 
 async function main() {
   const userId = (process.argv[2] || '').trim();
@@ -14,11 +15,11 @@ async function main() {
     process.exit(1);
   }
 
-  const result = await sendTelegram(userId, 'Test from your system');
+  const result = await sendTelegram(service, userId, 'Test from your system');
   console.log(JSON.stringify(result, null, 2));
 
   if (result.skipped) {
-    console.log('\nNo chat linked yet. Run: node link.js <user_id> <chat_id>');
+    console.log('\nNo chat linked yet. Link one from the app: POST /telegram');
   }
 }
 

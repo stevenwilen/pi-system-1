@@ -338,6 +338,29 @@ async function ensureProfile(timezone = 'America/New_York', wake = '08:00:00', w
 }
 
 /**
+ * Set fields on a test account's profile row, creating it if it is not there.
+ *
+ * This is how a suite configures a calendar now. It used to be done by handing
+ * a spawned server different environment variables, which meant one server
+ * process per feed configuration — three of them in calendar-feeds-test alone.
+ * The feeds live on the row, so the row is what changes, and one server serves
+ * every case.
+ */
+async function setProfile(which, fields) {
+  const accounts = await setup();
+  const account = accounts[which];
+
+  await ensureProfile(undefined, undefined, which);
+
+  const { error } = await db
+    .from('profile')
+    .update(fields)
+    .eq('user_id', account.id);
+
+  if (error) throw new Error(`could not set the ${which} profile: ${error.message}`);
+}
+
+/**
  * Remove everything belonging to the test accounts, and nothing else.
  *
  * Filtered on a test id in every statement, so even the teardown cannot reach
@@ -411,6 +434,7 @@ module.exports = {
   spawnServer,
   waitFor,
   ensureProfile,
+  setProfile,
   cleanup,
   assertGuarded,
   TestUserViolation,

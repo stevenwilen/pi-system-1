@@ -1,9 +1,22 @@
-// Hits /calendar against the real ICS feeds on a spare port.
+// Hits /calendar on a spare port, against a feed this suite serves itself.
 //
 // The endpoint's job shrank: it used to sort events into pinned blocks, all-day
 // notes and things to auto-place. It now returns one list of what is on the
 // calendar, and the screen shows it. Nothing here is placed, pinned or stored.
+//
+// IT USED TO READ THE OWNER'S REAL FEEDS, out of CALENDAR_ICS_URL. That was
+// its one distinctive value and it went when the urls moved onto the profile
+// row — but the failure would have been silent rather than loud. The test
+// account has no feeds, so the endpoint would answer with an empty list, and
+// almost every assertion here is of the form "every item is well-shaped",
+// which is true of no items at all. It would have gone on passing while
+// checking nothing.
+//
+// So it serves its own feed with known events in it, and asserts they come
+// back. A suite whose assertions are vacuously true of an empty list is worse
+// than one that fails.
 const { spawn } = require('child_process');
+const http = require('http');
 // The harness, for the account. The server has no user of its own any more:
 // it serves whoever the request's token says, so a suite driving it has to be
 // somebody. It reaches only the test account, which is the same guarantee the
@@ -38,9 +51,48 @@ let authed = () => {
   throw new Error('the account is not signed in yet');
 };
 
+const FEED_PORT = 3987;
+const FEED = `http://127.0.0.1:${FEED_PORT}`;
+
+// Two events on whatever day the suite asks about, one timed and one all day,
+// so both shapes are exercised and neither list is ever empty.
+let feedBody = '';
+const ics = (events) =>
+  ['BEGIN:VCALENDAR', 'VERSION:2.0', ...events, 'END:VCALENDAR'].join('\r\n');
+const bare = (date) => date.replace(/-/g, '');
+const dayAfter = (date) => {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+// Unique uids per day: an ICS file with the same uid twice is one event, and
+// the second day would silently hold nothing.
+const eventsOn = (date) => [
+  ['BEGIN:VEVENT', `UID:endpoint-timed-${bare(date)}`, `DTSTART:${bare(date)}T150000Z`,
+    `DTEND:${bare(date)}T160000Z`, 'SUMMARY:A timed thing', 'END:VEVENT'].join('\r\n'),
+  ['BEGIN:VEVENT', `UID:endpoint-allday-${bare(date)}`, `DTSTART;VALUE=DATE:${bare(date)}`,
+    `DTEND;VALUE=DATE:${bare(dayAfter(date))}`, 'SUMMARY:An all-day thing', 'END:VEVENT'].join('\r\n'),
+];
+
+let feedServer;
+
 (async () => {
   authed = H.as((await H.setup()).a);
   await H.ensureProfile();
+
+  feedServer = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/calendar' });
+    res.end(feedBody);
+  });
+  await new Promise((r) => feedServer.listen(FEED_PORT, r));
+  // Held open by keep-alive sockets from the server it feeds, so it is told not
+  // to keep this process alive.
+  feedServer.unref();
+
+  await H.setProfile('a', {
+    calendar_ics_url: `${FEED}/endpoint.ics`,
+    calendar_action_ics_url: null,
+  });
 
   for (let i = 0; i < 60; i++) {
     try { await fetch(BASE + '/version'); break; } catch { await new Promise((r) => setTimeout(r, 250)); }
@@ -54,11 +106,30 @@ let authed = () => {
   d.setUTCDate(d.getUTCDate() + 1);
   const tomorrow = d.toISOString().slice(0, 10);
 
+  const far = new Date(`${feed.today}T12:00:00Z`);
+  far.setUTCDate(far.getUTCDate() + 7);
+  const farDate = far.toISOString().slice(0, 10);
+
+  // Both days in one file, fetched once. The feed is cached per user and url
+  // for a minute, so a body swapped in later would never be seen.
+  feedBody = ics([...eventsOn(tomorrow), ...eventsOn(farDate)]);
+
   const res = await authed(`${BASE}/calendar/${tomorrow}`);
   const data = await res.json();
   check('200 for a valid date', res.status === 200);
   check('returns one list', Array.isArray(data.items),
     `${(data.items || []).length} item(s) on ${tomorrow}`);
+
+  // THE CHECK THAT KEEPS THE REST HONEST. Everything below is of the form
+  // "every item is well-shaped", and every one of those is true of an empty
+  // list. Without this the suite passes just as happily against an account
+  // with no feed at all, which is exactly what it became when the urls moved
+  // off the environment.
+  const titles = (data.items || []).map((e) => e.title).sort();
+  check('and the list is not empty, which every check below assumes',
+    titles.length === 2, titles.join(', '));
+  check('both events came back', titles.join(', ') === 'A timed thing, An all-day thing',
+    titles.join(', '));
 
   const shaped = (data.items || []).every(
     (e) =>
@@ -111,11 +182,20 @@ let authed = () => {
   check('failures travel with the answer', Array.isArray(data.failed),
     JSON.stringify(data.failed));
 
-  // A week out, to prove the shape holds when the feed has something in it.
-  const far = new Date(`${feed.today}T12:00:00Z`);
-  far.setUTCDate(far.getUTCDate() + 7);
-  const later = await (await authed(`${BASE}/calendar/${far.toISOString().slice(0, 10)}`)).json();
-  check('a different day also answers', Array.isArray(later.items), `${(later.items || []).length} item(s)`);
+  // A week out, to prove the shape holds on a second day.
+  //
+  // The feed already carries this day — it was built with both in it, up at
+  // the top, rather than swapped in here. Swapping would have proved nothing:
+  // the feed is cached per user and url for a minute, so the request below
+  // would have been answered from the copy fetched for tomorrow, found no
+  // events on this date, and returned an empty list that
+  // `Array.isArray(later.items)` is perfectly happy with.
+  const later = await (await authed(`${BASE}/calendar/${farDate}`)).json();
+  const laterTitles = (later.items || []).map((e) => e.title).sort();
+  check('a different day also answers', Array.isArray(later.items),
+    `${(later.items || []).length} item(s)`);
+  check('with that day\'s events, not the first day\'s',
+    laterTitles.join(', ') === 'A timed thing, An all-day thing', laterTitles.join(', '));
 
   console.log(bad === 0 ? '\nCalendar endpoint clean' : `\n${bad} FAILURE(S)`);
   // Exiting the instant the child is killed tears down a libuv handle that is
@@ -125,10 +205,12 @@ let authed = () => {
   server.stdout.destroy();
   server.stderr.destroy();
   server.kill();
+  if (feedServer) { feedServer.closeAllConnections(); feedServer.close(); }
 })().catch((e) => {
   console.error(e.message);
   process.exitCode = 1;
   server.stdout.destroy();
   server.stderr.destroy();
   server.kill();
+  if (feedServer) { feedServer.closeAllConnections(); feedServer.close(); }
 });

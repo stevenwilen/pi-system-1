@@ -126,20 +126,25 @@ async function update_profile(db, user_id, fields) {
 //
 // Two feeds, and which one an event is on is the whole signal.
 //
-//   awareness  CALENDAR_ICS_URL         things to KNOW
-//   action     CALENDAR_ACTION_ICS_URL  things to DO
+//   awareness  profile.calendar_ics_url         things to KNOW
+//   action     profile.calendar_action_ics_url  things to DO
 //
 // Nothing is filtered by TRANSP, by calendar name, or by anything written
 // inside the event. The person sorts their own life by putting a thing on one
 // calendar or the other, and this reads that decision rather than second
 // guessing it.
 //
-// The action feed is optional. With it unset there is one feed and the
-// behaviour is exactly what it was.
+// ON THE ROW, NOT IN THE ENVIRONMENT. These were CALENDAR_ICS_URL and
+// CALENDAR_ACTION_ICS_URL, which is the same assumption PI_USER_ID was: fine
+// while there was one person, and unable to express two. A feed URL is a fact
+// about a person.
+//
+// Both are optional. No awareness URL and no action URL is an ordinary account
+// with an empty calendar, not a broken one.
 
 const FEEDS = [
-  { source: 'awareness', env: 'CALENDAR_ICS_URL', label: 'Dates' },
-  { source: 'action', env: 'CALENDAR_ACTION_ICS_URL', label: 'Personal' },
+  { source: 'awareness', column: 'calendar_ics_url', label: 'Dates' },
+  { source: 'action', column: 'calendar_action_ics_url', label: 'Personal' },
 ];
 
 // Each feed is refetched at most this often. One brain turn can call
@@ -147,15 +152,38 @@ const FEEDS = [
 const CALENDAR_TTL_MS = 60 * 1000;
 const CALENDAR_TIMEOUT_MS = 10000;
 
-// Keyed by url, so two feeds cannot share one cache slot.
+/**
+ * Parsed feeds, by user and url.
+ *
+ * THE URL IS WHAT MAKES THIS SAFE. Two people with different feeds have
+ * different urls and therefore different slots, and the entry holds the raw
+ * parsed file rather than anything filtered per person — so keying on the url
+ * alone would already be leak-free.
+ *
+ * user_id is in the key anyway, and it is worth being clear that it is NOT
+ * load-bearing: nothing about isolation depends on it, and anyone reading this
+ * later should not treat it as the thing standing between two accounts. It is
+ * a second belt over a fastened one, cheap at this scale, and what it actually
+ * buys is that the invariant survives a future edit that gets the key wrong.
+ *
+ * What WOULD leak is keying on `source` — 'awareness' / 'action' — which is
+ * the tempting mistake now that the url is a variable and the source is the
+ * constant. tests/calendar-feeds-test.js has a case that goes red if anyone
+ * makes it.
+ */
 const calendarCache = new Map();
 
+// A space separates them, unambiguously: a uuid contains none, and a url
+// percent-encodes any it has.
+const cacheKey = (user_id, url) => `${user_id} ${url}`;
+
 /**
- * One feed, parsed. Returns null when it is not configured, and throws when it
- * is configured and unreachable — the caller decides what a failure costs.
+ * One feed, parsed. Throws when the feed is unreachable — the caller decides
+ * what a failure costs.
  */
-async function loadFeed(url) {
-  const hit = calendarCache.get(url);
+async function loadFeed(user_id, url) {
+  const key = cacheKey(user_id, url);
+  const hit = calendarCache.get(key);
   if (hit && Date.now() - hit.at < CALENDAR_TTL_MS) return hit.parsed;
 
   // Our own fetch rather than ical.async.fromURL, so a hung feed cannot
@@ -166,7 +194,7 @@ async function loadFeed(url) {
   if (!res.ok) throw new Error(`returned ${res.status}`);
 
   const parsed = await ical.async.parseICS(await res.text());
-  calendarCache.set(url, { at: Date.now(), parsed });
+  calendarCache.set(key, { at: Date.now(), parsed });
   return parsed;
 }
 
@@ -216,6 +244,32 @@ async function timezoneFor(db, user_id) {
     .maybeSingle();
 
   return (data && data.timezone) || 'UTC';
+}
+
+/**
+ * The timezone and both feed urls, in one read.
+ *
+ * One query rather than a timezone read and then a url read. They come off the
+ * same row and reading it twice is two chances for a caller to be served a
+ * timezone from one moment and a url from another.
+ *
+ * A missing profile row is not an error. It reads as UTC with no feeds, which
+ * is exactly what an account that has set nothing up should get.
+ */
+async function calendarSettings(db, user_id) {
+  const { data } = await db
+    .from('profile')
+    .select('timezone, calendar_ics_url, calendar_action_ics_url')
+    .eq('user_id', user_id)
+    .maybeSingle();
+
+  return {
+    timeZone: (data && data.timezone) || 'UTC',
+    urls: {
+      calendar_ics_url: (data && data.calendar_ics_url) || null,
+      calendar_action_ics_url: (data && data.calendar_action_ics_url) || null,
+    },
+  };
 }
 
 function event(id, title, start, end, source) {
@@ -303,16 +357,18 @@ async function readCalendar(db, user_id, date) {
   const result = { events: [], failed: [], configured: [] };
   if (!user_id || !date) return result;
 
-  const timeZone = await timezoneFor(db, user_id);
+  const { timeZone, urls } = await calendarSettings(db, user_id);
 
   for (const feed of FEEDS) {
-    const url = String(process.env[feed.env] || '').replace(/[<>]/g, '').trim();
+    // The angle-bracket strip is kept from when these came out of a .env file,
+    // where a url pasted from a mail client arrives wrapped in them.
+    const url = String(urls[feed.column] || '').replace(/[<>]/g, '').trim();
     if (!url) continue;
 
     result.configured.push(feed.source);
 
     try {
-      const parsed = await loadFeed(url);
+      const parsed = await loadFeed(user_id, url);
       for (const e of eventsOn(parsed, feed.source, date, timeZone)) {
         result.events.push({
           ...e,

@@ -30,7 +30,7 @@ let sendFails = false;
 // call — an instant stub closes it and the case proves nothing.
 let sendDelay = 0;
 
-telegram.sendTelegram = async (user_id, text) => {
+telegram.sendTelegram = async (db, user_id, text) => {
   if (sendFails) return { error: 'telegram is down' };
   if (sendDelay) await new Promise((r) => setTimeout(r, sendDelay));
   sent.push({ user_id, text });

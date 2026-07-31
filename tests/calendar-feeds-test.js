@@ -48,6 +48,9 @@ let feedServer;
 let awareness = '';
 let action = '';
 
+// Path -> exact body, for cases where two urls must return different files.
+const perUrl = new Map();
+
 const DATE = '2031-03-14';
 
 const ics = (events) =>
@@ -106,6 +109,15 @@ const clearClaims = async () => {
       res.writeHead(500);
       return res.end('nope');
     }
+
+    // A file of its own, for cases that need two urls to differ in content
+    // rather than in kind. Checked first, so `awareness`/`action` stay the
+    // simple default every other case uses.
+    if (perUrl.has(req.url)) {
+      res.writeHead(200, { 'Content-Type': 'text/calendar' });
+      return res.end(perUrl.get(req.url));
+    }
+
     const wantsAction = req.url.includes('action');
     res.writeHead(200, { 'Content-Type': 'text/calendar' });
     res.end(wantsAction ? action : awareness);
@@ -116,11 +128,17 @@ const clearClaims = async () => {
   // never ends, which reads as a hang rather than a result.
   feedServer.unref();
 
-  server = H.spawnServer(PORT, {
-    CALENDAR_ICS_URL: `${FEED}/dates.ics`,
-    CALENDAR_ACTION_ICS_URL: `${FEED}/action.ics`,
-  });
+  // ONE SERVER FOR EVERY CASE. There used to be three, each spawned with
+  // different CALENDAR_*_ICS_URL variables, because that was the only way to
+  // give a case a different feed. The urls live on the profile row now, so a
+  // case changes the row.
+  server = H.spawnServer(PORT);
   if (!(await H.waitFor(BASE))) throw new Error('server never came up');
+
+  await H.setProfile('a', {
+    calendar_ics_url: `${FEED}/dates.ics`,
+    calendar_action_ics_url: `${FEED}/action.ics`,
+  });
 
   // The feeds are cached for a minute inside tools.js, so each case uses its
   // own dates rather than trying to change what one date returns.
@@ -200,21 +218,16 @@ const clearClaims = async () => {
 
   console.log('\na broken feed does not look like a quiet day');
   {
-    // Its own server pointed at its own URL, because the feed cache is keyed by
-    // url and holds for a minute: the working feed above is still cached, so
-    // breaking it in place would change nothing for the next sixty seconds.
-    // That caching is right, and it is why this needs a cold url rather than a
-    // wait.
-    const broken = H.spawnServer(PORT + 2, {
-      CALENDAR_ICS_URL: `${FEED}/broken.ics`,
-      CALENDAR_ACTION_ICS_URL: `${FEED}/action.ics`,
-    });
-    const brokenBase = `http://127.0.0.1:${PORT + 2}`;
-    if (!(await H.waitFor(brokenBase))) throw new Error('broken-feed server never came up');
+    // A COLD URL, not a second server. The cache is keyed by user and url and
+    // holds for a minute, so the working feed above is still cached and
+    // breaking it in place would change nothing for sixty seconds. Pointing
+    // the row at a url that has never been fetched is a cold slot without a
+    // wait — which is what the second server was really buying.
+    await H.setProfile('a', { calendar_ics_url: `${FEED}/broken.ics` });
 
     action = ics([allDay('do-5', 'Still here', '2031-03-20')]);
 
-    const r = await (await authed(`${brokenBase}/calendar/2031-03-20`)).json();
+    const r = await (await authed(`${BASE}/calendar/2031-03-20`)).json();
     check('the request still succeeds', Array.isArray(r.items));
     check('and the dead feed is named', r.failed.length === 1, JSON.stringify(r.failed));
     check('by a name a person would recognise',
@@ -223,24 +236,46 @@ const clearClaims = async () => {
       !r.failed.some((f) => f.source === 'action'), JSON.stringify(r.failed));
     check('and it still returns what it could read',
       r.items.map((t) => t.title).join(',') === 'Still here', JSON.stringify(r.items));
-
-    broken.kill();
   }
 
   console.log('\nwith no action feed, nothing changes');
   {
-    const solo = H.spawnServer(PORT + 1, { CALENDAR_ICS_URL: `${FEED}/dates.ics` });
-    const soloBase = `http://127.0.0.1:${PORT + 1}`;
-    if (!(await H.waitFor(soloBase))) throw new Error('solo server never came up');
+    // Cleared rather than never set, and a fresh awareness url so the slot is
+    // cold. Null is what a person who only keeps one calendar has.
+    await H.setProfile('a', {
+      calendar_ics_url: `${FEED}/solo.ics`,
+      calendar_action_ics_url: null,
+    });
 
     awareness = ics([allDay('know-9', 'Anniversary', '2031-04-01')]);
-    const r = await (await authed(`${soloBase}/calendar/2031-04-01`)).json();
+    const r = await (await authed(`${BASE}/calendar/2031-04-01`)).json();
 
     check('the one feed still reads', r.items.map((a) => a.title).join(',') === 'Anniversary',
       JSON.stringify(r.items));
     check('and nothing is reported broken', r.failed.length === 0, JSON.stringify(r.failed));
+    check('the unset feed is not reported as failed either',
+      !r.failed.some((f) => f.source === 'action'), JSON.stringify(r.failed));
+  }
 
-    solo.kill();
+  console.log('\nan account with no calendar at all gets an empty aside');
+  {
+    // NOT AN ERROR. A person who keeps no calendar, or has not pasted a url
+    // yet, is an ordinary account — and the answer has to be an empty list
+    // rather than a failure, or the screen would say a feed is broken to
+    // someone who never had one.
+    await H.setProfile('a', { calendar_ics_url: null, calendar_action_ics_url: null });
+
+    const r = await get('/calendar/2031-05-02');
+    check('it answers', r.status === 200, String(r.status));
+    check('with nothing on', r.body.items.length === 0, JSON.stringify(r.body.items));
+    check('and nothing blamed', r.body.failed.length === 0, JSON.stringify(r.body.failed));
+    check('there is no error', r.body.error === undefined, JSON.stringify(r.body.error));
+
+    // Put the feeds back for anything after this.
+    await H.setProfile('a', {
+      calendar_ics_url: `${FEED}/dates.ics`,
+      calendar_action_ics_url: `${FEED}/action.ics`,
+    });
   }
 
   console.log('\nthe page shows the failure rather than an empty day');
@@ -250,6 +285,59 @@ const clearClaims = async () => {
     check('it says which feed it could not read', /could not be read/.test(html));
     check('in the miss colour', /\.cal \.failed \{[^}]*var\(--warn\)/.test(html));
     check('and an empty calendar says so plainly', /Nothing on it/.test(html));
+  }
+
+  console.log('\ntwo people, two calendars, and the cache between them');
+  {
+    // THE CASE THIS WHOLE CHANGE IS FOR. The feeds are per-user now, and the
+    // parsed file is cached — so the question is whether one person's calendar
+    // can be handed to another out of that cache.
+    //
+    // Same date on both sides, and deliberately: the events differ only by
+    // whose feed they came from, so a leak cannot hide behind "they asked for
+    // different days".
+    const SHARED = '2031-06-10';
+
+    await H.setProfile('a', {
+      calendar_ics_url: `${FEED}/a-only.ics`,
+      calendar_action_ics_url: null,
+    });
+    await H.setProfile('b', {
+      calendar_ics_url: `${FEED}/b-only.ics`,
+      calendar_action_ics_url: null,
+    });
+
+    const authedB = H.as((await H.setup()).b);
+
+    // The feed server answers by url, so each account's slot holds its own file.
+    perUrl.set('/a-only.ics', ics([allDay('a-1', "A's own appointment", SHARED)]));
+    perUrl.set('/b-only.ics', ics([allDay('b-1', "B's own appointment", SHARED)]));
+
+    // A first, so A's feed is the one warm in the cache when B asks.
+    const first = await get(`/calendar/${SHARED}`);
+    const bRes = await (await authedB(`${BASE}/calendar/${SHARED}`)).json();
+
+    const aTitles = first.body.items.map((e) => e.title);
+    const bTitles = bRes.items.map((e) => e.title);
+
+    check('A sees their own', aTitles.join(',') === "A's own appointment", aTitles.join(','));
+    check('B sees their own', bTitles.join(',') === "B's own appointment", bTitles.join(','));
+    check("and B is not served A's warm cache entry",
+      !bTitles.includes("A's own appointment"), bTitles.join(','));
+
+    // The other way round, so the result does not depend on who asked first.
+    const bAgain = await (await authedB(`${BASE}/calendar/${SHARED}`)).json();
+    const aAgain = await get(`/calendar/${SHARED}`);
+    check('and it holds whichever order they ask in',
+      bAgain.items.map((e) => e.title).join(',') === "B's own appointment" &&
+        aAgain.body.items.map((e) => e.title).join(',') === "A's own appointment",
+      `${bAgain.items.map((e) => e.title)} / ${aAgain.body.items.map((e) => e.title)}`);
+
+    // NEITHER OF THEM IS EMPTY, which is the check that stops the three above
+    // passing for the wrong reason. Two accounts that both see nothing also
+    // never see each other's.
+    check('and neither account was simply empty',
+      aTitles.length === 1 && bTitles.length === 1, `${aTitles.length} / ${bTitles.length}`);
   }
 
   console.log('\ncleanup');

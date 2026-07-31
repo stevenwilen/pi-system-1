@@ -30,7 +30,22 @@ const sent = [];
 // instant stub closes the window the bug lives in.
 let sendDelay = 0;
 
-telegram.sendTelegram = async (user_id, text) => {
+// Kept before it is replaced, for a case that asks the genuine article one
+// question: what does it return for a profile with no chat linked?
+const real = telegram.sendTelegram;
+
+// Makes the stub answer the way the real sender does for an unlinked account.
+//
+// A FLAG RATHER THAN SWAPPING THE REAL ONE BACK IN. scheduler.js destructures
+// sendTelegram when it loads, so anything assigned to telegram.sendTelegram
+// afterwards is invisible to it — the note at the top of this file says so, and
+// this case was written ignoring it. The scheduler went on calling the stub,
+// the stub reported success, and the block was marked sent by the success path
+// while the case claimed to be testing the skip path.
+let skipSend = false;
+
+telegram.sendTelegram = async (db, user_id, text) => {
+  if (skipSend) return { skipped: 'no telegram_chat_id for this user' };
   if (sendDelay) await new Promise((r) => setTimeout(r, sendDelay));
   sent.push({ user_id, text });
   return { sent: true, stubbed: true };
@@ -275,6 +290,98 @@ const statusOf = async (planId) => {
     sent.length = 0;
     await scheduler.deliverDue(profile, { ...now, date: '2031-06-10' });
     check('a tick after the fact sends nothing', sent.length === 0, `${sent.length}`);
+  }
+
+  console.log('\nan account with no telegram is skipped, not failed');
+  {
+    // WHAT THIS IS FOR. `skipped` used to fall through to the failure branch,
+    // which released the claim so the next tick would retry — and there is
+    // nothing about an unlinked account that a retry improves. The cost was
+    // twelve claim/release cycles and twelve error lines per block per day,
+    // ending in an [EXPIRED] warning about a delivery that was never possible.
+    //
+    // First, the real sender's own answer for a profile with no chat linked.
+    // One question, asked directly, with no scheduler in the way.
+    await supabase.from('profile').update({ telegram_chat_id: null }).eq('user_id', U);
+    const direct = await real(supabase, U, 'nowhere to go');
+    check('the sender reports a skip, not an error', Boolean(direct.skipped),
+      JSON.stringify(direct));
+    check('and does not claim to have sent', !direct.sent, JSON.stringify(direct));
+
+    // Then what the scheduler does with that answer, which is the part that
+    // changed.
+    skipSend = true;
+
+    const DATE = '2031-07-02';
+    await supabase.from('profile').update({ telegram_chat_id: null }).eq('user_id', U);
+
+    const { data: plan } = await supabase
+      .from('plans')
+      .insert({ user_id: U, date: DATE, wake_time: '08:00:00', status: 'confirmed' })
+      .select().single();
+    made.push(plan.id);
+
+    const { data: block } = await supabase
+      .from('blocks')
+      .insert({
+        user_id: U, plan_id: plan.id, title: 'Nowhere to send this',
+        start_time: '09:00:00', duration_minutes: 30, sort_order: 0,
+      })
+      .select().single();
+
+    // hour and minute, which is the shape deliverDue reads. Written as
+    // `minutes` first, which left the tick at midday: the 09:00 block was then
+    // three hours late, took the EXPIRED path, and the claim it left behind
+    // made this case pass without ever reaching the skip it is about.
+    sent.length = 0;
+    const at = { ...now, date: DATE, hour: 9, minute: 5 };
+    await scheduler.deliverDue(profile, at);
+
+    const claimed = async () => {
+      const { data } = await supabase
+        .from('blocks').select('message_sent_at').eq('id', block.id).maybeSingle();
+      return data && data.message_sent_at;
+    };
+
+    check('it did not throw', true);
+    // Claimed and LEFT claimed. Releasing it is what caused the retry storm.
+    check('the block is resolved rather than queued again', Boolean(await claimed()),
+      String(await claimed()));
+
+    const before = await claimed();
+    await scheduler.deliverDue(profile, { ...at, minute: 20 });
+    check('and a later tick does not pick it up again', (await claimed()) === before);
+    check('and nothing was put on the wire', sent.length === 0, JSON.stringify(sent));
+
+    skipSend = false;
+  }
+
+  console.log('\nand the other account still gets theirs');
+  {
+    // THE HALF THAT STOPS THE ABOVE MEANING NOTHING. "Nothing was sent" is
+    // also what a completely broken delivery loop looks like.
+    sent.length = 0;
+    const DATE = '2031-07-03';
+
+    const { data: plan } = await supabase
+      .from('plans')
+      .insert({ user_id: U, date: DATE, wake_time: '08:00:00', status: 'confirmed' })
+      .select().single();
+    made.push(plan.id);
+
+    await supabase.from('blocks').insert({
+      user_id: U, plan_id: plan.id, title: 'This one lands',
+      start_time: '09:00:00', duration_minutes: 30, sort_order: 0,
+    });
+
+    await supabase.from('profile').update({ telegram_chat_id: '5550100' }).eq('user_id', U);
+
+    await scheduler.deliverDue(profile, { ...now, date: DATE, hour: 9, minute: 5 });
+    check('a linked account is still delivered to', sent.length === 1, `${sent.length}`);
+    check('with its own block', /This one lands/.test((sent[0] || {}).text || ''),
+      (sent[0] || {}).text);
+
+    await supabase.from('profile').update({ telegram_chat_id: null }).eq('user_id', U);
   }
 
   console.log('\ncleanup');

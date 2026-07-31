@@ -7,9 +7,19 @@
 
 require('dotenv').config();
 
-const { service: supabase } = require('./db');
+// No client of its own. sendTelegram takes one, the same way tools.js and
+// staleness.js do, and for a sharper reason here: this module is reachable
+// from a route — the linking endpoint uses sendToChat — and a module a route
+// can reach must not be holding the key that bypasses row level security.
+// tests/service-key-check.js is what said so, on the first run after the
+// endpoint existed.
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+
+// Where the API lives. Overridable for one reason: so the suite can serve a
+// stand-in and assert on what this file sends, without a test run being able
+// to make a real phone buzz. Unset everywhere else, which is production.
+const API_BASE = process.env.TELEGRAM_API_BASE || 'https://api.telegram.org';
 
 // Telegram's HTML mode is used instead of MarkdownV2, which rejects
 // unescaped '.', '-', '(', ')' and '!' — characters every schedule is full of.
@@ -39,7 +49,7 @@ async function post(chat_id, text, parse_mode) {
   const payload = { chat_id, text };
   if (parse_mode) payload.parse_mode = parse_mode;
 
-  const res = await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+  const res = await fetch(`${API_BASE}/bot${TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -50,15 +60,46 @@ async function post(chat_id, text, parse_mode) {
 }
 
 /**
+ * Send to a chat this caller already has in hand.
+ *
+ * The difference from sendTelegram is one database read, and it is the reason
+ * this exists: sendTelegram looks the chat up with the SERVICE client, which
+ * throws inside a request by design. A route cannot call it.
+ *
+ * The linking endpoint has the chat_id — it is what the person just typed —
+ * so there is nothing to look up, and the send is the whole point: a chat_id
+ * that is well-formed and wrong looks identical to a correct one until 9am.
+ */
+async function sendToChat(chat_id, text) {
+  if (!chat_id) return { error: 'chat_id is required' };
+  if (!text) return { error: 'text is required' };
+  if (!TOKEN) return { error: 'TELEGRAM_BOT_TOKEN is not set in .env' };
+
+  let result;
+  try {
+    result = await post(chat_id, toTelegramHtml(text), 'HTML');
+  } catch (err) {
+    return { error: `could not reach telegram: ${err.message}` };
+  }
+
+  if (result.ok) return { sent: true, message_id: result.body.result.message_id };
+
+  // Telegram's own words. "chat not found" and "bot was blocked by the user"
+  // are the two a person can actually act on, and paraphrasing them would cost
+  // exactly the detail that makes them useful.
+  return { error: result.body.description || `telegram returned ${result.status}` };
+}
+
+/**
  * Deliver one message to a user's linked Telegram chat.
  * A user with no linked chat is not an error — nothing is sent.
  */
-async function sendTelegram(user_id, text) {
+async function sendTelegram(db, user_id, text) {
   if (!user_id) return { error: 'user_id is required' };
   if (!text) return { error: 'text is required' };
   if (!TOKEN) return { error: 'TELEGRAM_BOT_TOKEN is not set in .env' };
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('profile')
     .select('telegram_chat_id')
     .eq('user_id', user_id)
@@ -117,4 +158,4 @@ async function sendTelegram(user_id, text) {
 // toTelegramHtml is exported for one reason: it is the only place tags are
 // allowed back in after escaping, and that allowlist is worth a test rather
 // than a reading. Nothing in production imports it.
-module.exports = { sendTelegram, toTelegramHtml };
+module.exports = { sendTelegram, sendToChat, toTelegramHtml };

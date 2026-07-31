@@ -175,7 +175,7 @@ async function deliver(user_id, text) {
       ? `${text.slice(0, MAX_MESSAGE)}\n…(truncated)`
       : text;
 
-  return sendTelegram(user_id, body);
+  return sendTelegram(supabase, user_id, body);
 }
 
 // ---------------------------------------------------------------------------
@@ -320,6 +320,20 @@ async function deliverDue(profile, now) {
 
     if (result.sent) {
       console.log(`[SEND] ${block.title}`);
+    } else if (result.skipped) {
+      // NOT A FAILURE, and this is the third outcome rather than a flavour of
+      // the second. Someone who has not linked Telegram has nowhere to receive
+      // a message, and there is nothing about that a retry improves.
+      //
+      // Treated as a failure it cost: the claim released and re-taken on every
+      // tick for the whole grace window, an error logged each time, and finally
+      // an [EXPIRED] warning about a delivery that was never going to happen.
+      // Twelve alarming lines per block per day for an account that is simply
+      // not using Telegram.
+      //
+      // The claim STAYS. The block is done with — not delivered, but resolved
+      // — and leaving it claimed is what stops the next tick picking it up.
+      console.log(`[SEND] ${block.title}: no telegram linked, nothing to send`);
     } else {
       // Back in the queue, so the next tick retries while it is still in grace.
       await releaseBlock(block.id);
@@ -406,6 +420,11 @@ async function sendNudge(profile, now, { force = false } = {}) {
 
   if (sent.sent) {
     console.log(`[NUDGE] sent: ${text}`);
+  } else if (sent.skipped) {
+    // The same third outcome as a block. The slot stays taken: there is
+    // nothing to retry, and releasing it would mean asking again every tick
+    // for the rest of the window.
+    console.log('[NUDGE] no telegram linked, nothing to send');
   } else {
     // Slot back, so the next tick inside the window tries again.
     if (!force) await releaseSlot(profile.user_id, 'nudge', now.date);

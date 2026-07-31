@@ -121,7 +121,17 @@ console.log('\n2. the ones that are allowed to hold it, do');
   // Stated the other way round, so that the check above cannot pass by the
   // service client having quietly disappeared from the codebase.
   check('scheduler.js holds the service key', takesService('scheduler.js'));
-  check('and so does the Telegram sender it uses', takesService('telegram.js'));
+
+  // AND telegram.js NO LONGER DOES. It used to, and it had to stop the moment
+  // a route needed it: the linking endpoint sends through it, so it became
+  // reachable from routes/ and this file's first section went red. It takes a
+  // client now, like tools.js and staleness.js, and the scheduler hands it the
+  // service one.
+  check('the Telegram sender holds no client of its own', !takesService('telegram.js'));
+  check('and takes one instead',
+    /function sendTelegram\(db, user_id, text\)/.test(
+      fs.readFileSync(`${ROOT}/telegram.js`, 'utf8')
+    ));
 
   const src = fs.readFileSync(`${ROOT}/db.js`, 'utf8');
   check('db.js exports both clients',
