@@ -4,7 +4,11 @@
 // question and must not answer it differently, which is what two copies of
 // this query would eventually do.
 
-const supabase = require('./db');
+// No client of its own, deliberately. Whoever calls this hands one over, so a
+// route asks with the caller's connection and the scheduler asks with the
+// service key — the same question, asked as two different people. A module
+// that imported its own client could only ever be one of them, and it would be
+// the one that bypasses row level security.
 
 /**
  * entry_id -> the most recent plan date it was done on.
@@ -25,8 +29,8 @@ const supabase = require('./db');
  * today and every message would claim zero days. The caller generating
  * messages for a plan must exclude that plan.
  */
-async function lastScheduled(user_id, { excludePlanId = null } = {}) {
-  const { data: blocks, error: blockErr } = await supabase
+async function lastScheduled(db, user_id, { excludePlanId = null } = {}) {
+  const { data: blocks, error: blockErr } = await db
     .from('blocks')
     .select('entry_id, plan_id')
     .eq('user_id', user_id)
@@ -36,7 +40,7 @@ async function lastScheduled(user_id, { excludePlanId = null } = {}) {
   if (blockErr) throw new Error(`could not read blocks: ${blockErr.message}`);
   if (!blocks || !blocks.length) return new Map();
 
-  const { data: plans, error: planErr } = await supabase
+  const { data: plans, error: planErr } = await db
     .from('plans')
     .select('id, date')
     .eq('user_id', user_id);

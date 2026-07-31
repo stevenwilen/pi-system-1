@@ -9,7 +9,20 @@
 // note reaches the row delivery reads, and confirming a day writes no
 // message_text at all any more.
 const H = require('./harness');
-const U = H.TEST_USER_ID;
+// The test account, discovered rather than written down. It is a real auth
+// user now, created by the harness, so its id is not knowable until it
+// exists — which is why this is assigned inside the run rather than at the
+// top of the file.
+let U;
+
+// Every request this suite makes, as the test account.
+//
+// The server takes its user from the token and refuses a request without
+// one, so a bare fetch here would not read as a broken test — it would read
+// as an account with nothing in it.
+let authed = () => {
+  throw new Error('the account is not signed in yet');
+};
 const path = require('path');
 const ROOT = path.join(__dirname, '..').split(path.sep).join('/');
 process.chdir(ROOT);
@@ -33,6 +46,8 @@ const day = (n) => {
 const made = [];
 
 (async () => {
+  U = await H.userId();
+  authed = H.as((await H.setup()).a);
   await H.assertGuarded();
   await H.ensureProfile();
 
@@ -187,7 +202,7 @@ const made = [];
     const server = H.spawnServer(PORT);
     if (!(await H.waitFor(BASE))) throw new Error('server never came up');
 
-    const res = await fetch(`${BASE}/plan`, {
+    const res = await authed(`${BASE}/plan`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({

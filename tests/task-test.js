@@ -5,7 +5,11 @@
 // left two more rows in the real person's list. Rewritten to go through the
 // harness like every other writer, and to remove what it makes.
 const H = require('./harness');
-const U = H.TEST_USER_ID;
+// The test account, discovered rather than written down. It is a real auth
+// user now, created by the harness, so its id is not knowable until it
+// exists — which is why this is assigned inside the run rather than at the
+// top of the file.
+let U;
 const ROOT = H.ROOT;
 process.chdir(ROOT);
 
@@ -18,6 +22,7 @@ const check = (label, ok, detail = '') => {
 };
 
 (async () => {
+  U = await H.userId();
   await H.assertGuarded();
   await H.ensureProfile();
 
@@ -64,11 +69,11 @@ const check = (label, ok, detail = '') => {
 
   console.log('\ncleanup');
   await H.cleanup();
-  const { count } = await H.raw
+  const { count } = await H.service
     .from('entries').select('*', { count: 'exact', head: true }).eq('user_id', U);
   check('every row this made is gone', count === 0, `${count} left`);
 
-  const { count: logs } = await H.raw
+  const { count: logs } = await H.service
     .from('sent_log').select('*', { count: 'exact', head: true }).eq('user_id', U);
   check('and the sent_log row too', logs === 0, `${logs} left`);
 

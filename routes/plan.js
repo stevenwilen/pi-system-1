@@ -10,8 +10,6 @@
 
 const express = require('express');
 
-const supabase = require('../db');
-const { CURRENT_USER } = require('../user');
 const { minutesOfDay, toMinutes, hhmmss } = require('../clock');
 const { readCalendar } = require('../tools');
 
@@ -30,15 +28,16 @@ const NOTE_MAX = 500;
  * happening. A timed event carries its time; an all-day entry carries none.
  */
 router.get('/calendar/:date', async (req, res) => {
+  const { db, userId } = req.auth;
   const date = String(req.params.date);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
   }
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('profile')
     .select('timezone')
-    .eq('user_id', CURRENT_USER)
+    .eq('user_id', userId)
     .maybeSingle();
 
   const timeZone = (profile && profile.timezone) || 'UTC';
@@ -46,7 +45,7 @@ router.get('/calendar/:date', async (req, res) => {
   // readCalendar returns what it could read and names what it could not, so a
   // feed that is down costs its own events and never the whole builder — but
   // the failure travels with the answer instead of looking like a quiet day.
-  const { events, failed } = await readCalendar(CURRENT_USER, date);
+  const { events, failed } = await readCalendar(db, userId, date);
 
   const items = events.map((e) => ({
     title: e.title,
@@ -82,22 +81,23 @@ router.get('/calendar/:date', async (req, res) => {
  * the button.
  */
 router.get('/plan/:date', async (req, res) => {
+  const { db, userId } = req.auth;
   const date = String(req.params.date);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
   }
 
-  const { data: plan, error } = await supabase
+  const { data: plan, error } = await db
     .from('plans')
     .select('id, date, status, wake_time')
-    .eq('user_id', CURRENT_USER)
+    .eq('user_id', userId)
     .eq('date', date)
     .maybeSingle();
 
   if (error) return res.status(500).json({ error: error.message });
   if (!plan) return res.json({ plan: null, blocks: [] });
 
-  const { data: rows, error: blockErr } = await supabase
+  const { data: rows, error: blockErr } = await db
     .from('blocks')
     .select('id, title, entry_id, start_time, duration_minutes, note, sort_order, message_sent_at')
     .eq('plan_id', plan.id)
@@ -218,6 +218,7 @@ const blockFields = (b, i) => ({
  * be wrong precisely when the day changed most.
  */
 router.post('/plan', async (req, res) => {
+  const { db, userId } = req.auth;
   const { date, blocks, wake_minutes } = req.body || {};
 
   const problem = validatePlan(date, blocks, wake_minutes);
@@ -229,10 +230,10 @@ router.post('/plan', async (req, res) => {
   const wake = hhmmss(Number(wake_minutes));
 
   try {
-    const { data: existing } = await supabase
+    const { data: existing } = await db
       .from('plans')
       .select('id')
-      .eq('user_id', CURRENT_USER)
+      .eq('user_id', userId)
       .eq('date', date)
       .maybeSingle();
 
@@ -240,10 +241,10 @@ router.post('/plan', async (req, res) => {
     let stored = [];
 
     if (planId) {
-      const { data: rows, error } = await supabase
+      const { data: rows, error } = await db
         .from('blocks')
         .select('id, title, start_time, duration_minutes, message_sent_at')
-        .eq('user_id', CURRENT_USER)
+        .eq('user_id', userId)
         .eq('plan_id', planId);
       if (error) throw new Error(error.message);
       stored = rows || [];
@@ -301,16 +302,16 @@ router.post('/plan', async (req, res) => {
     // --- writes ------------------------------------------------------------
 
     if (planId) {
-      const { error: upErr } = await supabase
+      const { error: upErr } = await db
         .from('plans')
         .update({ status: 'confirmed', wake_time: wake })
         .eq('id', planId)
-        .eq('user_id', CURRENT_USER);
+        .eq('user_id', userId);
       if (upErr) throw new Error(upErr.message);
     } else {
-      const { data: made, error: insErr } = await supabase
+      const { data: made, error: insErr } = await db
         .from('plans')
-        .insert({ user_id: CURRENT_USER, date, wake_time: wake, status: 'confirmed' })
+        .insert({ user_id: userId, date, wake_time: wake, status: 'confirmed' })
         .select('id')
         .single();
       if (insErr) throw new Error(insErr.message);
@@ -318,10 +319,10 @@ router.post('/plan', async (req, res) => {
     }
 
     if (dropped.length) {
-      const { error } = await supabase
+      const { error } = await db
         .from('blocks')
         .delete()
-        .eq('user_id', CURRENT_USER)
+        .eq('user_id', userId)
         .in('id', dropped.map((b) => b.id));
       if (error) throw new Error(error.message);
     }
@@ -335,10 +336,10 @@ router.post('/plan', async (req, res) => {
 
     for (const [i, b] of blocks.entries()) {
       if (!b.id) continue;
-      const { error } = await supabase
+      const { error } = await db
         .from('blocks')
         .update(blockFields(b, i))
-        .eq('user_id', CURRENT_USER)
+        .eq('user_id', userId)
         .eq('id', b.id);
       if (error) throw new Error(error.message);
       ids[i] = b.id;
@@ -347,11 +348,11 @@ router.post('/plan', async (req, res) => {
     const freshAt = blocks.map((b, i) => i).filter((i) => !blocks[i].id);
 
     if (freshAt.length) {
-      const { data: made, error } = await supabase
+      const { data: made, error } = await db
         .from('blocks')
         .insert(
           freshAt.map((i) => ({
-            user_id: CURRENT_USER,
+            user_id: userId,
             plan_id: planId,
             ...blockFields(blocks[i], i),
           }))

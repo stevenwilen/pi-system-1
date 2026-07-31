@@ -92,11 +92,12 @@ const html = fs.readFileSync(ROOT + '/public/index.html', 'utf8');
 // afternoon to find, because the symptom was an empty builder three suites
 // away from the change.
 //
-// Anything from `load(` to the end of that line, and a throw if there was
-// nothing there to remove.
+// Anything from `start(` to the end of that line, and a throw if there was
+// nothing there to remove. It was `load(` until the page grew a gate in front
+// of it; the guard below is what said so, on the first run after the change.
 const rawScript = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const SCRIPT = rawScript
-  .replace(/^\s*load\(\)[^\n]*$/m, '')
+  .replace(/^\s*start\(\)[^\n]*$/m, '')
   .replace(/^\s*loadReview\(\);\s*$/m, '');
 
 if (SCRIPT === rawScript) {
@@ -150,6 +151,10 @@ function atClock(hhmm) {
 function boot({
   calendar = [], plan = null, failed = [], reduced = false,
   entries = null, now = null, failEntries = false,
+  // Signed in unless a case says otherwise. Every case here is about the
+  // planner, and the planner is only reachable with a session — booting each
+  // one through the gate would be re-testing sign-in three hundred times.
+  signedIn = true,
 } = {}) {
   // Frozen by default, not just when a case asks.
   //
@@ -164,9 +169,20 @@ function boot({
   // wake, so a day boots clean with nothing begun.
   const clock = atClock(now || '07:00');
   // Every id the markup declares, read from the file rather than listed here.
+  //
+  // WITH THE CLASSES IT DECLARES TOO. They used to start bare, which made
+  // every "is this hidden" check meaningless: `hidden` was never on the element
+  // in the first place, so asserting it was absent passed whatever the page
+  // did. The gate ships hidden and is shown by removing that class — three
+  // checks about it were green before the code they cover existed.
   const byId = {};
-  for (const id of new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]))) {
-    byId[id] = new El();
+  for (const tag of html.match(/<[a-zA-Z][^>]*>/g) || []) {
+    const id = /\sid="([^"]+)"/.exec(tag);
+    if (!id) continue;
+    const el = new El((/^<([a-zA-Z]+)/.exec(tag) || [])[1] || 'div');
+    const klass = /\sclass="([^"]*)"/.exec(tag);
+    if (klass) el.className = klass[1];
+    byId[id[1]] = el;
   }
   for (const t of ['habit', 'project', 'task']) {
     const b = new El('button');
@@ -196,6 +212,11 @@ function boot({
   // rather than infer it from what the page shows.
   const posted = [];
 
+  // Every request the page made, and what it claimed to be. Separate from
+  // `posted` because that one only sees writes, and the header matters on
+  // every read too.
+  const asked = [];
+
   // Every confirm() the page raised. Delete used to ask before removing a
   // thing; the undo replaced that, and this is how a case proves it.
   const confirmed = [];
@@ -209,11 +230,34 @@ function boot({
     return plan || { plan: null, blocks: [] };
   };
 
+  // The device's storage, as a Map with the four methods the page uses.
+  //
+  // Seeded with a session that expires an hour from the frozen clock, so the
+  // page finds one, believes it, and never tries to refresh it. A case about
+  // the gate empties it.
+  const stored = new Map();
+  if (signedIn) {
+    stored.set(
+      'pi.session',
+      JSON.stringify({
+        access_token: 'test-access-token',
+        refresh_token: 'test-refresh-token',
+        expires_at: Math.floor(clock.now() / 1000) + 3600,
+        email: 'planner@example.test',
+      })
+    );
+  }
+
   const sandbox = {
     console, setTimeout, clearTimeout, Intl, Math, JSON,
     Date: clock,
     String, Number, Boolean, Array, Object,
     alert: () => {},
+    localStorage: {
+      getItem: (k) => (stored.has(k) ? stored.get(k) : null),
+      setItem: (k, v) => stored.set(k, String(v)),
+      removeItem: (k) => stored.delete(k),
+    },
     // Recorded rather than merely answered, so a case can assert that Delete
     // stopped asking.
     confirm: (q) => {
@@ -234,9 +278,22 @@ function boot({
           keepalive: Boolean(opts.keepalive),
         });
       }
+
+      // Who the request said it was. Recorded on every call, GET included,
+      // because a route reached without this header is a route that 401s in
+      // production and looks like an empty day on screen.
+      asked.push({
+        url,
+        auth: (opts && opts.headers && opts.headers.Authorization) || null,
+      });
+
       return {
         ok: true,
+        status: 200,
         json: async () => {
+          // Ahead of the gate in the page, and ahead of everything here. The
+          // project's URL is what makes a token refreshable.
+          if (url === '/config') return { url: 'https://stub.supabase.co', anon_key: 'anon-key' };
           if (url === '/entries' && failEntries) throw new Error('offline');
           if (url.startsWith('/calendar')) return { items: calendar, failed };
           if (url.startsWith('/plan/')) return planFor(url);
@@ -283,7 +340,7 @@ function boot({
 
   return {
     ctx, byId, slots, cardOf, backingOf, rowOf, chipOf, noteOf, editorOf,
-    titleOf, titles, listeners, touchmoves, win, posted, confirmed,
+    titleOf, titles, listeners, touchmoves, win, posted, confirmed, asked, stored,
     // Wind the frozen clock on without re-rendering, the way a page left
     // open on a phone experiences time passing.
     setClock: (hhmm) => clock.moveTo && clock.moveTo(hhmm),
@@ -2208,6 +2265,101 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       press(rowsIn(byId)[1], 'Delete');
       check('nothing was confirmed', confirmed.length === 0, JSON.stringify(confirmed));
     }
+  }
+
+  console.log('\nnothing reaches the server without saying who it is');
+  {
+    const { ctx, byId, asked } = boot({
+      plan: twoDays(), entries: utcEntries(), now: '11:00',
+    });
+    await ctx.start();
+
+    // EVERY request, not just the writes. A read that forgets the header is
+    // not a visibly broken read — it is a 401, which the page turns into an
+    // empty day. That is the shape of this failure: nothing looks wrong.
+    const appCalls = asked.filter((a) => a.url !== '/config');
+    check('the page asked for something', appCalls.length > 0, String(appCalls.length));
+    check('and every one of them carried a token',
+      appCalls.every((a) => /^Bearer \S/.test(a.auth || '')),
+      JSON.stringify(appCalls.filter((a) => !a.auth).map((a) => a.url)));
+
+    // /config is the exception, necessarily: it is what you fetch when you
+    // have nothing, and it is how the page learns where to sign in.
+    const config = asked.find((a) => a.url === '/config');
+    check('config was fetched first, without one', config && !config.auth,
+      JSON.stringify(config));
+    check('and it was fetched before anything else', asked[0].url === '/config',
+      asked[0].url);
+
+    // Writes too, through the same wrapper.
+    byId['pick-tomorrow'].onclick && (await byId['pick-tomorrow'].onclick());
+    await byId['confirm'].onclick();
+    const confirmCall = asked.filter((a) => a.url === '/plan').pop();
+    check('a confirm says who it is', /^Bearer \S/.test((confirmCall || {}).auth || ''),
+      JSON.stringify(confirmCall));
+  }
+
+  console.log('\nno session means the gate, not an empty planner');
+  {
+    const { ctx, byId, asked } = boot({
+      plan: twoDays(), entries: utcEntries(), now: '11:00', signedIn: false,
+    });
+    await ctx.start();
+
+    check('the gate is up', !byId['gate']._class.has('hidden'));
+    check('and nothing was asked for', asked.every((a) => a.url === '/config'),
+      JSON.stringify(asked.map((a) => a.url)));
+    check('so the builder is empty', byId['builder'].children.length === 0);
+
+    // THE DISTINCTION THIS PROTECTS. An empty planner and a signed-out one
+    // look identical if the page just renders whatever it has, which is
+    // nothing either way. The gate is what makes them different screens.
+    check('and the list is empty too', byId['things'].children.length === 0);
+  }
+
+  console.log('\na session the server refuses puts the gate back up');
+  {
+    const { ctx, byId, stored } = boot({
+      plan: twoDays(), entries: utcEntries(), now: '11:00',
+    });
+
+    const real = ctx.fetch;
+    ctx.fetch = async (url, opts) => {
+      if (url === '/config') return real(url, opts);
+      return { ok: false, status: 401, json: async () => ({ error: 'not signed in' }) };
+    };
+
+    await ctx.start();
+
+    check('the gate came back', !byId['gate']._class.has('hidden'));
+    // The stored session goes with it. Left behind, the next load would try
+    // the same dead token, fail the same way, and look like a broken app
+    // rather than one asking you to sign in again.
+    check('and the dead session was thrown away', !stored.has('pi.session'),
+      String(stored.get('pi.session')));
+  }
+
+  console.log('\nsigning out takes the day off the screen with it');
+  {
+    const { ctx, byId, stored } = boot({
+      plan: twoDays(), entries: utcEntries(), now: '11:00',
+    });
+    await ctx.start();
+
+    check('there was a day to begin with', byId['builder'].children.length > 0);
+    check('and the account is named', byId['whoami'].textContent === 'planner@example.test',
+      byId['whoami'].textContent);
+
+    await byId['sign-out'].onclick();
+
+    check('the session is gone', !stored.has('pi.session'));
+    check('the gate is up', !byId['gate']._class.has('hidden'));
+    // NOT JUST HIDDEN. The next person to open this device must not find the
+    // last one's day sitting behind the sign-in screen.
+    check('the day is off the screen', byId['builder'].children.length === 0,
+      String(byId['builder'].children.length));
+    check('and so is the list', byId['things'].children.length === 0,
+      String(byId['things'].children.length));
   }
 
   console.log(bad === 0 ? '\nBuilder clean' : `\n${bad} FAILURE(S)`);

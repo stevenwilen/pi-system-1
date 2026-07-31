@@ -8,7 +8,20 @@
 // Both feeds are served from a local ICS server, so the assertions are about
 // this code rather than about what happens to be in anyone's real calendar.
 const H = require('./harness');
-const U = H.TEST_USER_ID;
+// The test account, discovered rather than written down. It is a real auth
+// user now, created by the harness, so its id is not knowable until it
+// exists — which is why this is assigned inside the run rather than at the
+// top of the file.
+let U;
+
+// Every request this suite makes, as the test account.
+//
+// The server takes its user from the token and refuses a request without
+// one, so a bare fetch here would not read as a broken test — it would read
+// as an account with nothing in it.
+let authed = () => {
+  throw new Error('the account is not signed in yet');
+};
 const http = require('http');
 const path = require('path');
 const ROOT = path.join(__dirname, '..').split(path.sep).join('/');
@@ -71,7 +84,7 @@ const timed = (uid, summary, date, from, to) =>
   ].join('\r\n');
 
 const get = async (p) => {
-  const r = await fetch(BASE + p);
+  const r = await authed(BASE + p);
   return { status: r.status, body: await r.json() };
 };
 
@@ -80,6 +93,8 @@ const clearClaims = async () => {
 };
 
 (async () => {
+  U = await H.userId();
+  authed = H.as((await H.setup()).a);
   await H.assertGuarded();
   await H.ensureProfile();
   await clearClaims();
@@ -179,7 +194,7 @@ const clearClaims = async () => {
     check('and nothing was written to claim any of it', claims.length === 0,
       JSON.stringify(claims.map((c) => c.job)));
 
-    const place = await fetch(`${BASE}/calendar/${DATE}/place`, { method: 'POST' });
+    const place = await authed(`${BASE}/calendar/${DATE}/place`, { method: 'POST' });
     check('the placement endpoint is gone', place.status === 404, `${place.status}`);
   }
 
@@ -199,7 +214,7 @@ const clearClaims = async () => {
 
     action = ics([allDay('do-5', 'Still here', '2031-03-20')]);
 
-    const r = await (await fetch(`${brokenBase}/calendar/2031-03-20`)).json();
+    const r = await (await authed(`${brokenBase}/calendar/2031-03-20`)).json();
     check('the request still succeeds', Array.isArray(r.items));
     check('and the dead feed is named', r.failed.length === 1, JSON.stringify(r.failed));
     check('by a name a person would recognise',
@@ -219,7 +234,7 @@ const clearClaims = async () => {
     if (!(await H.waitFor(soloBase))) throw new Error('solo server never came up');
 
     awareness = ics([allDay('know-9', 'Anniversary', '2031-04-01')]);
-    const r = await (await fetch(`${soloBase}/calendar/2031-04-01`)).json();
+    const r = await (await authed(`${soloBase}/calendar/2031-04-01`)).json();
 
     check('the one feed still reads', r.items.map((a) => a.title).join(',') === 'Anniversary',
       JSON.stringify(r.items));

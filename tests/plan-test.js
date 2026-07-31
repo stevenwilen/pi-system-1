@@ -4,7 +4,20 @@
 // block must change what the stale panel says about it. That is the thing that
 // was never exercised while plans and blocks sat empty.
 const H = require('./harness');
-const U = H.TEST_USER_ID;
+// The test account, discovered rather than written down. It is a real auth
+// user now, created by the harness, so its id is not knowable until it
+// exists — which is why this is assigned inside the run rather than at the
+// top of the file.
+let U;
+
+// Every request this suite makes, as the test account.
+//
+// The server takes its user from the token and refuses a request without
+// one, so a bare fetch here would not read as a broken test — it would read
+// as an account with nothing in it.
+let authed = () => {
+  throw new Error('the account is not signed in yet');
+};
 const { spawn } = require('child_process');
 // The app, found from where this file sits, so the suite runs from any clone.
 const path = require('path');
@@ -19,7 +32,7 @@ const check = (label, ok, detail = '') => {
 };
 
 async function call(path, body, method = 'POST') {
-  const res = await fetch(BASE + path, body
+  const res = await authed(BASE + path, body
     ? { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
     : undefined);
   return { status: res.status, data: await res.json().catch(() => ({})) };
@@ -32,6 +45,8 @@ const DATE = '2031-03-09';
 
 (async () => {
   // Refuses to run at all if the guard is not live.
+  U = await H.userId();
+  authed = H.as((await H.setup()).a);
   await H.assertGuarded();
   await H.ensureProfile();
 

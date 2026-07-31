@@ -1,16 +1,24 @@
 // Confirm a message actually lands in Telegram.
-// Run: node send-test.js
+// Run: node send-test.js <user_id>
+//
+// The user is an argument now. It used to be a constant in this file, back
+// when there was one account and its id was a fact about the system rather
+// than about a person. Sign-in decides who exists; a utility cannot know.
 
 const { sendTelegram } = require('./telegram');
 
-const USER_ID = '00000000-0000-0000-0000-000000000001';
-
 async function main() {
-  const result = await sendTelegram(USER_ID, 'Test from your system');
+  const userId = (process.argv[2] || '').trim();
+  if (!userId) {
+    console.error('usage: node send-test.js <user_id>');
+    process.exit(1);
+  }
+
+  const result = await sendTelegram(userId, 'Test from your system');
   console.log(JSON.stringify(result, null, 2));
 
   if (result.skipped) {
-    console.log('\nNo chat linked yet. Run: node link.js <chat_id>');
+    console.log('\nNo chat linked yet. Run: node link.js <user_id> <chat_id>');
   }
 }
 

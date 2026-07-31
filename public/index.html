@@ -736,6 +736,120 @@
       @keyframes spin {
         to { transform: rotate(360deg); }
       }
+
+      /* THE GATE. The whole screen, because there is nothing else to look at:
+         the planner behind it holds no data until a request comes back, and no
+         request comes back without a token.
+
+         Centred and short. Two fields and a seal — the same seal the day is
+         confirmed with, because it is the same act of committing to something,
+         and a second button style for one screen would be a second thing to
+         keep in step with the theme. */
+      #gate {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        background: var(--bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        overflow-y: auto;
+      }
+      #gate.hidden {
+        display: none;
+      }
+      #gate form {
+        width: 100%;
+        max-width: 320px;
+      }
+      #gate h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        color: var(--text);
+      }
+      .gate-sub {
+        margin: 6px 0 26px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .gate-field {
+        display: block;
+        margin-bottom: 16px;
+      }
+      .gate-field span {
+        display: block;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--faint);
+        margin-bottom: 6px;
+      }
+      /* A ruled line rather than a box. The rest of the page draws nothing it
+         does not have to, and a field is a place to write on the paper. */
+      .gate-field input {
+        width: 100%;
+        box-sizing: border-box;
+        background: none;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        padding: 8px 2px;
+        font-size: 16px; /* under 16 and iOS zooms the page on focus */
+        font-family: inherit;
+        color: var(--text);
+      }
+      .gate-field input:focus {
+        outline: none;
+        border-bottom-color: var(--accent);
+      }
+      .gate-problem {
+        margin: 0 0 14px;
+        font-size: 13px;
+        color: var(--warn);
+      }
+      .gate-problem.hidden {
+        display: none;
+      }
+      #gate .confirm {
+        margin-top: 8px;
+      }
+      /* The other door, and plainly the lesser one. Blue because it acts, but
+         small and centred rather than beside the seal, so there is never a
+         question which of the two is the button. */
+      .gate-swap {
+        display: block;
+        width: 100%;
+        margin-top: 18px;
+        background: none;
+        border: 0;
+        font-family: inherit;
+        font-size: 13px;
+        color: var(--accent);
+        cursor: pointer;
+      }
+
+      /* Below the whole page, and deliberately hard to hit by accident. */
+      .signout {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 40px 0 8px;
+        font-size: 12px;
+        color: var(--faint);
+      }
+      .signout button {
+        background: none;
+        border: 0;
+        font-family: inherit;
+        font-size: 12px;
+        color: var(--muted);
+        text-decoration: underline;
+        cursor: pointer;
+        padding: 4px 0;
+      }
       /* Stillness is the setting, not a lesser version of it. A quarter arc
          held still reads as something half-drawn, so it closes into the whole
          outline: a complete shape, plainly deliberate, saying the same thing
@@ -1161,6 +1275,44 @@
 
     <div id="booting"><span></span></div>
 
+    <!--
+      THE GATE. Over everything until there is a session, and the planner is
+      not behind it in any sense that matters: <main> is not merely hidden, the
+      requests that would fill it are refused by the server without a token.
+
+      One form for both. Signing in and signing up ask for exactly the same two
+      things, and the difference is which of them you already have — so the
+      fields do not move and only the words change. Two forms would be two
+      places to keep the same rules.
+    -->
+    <div id="gate" class="hidden">
+      <form id="gate-form">
+        <h1>Schedule</h1>
+        <p class="gate-sub" id="gate-sub">Sign in to your day.</p>
+
+        <label class="gate-field">
+          <span>Email</span>
+          <input type="email" id="gate-email" autocomplete="email" required />
+        </label>
+
+        <label class="gate-field">
+          <!-- `current-password` when signing in, `new-password` when signing
+               up, set from the script. A password manager offers to save a new
+               one only when it is told which this is. -->
+          <span>Password</span>
+          <input type="password" id="gate-password" autocomplete="current-password" required />
+        </label>
+
+        <p class="gate-problem hidden" id="gate-problem"></p>
+
+        <button type="submit" class="confirm" id="gate-go">Sign in</button>
+
+        <button type="button" class="gate-swap" id="gate-swap">
+          No account yet? Create one
+        </button>
+      </form>
+    </div>
+
     <main>
       <!-- 1. THE DAY -------------------------------------------------------- -->
       <!--
@@ -1221,6 +1373,14 @@
         </div>
         <div id="things"></div>
       </section>
+
+      <!-- Last, and quiet. Signing out is a thing you do rarely and never by
+           accident, so it sits below everything with nothing drawing the eye
+           to it. -->
+      <div class="signout">
+        <span id="whoami"></span>
+        <button type="button" id="sign-out">Sign out</button>
+      </div>
     </main>
 
     <!-- Where the "Removed · Undo" bar lives. A fixed element needs somewhere
@@ -1273,6 +1433,158 @@
 
     <script>
       const $ = (id) => document.getElementById(id);
+
+      // --- who you are ---------------------------------------------------------
+
+      /**
+       * The session, and every request that carries it.
+       *
+       * Supabase's own library is not loaded here. This page has no build step
+       * and no scripts but its own, and the four calls it would make are four
+       * fetches — sign up, sign in, refresh, and the header on everything else.
+       * A CDN script to make four requests would be a network dependency on the
+       * one screen that has to work before anything else does.
+       */
+      const SESSION_KEY = 'pi.session';
+
+      // Filled from GET /config, which is the one route ahead of the gate that
+      // says anything. The key is public by design; serving it means rotating
+      // it is a restart rather than an edit to this file.
+      let authUrl = null;
+      let authKey = null;
+
+      // Guarded because the suite runs this script in a VM. A page with no
+      // storage still works for as long as it is open — what it loses is being
+      // signed in tomorrow, which is better than not running.
+      const store = typeof localStorage === 'object' && localStorage ? localStorage : null;
+
+      function readSession() {
+        if (!store) return null;
+        try {
+          const raw = store.getItem(SESSION_KEY);
+          return raw ? JSON.parse(raw) : null;
+        } catch {
+          return null;
+        }
+      }
+
+      function writeSession(s) {
+        session = s;
+        if (!store) return;
+        try {
+          if (s) store.setItem(SESSION_KEY, JSON.stringify(s));
+          else store.removeItem(SESSION_KEY);
+        } catch {
+          // A full or blocked store is not a reason to fail the sign-in that
+          // just succeeded. It costs the next visit, not this one.
+        }
+      }
+
+      let session = readSession();
+
+      /**
+       * A token that is still good, refreshing it if it is not.
+       *
+       * Supabase access tokens last an hour and this is a page people leave
+       * open all day, so the interesting case is the ordinary one. Refreshed a
+       * minute early, because a token that expires in flight fails a request
+       * that had every reason to work.
+       */
+      async function freshToken() {
+        if (!session) return null;
+
+        const expires = Number(session.expires_at || 0) * 1000;
+        if (expires && Date.now() < expires - 60000) return session.access_token;
+
+        if (!session.refresh_token || !authUrl) {
+          writeSession(null);
+          return null;
+        }
+
+        let res;
+        try {
+          res = await fetch(`${authUrl}/auth/v1/token?grant_type=refresh_token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', apikey: authKey },
+            body: JSON.stringify({ refresh_token: session.refresh_token }),
+          });
+        } catch {
+          // Offline. The token in hand may still be good, and the request
+          // about to use it will find out — signing someone out because the
+          // network blinked would be the worse guess.
+          return session.access_token;
+        }
+
+        if (!res.ok) {
+          writeSession(null);
+          return null;
+        }
+
+        const body = await res.json();
+        writeSession({
+          access_token: body.access_token,
+          refresh_token: body.refresh_token,
+          expires_at: body.expires_at,
+          email: (body.user && body.user.email) || session.email,
+        });
+        return session.access_token;
+      }
+
+      /**
+       * Every request to this server goes through here.
+       *
+       * There is no bare fetch to an app route anywhere on this page, and that
+       * is checked rather than trusted: one that forgot the header would not
+       * fail visibly, it would 401 and look like an empty day.
+       *
+       * A 401 means the session is over — expired past refreshing, or a token
+       * the server no longer accepts. The gate goes back up rather than the
+       * screen going blank, because "signed out" and "nothing planned" must
+       * never look the same.
+       */
+      /**
+       * The same request, issued now, with whatever token is already in hand.
+       *
+       * For the one caller that has no later: the deferred write on `pagehide`.
+       * `api` awaits a possible refresh first, and an await inside a pagehide
+       * handler is a request that never leaves — the tab is gone by the time
+       * the microtask runs, and `keepalive` cannot keep alive something that
+       * was never started. Whatever is in `session` is sent as it stands.
+       *
+       * A token that expired while the offer was up loses that write. That is
+       * the honest cost and it is small: the window is six seconds, the token
+       * lasts an hour, and the alternative is losing every one of them.
+       */
+      function apiNow(path, opts = {}) {
+        const token = session && session.access_token;
+        if (!token) return Promise.reject(new Error('not signed in'));
+
+        return fetch(path, {
+          ...opts,
+          headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` },
+        });
+      }
+
+      async function api(path, opts = {}) {
+        const token = await freshToken();
+        if (!token) {
+          showGate();
+          throw new Error('not signed in');
+        }
+
+        const res = await fetch(path, {
+          ...opts,
+          headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` },
+        });
+
+        if (res.status === 401) {
+          writeSession(null);
+          showGate();
+          throw new Error('not signed in');
+        }
+
+        return res;
+      }
 
       // The step everything moves in. Half an hour is the smallest unit this
       // system expresses: block durations, the start time, all of it.
@@ -1469,7 +1781,7 @@
       async function load() {
         let data;
         try {
-          data = await (await fetch('/entries')).json();
+          data = await (await api('/entries')).json();
         } catch {
           return;
         }
@@ -1785,7 +2097,9 @@
             renderThings();
           },
           () => {
-            fetch(`/entries/${item.id}${path}`, { method: 'POST', keepalive: true })
+            // apiNow, not api: this also runs from `pagehide`, where there is
+            // no next turn of the loop to send anything in.
+            apiNow(`/entries/${item.id}${path}`, { method: 'POST', keepalive: true })
               .catch(() => {
                 // The row is already off the screen. A failed write is
                 // corrected by the next load rather than by an alert.
@@ -1809,7 +2123,7 @@
       async function loadCalendar(date) {
         let data;
         try {
-          data = await (await fetch(`/calendar/${date}`)).json();
+          data = await (await api(`/calendar/${date}`)).json();
         } catch {
           return;
         }
@@ -1837,7 +2151,7 @@
       async function loadPlan(date) {
         let data;
         try {
-          data = await (await fetch(`/plan/${date}`)).json();
+          data = await (await api(`/plan/${date}`)).json();
         } catch {
           return renderBuilder();
         }
@@ -2914,7 +3228,7 @@
         let res;
         try {
           res = await (
-            await fetch('/plan', {
+            await api('/plan', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -3104,7 +3418,7 @@
         let res;
         try {
           res = await (
-            await fetch(url, {
+            await api(url, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(body),
@@ -3146,7 +3460,188 @@
         }, 200);
       }
 
-      load().finally(uncover);
+      // --- the gate ------------------------------------------------------------
+
+      // Which door this is. One form, two words.
+      let makingAccount = false;
+
+      function renderGate() {
+        $('gate-sub').textContent = makingAccount
+          ? 'Your days, kept in one place.'
+          : 'Sign in to your day.';
+        $('gate-go').textContent = makingAccount ? 'Create account' : 'Sign in';
+        $('gate-swap').textContent = makingAccount
+          ? 'Already have an account? Sign in'
+          : 'No account yet? Create one';
+        // A manager offers to save a password only when told it is a new one.
+        $('gate-password').setAttribute(
+          'autocomplete',
+          makingAccount ? 'new-password' : 'current-password'
+        );
+      }
+
+      function showGate() {
+        $('gate').classList.remove('hidden');
+        renderGate();
+      }
+
+      function hideGate() {
+        $('gate').classList.add('hidden');
+        $('gate-password').value = '';
+      }
+
+      function gateProblem(text) {
+        const box = $('gate-problem');
+        if (!text) {
+          box.classList.add('hidden');
+          return;
+        }
+        box.textContent = text;
+        box.classList.remove('hidden');
+      }
+
+      $('gate-swap').onclick = () => {
+        makingAccount = !makingAccount;
+        gateProblem('');
+        renderGate();
+      };
+
+      /**
+       * Sign in, or sign up, depending on which word the button is showing.
+       *
+       * Supabase answers a bad password and an unknown email with the same
+       * message, and that is repeated rather than improved on: telling someone
+       * which of the two they got wrong tells anyone who asks whether an
+       * address has an account here.
+       */
+      $('gate-form').onsubmit = async (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+
+        const email = String($('gate-email').value || '').trim();
+        const password = String($('gate-password').value || '');
+
+        if (!email || !password) return gateProblem('Both, please.');
+        if (!authUrl) return gateProblem('Cannot reach the server.');
+
+        $('gate-go').classList.add('pressing');
+        $('gate-go').disabled = true;
+        gateProblem('');
+
+        try {
+          const path = makingAccount
+            ? '/auth/v1/signup'
+            : '/auth/v1/token?grant_type=password';
+
+          let body;
+          try {
+            const res = await fetch(authUrl + path, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', apikey: authKey },
+              body: JSON.stringify({ email, password }),
+            });
+            body = await res.json();
+          } catch {
+            return gateProblem('Could not reach the server.');
+          }
+
+          if (body.error || body.error_description || body.msg) {
+            return gateProblem(
+              body.error_description || body.msg || body.error || 'That did not work.'
+            );
+          }
+
+          // Sign-up returns a user but no session when the project asks for
+          // email confirmation. That is not a failure and must not read as
+          // one — there is simply nothing to sign in with yet.
+          if (!body.access_token) {
+            makingAccount = false;
+            renderGate();
+            return gateProblem('Account created. Check your email, then sign in.');
+          }
+
+          writeSession({
+            access_token: body.access_token,
+            refresh_token: body.refresh_token,
+            expires_at: body.expires_at,
+            email: (body.user && body.user.email) || email,
+          });
+
+          hideGate();
+          await enter();
+        } finally {
+          $('gate-go').classList.remove('pressing');
+          $('gate-go').disabled = false;
+        }
+      };
+
+      /**
+       * Out, and back to the gate.
+       *
+       * The stored session goes first. Telling Supabase comes second and its
+       * failure changes nothing: an access token cannot be recalled, only
+       * discarded and left to expire, so the copy on this device is the thing
+       * that actually matters.
+       */
+      $('sign-out').onclick = async () => {
+        const token = session && session.access_token;
+        writeSession(null);
+
+        // Everything the last person had on screen, gone with them.
+        things = [];
+        blocks = [];
+        today = null;
+        $('things').replaceChildren();
+        $('builder').replaceChildren();
+
+        showGate();
+
+        if (token && authUrl) {
+          fetch(`${authUrl}/auth/v1/logout`, {
+            method: 'POST',
+            headers: { apikey: authKey, Authorization: `Bearer ${token}` },
+          }).catch(() => {});
+        }
+      };
+
+      // --- opening -------------------------------------------------------------
+
+      /** The planner, once there is somebody to show it to. */
+      async function enter() {
+        $('whoami').textContent = (session && session.email) || '';
+        await load();
+      }
+
+      /**
+       * What happens on load, in the only order that works.
+       *
+       * The config first, because without the project's URL there is no way to
+       * refresh a token and no way to sign in — so a stored session cannot even
+       * be tested. Then either the planner or the gate, and the cover comes off
+       * whichever it was.
+       */
+      async function start() {
+        try {
+          const config = await (await fetch('/config')).json();
+          authUrl = config.url;
+          authKey = config.anon_key;
+        } catch {
+          // Nothing can be done without it, and the gate is the honest screen
+          // to be stuck on: it is the one that says what is missing.
+        }
+
+        if (!session) {
+          showGate();
+          return;
+        }
+
+        try {
+          await enter();
+        } catch {
+          // api() has already put the gate up if the session was the problem.
+        }
+      }
+
+      start().finally(uncover);
     </script>
   </body>
 </html>

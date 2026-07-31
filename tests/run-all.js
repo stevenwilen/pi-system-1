@@ -7,7 +7,21 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const S = __dirname;
 
-const REAL_USER = '00000000-0000-0000-0000-000000000001';
+// A uuid that could belong to a real account.
+//
+// No suite has a reason to name one: the accounts are real auth users, the
+// harness creates them, and their ids are discovered at runtime. This used to
+// name a single forbidden id — the owner's — which stopped meaning anything
+// the moment ids stopped being constants, and would have gone on passing
+// while a suite hardcoded somebody else's.
+//
+// The `00000000-0000-0000-0000-` prefix is exempt, and only that prefix. It is
+// what this codebase has always used for ids that stand for nobody: the "this
+// row does not exist" paths the auth suite drives, and the outsider the write
+// guard proves it refuses. An id Supabase issues is random and cannot look
+// like that, so exempting it gives up nothing.
+const REAL_LOOKING_UUID =
+  /['"](?!00000000-0000-0000-0000-)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}['"]/i;
 
 // The app is the directory above this one. Found rather than written down, so
 // the suites run from any clone on any machine.
@@ -68,14 +82,19 @@ function refuseUnguarded(names) {
     const dbInReach = imported.filter((f) => reachesDb(f));
 
     const spawnsServer = /\['server\.js'\]|spawn\([^)]*server\.js/.test(src);
-    const pointsAtTestUser = src.includes('PI_USER_ID');
+    // Comments stripped: several suites explain at length which id they no
+    // longer name, and an explanation is not a hardcoded id.
+    const bare = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-    if (src.includes(REAL_USER)) {
-      problems.push(`${name}: names the real user id`);
+    if (REAL_LOOKING_UUID.test(bare)) {
+      problems.push(`${name}: names a uuid that could be a real account's. Ids come from the harness now.`);
     } else if (dbInReach.length && !guarded) {
       problems.push(`${name}: loads ${dbInReach.join(', ')}, which reaches the database, without the harness`);
-    } else if (spawnsServer && !guarded && !pointsAtTestUser) {
-      problems.push(`${name}: starts a server without pointing it at the test user`);
+    } else if (spawnsServer && !guarded) {
+      // A server serves whoever the token says. A suite driving one without
+      // the harness holds no tokens, so it reaches nothing — which reads as a
+      // passing test about an empty account.
+      problems.push(`${name}: starts a server without the harness, so it has no account to be`);
     }
   }
 
@@ -106,6 +125,8 @@ const SUITES = [
   ['builder-test.js', 120],
   ['plan-layout-check.js', 120],
   ['icons-check.js', 60],
+  ['service-key-check.js', 60],
+  ['request-scope-check.js', 60],
   ['calendar-endpoint-test.js', 120],
   ['calendar-feeds-test.js', 180],
   ['task-test.js', 120],
@@ -118,6 +139,10 @@ const SUITES = [
   ['plan-test.js', 180],
   ['messages-test.js', 180],
   ['delivery-test.js', 240],
+  // The two this whole change exists for. Last, because they are the slowest
+  // and the most likely to be the reason a run is being watched.
+  ['auth-test.js', 180],
+  ['isolation-accounts-test.js', 300],
 ];
 
 const only = process.argv.slice(2);

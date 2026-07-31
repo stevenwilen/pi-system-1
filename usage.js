@@ -6,7 +6,7 @@
 
 require('dotenv').config();
 
-const supabase = require('./db');
+const { service: supabase } = require('./db');
 
 // US dollars per million tokens. Cache reads are 0.1x input, cache writes
 // 1.25x input at the 5-minute TTL.

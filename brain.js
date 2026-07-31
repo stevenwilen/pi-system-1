@@ -16,6 +16,9 @@ require('dotenv').config();
 const util = require('util');
 const { Anthropic } = require('@anthropic-ai/sdk');
 const tools = require('./tools');
+// The service client. The brain runs on a schedule, not inside a request, so
+// there is no caller whose connection it could borrow.
+const { service } = require('./db');
 const { recordUsage } = require('./usage');
 const { fence, LABEL } = require('./untrusted');
 
@@ -155,15 +158,15 @@ const TOOL_SCHEMAS = [
 async function runTool(user_id, name, input) {
   switch (name) {
     case 'search_entries':
-      return tools.search_entries(user_id, input.query, input.type, input.limit);
+      return tools.search_entries(service, user_id, input.query, input.type, input.limit);
     case 'get_calendar':
-      return tools.get_calendar(user_id, input.date);
+      return tools.get_calendar(service, user_id, input.date);
     case 'create_entry':
-      return tools.create_entry(user_id, input);
+      return tools.create_entry(service, user_id, input);
     case 'update_entry':
-      return tools.update_entry(user_id, input.id, input);
+      return tools.update_entry(service, user_id, input.id, input);
     case 'update_profile':
-      return tools.update_profile(user_id, input);
+      return tools.update_profile(service, user_id, input);
     default:
       return { error: `no such tool: ${name}` };
   }
@@ -207,7 +210,7 @@ function textOf(response) {
 async function nowLine(user_id) {
   let timeZone = 'UTC';
   try {
-    timeZone = await tools.timezoneFor(user_id);
+    timeZone = await tools.timezoneFor(service, user_id);
   } catch {
     // A missing profile is not a reason to fail the whole turn.
   }

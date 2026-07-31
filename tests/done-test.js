@@ -15,7 +15,20 @@
 // All of it is checked against real rows, because the claim is about what the
 // database returns and not about what the code looks like.
 const H = require('./harness');
-const U = H.TEST_USER_ID;
+// The test account, discovered rather than written down. It is a real auth
+// user now, created by the harness, so its id is not knowable until it
+// exists — which is why this is assigned inside the run rather than at the
+// top of the file.
+let U;
+
+// Every request this suite makes, as the test account.
+//
+// The server takes its user from the token and refuses a request without
+// one, so a bare fetch here would not read as a broken test — it would read
+// as an account with nothing in it.
+let authed = () => {
+  throw new Error('the account is not signed in yet');
+};
 const path = require('path');
 const ROOT = path.join(__dirname, '..').split(path.sep).join('/');
 process.chdir(ROOT);
@@ -35,14 +48,14 @@ const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 
 const post = async (p, body) => {
-  const r = await fetch(BASE + p, {
+  const r = await authed(BASE + p, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body || {}),
   });
   return { status: r.status, body: await r.json() };
 };
-const get = async (p) => (await fetch(BASE + p)).json();
+const get = async (p) => (await authed(BASE + p)).json();
 
 // Rows this suite made, cleaned up whatever happens.
 const made = { entries: [], plans: [] };
@@ -102,6 +115,8 @@ async function cleanup() {
 }
 
 (async () => {
+  U = await H.userId();
+  authed = H.as((await H.setup()).a);
   await H.assertGuarded();
   // Everything the test user owns, before the profile is put back. A run that
   // died holding rows would otherwise collide here: plans are unique on

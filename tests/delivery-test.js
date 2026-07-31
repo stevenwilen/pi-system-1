@@ -4,7 +4,11 @@
 // timezone maths, real state transitions. Sending genuine messages to the
 // owner's phone is an outward-facing action and not mine to take unasked.
 const H = require('./harness');
-const U = H.TEST_USER_ID;
+// The test account, discovered rather than written down. It is a real auth
+// user now, created by the harness, so its id is not knowable until it
+// exists — which is why this is assigned inside the run rather than at the
+// top of the file.
+let U;
 process.env.SCHEDULER_DISABLED = '1';
 
 // The app, found from where this file sits, so the suite runs from any clone.
@@ -77,6 +81,7 @@ const statusOf = async (planId) => {
 
 (async () => {
   // Refuses to run at all if the guard is not live.
+  U = await H.userId();
   await H.assertGuarded();
   await H.ensureProfile();
 

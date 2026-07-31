@@ -6,8 +6,6 @@
 
 const express = require('express');
 
-const supabase = require('../db');
-const { CURRENT_USER } = require('../user');
 const { todayIn } = require('../clock');
 const { create_entry, update_entry } = require('../tools');
 const { lastScheduled, daysBetween } = require('../staleness');
@@ -32,26 +30,28 @@ const DATED = ['project', 'task'];
  * "since scheduled" in that case, because those are different claims.
  */
 router.get('/entries', async (req, res) => {
+  const { db, userId } = req.auth;
+
   try {
-    const { data: profile } = await supabase
+    const { data: profile } = await db
       .from('profile')
       .select('timezone, default_wake_time, plans_in, nudge_hour')
-      .eq('user_id', CURRENT_USER)
+      .eq('user_id', userId)
       .maybeSingle();
 
     const timeZone = (profile && profile.timezone) || 'UTC';
     const today = todayIn(timeZone);
 
-    const { data: rows, error } = await supabase
+    const { data: rows, error } = await db
       .from('entries')
       .select('id, type, title, frequency, due, size, created_at')
-      .eq('user_id', CURRENT_USER)
+      .eq('user_id', userId)
       .eq('status', 'active')
       .in('type', TYPES);
 
     if (error) return res.status(500).json({ error: error.message });
 
-    const latest = await lastScheduled(CURRENT_USER);
+    const latest = await lastScheduled(db, userId);
 
     const items = (rows || []).map((r) => {
       const seen = latest.get(r.id) || null;
@@ -174,11 +174,12 @@ function toRow(body) {
 }
 
 router.post('/entries', async (req, res) => {
+  const { db, userId } = req.auth;
   const body = req.body || {};
   const problem = validate(body);
   if (problem) return res.status(400).json({ error: problem });
 
-  const row = await create_entry(CURRENT_USER, toRow(body));
+  const row = await create_entry(db, userId, toRow(body));
   if (row.error) return res.status(400).json({ error: row.error });
 
   res.json({ entry: row });
@@ -192,13 +193,14 @@ router.post('/entries', async (req, res) => {
  * to a row with no size one request at a time, each individually valid.
  */
 router.post('/entries/:id/update', async (req, res) => {
+  const { db, userId } = req.auth;
   const body = req.body || {};
 
-  const { data: current, error: readErr } = await supabase
+  const { data: current, error: readErr } = await db
     .from('entries')
     .select('type, title, frequency, due, size')
     .eq('id', req.params.id)
-    .eq('user_id', CURRENT_USER)
+    .eq('user_id', userId)
     .eq('status', 'active')
     .maybeSingle();
 
@@ -223,7 +225,7 @@ router.post('/entries/:id/update', async (req, res) => {
   const problem = validate(merged);
   if (problem) return res.status(400).json({ error: problem });
 
-  const row = await update_entry(CURRENT_USER, req.params.id, toRow(merged));
+  const row = await update_entry(db, userId, req.params.id, toRow(merged));
   if (row.error) return res.status(400).json({ error: row.error });
   res.json({ entry: row });
 });
@@ -240,11 +242,13 @@ router.post('/entries/:id/update', async (req, res) => {
  * Both drop out of every read, which all filter on status = 'active'.
  */
 router.post('/entries/:id/done', async (req, res) => {
-  const { data: entry, error: readErr } = await supabase
+  const { db, userId } = req.auth;
+
+  const { data: entry, error: readErr } = await db
     .from('entries')
     .select('id, type')
     .eq('id', req.params.id)
-    .eq('user_id', CURRENT_USER)
+    .eq('user_id', userId)
     .eq('status', 'active')
     .maybeSingle();
 
@@ -255,13 +259,14 @@ router.post('/entries/:id/done', async (req, res) => {
     return res.status(400).json({ error: `a ${entry.type} is not finished in one go` });
   }
 
-  const row = await update_entry(CURRENT_USER, req.params.id, { status: 'done' });
+  const row = await update_entry(db, userId, req.params.id, { status: 'done' });
   if (row.error) return res.status(400).json({ error: row.error });
   res.json({ done: row.id });
 });
 
 router.post('/entries/:id/delete', async (req, res) => {
-  const row = await update_entry(CURRENT_USER, req.params.id, { status: 'deleted' });
+  const { db, userId } = req.auth;
+  const row = await update_entry(db, userId, req.params.id, { status: 'deleted' });
   if (row.error) return res.status(400).json({ error: row.error });
   res.json({ deleted: row.id });
 });

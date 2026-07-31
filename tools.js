@@ -1,13 +1,17 @@
 // The four tools. No AI in this file.
 //
-// user_id is always the FIRST argument and is always supplied by the caller.
-// It is never part of `fields` and never chosen by the model.
+// The database client is the FIRST argument and user_id the second, both
+// always supplied by the caller. Neither is ever part of `fields` and neither
+// is ever chosen by the model.
+//
+// The client is passed rather than imported so that a route asks with the
+// caller's own connection, subject to row level security, while the scheduler
+// asks with the service key. One module, two callers, and no way to be the
+// wrong one by accident, because there is no client in here to reach for.
 
 require('dotenv').config();
 
 const ical = require('node-ical');
-
-const supabase = require('./db');
 
 // Fields the caller may set. Anything else is dropped, so user_id, id,
 // created_at and updated_at can never be overwritten from outside.
@@ -46,10 +50,10 @@ function escapeForOr(text) {
  * Read active entries for one user.
  * Never returns rows with status = 'deleted'.
  */
-async function search_entries(user_id, query, type, limit = 50) {
+async function search_entries(db, user_id, query, type, limit = 50) {
   if (!user_id) return { error: 'user_id is required' };
 
-  let q = supabase
+  let q = db
     .from('entries')
     .select('*')
     .eq('user_id', user_id)
@@ -81,7 +85,7 @@ const PROFILE_UPDATABLE = ['timezone', 'default_wake_time'];
  * working out the local hour, skip this user, and silently stop sending them
  * anything at all.
  */
-async function update_profile(user_id, fields) {
+async function update_profile(db, user_id, fields) {
   if (!user_id) return { error: 'user_id is required' };
 
   const patch = pick(fields, PROFILE_UPDATABLE);
@@ -106,7 +110,7 @@ async function update_profile(user_id, fields) {
     }
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('profile')
     .update(patch)
     .eq('user_id', user_id)
@@ -204,8 +208,8 @@ function nextDay(date) {
   return d.toISOString().slice(0, 10);
 }
 
-async function timezoneFor(user_id) {
-  const { data } = await supabase
+async function timezoneFor(db, user_id) {
+  const { data } = await db
     .from('profile')
     .select('timezone')
     .eq('user_id', user_id)
@@ -295,11 +299,11 @@ function eventsOn(parsed, source, date, timeZone) {
  * returned rather than swallowed, because [] from a dead feed and [] from a
  * quiet Tuesday are the same value and must not look the same on screen.
  */
-async function readCalendar(user_id, date) {
+async function readCalendar(db, user_id, date) {
   const result = { events: [], failed: [], configured: [] };
   if (!user_id || !date) return result;
 
-  const timeZone = await timezoneFor(user_id);
+  const timeZone = await timezoneFor(db, user_id);
 
   for (const feed of FEEDS) {
     const url = String(process.env[feed.env] || '').replace(/[<>]/g, '').trim();
@@ -336,12 +340,12 @@ async function readCalendar(user_id, date) {
  * read must never stop day planning. Callers that need to know a feed was
  * unreachable use readCalendar instead.
  */
-async function get_calendar(user_id, date) {
+async function get_calendar(db, user_id, date) {
   if (!user_id) return { error: 'user_id is required' };
   if (!date) return [];
 
   try {
-    return (await readCalendar(user_id, date)).events;
+    return (await readCalendar(db, user_id, date)).events;
   } catch {
     return [];
   }
@@ -350,7 +354,7 @@ async function get_calendar(user_id, date) {
 /**
  * Insert one entry. user_id is forced from the argument.
  */
-async function create_entry(user_id, fields) {
+async function create_entry(db, user_id, fields) {
   if (!user_id) return { error: 'user_id is required' };
 
   const row = { ...pick(fields, CREATABLE), user_id };
@@ -358,7 +362,7 @@ async function create_entry(user_id, fields) {
   if (!row.type) return { error: 'type is required' };
   if (!row.title) return { error: 'title is required' };
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('entries')
     .insert(row)
     .select()
@@ -379,7 +383,7 @@ function describe(error) {
  * Update one entry, but only if it belongs to this user.
  * Soft-delete is update_entry(user_id, id, { status: 'deleted' }).
  */
-async function update_entry(user_id, id, fields) {
+async function update_entry(db, user_id, id, fields) {
   if (!user_id) return { error: 'user_id is required' };
   if (!id) return { error: 'id is required' };
 
@@ -389,7 +393,7 @@ async function update_entry(user_id, id, fields) {
   // updated_at is set by a database trigger, not from here — the client
   // clock and the database clock do not agree.
 
-  let q = supabase
+  let q = db
     .from('entries')
     .update(patch)
     .eq('id', id)

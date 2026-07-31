@@ -5,7 +5,20 @@
 // and the rules between them are the whole of this suite. There is no why, no
 // note about where anything stands, and no pause.
 const H = require('./harness');
-const U = H.TEST_USER_ID;
+// The test account, discovered rather than written down. It is a real auth
+// user now, created by the harness, so its id is not knowable until it
+// exists — which is why this is assigned inside the run rather than at the
+// top of the file.
+let U;
+
+// Every request this suite makes, as the test account.
+//
+// The server takes its user from the token and refuses a request without
+// one, so a bare fetch here would not read as a broken test — it would read
+// as an account with nothing in it.
+let authed = () => {
+  throw new Error('the account is not signed in yet');
+};
 // The app, found from where this file sits, so the suite runs from any clone.
 const path = require('path');
 const ROOT = path.join(__dirname, '..').split(path.sep).join('/');
@@ -21,7 +34,7 @@ const check = (label, ok, detail = '') => {
 };
 
 async function call(path, body) {
-  const res = await fetch(BASE + path, body
+  const res = await authed(BASE + path, body
     ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
     : undefined);
   return { status: res.status, data: await res.json().catch(() => ({})) };
@@ -37,6 +50,8 @@ const server = H.spawnServer(PORT);
 
 (async () => {
   // Refuses to run at all if the guard is not live.
+  U = await H.userId();
+  authed = H.as((await H.setup()).a);
   await H.assertGuarded();
   await H.ensureProfile();
 
@@ -114,17 +129,17 @@ const server = H.spawnServer(PORT);
   console.log('\nthe endpoints that were removed are gone');
   {
     const id = t.data.entry.id;
-    const paused = await fetch(`${BASE}/entries/${id}/pause`, {
+    const paused = await authed(`${BASE}/entries/${id}/pause`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ paused: true }),
     });
     check('pause is gone', paused.status === 404, `${paused.status}`);
 
-    const prompt = await fetch(`${BASE}/plan-intent/setup-prompt`);
+    const prompt = await authed(`${BASE}/plan-intent/setup-prompt`);
     check('the setup interview is gone', prompt.status === 404, `${prompt.status}`);
 
-    const summarize = await fetch(`${BASE}/summarize`, {
+    const summarize = await authed(`${BASE}/summarize`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ text: 'x' }),

@@ -7,7 +7,7 @@
 
 require('dotenv').config();
 
-const supabase = require('./db');
+const { service: supabase } = require('./db');
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 

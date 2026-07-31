@@ -3,7 +3,20 @@
 // Needs migration-due.sql and migration-size.sql to have been run. Everything
 // writes as the test user.
 const H = require('./harness');
-const U = H.TEST_USER_ID;
+// The test account, discovered rather than written down. It is a real auth
+// user now, created by the harness, so its id is not knowable until it
+// exists — which is why this is assigned inside the run rather than at the
+// top of the file.
+let U;
+
+// Every request this suite makes, as the test account.
+//
+// The server takes its user from the token and refuses a request without
+// one, so a bare fetch here would not read as a broken test — it would read
+// as an account with nothing in it.
+let authed = () => {
+  throw new Error('the account is not signed in yet');
+};
 const ROOT = H.ROOT;
 process.chdir(ROOT);
 
@@ -33,7 +46,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 
 const post = async (path, body) => {
-  const r = await fetch(`${BASE}${path}`, {
+  const r = await authed(`${BASE}${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -41,11 +54,13 @@ const post = async (path, body) => {
   return { status: r.status, body: await r.json() };
 };
 const get = async (path) => {
-  const r = await fetch(`${BASE}${path}`);
+  const r = await authed(`${BASE}${path}`);
   return { status: r.status, body: await r.json() };
 };
 
 (async () => {
+  U = await H.userId();
+  authed = H.as((await H.setup()).a);
   await H.assertGuarded();
   await H.ensureProfile();
 
@@ -216,7 +231,7 @@ const get = async (path) => {
     // Read as a raw response rather than through post(): an unknown path falls
     // through to the static handler and comes back as the page, so asking for
     // JSON here throws on the HTML instead of reporting the 404.
-    const r = await fetch(`${BASE}/entries/reorder`, {
+    const r = await authed(`${BASE}/entries/reorder`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ ids }),
@@ -234,12 +249,12 @@ const get = async (path) => {
   console.log('\nthe endpoints that were removed really are gone');
   {
     for (const path of ['/plan-intent/setup-prompt', '/summarize']) {
-      const r = await fetch(`${BASE}${path}`);
+      const r = await authed(`${BASE}${path}`);
       check(`${path} is gone`, r.status === 404, `${r.status}`);
     }
     const list = await get('/entries');
     const id = list.body.items[0].id;
-    const paused = await fetch(`${BASE}/entries/${id}/pause`, { method: 'POST' });
+    const paused = await authed(`${BASE}/entries/${id}/pause`, { method: 'POST' });
     check('/entries/:id/pause is gone', paused.status === 404, `${paused.status}`);
     check('and nothing reports a paused list', list.body.paused === undefined);
   }
@@ -247,7 +262,7 @@ const get = async (path) => {
   console.log('\ncleanup');
   server.kill();
   await H.cleanup();
-  const { count } = await H.raw
+  const { count } = await H.service
     .from('entries').select('*', { count: 'exact', head: true }).eq('user_id', U);
   check('test rows removed', count === 0, `${count}`);
 

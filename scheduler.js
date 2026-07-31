@@ -10,7 +10,7 @@ require('dotenv').config();
 
 const cron = require('node-cron');
 
-const supabase = require('./db');
+const { service: supabase } = require('./db');
 const { toMinutes, tomorrowOf } = require('./clock');
 const { sendTelegram } = require('./telegram');
 const { composeMessage } = require('./messages');

@@ -300,7 +300,13 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // It says "here is where you are", which is the nearest thing to an action
   // that is not one. It is listed by name so a second has to be argued for
   // here rather than added quietly.
-  const acts = /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save/;
+  //
+  // THE GATE ADDS TWO, and both are the same idea as the rest. `.gate-swap` is
+  // the other door — the one press on that screen that is not the seal — and a
+  // focused field is where the caret is, which is the orienting job the divider
+  // does for the day. Named here so a third has to be argued for.
+  const acts =
+    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus/;
   // The divider: the knot and the line it fastens. Both are indigo now, where
   // the dark build tinted the line with a separate near-blue that belonged to
   // nothing — one fewer colour on the page, and the two halves of one object
@@ -407,7 +413,10 @@ console.log('\n7. the warn colour warns; it does not narrate');
   // A seal is stamped in persimmon; it is the one warm thing on the page and
   // the one press that commits a day. Listed by name so a second addition has
   // to be argued for here rather than added quietly.
-  const allowed = /\.mark|\.ends\.late|\.failed|\.danger|\.problem|\.confirm/;
+  // `.gate-problem` is the same job as `.problem` in the add sheet: a form
+  // saying why it will not accept what it was given. Not a new use of the
+  // colour, the same one on a second form.
+  const allowed = /\.mark|\.ends\.late|\.failed|\.danger|\.problem|\.confirm|\.gate-problem/;
   check('used only on marks, failures, Delete and the seal',
     warn.every((s) => allowed.test(s)), warn.join(' | '));
   check('and nothing is left claiming a miss', !/askmiss|wasmissed/.test(css));
@@ -468,8 +477,12 @@ console.log('\n7a. the wait before the first day is on screen');
   check('and no word, because this system would not say "Loading"',
     !/Loading|loading/.test(body));
 
-  check('it lifts when the load settles, not only when it succeeds',
-    /load\(\)\.finally\(uncover\)/.test(code));
+  // `start`, not `load`. What settles is now the whole opening: read the
+  // config, then either the day or the gate. The cover has to come off either
+  // way — a page stuck under it because nobody was signed in would be the same
+  // failure as one stuck because a fetch died.
+  check('it lifts when the opening settles, not only when it succeeds',
+    /start\(\)\.finally\(uncover\)/.test(code));
   check('and leaves the layout rather than sitting invisible over it',
     /style\.display = 'none'/.test(code));
 

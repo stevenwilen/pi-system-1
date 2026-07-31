@@ -160,6 +160,56 @@ change to make later, in the place hardest to notice it was needed.
 
 Nothing about how the system behaves lives outside the database.
 
+### 2.7 A request is whoever its token says, and nothing else
+
+There is no default user. `PI_USER_ID` is gone, and so is the fixed uuid it fell
+back to. Every request carries `Authorization: Bearer <token>`, the server asks
+Supabase to verify it, and the user is the `sub` that comes back. A request
+without a valid token is refused with **401** — never served an empty result,
+because "you are not signed in" and "you have nothing planned" are different
+facts and a screen that confuses them shows a blank day to someone whose session
+merely expired.
+
+**Two clients, and which one a piece of code holds is the security model.**
+
+| | |
+|---|---|
+| `forUser(token)` | anon key under the caller's token, so PostgREST runs as `authenticated` and row level security applies. Every route. |
+| `service` | bypasses row level security. The scheduler and the command line tools only — they act for every user at once and have no caller to be. |
+
+The anon key rather than the service key under that token is the deliberate
+part. Both work on the happy path; they differ in how they fail. With no token
+an anon-key client falls back to the `anon` role, which no policy grants
+anything to. A service-key client falls back to `service_role`, which is every
+row in the database.
+
+**That separation is enforced twice, because neither way is sufficient alone:**
+
+- `tests/service-key-check.js` walks the import graph from `routes/` and fails
+  if anything reachable takes the `service` export. It names the file, before
+  anything runs.
+- `db.js` wraps the service client so that `from()` and `rpc()` throw if called
+  inside a request. `server.js` opens an `AsyncLocalStorage` scope around every
+  request; the scheduler runs on a timer, outside it. This catches what reading
+  imports cannot see — a require built at runtime, a helper that grew a second
+  caller.
+
+Reading imports is a claim about the shape of the code. The scope check is a
+fact about the process. `server.js` genuinely reaches the service key, because
+it requires `./scheduler` to start cron in the same process — which is exactly
+why the static check alone was never going to be enough.
+
+**Row level security is on for `profile`, `entries`, `plans`, `blocks` and
+`sent_log`**, one policy each: `user_id = auth.uid()` in both `using` and
+`with check`, covering select, insert, update and delete. `using` decides what
+you can see and therefore change; `with check` decides what a row may look like
+afterwards, which is what stops a caller handing one of their rows to somebody
+else. See `migration-rls.sql`.
+
+The routes still filter on `user_id` as well. That duplication is deliberate:
+the filter is what the code means, the policy is what the database enforces, and
+neither is a reason to drop the other.
+
 ---
 
 ## 3. The screen
@@ -1064,21 +1114,18 @@ Set in Railway, and in a local `.env` that is never committed.
 
 | | |
 |---|---|
-| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | the notebook. The service key bypasses row level security, which is why every query scopes `user_id` in code rather than trusting the database to do it |
+| `SUPABASE_URL` | the project |
+| `SUPABASE_ANON_KEY` | **required.** Every route builds its client from this key plus the caller's token, so row level security applies. Also served to the browser by `GET /config` |
+| `SUPABASE_SERVICE_KEY` | bypasses row level security. **Only the scheduler and the command line tools may hold it** |
 | `TELEGRAM_BOT_TOKEN` | outbound only |
 | `CALENDAR_ICS_URL` | a read-only ICS feed |
 | `CALENDAR_ACTION_ICS_URL` | *optional.* A second one. Both are read the same way |
 | `ANTHROPIC_API_KEY` | the brain. **Nothing calls it.** Kept so the wiring stays live. Read by the SDK, not by any file here, so grepping the repo for it finds nothing |
 | `PORT` | assigned by the host |
-| `PI_USER_ID` | *optional.* Which user the server serves |
 | `SCHEDULER_DISABLED` | *optional.* `1` loads the scheduler without starting cron |
 
-`PI_USER_ID` defaults to the single real user, so production behaviour does not
-depend on it being set. It exists so a test can point a whole server at a
-throwaway user and be **structurally unable** to touch real rows — not scoped by
-every query being written carefully, but by there being no path to the real id at
-all. A test once matched real rows by kind and destroyed a row that could not be
-recovered; that is what this prevents.
+`PI_USER_ID` is gone. The server serves whoever the request's token says, and
+there is no default user to fall back to — see 6.1.
 
 `SCHEDULER_DISABLED=1` is how a suite drives a single tick by hand. Without it,
 requiring the file would also fire cron against the real database and send real
@@ -1195,20 +1242,46 @@ npm test                              # all of it
 node tests/run-all.js due-test.js     # one suite
 ```
 
-Sequential on purpose: they share one test user, and two of them writing the same
-rows at once would fail for a reason that has nothing to do with the code under
-test.
+Sequential on purpose: they share two test accounts, and two of them writing the
+same rows at once would fail for a reason that has nothing to do with the code
+under test.
 
-`run-all.js` **refuses to start** if any suite could reach the real person's
-rows. It reads each file and computes whether the app modules it imports can see
-the database, rather than trusting a hand-kept list of dangerous files. A suite
-that writes must import `harness.js`, and no suite may name the real user id at
-all.
+`run-all.js` **refuses to start** if any suite could reach somebody's real rows.
+It reads each file and computes whether the app modules it imports can see the
+database, rather than trusting a hand-kept list of dangerous files. A suite that
+writes must import `harness.js`; so must one that drives a server, since without
+the harness it holds no token and would test an account it cannot reach. And no
+suite may name a uuid that could belong to a real account — only the
+`00000000-0000-0000-0000-` prefix is allowed, which is what this codebase uses
+for ids that stand for nobody.
 
-`harness.js` hands out a database client that is physically unable to write to
-anyone but the test user: an insert without the test id in the payload, or an
-update or delete without it in the filter, throws before it reaches the network.
-This exists because scoping by hand failed once, destructively.
+**Two real accounts.** `harness.js` creates `pi-suite-a@example.test` and
+`pi-suite-b@example.test` through the admin API with `email_confirm` set, signs
+into both, and holds their tokens. Their ids are discovered at runtime and
+written down nowhere — a route derives the user from a verified token now, and
+no token can be minted for a uuid that is not an auth user, so the old fixed id
+could not have worked.
+
+`harness.js` still hands out a database client that is physically unable to
+write to anyone but those two: an insert without one of their ids in the
+payload, or an update or delete without one in the filter, throws before it
+reaches the network. That client is still the **service** client underneath —
+setup and teardown have to reach across both accounts — which is precisely why
+the guard is still there. Row level security will not stop it. This exists
+because scoping by hand failed once, destructively.
+
+**The two suites this is all for:**
+
+- `isolation-accounts-test.js` — A cannot read, change or remove anything of
+  B's, on every table, through the routes *and* through the database directly.
+  Every write attempt is followed by a service-key read of the row it was aimed
+  at, because "the update returned no rows" is not the same claim as "the row is
+  unchanged". Every "A sees nothing" check is paired with a "B sees their own"
+  check, or it would pass just as well against an empty table.
+- `auth-test.js` — no token, malformed tokens, the project's own anon key, and a
+  real token for an account deleted out from under it, against every route. Plus
+  a control that a valid token still works, or a server that had fallen over
+  would pass every other check in the file.
 
 Suites are **deleted rather than skipped** when the thing they covered is
 removed. A suite that cannot run still reads as coverage, which is worse than
