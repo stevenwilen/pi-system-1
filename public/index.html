@@ -2553,7 +2553,24 @@
       }
 
       function attach({ slot, card, backing, index }) {
-        const siblings = () => [...$('builder').children];
+        /**
+         * The blocks, and only the blocks.
+         *
+         * THE BUILDER HOLDS MORE THAN SLOTS. The divider is one of its children
+         * on any day with something behind it, and the empty-day spacer is
+         * another — while `from` and `to` below are indexes into `blocks`.
+         * Reading every child made the two disagree by one from the divider
+         * down, so a drag opened the gap in the wrong place, shifted the
+         * divider instead of a block, and pushed several blocks onto each
+         * other. The list appeared to collapse together and then landed
+         * correctly, because only the animation was reading the wrong index.
+         *
+         * Filtering here rather than at the two call sites: they are the same
+         * question, and one of them answering it differently is how this comes
+         * back.
+         */
+        const siblings = () =>
+          [...$('builder').children].filter((c) => c.classList.contains('slot'));
 
         // Asked at the moment of the gesture, not at the moment of the render.
         //
@@ -2609,7 +2626,23 @@
           gesture.mode = 'reorder';
           gesture.from = index;
           gesture.to = index;
-          gesture.step = (rect.height || 64) + 9;
+
+          // How far apart two blocks sit, MEASURED rather than assumed.
+          //
+          // This used to be the slot's height plus a hardcoded 9 — the gap
+          // between slots at the time it was written. The washi theme moved
+          // that gap to 12 and the constant stayed, so every position a block
+          // was carried drifted three pixels from where it would land.
+          //
+          // Measuring off the next slot cannot go stale. The fallback only
+          // runs for a day of one block, where there is nothing to reorder.
+          const rows = siblings();
+          const next = rows[index + 1] || rows[index - 1];
+          const pitch =
+            next && next.getBoundingClientRect
+              ? Math.abs(next.getBoundingClientRect().top - rect.top)
+              : 0;
+          gesture.step = pitch || (rect.height || 64) + 12;
           // Where the page stood when this began, so a drag stays under the
           // finger even if something scrolls the page out from under it.
           gesture.scroll0 = pageY();

@@ -680,6 +680,18 @@ question which one is in your hand. Drag vertically and the others part to show
 the gap it will drop into. Release settles it into place over 180ms rather than
 snapping.
 
+**The gap opens against the slots, not against the builder's children.** The
+divider is a child of the builder too, and the empty-day spacer is another,
+while the drag indexes into `blocks`. Reading every child made the two disagree
+by one from the divider down — the gap opened in the wrong place, the divider
+was shifted instead of a block, and blocks were pushed onto each other, so the
+list appeared to collapse together and then landed correctly. Only the animation
+was reading the wrong index.
+
+**The pitch between blocks is measured, not assumed.** It used to be the slot's
+height plus a hardcoded gap, and when the theme changed that gap the constant
+stayed behind — three pixels of drift per position carried.
+
 **It cannot be carried above the divider.** The drop target's floor is the far
 side of the last block that has begun, so a block still to come cannot be
 dropped into the part of the day that already happened.

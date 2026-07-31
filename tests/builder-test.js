@@ -48,16 +48,26 @@ class El {
   }
   get className() { return [...this._class].join(' '); }
   set className(v) { this._class = new Set(String(v).split(/\s+/).filter(Boolean)); }
-  append(...k) { for (const x of k) if (x) this.children.push(x); }
-  replaceChildren(...k) { this.children = k.filter(Boolean); }
-  appendChild(k) { this.children.push(k); return k; }
+  // Children know their parent, so an element can say where it sits. Without
+  // that every rect reported top: 0 and anything measuring the distance
+  // between two rows measured nothing.
+  append(...k) { for (const x of k) if (x) { x._parent = this; this.children.push(x); } }
+  replaceChildren(...k) {
+    this.children = k.filter(Boolean);
+    for (const x of this.children) x._parent = this;
+  }
+  appendChild(k) { k._parent = this; this.children.push(k); return k; }
   setAttribute(k, v) { this._attrs[k] = v; this[k] = v; }
   getAttribute(k) { return this._attrs[k]; }
   focus() {} scrollIntoView() {} setPointerCapture() {} releasePointerCapture() {}
   addEventListener() {} removeEventListener() {}
-  // A real, consistent height, because the reorder maths divides by it.
-  // 40 + the 9px gap makes one slot 49px, so a drag of 49 is exactly one place.
-  getBoundingClientRect() { return { top: 0, height: 40 }; }
+  // A real height AND a real position, because the reorder maths divides by
+  // the first and now measures the second. 40 high with the stylesheet's 12px
+  // gap puts one row every 52px, so a drag of 52 is exactly one place.
+  getBoundingClientRect() {
+    const at = this._parent ? this._parent.children.indexOf(this) : 0;
+    return { top: at * 52, height: 40 };
+  }
   querySelector(s) { return this._find(s)[0] || new El(); }
   querySelectorAll(s) { return this._find(s); }
   _find(s) {
@@ -104,7 +114,7 @@ const ENTRIES = {
   items: [],
 };
 
-const SLOT = 49; // one block's height plus the gap, per getBoundingClientRect
+const SLOT = 52; // one block's height plus the stylesheet's gap
 
 // The clock the page reads. It asks Intl for the hour in the profile's own
 // timezone, so a case that needs "it is 11am" fixes the whole environment to a
@@ -1606,6 +1616,62 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     const body = posted.find((p) => p.url === '/plan').body;
     check('and is sent unchanged', body.blocks[0].start_minutes === 480,
       String(body.blocks[0].start_minutes));
+  }
+
+  console.log('\nthe divider does not throw the drag off by one');
+  {
+    // THE BUG. The gap-opening read every child of the builder, and on a day
+    // with something behind it the divider is one of those — while the drag
+    // indexes into `blocks`. The two disagreed by one from the divider down,
+    // so the gap opened in the wrong place, the divider was shifted instead of
+    // a block, and blocks were pushed onto each other. The list appeared to
+    // collapse together and then landed correctly, because only the animation
+    // was reading the wrong index.
+    const { ctx, byId, slots, cardOf, titles } = boot({
+      entries: utcEntries({ plans_in: 'morning' }),
+      now: '10:15',
+      plan: {
+        [TODAY]: {
+          plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+          blocks: [
+            { id: 'q1', title: 'Reading', entryId: null, start_minutes: 480, duration_minutes: 60, sent: true },
+            { id: 'q2', title: 'Gym', entryId: null, start_minutes: 540, duration_minutes: 60, sent: true },
+            { id: 'q3', title: 'Errands', entryId: null, start_minutes: 660, duration_minutes: 60 },
+            { id: 'q4', title: 'Email', entryId: null, start_minutes: 720, duration_minutes: 60 },
+          ],
+        },
+      },
+    });
+    await ctx.load();
+
+    const kids = () => byId.builder.children;
+    const divider = () => kids().find((c) => c._class.has('now'));
+    check('the day has a divider in it', Boolean(divider()));
+    check('so the builder holds more children than blocks',
+      kids().length === slots().length + 1, `${kids().length} vs ${slots().length}`);
+
+    // Carry the last block up one place — the case reported.
+    const card = cardOf(slots()[3]);
+    down(card, 100, 300);
+    await wait(HELD);
+    move(card, 100, 300 - SLOT);
+
+    // The one it passes should move down to open the gap, and nothing else.
+    check('the block it passes opens the gap',
+      slots()[2].style.transform === `translateY(${SLOT}px)`, slots()[2].style.transform);
+    check('the finished blocks are left alone',
+      !slots()[0].style.transform && !slots()[1].style.transform,
+      `${slots()[0].style.transform} / ${slots()[1].style.transform}`);
+    check('and the divider is not dragged around with them',
+      !divider().style.transform, divider().style.transform);
+
+    up(card, 100, 300 - SLOT);
+    await wait(SETTLED);
+    check('it lands where the gap was', titles().join() === 'Reading,Gym,Email,Errands',
+      titles().join());
+    check('and nothing is left holding a transform',
+      slots().every((s) => !s.style.transform),
+      JSON.stringify(slots().map((s) => s.style.transform)));
   }
 
   console.log('\na block cannot be carried into the part of the day that happened');
