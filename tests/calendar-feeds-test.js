@@ -223,7 +223,17 @@ const clearClaims = async () => {
     // breaking it in place would change nothing for sixty seconds. Pointing
     // the row at a url that has never been fetched is a cold slot without a
     // wait — which is what the second server was really buying.
-    await H.setProfile('a', { calendar_ics_url: `${FEED}/broken.ics` });
+    //
+    // BOTH urls, and that is the part collapsing three servers into one
+    // changes. Each case used to get a fresh process and therefore an empty
+    // cache; now the cache outlives a case, so any case that changes what a
+    // feed RETURNS needs a url that has never been asked for. Leaving the
+    // action feed on its old url served this case the previous case's events,
+    // and the check below went red saying it could read nothing.
+    await H.setProfile('a', {
+      calendar_ics_url: `${FEED}/broken.ics`,
+      calendar_action_ics_url: `${FEED}/action-later.ics`,
+    });
 
     action = ics([allDay('do-5', 'Still here', '2031-03-20')]);
 
@@ -322,8 +332,16 @@ const clearClaims = async () => {
 
     check('A sees their own', aTitles.join(',') === "A's own appointment", aTitles.join(','));
     check('B sees their own', bTitles.join(',') === "B's own appointment", bTitles.join(','));
-    check("and B is not served A's warm cache entry",
-      !bTitles.includes("A's own appointment"), bTitles.join(','));
+
+    // BOTH HALVES, in one check, because either alone is satisfied by B being
+    // served nothing at all — and "nothing" is what B gets under several
+    // failures that have no leak in them. Keyed on the feed's source, this
+    // suite goes red in eight places, but this particular line passed: an
+    // earlier case had already warmed the 'awareness' slot with a third feed,
+    // so B was served neither their own calendar nor A's.
+    check("B has their own and not A's",
+      bTitles.includes("B's own appointment") && !bTitles.includes("A's own appointment"),
+      bTitles.join(','));
 
     // The other way round, so the result does not depend on who asked first.
     const bAgain = await (await authedB(`${BASE}/calendar/${SHARED}`)).json();
