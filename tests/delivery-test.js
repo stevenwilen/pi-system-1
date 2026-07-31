@@ -198,6 +198,42 @@ const statusOf = async (planId) => {
   await scheduler.deliverDue(profile, { ...now, date: '2031-06-09' });
   check('a day with no plan is quiet', sent.length === 0);
 
+  console.log('\na block is announced fifteen minutes before it starts');
+  {
+    // The message used to land as the block began, which is already late: you
+    // find out you should be doing something as the time to start passes.
+    //
+    // The boundaries are the whole of this. Fifteen minutes is one tick of the
+    // loop, so a block's message lands on the tick before it — and a block
+    // sixteen minutes out must wait for that tick rather than going now.
+    const ahead = await makePlan('2031-06-11', 'confirmed', [
+      { title: 'Due in 15', start_time: at(15), duration_minutes: 30, note: null, created_at: old },
+      { title: 'Due in 16', start_time: at(16), duration_minutes: 30, note: null, created_at: old },
+      { title: 'Due in 45', start_time: at(45), duration_minutes: 30, note: null, created_at: old },
+    ]);
+    sent.length = 0;
+    await scheduler.deliverDue(profile, { ...now, date: '2031-06-11' });
+
+    const titles = sent.map((s) => s.text.split('\n')[0]);
+    check('the one starting in fifteen goes out',
+      titles.some((t) => /Due in 15/.test(t)), JSON.stringify(titles));
+    check('the one a minute further off does not',
+      !titles.some((t) => /Due in 16/.test(t)), JSON.stringify(titles));
+    check('nor the one three quarters of an hour away',
+      !titles.some((t) => /Due in 45/.test(t)), JSON.stringify(titles));
+
+    // The message is unchanged: it names the block's own hours, which is what
+    // makes an early one a warning rather than a correction.
+    const early = sent.find((s) => /Due in 15/.test(s.text));
+    check('and it still names the hour the block starts, not the hour it arrived',
+      early.text.includes(`${ampm(nowMinutes + 15)} to`), early.text.replace(/\n/g, ' | '));
+
+    const after = await statusOf(ahead);
+    check('only the announced one left the queue',
+      after.filter((b) => b.message_sent_at).length === 1,
+      JSON.stringify(after.map((b) => [b.title, Boolean(b.message_sent_at)])));
+  }
+
   console.log('\ntwo ticks at once send one message, not two');
   {
     // THE DUPLICATE. The queue is "message_sent_at IS NULL" and the mark is

@@ -86,27 +86,25 @@ const DATE = '2031-03-09';
   check('rejects a start outside the day', (await withWake({ date: DATE, blocks: [{ title: 'x', start_minutes: 1500, duration_minutes: 30 }] })).status === 400);
   check('rejects a blank title', (await withWake({ date: DATE, blocks: [{ title: '  ', start_minutes: 480, duration_minutes: 30 }] })).status === 400);
 
-  console.log('\nconfirming sends the schedule, and cannot reach a real phone');
+  console.log('\nconfirming sends nothing to Telegram');
   {
-    // POST /plan now messages Telegram. This suite drives a REAL server
-    // process, so the only thing standing between it and someone's phone is
-    // the user it runs as — spawnServer sets PI_USER_ID to the test id, and
-    // the test profile has no telegram_chat_id, so sendTelegram returns
-    // "skipped" without a request.
-    //
-    // Asserted rather than assumed. The safety is real but it is incidental,
-    // and a chat id appearing on this row would turn the suite into a source
-    // of notifications with nothing to catch it.
+    // It sent the whole day as one message for a while. That is gone: block
+    // messages now arrive fifteen minutes ahead of each block, which is the
+    // same information at the moment it is worth having, so a brief at confirm
+    // time was saying it all twice.
+    const src = require('fs').readFileSync(ROOT + '/routes/plan.js', 'utf8');
+    check('the confirm route does not message', !/sendTelegram|composeSchedule/.test(src));
+    check('nor compose a day', !/sendSchedule|blocksStillToCome/.test(src));
+
+    // This suite drives a REAL server process, so anything the route sends
+    // would go to a real phone. It is safe because spawnServer runs as the
+    // test user and that profile has no chat linked — asserted rather than
+    // assumed, because the safety is incidental and would go quiet if a chat
+    // id ever appeared on this row.
     const { data: prof } = await supabase
       .from('profile').select('telegram_chat_id').eq('user_id', U).maybeSingle();
-    check('the test user has no chat linked', prof && prof.telegram_chat_id === null,
-      JSON.stringify(prof));
-
-    // And the send is downstream of the response either way.
-    const src = require('fs').readFileSync(ROOT + '/routes/plan.js', 'utf8');
-    check('the confirm sends a schedule', /await sendSchedule\(date, blocks\)/.test(src));
-    check('and it cannot fail the confirm',
-      /async function sendSchedule[\s\S]*?try \{[\s\S]*?\} catch \(err\) \{[\s\S]*?console\.error/.test(src));
+    check('and the test user has no chat linked anyway',
+      prof && prof.telegram_chat_id === null, JSON.stringify(prof));
   }
 
   console.log('\nconfirm writes plans and blocks');

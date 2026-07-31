@@ -29,6 +29,18 @@ const WINDOW = 15;
 // 08:00" arriving at 14:00 is worse than nothing.
 const GRACE_MINUTES = 30;
 
+// How far ahead of a block its message goes out.
+//
+// A message arriving at the moment a block starts is already late: you find out
+// you should be doing something as the time to start doing it passes. Fifteen
+// minutes is one tick of the loop, so a block's message lands on the tick before
+// it — the same arithmetic, one step earlier.
+//
+// The message itself is unchanged. It names the block's own hours, so a heads-up
+// at 08:45 still reads "9:00 AM to 10:00 AM", which is what makes it a warning
+// rather than a correction.
+const LEAD_MINUTES = 15;
+
 // When the evening nudge goes out, for anyone who has not said otherwise.
 // Late enough that the evening has had a chance to happen, early enough that
 // planning tomorrow is still a reasonable thing to ask of someone.
@@ -276,7 +288,10 @@ async function deliverDue(profile, now) {
     const start = toMinutes(block.start_time);
     const late = nowMinutes - start;
 
-    if (late < 0) continue; // not started yet
+    // Still further off than the lead. `late` stays measured against the block's
+    // own start, so the expiry below and the [EXPIRED] line keep meaning what
+    // they say — it is only the moment of sending that moves earlier.
+    if (late < -LEAD_MINUTES) continue;
 
     if (late > GRACE_MINUTES) {
       // Long past. Retire it rather than delivering a message about a block

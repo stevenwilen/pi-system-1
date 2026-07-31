@@ -12,10 +12,8 @@ const express = require('express');
 
 const supabase = require('../db');
 const { CURRENT_USER } = require('../user');
-const { minutesOfDay, toMinutes, hhmmss, todayIn, tomorrowOf } = require('../clock');
+const { minutesOfDay, toMinutes, hhmmss } = require('../clock');
 const { readCalendar } = require('../tools');
-const { composeSchedule, blocksStillToCome } = require('../messages');
-const { sendTelegram } = require('../telegram');
 
 const router = express.Router();
 
@@ -369,77 +367,10 @@ router.post('/plan', async (req, res) => {
       for (const i of freshAt) ids[i] = bySort.get(i) || null;
     }
 
-    await sendSchedule(date, blocks);
-
     res.json({ date, blocks: blocks.length, status: 'confirmed', ids });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-/**
- * The day, to Telegram, when it is agreed to.
- *
- * Every confirm sends one. Confirming, changing something and confirming again
- * puts two schedules on the phone, and that is the intended reading: the newest
- * message is the plan, and the rule is small enough to hold in your head.
- *
- * **From what is going on now.** On today, a block that has already ended is
- * not part of what is coming and is left out; the one in progress is included,
- * because it is what is going on. On any other day there is no "now" inside it,
- * so the whole day goes.
- *
- * Composed from the payload rather than read back, so it says what was just
- * agreed to without a second round trip for rows that were written a line ago.
- *
- * NEVER FAILS THE CONFIRM. The plan is saved by the time this runs, and a
- * Telegram outage must not turn a saved day into a 500 that tells the person
- * their day did not save. Anything that goes wrong here is logged and swallowed.
- */
-async function sendSchedule(date, blocks) {
-  try {
-    const { data: profile } = await supabase
-      .from('profile')
-      .select('timezone')
-      .eq('user_id', CURRENT_USER)
-      .maybeSingle();
-
-    const timeZone = (profile && profile.timezone) || 'UTC';
-    const today = todayIn(timeZone);
-
-    // Null on any day but today: tomorrow has no "now" inside it, so the whole
-    // of it is still to come.
-    const now =
-      date === today ? minutesOfDay(new Date().toISOString(), timeZone) : null;
-
-    const coming = blocksStillToCome(
-      blocks.map((b) => ({
-        title: b.title,
-        start_time: hhmmss(Number(b.start_minutes)),
-        duration_minutes: Number(b.duration_minutes),
-      })),
-      now
-    );
-
-    const label =
-      date === today ? 'Today' : date === tomorrowOf(today) ? 'Tomorrow' : date;
-
-    const text = composeSchedule(coming, label);
-
-    // A day with nothing left in it says nothing. Confirming at six in the
-    // evening a day whose last block ended at three would otherwise send a
-    // header, no lines, and an ending time already past.
-    if (!text) {
-      console.log(`[SCHEDULE] ${date}: nothing left to come, sending nothing`);
-      return;
-    }
-
-    const result = await sendTelegram(CURRENT_USER, text);
-    if (result.sent) console.log(`[SCHEDULE] ${date}: ${coming.length} blocks`);
-    else console.error(`[SCHEDULE] ${date}: ${JSON.stringify(result)}`);
-  } catch (err) {
-    console.error(`[SCHEDULE] ${date}: ${err.message}`);
-  }
-}
 
 module.exports = router;

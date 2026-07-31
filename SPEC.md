@@ -841,9 +841,24 @@ is deliberate — if they did not write anything, there was nothing to say.
 nothing.
 
 **Delivery.** The scheduler ticks every 15 minutes and asks which blocks of
-today's confirmed plan have started and not been sent. A block more than 30
-minutes late is marked sent without being sent and logged under `[EXPIRED]`,
-because "Gym, 08:00" arriving at 14:00 is worse than nothing.
+today's confirmed plan are due and not yet sent. A block more than 30 minutes
+late is marked sent without being sent and logged under `[EXPIRED]`, because
+"Gym, 08:00" arriving at 14:00 is worse than nothing.
+
+**A message goes out 15 minutes before its block starts.** It used to arrive as
+the block began, which is already late — you find out you should be doing
+something as the time to start doing it passes. Fifteen minutes is one tick of
+the loop, so a block's message lands on the tick before it: the same arithmetic,
+one step earlier.
+
+**The message itself is unchanged.** It names the block's own hours, so a
+heads-up at 08:45 still reads `9:00 AM to 10:00 AM`. That is what makes it a
+warning rather than a correction, and it is why nothing about the composition had
+to move.
+
+Only the moment of sending is early. `late` is still measured against the block's
+own start, so the 30-minute expiry and the `[EXPIRED]` line keep meaning exactly
+what they say.
 
 #### Nothing is sent twice, because the queue is claimed before the send
 
@@ -931,57 +946,6 @@ days-since alone would name something every single night, including the nights
 when nothing was actually neglected — and a nudge that always fires is a digest,
 which this is deliberately not.
 
-### 4.3 The schedule, at confirm time
-
-Pressing **Confirm** sends the day as one message. The block messages arrive one
-at a time, each at its own hour, and none of them shows the shape of the day;
-this is the other half, sent at the moment the day is agreed to.
-
-```
-Today
-
-9:30 AM — Morning routine
-11:30 AM — Automate mom's investment account
-12:00 PM — Eat
-2:30 PM — Pack for trip
-
-Ends 3:30 PM
-```
-
-**Plain text, and no markup at all.** It was a monospace `<pre>` block first, for
-the one thing monospace buys: Telegram renders in a proportional font, so
-`9:30 AM` and `11:30 AM` are different widths and padded spaces align nothing. A
-real column needs a code block — and a code block is what it looked like, sitting
-in a chat on its own grey surface in a smaller face. The ragged left edge is the
-cheaper price. This is a message and it should read like the other messages.
-
-`pre` was on the tag allowlist in `telegram.js` while that lasted, and **came
-back off with it**. An allowlist that grants more than anything asks for is the
-kind of thing nobody removes later.
-
-**Start times only.** Each block's end is the next one's start, so carrying both
-would say everything twice. The one end that is not implied is the day's, and
-that is the last line.
-
-**From what is going on now until finish.** On today, a block that has already
-ended is left out; the one in progress is kept, because it is what is going on.
-On any other day there is no *now* inside it, so the whole day goes. The two
-boundaries are decided rather than left to chance: a block ending exactly at now
-is over, and one starting exactly at now has begun.
-
-**Every confirm sends one.** Confirm, change something, confirm again, and two
-schedules arrive. That is the intended reading — the newest message is the plan —
-and the rule is small enough to hold in your head, which the alternatives were
-not.
-
-**A day with nothing left sends nothing.** Confirming at six in the evening a day
-whose last block ended at three would otherwise send a header, no lines, and an
-ending time already past.
-
-**It cannot fail the confirm.** The plan is saved before this runs, and a
-Telegram outage must not turn a saved day into an error that says it did not
-save. Anything that goes wrong is logged under `[SCHEDULE]` and swallowed.
-
 ---
 
 ## 5. Non-goals
@@ -1014,7 +978,7 @@ npm test       # every suite, sequentially
 | `clock.js` | dates and clock times as numbers, in the person's own timezone |
 | `staleness.js` | entry → the most recent plan date it still has a block on |
 | `warning.js` | the mark: size against time left, and nothing else |
-| `messages.js` | what Telegram sends: a block's header and note, and the whole-day schedule at confirm time |
+| `messages.js` | what Telegram sends for a block: the header and the note, read off the row |
 | `scheduler.js` | the 15-minute tick: block delivery and the evening nudge |
 | `telegram.js` | the send |
 | `routes/entries.js` | Things: read, add, edit, finish, delete |
