@@ -89,13 +89,21 @@
 
         --gap: 36px;
 
-        /* Hiragino is on every iPhone and is the face this theme wants. The
-           reference fetched Zen Kaku Gothic New from Google, which costs a
-           round trip and a flash of the wrong font on every cold load — for a
-           page whose whole point is to be open before you have finished
-           reaching for it. */
-        --face: -apple-system, BlinkMacSystemFont, 'Hiragino Sans',
-          'Noto Sans JP', 'Segoe UI', Roboto, sans-serif;
+        /* The plain system face, and nothing exotic.
+
+           This reached for Hiragino and Noto Sans JP first, on the theory that
+           the theme wanted a Japanese face. It did not. On a Mac or a PC with
+           Noto installed, that meant English text set in a face drawn for
+           Japanese — the Latin glyphs in those fonts are an afterthought, and
+           they read as subtly wrong without ever looking broken enough to
+           explain themselves.
+
+           The paper is doing the work here. The deckle, the cord, the seal and
+           the letterspacing are what make this washi; the type only has to be
+           quiet and legible, and the system face is both on every device this
+           runs on. */
+        --face: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          system-ui, sans-serif;
       }
 
       * {
