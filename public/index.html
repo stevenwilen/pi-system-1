@@ -1766,7 +1766,9 @@
                not offer a drag handle for editing that nobody does. -->
           <textarea id="paste" rows="3" placeholder="Paste the whole reply."></textarea>
 
-          <div class="row-actions">
+          <!-- Hidden until there is something to check. An offer to inspect an
+               empty box is a question with no answer. -->
+          <div class="row-actions hidden" id="paste-actions">
             <button type="button" class="minor" id="paste-check">See what this would do</button>
           </div>
 
@@ -4088,8 +4090,7 @@ Rules for the output:
       function openSettings() {
         $('settings-scrim').classList.remove('hidden');
         for (const id of ['chat-said', 'cal-said', 'copy-said']) said(id, '');
-        $('paste-preview').classList.add('hidden');
-        $('paste-save').classList.add('hidden');
+        pasteChanged();
         // Every row shut. It opens on the list, which is the answer to the
         // question it is usually opened with.
         openRow(null);
@@ -4106,6 +4107,7 @@ Rules for the output:
         // calendar url, and leaving it sitting in a field is the same leak the
         // hints exist to avoid.
         for (const id of ['f-chat', 'f-cal', 'paste']) $(id).value = '';
+        pasteChanged();
       }
 
       $('settings-open').onclick = openSettings;
@@ -4239,6 +4241,25 @@ Rules for the output:
         $('paste-save').classList.remove('hidden');
       }
 
+      /**
+       * What the paste box offers depends on whether it holds anything.
+       *
+       * Empty, there is nothing to check, and a button that inspects nothing
+       * is a question with no answer.
+       *
+       * And any edit retires the last answer. A preview describes the text
+       * that produced it; change a character and it is a report about
+       * something else, with a Save under it that would commit the new text on
+       * the strength of the old text's verdict.
+       */
+      function pasteChanged() {
+        $('paste-actions').classList.toggle('hidden', !$('paste').value.trim());
+        $('paste-preview').classList.add('hidden');
+        $('paste-save').classList.add('hidden');
+      }
+
+      $('paste').oninput = pasteChanged;
+
       $('paste-check').onclick = async () => {
         const paste = $('paste').value.trim();
         if (!paste) return;
@@ -4281,7 +4302,9 @@ Rules for the output:
           }
 
           $('paste').value = '';
-          $('paste-save').classList.add('hidden');
+          pasteChanged();
+          // Said after the reset, because the reset hides this box.
+          $('paste-preview').classList.remove('hidden');
           $('paste-preview').textContent = `Saved. ${body.added.length} thing${body.added.length === 1 ? '' : 's'} added.`;
           await loadSettings();
           await load();
