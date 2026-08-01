@@ -246,7 +246,16 @@ console.log('\n3. rows are rows; only builder blocks are cards');
   check('nor does the undo bar, which had the same fault',
     !/filter/.test(rule('.undo')), rule('.undo'));
   check('and the filter really exists in the markup',
-    /<filter id="deckle">/.test(body) && /feDisplacementMap/.test(body));
+    /<filter id="deckle"[ >]/.test(body) && /feDisplacementMap/.test(body));
+
+  // AND HAS ROOM TO BE RAGGED IN. A filter's default region is the element
+  // grown by ten per cent a side; these displace pixels by up to half their
+  // `scale`, which on a short element is more than ten per cent of its height.
+  // A bite clipped flat is the one thing this filter exists not to be.
+  for (const id of ['deckle', 'deckle-soft']) {
+    const tag = (body.match(new RegExp(`<filter id="${id}"[^>]*>`)) || [''])[0];
+    check(`#${id} states its own region`, /height="1[3-9]\d%"/.test(tag), tag);
+  }
   check('the slot does not clip it flat',
     !/overflow: hidden/.test(rule('.slot')), rule('.slot'));
 
@@ -368,14 +377,26 @@ console.log('\n6. blue is actionable, and nothing else is blue');
 
   // A SEALED DAY IS STILL INK. It used to go paper-and-grey when confirmed,
   // which read as the button being taken away rather than the day being
-  // agreed to. Same persimmon, so the contrast holds both ways round; what
-  // changes is that the ink has settled into a softer bite.
+  // agreed to. Same persimmon, so the contrast holds both ways round.
   check('confirmed stays persimmon rather than going to paper',
     !/background/.test(rule('.confirm:disabled')), rule('.confirm:disabled'));
   check('and keeps its full contrast',
     /color: var\(--bg\)/.test(rule('.confirm:disabled')));
-  check('the sealed day settles into a softer edge',
-    /filter: url\(#deckle-soft\)/.test(rule('.confirm:disabled::after')),
+
+  // AND THE SAME EDGE, WHICH IS A BUG FIX. Confirmed used to take a wider
+  // bite — ink that had settled — and that swapped the referenced filter on
+  // this layer every time the state changed. Confirm a day, tap Tomorrow, tap
+  // Today, and the word came back cut off: a re-rasterised filter layer can
+  // return short, and the word is painted in the PAGE colour on top of that
+  // persimmon, so wherever the persimmon is missing the letters are not
+  // clipped, they are invisible.
+  //
+  // The state was never wrong — right word, disabled, nothing left over — so
+  // the fix is here rather than in the script. What separates Confirm from
+  // Confirmed is the word and being unpressable, which was doing the work
+  // anyway.
+  check('the seal keeps one edge in every state',
+    !/filter/.test(rule('.confirm:disabled::after')),
     rule('.confirm:disabled::after'));
   // UNDER THE HAND. Saving is a round trip, so the seal used to say nothing
   // for about a second after the tap, which reads as a tap that missed.
@@ -393,15 +414,20 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   check('the stamp seats a hair into the paper',
     /transform: scale\(0\.9/.test(rule('.confirm.pressing')), rule('.confirm.pressing'));
 
-  // Source order is what decides here: `.confirm.pressing::after` and
-  // `.confirm:disabled::after` carry the same weight, and the seal has to stay
-  // pressed until the answer is in rather than lighten the moment the word
-  // changes to Confirmed. Both indexes checked, or a missing settled rule
-  // would read as the pressed one winning.
-  const atPressed = css.indexOf('.confirm.pressing::after');
-  const atSettled = css.indexOf('.confirm:disabled::after');
-  check('the pressed seal outranks the settled one',
-    atSettled !== -1 && atPressed > atSettled, `${atSettled} then ${atPressed}`);
+  // There is nothing left for it to outrank, and that is the point. This used
+  // to check source order, because `.confirm.pressing::after` and
+  // `.confirm:disabled::after` set the same property at the same weight and
+  // the pressed seal had to stay pressed until the answer was in. With the
+  // settled edge gone there is exactly one rule touching this layer's filter
+  // outside the press, so nothing can quietly win over it.
+  const touchesFilter = [...css.matchAll(/\n {6}([^{@\n][^{]*?)\{([^}]*)\}/g)]
+    .filter((m) => /\.confirm/.test(m[1]) && /filter:/.test(m[2]))
+    .map((m) => m[1].trim().replace(/\s+/g, ' '));
+
+  check('only the seal and its press set that edge',
+    touchesFilter.length === 2, touchesFilter.join(' | '));
+  check('and the press is the later of the two',
+    touchesFilter[1] === '.confirm.pressing::after', touchesFilter.join(' | '));
 
   check('undo is blue, because undoing is an action',
     /color: var\(--accent\)/.test(rule('.undo button')));

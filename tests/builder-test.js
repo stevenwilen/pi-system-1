@@ -2358,6 +2358,41 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       String(stored.get('pi.session')));
   }
 
+  console.log('\nthe seal reads right after a day switch and back');
+  {
+    // The exact sequence a confirmed day, Tomorrow, Today reported as broken.
+    // This says nothing about how it LOOKS — the stub has no layout — but it
+    // separates "the button is in the wrong state" from "the button is in the
+    // right state and is drawn wrong", which are different bugs in different
+    // files.
+    const { ctx, byId } = boot({
+      plan: {
+        [TODAY]: {
+          plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+          blocks: [{ id: 'b-1', title: 'Alpha', start_minutes: 600, duration_minutes: 30, entryId: null, note: null }],
+        },
+        [TOMORROW]: { plan: null, blocks: [] },
+      },
+      entries: utcEntries(), now: '11:00',
+    });
+    await ctx.load();
+
+    check('today opens confirmed', byId['confirm'].textContent === 'Confirmed',
+      byId['confirm'].textContent);
+    check('and is not pressable', byId['confirm'].disabled === true);
+
+    await byId['pick-tomorrow'].onclick();
+    check('tomorrow has nothing to confirm', byId['confirm'].textContent === 'Confirm',
+      byId['confirm'].textContent);
+
+    await byId['pick-today'].onclick();
+    check('and today reads confirmed again', byId['confirm'].textContent === 'Confirmed',
+      byId['confirm'].textContent);
+    check('with nothing left over from the way back',
+      byId['confirm'].disabled === true && !byId['confirm']._class.has('pressing'),
+      `disabled=${byId['confirm'].disabled} classes=${byId['confirm'].className}`);
+  }
+
   console.log('\nsetup is somewhere you go, never somewhere you are sent');
   {
     // A new account used to land on setup instead of the planner. It does
