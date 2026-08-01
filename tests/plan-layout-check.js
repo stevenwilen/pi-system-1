@@ -411,8 +411,29 @@ console.log('\n6. blue is actionable, and nothing else is blue');
     !/#[0-9a-f]{6}/i.test(pressed), pressed);
   check('and it is still the same torn edge',
     /url\(#deckle\)/.test(pressed), pressed);
-  check('the stamp seats a hair into the paper',
-    /transform: scale\(0\.9/.test(rule('.confirm.pressing')), rule('.confirm.pressing'));
+  // AND THE STAMP DOES NOT MOVE. It used to seat a hair into the paper —
+  // `transform: scale(0.985)` with a transition to carry it — and that
+  // transform is what cut the word in half.
+  //
+  // A transformed, transitioned element gets its own composited layer, and the
+  // layer keeps its raster across a text change. Confirm a day, tap Tomorrow
+  // and the word shortens to Confirm, re-rastering the layer at seven
+  // characters; tap Today and it lengthens to Confirmed with no reason to
+  // re-raster, so the extra two are painted outside the layer. Centred text
+  // loses them one a side: ONFIRME, with the D clipped to its stem.
+  //
+  // Nothing that composites the TEXT may be animated on this button. The press
+  // is answered on the layer beneath instead, which carries no text at all.
+  // The property, not the substring: `.confirm` sets `text-transform:
+  // uppercase`, and a bare /transform/ matches that and reports the seal as
+  // animated when it is only capitalised.
+  const moves = (selector) => /(^|[^-\w])transform:/.test(rule(selector));
+
+  check('nothing on the seal itself is transformed',
+    !moves('.confirm') && !moves('.confirm.pressing'),
+    `${rule('.confirm.pressing')} ${rule('.confirm')}`);
+  check('and nothing on it is transitioned',
+    !/transition:/.test(rule('.confirm')), rule('.confirm'));
 
   // There is nothing left for it to outrank, and that is the point. This used
   // to check source order, because `.confirm.pressing::after` and
@@ -549,11 +570,18 @@ console.log('\n7a. the wait before the first day is on screen');
   check('and closes the arc into a whole circle rather than freezing it',
     /animation: none;\s*border-color: var\(--text\)/.test(reduced));
 
-  // The seal's answer survives the setting. Only the seating is movement; the
-  // ink deepening is not, and dropping it would leave the press unanswered
-  // for exactly the people least served by that.
-  check('a still seal keeps its answer and loses only the seating',
-    /\.confirm\.pressing \{\s*transform: none/.test(reduced), reduced.slice(-260));
+  // The seal needs no exception here any more. It answered a press by seating
+  // into the paper AND deepening its ink; the seating is gone — it was cutting
+  // the word in half — and what is left is not movement, so there is nothing
+  // for this setting to still.
+  //
+  // Asserted as the two exact rules being absent rather than as ".confirm does
+  // not appear in `reduced`" — `reduced` is a slice to the END of the
+  // stylesheet, so it contains every rule written after the first
+  // reduced-motion block, the seal's own among them.
+  check('the seal needs no stillness rule, having no movement',
+    !/\.confirm\.pressing \{\s*transform: none/.test(css) &&
+      !/\.confirm \{\s*transition: none/.test(css));
 }
 
 console.log('\n7a-iii. an empty day keeps a block\'s worth of room');

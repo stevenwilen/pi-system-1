@@ -1319,7 +1319,6 @@
         border: 0;
         font-family: inherit;
         cursor: pointer;
-        transition: transform 90ms ease-out;
       }
       .confirm::after {
         content: '';
@@ -1387,11 +1386,24 @@
          weight, so source order decides, and the seal should stay pressed
          until the answer is actually in rather than lighten the instant the
          word changes. */
+      /* THE INK DEEPENS AND THE BUTTON DOES NOT MOVE.
+         It used to seat a hair into the paper as well — `transform:
+         scale(0.985)` with a transition to carry it. That transform is what
+         cut the word in half.
+
+         A transformed, transitioned element gets its own composited layer, and
+         that layer keeps its raster across a text change. Confirm a day, tap
+         Tomorrow, and the word shortens to Confirm: the layer is re-rastered
+         at seven characters. Tap Today and it lengthens to Confirmed with no
+         reason to re-raster, so the extra two characters are painted outside
+         the layer and never appear. Centred text loses them one a side, which
+         is exactly what a screenshot of it showed: ONFIRME, with the D clipped
+         to its stem.
+
+         The press still answers — the ink darkens — and that lives on the
+         layer beneath, which composites nothing the text is on. */
       .confirm.pressing::after {
         filter: url(#deckle) brightness(0.82);
-      }
-      .confirm.pressing {
-        transform: scale(0.985);
       }
 
       /* --- the add sheet --------------------------------------------------- */
@@ -1519,13 +1531,8 @@
         .block.lifted::after {
           filter: url(#deckle);
         }
-        /* The deepening ink still answers the tap; only the seating goes. */
-        .confirm {
-          transition: none;
-        }
-        .confirm.pressing {
-          transform: none;
-        }
+        /* Nothing to still here any more: the seal answers a press by
+           deepening its ink, which is not movement. */
       }
     </style>
   </head>
