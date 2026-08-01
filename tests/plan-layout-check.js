@@ -1103,6 +1103,22 @@ console.log('\n19. a sheet is inside its scrim');
   // so a stray tap on the background would close a screen someone was reading.
   check('the full-screen page has no tap-outside to close',
     !/\$\('settings-scrim'\)\.onclick/.test(code));
+
+  // NOBODY IS SENT TO SETUP. A new account opened on it for one release, on
+  // the reasoning that an empty day cannot explain itself. Watching an actual
+  // new person meet it settled that the other way: the first thing between you
+  // and what you signed up for should be what you signed up for.
+  //
+  // So the way out is Back and only Back — there is always a day behind it —
+  // and nothing decides on your behalf that you should be looking at this.
+  check('the way out of setup says Back',
+    /id="settings-close"[^>]*>‹ Back</.test(body));
+  check('and never a word for having been sent there',
+    !/Skip for now/.test(body) && !/Skip for now/.test(code));
+  check('opening setup takes no argument, so nothing can force it',
+    /function openSettings\(\) \{/.test(code), 'a parameter here is a way to be sent');
+  check('and the opening sequence does not decide for you',
+    !/needsSetup|firstRun|forcedSetup/.test(code));
 }
 
 console.log('\n17. the mockup still describes the page');

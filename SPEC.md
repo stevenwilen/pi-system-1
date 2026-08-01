@@ -219,28 +219,21 @@ outside and tapping it is how you dismiss one, but a page has none. Every pixel
 belongs to it, so a stray tap on the background would close a screen someone was
 reading with no way to tell why.
 
-**A brand new account opens on setup, not on an empty day.** With no calendar,
-no chat id and nothing written down, the planner has nothing to say and no way
-to say why — broken, empty and waiting all render identically. So setup opens
-instead, leading with a line about what this is and the paste box that does the
-whole thing in one conversation. The individual fields stay below for anyone
-who would rather not.
+**Nobody is ever sent here.** Signing up lands on the planner, empty, and setup
+opens when the dots are pressed and at no other time.
 
-**Any one of the three is enough to stop that.** Someone who has written down
-five things but never linked Telegram is using the system, and sending them
-back through setup would be telling them they had not started.
+A new account opened on setup instead, for one release. The reasoning was that
+an empty day cannot explain itself: broken, empty and waiting all render as the
+same screen. Watching an actual new person meet it settled it the other way —
+the first thing between someone and the thing they signed up for should be the
+thing they signed up for. Whoever hands this system to someone can say what the
+dots are for in a sentence, and that is cheaper than a screen which stops
+everyone to solve a problem one person had once.
 
-**And one dismissal is remembered.** Leaving the forced screen — the way out
-says *Skip for now* rather than *Back*, because there is nothing behind you yet
-— records that this account has been past it on this device, so somebody who
-deliberately empties their account is not trapped back in setup. Being shown it
-does not count; only leaving it does.
-
-That flag lives in the browser, keyed by email, which is the honest limitation:
-signing in on a new device shows setup again if the account is still empty. That
-is a fresh device with nothing on it, which is arguably the right moment to see
-it, and the alternative is a schema change to record something the person can
-already see.
+The way out therefore says **Back**, and only ever Back, because there is always
+a day behind it. `openSettings` takes no argument, which is the structural half
+of the same rule: a parameter saying which kind of visit this is would be a way
+to be sent.
 
 **Saving tests what it was given and reports what happened.** Every value here
 looks correct when it is wrong — a mistyped chat id is still ten digits, a
