@@ -289,15 +289,39 @@ naming nobody. It is inert markup rather than a JavaScript string because it
 contains a fenced JSON block, and a template literal full of escaped backticks
 is a string the next edit breaks.
 
-It is strictly linear and refuses to move on: Telegram first — the fiddliest
-step, done while motivation is highest — then the calendar, then the
-interview about projects, habits and tasks. Each step is verified by asking the
-person to paste the value back, never by asking "got it?". After each step it
-restates progress on one line — `Done: Telegram. Now: calendars 1 of 2.
-Remaining: your things.` — which is how a paused conversation is resumed. It
-refuses to produce the JSON until every step is verified and names what is
-missing, explains what a size bucket is for and why staleness matters, and ends
-with the fenced block and nothing after it.
+It is strictly linear and refuses to move on. Each step is verified by asking
+the person to paste the value back, never by asking "got it?", and after each
+one it restates progress on a single line — `Done: your things. Now: reminders.
+Remaining: your calendar.` — which is how a paused conversation is resumed. It
+holds the closing block back until everything is finished and names what is
+missing, and ends with that block and nothing after it.
+
+**The interview comes first, and it is the only required step.** Projects,
+habits, tasks, deadlines and sizes. Without them there is nothing to plan, so
+that is what a setup conversation is for; reminders and the calendar are
+conveniences that make the result reach you.
+
+**Then one question, which can be answered "later".** *Do you want to set up
+daily phone reminders and your calendar now, or skip and do it later in the
+app?* Declining returns null for both and ends the conversation there, and the
+prompt says plainly that either can be added any time in settings, so skipping
+costs nothing. Accepting walks through the reminders and then the calendar, one
+at a time, each still individually skippable.
+
+That order was the other way round for two releases: Telegram first, on the
+reasoning that it was the fiddliest step and best done while motivation was
+high. That is true of somebody who has already decided to use the system, and
+wrong for somebody deciding whether to. The first thing asked for should be the
+thing the app is for.
+
+**Plain words only.** It never says JSON, field, blob, endpoint or bucket, and
+it does not explain how any of this works inside — a thing is explained in a
+sentence at the moment it is needed, or not at all. It closes by asking them to
+*copy everything in the box below and paste it back into the app*.
+
+Its fence therefore carries no language tag, which the paste parser has always
+accepted and is now tested for directly: what the prompt actually produces is
+the commonest paste there will ever be.
 
 ### 2.9 A request is whoever its token says, and nothing else
 

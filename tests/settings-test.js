@@ -190,6 +190,11 @@ async function rowOf(which) {
       for (const [what, text] of [
         ['bare', JSON.stringify(body)],
         ['fenced', '```json\n' + JSON.stringify(body, null, 2) + '\n```'],
+        // WHAT THE PROMPT ACTUALLY PRODUCES. It ends with a bare fence, no
+        // language tag, because "json" is one of the words it is not allowed
+        // to say — so the commonest paste in the world is this one, and it
+        // would be an odd thing for the parser to be worse at.
+        ['fenced with no language tag', '```\n' + JSON.stringify(body, null, 2) + '\n```'],
         ['buried in prose', `Great, here it is!\n\n${JSON.stringify(body)}\n\nLet me know.`],
         // A setup conversation shows the shape before it fills it in, so the
         // first object in a transcript is an example and the last is the answer.
@@ -384,40 +389,71 @@ async function rowOf(which) {
       check('nothing is interpolated into it', !/\$\{/.test(flat));
       check('and it names nobody', !/steven|@gmail|b586ea65/i.test(prompt));
 
-      check('it is strictly ordered', /IN ORDER/i.test(flat));
-      check('and refuses to move on', /Do not move to the next step/i.test(flat));
-      check('telegram comes first', prompt.indexOf('STEP 1 — TELEGRAM') < prompt.indexOf('STEP 2'));
-      check('then the calendars', prompt.indexOf('STEP 2 — CALENDARS') < prompt.indexOf('STEP 3'));
-      check('then their things', /STEP 3 — THEIR THINGS/.test(flat));
+      check('it is strictly ordered', /in order/i.test(flat));
+      check('and refuses to move on',
+        /Finish each one before starting the next/i.test(flat));
+      check('and says so even when asked to skip ahead',
+        /Do not skip ahead/i.test(flat));
 
-      check('it verifies by asking for evidence', /paste (?:the number|it|them|the address) back/i.test(flat),
+      // THE ORDER, and it is the whole point of this rewrite. The interview
+      // comes first because without it there is nothing to plan; reminders and
+      // the calendar are conveniences and go second, together, behind one
+      // question that can be answered "later".
+      const things = prompt.indexOf('STEP 1. WHAT THEY WANT TO GET DONE');
+      const rest = prompt.indexOf('STEP 2. REMINDERS AND CALENDAR');
+      const reminders = prompt.indexOf('REMINDERS. This is how');
+      const calendar = prompt.indexOf('CALENDAR. The app shows it');
+
+      check('the interview comes first', things !== -1 && things < rest, `${things} then ${rest}`);
+      check('and it is not optional', /This one is required/i.test(flat));
+      check('reminders and the calendar come after it', rest !== -1);
+      check('reminders before the calendar within that step',
+        reminders !== -1 && calendar !== -1 && reminders < calendar,
+        `${reminders} then ${calendar}`);
+
+      // ONE QUESTION, and the whole of the second step can be answered by
+      // declining it. A setup that cannot be declined is a setup people
+      // abandon halfway.
+      check('it offers to skip both at once',
+        /Do you want to set up daily phone reminders and your calendar now, or skip and do it later in the app\?/.test(flat));
+      check('and says where they can be added later',
+        /added at any time in the app's settings/i.test(flat));
+      check('and that skipping costs nothing', /costs them nothing/i.test(flat));
+      check('skipping ends it immediately',
+        /put null for the reminders and null for the calendar, and go straight to the end/i.test(flat));
+      check('and either can still be skipped on its own',
+        /skip either one on its own/i.test(flat));
+
+      check('it verifies by asking for evidence',
+        /paste (?:that number|it) back to you/i.test(flat),
         'must ask for the value, not "got it?"');
       check('and says not to accept an assurance', /Do not accept "done"/i.test(flat));
       check('it restates progress in a resumable line',
-        /Done: Telegram\. Now: your calendar\. Remaining: your things\./.test(flat));
+        /Done: your things\. Now: reminders\. Remaining: your calendar\./.test(flat));
       check('and says that line is how you resume',
-        /resumed|continue from it/i.test(flat));
-      check('it refuses the JSON until everything is verified',
-        /Do not produce the final JSON until every step is verified/i.test(flat));
-      check('and names what is missing', /name what is still missing/i.test(flat));
+        /carry on from where it says/i.test(flat));
+      check('it holds the box back until everything is finished',
+        /Do not write the box at the end until every step is finished/i.test(flat));
+      check('and names what is missing', /say what is still missing/i.test(flat));
 
-      // A new person does not know what any of this is for.
-      check('it explains the size buckets', /A week of work due in three days/i.test(flat));
-      check('and what staleness is for', /coldest first/i.test(flat));
-
+      // PLAIN WORDS ONLY. Every one of these is a word about the machinery
+      // rather than about the person's day, and this prompt is read by someone
+      // who has never seen the app.
+      for (const word of ['JSON', 'field', 'blob', 'endpoint', 'bucket']) {
+        check(`it never says "${word}"`,
+          !new RegExp(`\\b${word}\\b`, 'i').test(flat));
+      }
+      check('and asks for a copy and paste in those words',
+        /Copy everything in the box below and paste it back into the app/i.test(flat));
 
       // The warning has to be in the prompt as well as the sheet: someone
       // pasting a secret address is doing it in the chat, not here.
-      check('it warns that the url grants read access',
-        /grants read access to that entire calendar/i.test(flat));
-
-      // ONE CALENDAR, and the prompt has to say what it is NOT for. People
-      // arrive expecting a calendar to be written to.
-      check('it asks for one calendar', /STEP 2 — CALENDAR\b/.test(flat));
-      check('and no longer mentions a second',
-        !/calendar_action_ics_url/.test(flat) && !/things to DO/.test(flat));
-      check('and says nothing on it is ever turned into a block',
-        /never turned into a block|nothing on that calendar is ever turned into a block/i.test(flat));
+      check('it warns that the address grants read access',
+        /lets anyone who has it read that whole calendar/i.test(flat));
+      check('and says the calendar is never written to',
+        /It never changes anything on it/i.test(flat));
+      check('there is only one calendar in it',
+        !/calendar_action_ics_url/.test(flat) && !/things to DO/i.test(flat));
 
       check('it ends with the fenced block and nothing after',
         prompt.trimEnd().endsWith('```'), prompt.slice(-60));
