@@ -905,6 +905,14 @@
       .page-top .label {
         margin: 0;
       }
+      /* The one paragraph on this screen written for someone who has never
+         seen it. Ordinary text size, because it is the thing to read. */
+      .intro {
+        margin: 0 0 26px;
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--text);
+      }
       .back {
         background: none;
         border: 0;
@@ -1690,11 +1698,20 @@
          at the foot of the document, so it had to be scrolled to and every tap
          on it landed on the scrim in front and closed it. -->
     <div class="page hidden" id="settings-scrim">
-      <div class="page-inner">
+      <div class="page-inner" id="page-inner">
         <div class="page-top">
           <button type="button" class="back" id="settings-close">‹ Back</button>
           <span class="label">Setup</span>
         </div>
+
+        <!-- Only on an account that has nothing at all. A brand new person
+             landed on an empty planner with no way to know whether it was
+             broken, empty, or waiting for them. -->
+        <p class="intro hidden" id="first-run">
+          This plans your day and messages you as it goes. Setting it up takes
+          one conversation: copy the prompt, answer its questions wherever you
+          talk to an AI, and paste the reply back here.
+        </p>
 
         <!-- WHAT IS DONE, first and as a list.
              This sheet used to open with the paste box — the biggest thing on
@@ -1703,7 +1720,7 @@
              with is "what have I not set up yet", and three lines answer it at
              a glance. The controls are behind them, because changing something
              is the rarer act than checking it. -->
-        <div class="checklist">
+        <div class="checklist" id="checklist">
           <button type="button" class="srow" id="chat-row" aria-expanded="false">
             <span class="srow-name">Telegram</span>
             <span class="srow-state" id="chat-state">Not linked</span>
@@ -1752,7 +1769,7 @@
              coming back to change one thing this is not what they want, and for
              someone new the three "Not set" lines above are the question this
              answers. -->
-        <div class="allatonce">
+        <div class="allatonce" id="allatonce">
           <p class="field-note">
             Copy the prompt into any AI chat, answer its questions, and paste
             the reply here. It sets up everything above and your first list of
@@ -1780,7 +1797,7 @@
           <button type="button" class="confirm hidden" id="paste-save">Save all of it</button>
         </div>
 
-        <div class="signout">
+        <div class="signout" id="signout">
           <span id="whoami"></span>
           <button type="button" id="sign-out">Sign out</button>
         </div>
@@ -4087,7 +4104,81 @@ Rules for the output:
         return [`Reachable. ${r.events} event${r.events === 1 ? '' : 's'} on it.`, 'good'];
       };
 
-      function openSettings() {
+      // --- the first run --------------------------------------------------
+
+      /**
+       * That this person has been past setup once, on this device.
+       *
+       * Per account, not per browser: two people sharing a phone must not
+       * inherit each other's dismissal. Keyed by email because that is the
+       * only stable identifier the page holds — the user id never leaves the
+       * server.
+       *
+       * On the device rather than in the row, which is the honest limitation:
+       * signing in somewhere new shows setup again if the account is still
+       * empty. That is a fresh device with nothing on it, which is arguably
+       * the right moment to be shown it anyway, and the alternative is a
+       * schema change to record something the person can already see.
+       */
+      const dismissKey = () => `pi.setup-seen:${(session && session.email) || ''}`;
+
+      function setupDismissed() {
+        if (!store) return false;
+        try {
+          return store.getItem(dismissKey()) === '1';
+        } catch {
+          return false;
+        }
+      }
+
+      function rememberDismissal() {
+        if (!store) return;
+        try {
+          store.setItem(dismissKey(), '1');
+        } catch {
+          // A full or blocked store costs one extra sight of this screen.
+        }
+      }
+
+      /**
+       * Has this account got anything at all?
+       *
+       * Any one of the three is enough. Someone who has written down five
+       * things but never linked Telegram is using the system, and putting them
+       * back through setup would be telling them they have not started.
+       */
+      async function needsSetup() {
+        if (setupDismissed()) return false;
+        if (things.length) return false;
+
+        let s;
+        try {
+          s = await (await api('/settings')).json();
+        } catch {
+          // Cannot tell. The planner is the safer guess: showing setup to
+          // somebody who has already done it is worse than not showing it to
+          // somebody who has not.
+          return false;
+        }
+
+        return !s.telegram.set && !s.calendar.set;
+      }
+
+      function openSettings(firstRun = false) {
+        // FIRST RUN LEADS WITH THE CONVERSATION. The paste box does all of it
+        // in one go, and the fields below are for anyone who would rather do
+        // it by hand — but a person seeing this screen for the first time
+        // should meet the short path first.
+        const inner = $('page-inner');
+        if (firstRun) inner.insertBefore($('allatonce'), $('checklist'));
+        else inner.insertBefore($('allatonce'), $('signout'));
+
+        $('first-run').classList.toggle('hidden', !firstRun);
+        // Leaving is allowed, and it is the dismissal. The word changes
+        // because "Back" is wrong when there is nothing behind you yet.
+        $('settings-close').textContent = firstRun ? 'Skip for now' : '‹ Back';
+        forcedSetup = firstRun;
+
         $('settings-scrim').classList.remove('hidden');
         for (const id of ['chat-said', 'cal-said', 'copy-said']) said(id, '');
         pasteChanged();
@@ -4101,7 +4192,15 @@ Rules for the output:
         loadSettings();
       }
 
+      // Whether this screen was opened by the system rather than asked for.
+      // Leaving it in that state is the one dismissal that is remembered.
+      let forcedSetup = false;
+
       function closeSettings() {
+        if (forcedSetup) {
+          rememberDismissal();
+          forcedSetup = false;
+        }
         $('settings-scrim').classList.add('hidden');
         // The boxes are emptied on the way out. A pasted setup blob holds a
         // calendar url, and leaving it sitting in a field is the same leak the
@@ -4110,7 +4209,10 @@ Rules for the output:
         pasteChanged();
       }
 
-      $('settings-open').onclick = openSettings;
+      // Wrapped, not passed: `onclick = openSettings` hands the click event in as
+      // the argument, and an event object is truthy — so every tap on the dots
+      // would have opened the first-run screen.
+      $('settings-open').onclick = () => openSettings();
       $('settings-close').onclick = closeSettings;
 
       // NO TAP-OUTSIDE-TO-CLOSE any more, and its absence is the point. A
@@ -4458,10 +4560,19 @@ Rules for the output:
 
       // --- opening -------------------------------------------------------------
 
-      /** The planner, once there is somebody to show it to. */
+      /**
+       * The planner, once there is somebody to show it to — unless there is
+       * nothing yet to show them.
+       *
+       * A brand new account landed on an empty day with no way to tell whether
+       * it was broken, empty, or waiting for something. The planner is still
+       * what loads underneath, so closing setup lands on a real screen rather
+       * than on a blank one that then has to fetch itself.
+       */
       async function enter() {
         $('whoami').textContent = (session && session.email) || '';
         await load();
+        if (await needsSetup()) openSettings(true);
       }
 
       /**

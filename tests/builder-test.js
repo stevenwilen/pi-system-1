@@ -57,6 +57,18 @@ class El {
     for (const x of this.children) x._parent = this;
   }
   appendChild(k) { k._parent = this; this.children.push(k); return k; }
+  // Moves an existing child as well as inserting a new one, which is what the
+  // real one does and what the setup screen relies on to reorder itself for a
+  // first run.
+  insertBefore(node, before) {
+    const had = this.children.indexOf(node);
+    if (had !== -1) this.children.splice(had, 1);
+    const at = before ? this.children.indexOf(before) : -1;
+    node._parent = this;
+    if (at === -1) this.children.push(node);
+    else this.children.splice(at, 0, node);
+    return node;
+  }
   setAttribute(k, v) { this._attrs[k] = v; this[k] = v; }
   getAttribute(k) { return this._attrs[k]; }
   focus() {} scrollIntoView() {} setPointerCapture() {} releasePointerCapture() {}
@@ -151,10 +163,16 @@ function atClock(hhmm) {
 function boot({
   calendar = [], plan = null, failed = [], reduced = false,
   entries = null, now = null, failEntries = false,
+  // What GET /settings answers. Configured by default, so no case falls into
+  // the first-run screen without asking for it — the cases about that ask.
+  settings = { telegram: { set: true, hint: '…3785' }, calendar: { set: true, hint: 'x/…/basic.ics' } },
   // Signed in unless a case says otherwise. Every case here is about the
   // planner, and the planner is only reachable with a session — booting each
   // one through the gate would be re-testing sign-in three hundred times.
   signedIn = true,
+  // Handed in when a case is simulating a RELOAD: the same device, the same
+  // storage, a fresh page.
+  storage = null,
 } = {}) {
   // Frozen by default, not just when a case asks.
   //
@@ -235,7 +253,7 @@ function boot({
   // Seeded with a session that expires an hour from the frozen clock, so the
   // page finds one, believes it, and never tries to refresh it. A case about
   // the gate empties it.
-  const stored = new Map();
+  const stored = storage || new Map();
   if (signedIn) {
     stored.set(
       'pi.session',
@@ -294,6 +312,7 @@ function boot({
           // Ahead of the gate in the page, and ahead of everything here. The
           // project's URL is what makes a token refreshable.
           if (url === '/config') return { url: 'https://stub.supabase.co', anon_key: 'anon-key' };
+          if (url === '/settings') return settings;
           if (url === '/entries' && failEntries) throw new Error('offline');
           if (url.startsWith('/calendar')) return { items: calendar, failed };
           if (url.startsWith('/plan/')) return planFor(url);
@@ -2337,6 +2356,140 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // rather than one asking you to sign in again.
     check('and the dead session was thrown away', !stored.has('pi.session'),
       String(stored.get('pi.session')));
+  }
+
+  console.log('\na brand new account is shown setup, not an empty day');
+  {
+    // WHAT THIS IS FOR. A new account landed on a planner with nothing in it
+    // and no way to tell whether the thing was broken, empty, or waiting.
+    const bare = { telegram: { set: false, hint: null }, calendar: { set: false, hint: null } };
+    const { ctx, byId, stored } = boot({
+      plan: twoDays(), entries: utcEntries({ items: [] }), now: '11:00', settings: bare,
+    });
+    await ctx.start();
+
+    check('setup is on the screen', !byId['settings-scrim']._class.has('hidden'));
+    check('with the line that says what this is',
+      !byId['first-run']._class.has('hidden'));
+    check('and a way out that does not say Back',
+      byId['settings-close'].textContent === 'Skip for now',
+      byId['settings-close'].textContent);
+
+    // The planner still loaded underneath. Closing setup has to land on a real
+    // screen rather than a blank one that then has to go and fetch itself.
+    check('the day loaded behind it', byId['builder'].children.length > 0);
+
+    // NOT REMEMBERED YET. Being shown it is not the same as having answered
+    // or refused it, and a reload before either should show it again.
+    check('nothing is remembered merely for having seen it',
+      ![...stored.keys()].some((k) => k.startsWith('pi.setup-seen')),
+      JSON.stringify([...stored.keys()]));
+  }
+
+  console.log('\nanything at all, and the planner is the default again');
+  {
+    const bare = { telegram: { set: false, hint: null }, calendar: { set: false, hint: null } };
+
+    // utcEntries() is EMPTY by default — `items: []` — so "has entries" has to
+    // be spelled out. It was written as `utcEntries()` first, which meant the
+    // case called "some things written down" had nothing written down, and it
+    // failed by being correct.
+    const written = utcEntries({
+      items: [
+        { id: 'e-1', type: 'task', title: 'Return the router', days: 1, mark: null, due: null, size: null, last_scheduled: null },
+      ],
+    });
+
+    // Each of the three on its own is enough. Someone who has written down
+    // five things but never linked Telegram is using the system, and putting
+    // them back through setup would be telling them they had not started.
+    for (const [what, opts] of [
+      ['a chat id', { settings: { telegram: { set: true, hint: '…3785' }, calendar: { set: false, hint: null } } }],
+      ['a calendar', { settings: { telegram: { set: false, hint: null }, calendar: { set: true, hint: 'x/…/basic.ics' } } }],
+      ['some things written down', { settings: bare, entries: written }],
+    ]) {
+      const { ctx, byId } = boot({
+        plan: twoDays(), now: '11:00', entries: utcEntries({ items: [] }), ...opts,
+      });
+      await ctx.start();
+      check(`${what} is enough to skip setup`, byId['settings-scrim']._class.has('hidden'));
+    }
+
+    // And the last of those is the one worth naming: entries but no Telegram
+    // must not be sent back.
+    const { ctx, byId } = boot({
+      plan: twoDays(), now: '11:00', entries: written, settings: bare,
+    });
+    await ctx.start();
+    check('an account with things but no Telegram stays on the planner',
+      byId['settings-scrim']._class.has('hidden'));
+    check('and the day is what it is looking at', byId['builder'].children.length > 0);
+  }
+
+  console.log('\nafter a paste lands, the planner is the default');
+  {
+    // AND WITHOUT A DISMISSAL. Someone who completes setup should not also
+    // have to refuse it: what makes the planner the default is having
+    // something, not having said no.
+    const bare = { telegram: { set: false, hint: null }, calendar: { set: false, hint: null } };
+    const first = boot({
+      plan: twoDays(), entries: utcEntries({ items: [] }), now: '11:00', settings: bare,
+    });
+    await first.ctx.start();
+    check('it opened on setup', !first.byId['settings-scrim']._class.has('hidden'));
+
+    // The paste goes in and saves. The stub answers every import as saved.
+    first.byId['paste'].value = JSON.stringify({ telegram_chat_id: '8906223785', items: [] });
+    await first.byId['paste-save'].onclick();
+
+    const posted = first.posted.find((p) => p.url === '/settings/import');
+    check('the import went out', Boolean(posted), JSON.stringify(first.posted.map((p) => p.url)));
+
+    // Next load, same device, and the account now has a chat id.
+    const after = boot({
+      plan: twoDays(), entries: utcEntries({ items: [] }), now: '11:00',
+      settings: { telegram: { set: true, hint: '…3785' }, calendar: { set: false, hint: null } },
+      storage: first.stored,
+    });
+    await after.ctx.start();
+
+    check('the planner is what opens now', after.byId['settings-scrim']._class.has('hidden'));
+    check('and it was not a dismissal that did it',
+      ![...first.stored.keys()].some((k) => k.startsWith('pi.setup-seen')),
+      JSON.stringify([...first.stored.keys()]));
+  }
+
+  console.log('\none dismissal is remembered, and it is per account');
+  {
+    const bare = { telegram: { set: false, hint: null }, calendar: { set: false, hint: null } };
+    const fresh = () => boot({
+      plan: twoDays(), entries: utcEntries({ items: [] }), now: '11:00', settings: bare,
+    });
+
+    const first = fresh();
+    await first.ctx.start();
+    check('it was forced open', !first.byId['settings-scrim']._class.has('hidden'));
+
+    await first.byId['settings-close'].onclick();
+    check('and closes', first.byId['settings-scrim']._class.has('hidden'));
+
+    const key = [...first.stored.keys()].find((k) => k.startsWith('pi.setup-seen'));
+    check('the dismissal was written down', Boolean(key), JSON.stringify([...first.stored.keys()]));
+    // PER ACCOUNT, not per device. Two people sharing a phone must not inherit
+    // each other's dismissal.
+    check('against the account, not the browser', /planner@example\.test/.test(key || ''), key);
+
+    // A RELOAD IS A FRESH BOOT with the same storage. The stub gives each boot
+    // its own store, so the second one is handed the first one's contents —
+    // which is what a reload is.
+    const again = boot({
+      plan: twoDays(), entries: utcEntries({ items: [] }), now: '11:00', settings: bare,
+      storage: first.stored,
+    });
+    await again.ctx.start();
+    check('and a reload does not force it again',
+      again.byId['settings-scrim']._class.has('hidden'));
+    check('while the day is there to look at', again.byId['builder'].children.length > 0);
   }
 
   console.log('\nsigning out takes the day off the screen with it');

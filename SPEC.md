@@ -22,7 +22,7 @@ One screen, opened once a day. Two sections, top to bottom:
 1. **The day** — the builder, showing today or tomorrow.
 2. **Things** — habits, projects and tasks in one list, coldest first.
 
-Behind it: a Postgres notebook (Supabase), two read-only calendar feeds, and a
+Behind it: a Postgres notebook (Supabase), one read-only calendar feed, and a
 Telegram bot that only ever sends.
 
 ### The brain is wired and unused
@@ -218,6 +218,29 @@ It has no tap-outside-to-close, and the absence is deliberate: a sheet has an
 outside and tapping it is how you dismiss one, but a page has none. Every pixel
 belongs to it, so a stray tap on the background would close a screen someone was
 reading with no way to tell why.
+
+**A brand new account opens on setup, not on an empty day.** With no calendar,
+no chat id and nothing written down, the planner has nothing to say and no way
+to say why — broken, empty and waiting all render identically. So setup opens
+instead, leading with a line about what this is and the paste box that does the
+whole thing in one conversation. The individual fields stay below for anyone
+who would rather not.
+
+**Any one of the three is enough to stop that.** Someone who has written down
+five things but never linked Telegram is using the system, and sending them
+back through setup would be telling them they had not started.
+
+**And one dismissal is remembered.** Leaving the forced screen — the way out
+says *Skip for now* rather than *Back*, because there is nothing behind you yet
+— records that this account has been past it on this device, so somebody who
+deliberately empties their account is not trapped back in setup. Being shown it
+does not count; only leaving it does.
+
+That flag lives in the browser, keyed by email, which is the honest limitation:
+signing in on a new device shows setup again if the account is still empty. That
+is a fresh device with nothing on it, which is arguably the right moment to see
+it, and the alternative is a schema change to record something the person can
+already see.
 
 **Saving tests what it was given and reports what happened.** Every value here
 looks correct when it is wrong — a mistyped chat id is still ten digits, a
