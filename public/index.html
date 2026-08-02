@@ -2791,8 +2791,15 @@
         // An empty day still takes up a day's worth of room.
         if (!blocks.length) box.append(emptySpace());
 
+        // 0:00 on an empty day, not a dash. A dash reads as "we could not work
+        // this out"; a day with nothing in it has a perfectly good answer and
+        // the answer is nothing.
+        //
+        // The dash survives in showWaiting, which is a different statement: the
+        // day is being fetched and the old hour is no longer true, so there is
+        // genuinely nothing to say yet.
         $('end-time').textContent = !blocks.length
-          ? '—'
+          ? '0:00'
           : end >= 1440
             ? `${clock(end)} next day`
             : clock(end);

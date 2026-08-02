@@ -744,7 +744,10 @@ endpoint and no `placed:` rows.
   that is the whole rule. Changing one duration shifts everything below it.
 - **+ Block** adds a manual block.
 - **Day ends** is live, and reads `HH:MM next day` in the warn colour past
-  midnight.
+  midnight. An empty day reads `0:00`, not a dash: a day with nothing in it has
+  a perfectly good answer and the answer is nothing. The dash belongs to the day
+  switch, which shows one while it fetches — a different statement, and the old
+  hour is no longer true by then.
 - **Confirm** saves the plan. Any edit afterwards un-saves it. It stays visibly
   pressed from the tap until the save answers — the round trip takes about a
   second, and a seal that says nothing for that long reads as a tap that

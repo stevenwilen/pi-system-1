@@ -453,8 +453,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // The one that would bite: it must not read as a block anywhere.
     check('it is not a slot, so nothing counts it as a block',
       slots().length === 0, String(slots().length));
-    check('and the day still ends nowhere', byId['end-time'].textContent === '—',
-      byId['end-time'].textContent);
+    check('and the day ends at nothing rather than at a dash',
+      byId['end-time'].textContent === '0:00', byId['end-time'].textContent);
 
     ctx.addBlock({ title: 'Real' });
     check('a real block replaces it', ghosts().length === 0, String(ghosts().length));
@@ -1057,7 +1057,10 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     const { ctx, byId, slots } = boot();
     await ctx.load();
     check('nothing to confirm on an empty day', byId['confirm'].disabled === true);
-    check('and the end time says nothing', byId['end-time'].textContent === '—');
+    // A day with nothing in it has an answer, and the answer is nothing. The
+    // dash belongs to the switch, which does not yet know.
+    check('and the end time says nothing rather than a dash',
+      byId['end-time'].textContent === '0:00', byId['end-time'].textContent);
 
     ctx.addBlock({ title: 'A' });
     check('a block enables it', byId['confirm'].disabled === false);
