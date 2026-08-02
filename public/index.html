@@ -1093,6 +1093,79 @@
       .pline.bad { color: var(--warn); }
 
 
+      /* WHERE THE TIME WENT. Bars rather than a table: the question is which
+         of these is bigger, and a bar answers that without being read. */
+      .stats {
+        margin: 30px 0 34px;
+      }
+      .stats .label {
+        margin-bottom: 8px;
+      }
+      .statrow {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 7px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .statrow .who {
+        width: 84px;
+        flex: none;
+      }
+      .statrow .much {
+        width: 46px;
+        flex: none;
+        text-align: right;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+      /* Ink on paper, like everything else here. The bar is the only thing on
+         this screen drawn to be compared rather than read. */
+      .bar {
+        flex: 1;
+        height: 7px;
+        background: var(--card-spent);
+      }
+      .bar span {
+        display: block;
+        height: 100%;
+        background: var(--text);
+      }
+      /* The untagged share is the hours that belong to no thing in the list.
+         Faint, because it is the absence of an answer rather than one. */
+      .statrow.loose .much,
+      .statrow.loose .bar span {
+        color: var(--faint);
+        background: var(--faint);
+      }
+      .statrow.loose .much {
+        background: none;
+      }
+
+      .toprow {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 5px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .toprow b {
+        width: 46px;
+        flex: none;
+        text-align: right;
+        font-weight: 400;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+      .tophead {
+        margin: 18px 0 8px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--faint);
+      }
+
       /* Below the whole page, and deliberately hard to hit by accident. */
       .signout {
         display: flex;
@@ -1810,6 +1883,16 @@
               never shown back to you here.
             </p>
           </div>
+        </div>
+
+        <!-- WHERE THE TIME WENT. Not whether any of it happened — the system
+             is never told that — so every figure here is about what was set
+             aside, and the words say so. -->
+        <div class="stats">
+          <div class="label">Where your time went</div>
+          <p class="field-note" id="stat-head">Nothing planned yet.</p>
+          <div id="stat-bars"></div>
+          <div id="stat-top"></div>
         </div>
 
         <div class="signout">
@@ -3951,6 +4034,87 @@
       }
 
       /**
+       * Where the time went, over the last month.
+       *
+       * "Given to" rather than "spent on" throughout. The system is never told
+       * that anything happened; it knows a block was scheduled and left in a
+       * confirmed day, which is time set aside. Reporting that as time spent
+       * would be a claim no row supports.
+       */
+      const hours = (mins) => (mins / 60).toFixed(1);
+
+      async function loadStats() {
+        let s;
+        try {
+          s = await (await api('/stats')).json();
+        } catch {
+          return;
+        }
+
+        $('stat-bars').replaceChildren();
+        $('stat-top').replaceChildren();
+
+        // NOTHING PLANNED IS NOT ZERO HOURS. One is an account that has not
+        // started, the other is a month of empty days, and they read alike if
+        // the same figures are shown for both.
+        if (!s.days) {
+          $('stat-head').textContent =
+            `Nothing planned in the last ${s.window_days} days.`;
+          return;
+        }
+
+        const perDay = s.minutes / s.days / 60;
+        $('stat-head').textContent =
+          `${hours(s.minutes)} hours across ${s.days} ` +
+          `day${s.days === 1 ? '' : 's'}, in the last ${s.window_days}. ` +
+          `About ${perDay.toFixed(1)} hours a day.`;
+
+        // Bars are drawn against the biggest, not against the total, so the
+        // smallest one is still visible rather than a sliver.
+        const most = Math.max(...s.by_kind.map((k) => k.minutes), 1);
+
+        for (const k of s.by_kind) {
+          const row = document.createElement('div');
+          row.className = k.kind === 'untagged' ? 'statrow loose' : 'statrow';
+
+          const who = document.createElement('span');
+          who.className = 'who';
+          who.textContent = k.kind === 'untagged' ? 'not on a thing' : `${k.kind}s`;
+
+          const much = document.createElement('span');
+          much.className = 'much';
+          much.textContent = `${hours(k.minutes)}h`;
+
+          const bar = document.createElement('span');
+          bar.className = 'bar';
+          const fill = document.createElement('span');
+          fill.style.width = `${Math.round((k.minutes / most) * 100)}%`;
+          bar.append(fill);
+
+          row.append(who, much, bar);
+          $('stat-bars').append(row);
+        }
+
+        if (!s.top.length) return;
+
+        const head = document.createElement('div');
+        head.className = 'tophead';
+        head.textContent = 'Most time given to';
+        $('stat-top').append(head);
+
+        for (const t of s.top) {
+          const row = document.createElement('div');
+          const much = document.createElement('b');
+          much.textContent = `${hours(t.minutes)}h`;
+          const title = document.createElement('span');
+          title.textContent = t.title;
+          row.className = 'toprow';
+          row.append(much, title);
+          $('stat-top').append(row);
+        }
+      }
+
+      /**
        * One row open at a time.
        *
        * Not a preference: the sheet is two rows on a phone,
@@ -4008,6 +4172,7 @@
         // halfway down a screen you have just opened reads as a glitch.
         $('settings-scrim').scrollTop = 0;
         loadSettings();
+        loadStats();
       }
 
       function closeSettings() {

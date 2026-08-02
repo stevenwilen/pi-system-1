@@ -139,6 +139,7 @@ app.use(async (req, res, next) => {
 app.use(require('./routes/entries'));
 app.use(require('./routes/plan'));
 app.use(require('./routes/settings'));
+app.use(require('./routes/stats'));
 
 // Several tables are no longer read or written: `messages`, and everything the
 // finance lane used. They are deliberately left in place with their rows.

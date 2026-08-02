@@ -242,6 +242,100 @@ async function rowOf(which) {
     }
 
 
+    console.log('\n5. where the time went');
+    {
+      await H.cleanup();
+      await H.ensureProfile(undefined, undefined, 'a');
+      await H.ensureProfile(undefined, undefined, 'b');
+
+      const stats = async (who) => (await H.as(who)(`${BASE}/stats`)).json();
+
+      // NOTHING PLANNED IS NOT ZERO HOURS. An account that has not started and
+      // a month of empty days are different facts, and the screen says
+      // something different for each.
+      const bare = await stats(A);
+      check('an account with no plans reports no days', bare.days === 0, JSON.stringify(bare));
+      check('and no bars to draw', bare.by_kind.length === 0, JSON.stringify(bare.by_kind));
+      check('while still saying what window it looked at',
+        bare.window_days === 30, String(bare.window_days));
+
+      // A day with three blocks: one habit, one project, one typed straight
+      // into the day and belonging to nothing.
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' })
+        .format(new Date());
+
+      const mk = async (type, title, extra = {}) => {
+        const { data } = await H.db.from('entries')
+          .insert({ user_id: A.id, type, title, ...extra }).select().single();
+        return data;
+      };
+      const gym = await mk('habit', 'Gym', { frequency: 'daily' });
+      const study = await mk('project', 'Rewire the study');
+
+      const { data: plan } = await H.db.from('plans')
+        .insert({ user_id: A.id, date: today, wake_time: '08:00:00', status: 'confirmed' })
+        .select().single();
+
+      await H.db.from('blocks').insert([
+        { user_id: A.id, plan_id: plan.id, title: 'Gym', entry_id: gym.id,
+          start_time: '08:00:00', duration_minutes: 60, sort_order: 0 },
+        { user_id: A.id, plan_id: plan.id, title: 'Rewire the study', entry_id: study.id,
+          start_time: '09:00:00', duration_minutes: 120, sort_order: 1 },
+        { user_id: A.id, plan_id: plan.id, title: 'Dentist', entry_id: null,
+          start_time: '14:00:00', duration_minutes: 30, sort_order: 2 },
+      ]);
+
+      const mine = await stats(A);
+      check('one day planned', mine.days === 1, String(mine.days));
+      check('three blocks', mine.blocks === 3, String(mine.blocks));
+      check('and three and a half hours', mine.minutes === 210, String(mine.minutes));
+
+      const kind = Object.fromEntries(mine.by_kind.map((k) => [k.kind, k.minutes]));
+      check('the project took the most', kind.project === 120, JSON.stringify(kind));
+      check('the habit next', kind.habit === 60, JSON.stringify(kind));
+      // A block typed straight into the day belongs to no thing in the list,
+      // and is counted apart rather than dropped: the parts have to add up to
+      // the whole or the bars are lying about the total above them.
+      check('and the untagged half hour is kept apart',
+        kind.untagged === 30, JSON.stringify(kind));
+      check('the parts add up to the whole',
+        mine.by_kind.reduce((n, k) => n + k.minutes, 0) === mine.minutes);
+      check('and nothing empty is drawn',
+        mine.by_kind.every((k) => k.minutes > 0), JSON.stringify(mine.by_kind));
+
+      check('the top list is by time, biggest first',
+        mine.top.map((t) => t.title).join(',') === 'Rewire the study,Gym',
+        JSON.stringify(mine.top));
+      check('and holds nothing that was not tagged',
+        !mine.top.some((t) => t.title === 'Dentist'), JSON.stringify(mine.top));
+
+      // A day outside the window is outside the figures.
+      const old = new Date(`${today}T12:00:00Z`);
+      old.setUTCDate(old.getUTCDate() - 60);
+      const { data: oldPlan } = await H.db.from('plans')
+        .insert({ user_id: A.id, date: old.toISOString().slice(0, 10),
+          wake_time: '08:00:00', status: 'confirmed' })
+        .select().single();
+      await H.db.from('blocks').insert({
+        user_id: A.id, plan_id: oldPlan.id, title: 'Long ago', entry_id: gym.id,
+        start_time: '08:00:00', duration_minutes: 600, sort_order: 0,
+      });
+
+      const still = await stats(A);
+      check('a day two months back is outside the window',
+        still.minutes === 210 && still.days === 1,
+        `${still.minutes} minutes across ${still.days} day(s)`);
+
+      // AND IT IS ONLY EVER YOUR OWN TIME. The route reads with the caller's
+      // client, so this is row level security being asked the question one
+      // more way — but a stats screen totalling somebody else's hours is a
+      // leak that would look like a plausible number rather than an error.
+      const theirs = await stats(B);
+      check('B sees none of it', theirs.days === 0 && theirs.minutes === 0,
+        JSON.stringify(theirs));
+      check('and A still sees their own', (await stats(A)).minutes === 210);
+    }
+
   } finally {
     server.kill();
     tg.closeAllConnections();

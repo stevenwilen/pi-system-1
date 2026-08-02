@@ -287,6 +287,30 @@ them is the smaller thing that does the same job.
 be, and the add form is now its only caller.
 
 
+#### Where your time went
+
+The last thing on the setup screen, and read-only. Hours scheduled over the
+last thirty days, split by habits, projects and tasks, and the five things
+given the most time.
+
+**Given to, never spent on.** The system is never told that anything happened.
+It knows a block was scheduled and left in a confirmed day, which is time set
+aside; reporting that as time spent would be a claim no row supports. The words
+on screen say the weaker, true thing.
+
+**Thirty days, not all time.** All time is the honest default at four days of
+history and the wrong one at four hundred, when it becomes a figure that only
+grows and stops describing this month. The window is stated on screen so the
+number is never read as more than it is.
+
+**Nothing planned is not zero hours.** An account that has not started and a
+month of empty days are different facts and get different sentences.
+
+**Blocks typed straight into a day are counted apart**, as `not on a thing`,
+rather than dropped. The parts have to add up to the total above them or the
+bars are lying about it — and the gap between planned hours and hours against
+something in the list is worth being able to see.
+
 ### 2.9 A request is whoever its token says, and nothing else
 
 There is no default user. `PI_USER_ID` is gone, and so is the fixed uuid it fell
@@ -1225,6 +1249,7 @@ npm test       # every suite, sequentially
 | `brain.js`, `usage.js`, `untrusted.js` | **wired and unused.** See 1. `brain.js` requires the other two |
 | `entry-shape.js` | what a habit, project or task may be |
 | `routes/settings.js` | the setup screen: linking Telegram and the calendar |
+| `routes/stats.js` | where the time went, over the last thirty days |
 | `calendar-test.js`, `send-test.js` | run by hand, not part of the running system |
 | `make-icons.js` | regenerates the PNGs from the SVG |
 
