@@ -355,6 +355,131 @@ async function rowOf(which) {
       check('and A still sees their own', (await stats(A)).minutes === 180);
     }
 
+    console.log('\n6. an account with no profile row, which is every new account');
+    {
+      // NO ensureProfile() IN THIS SECTION, and that is the entire point of it.
+      // Every other section in this file — and every other suite — seeds a
+      // profile row with the service key before it starts, because the harness
+      // has to: nothing in the app ever created one. So the suite only ever
+      // exercised these routes against an account that had been set up by hand,
+      // and the state every real person is in on their first day was the one
+      // state never tested.
+      //
+      // What that hid: the writes were UPDATEs, an UPDATE matching no row
+      // reports success-with-nothing-changed, and so linking Telegram on a
+      // fresh signup answered `no profile for this account`, stored nothing,
+      // and sent nothing.
+      await H.cleanup();
+
+      const profileOf = async (which) => {
+        const accounts = await H.setup();
+        const { data } = await H.service
+          .from('profile')
+          .select('user_id, telegram_chat_id, calendar_ics_url, timezone, default_wake_time')
+          .eq('user_id', accounts[which].id)
+          .maybeSingle();
+        return data;
+      };
+
+      // THE PRECONDITION, CHECKED RATHER THAN ASSUMED. Everything below passes
+      // trivially against an account that already has a row, so if cleanup ever
+      // stops deleting these this check fails here instead of quietly turning
+      // the whole section into a second copy of section 1.
+      check('the account starts with no profile row at all',
+        (await profileOf('a')) === null && (await profileOf('b')) === null);
+
+      const before = sent.length;
+      const linked = await post(A, '/telegram', { chat_id: '3141592653' });
+      const linkedBody = await linked.json();
+
+      check('linking a chat is not a 404', linked.status === 200, String(linked.status));
+      check('and does not answer "no profile for this account"',
+        linkedBody.error !== 'no profile for this account', JSON.stringify(linkedBody));
+      check('it reports the chat as delivered', linkedBody.delivered === true,
+        JSON.stringify(linkedBody));
+
+      // Saved AND proved. The old failure returned before sendToChat, so a
+      // check on the stored row alone would not notice a route that stopped
+      // sending, and a check on the message alone would not notice one that
+      // stopped storing.
+      const rowA = await profileOf('a');
+      check('the row now exists', Boolean(rowA));
+      check('holding the chat id that was sent', rowA && rowA.telegram_chat_id === '3141592653',
+        String(rowA && rowA.telegram_chat_id));
+      check('and the test message actually went out', sent.length === before + 1,
+        `${before} then ${sent.length}`);
+      check('to that chat', String((sent[sent.length - 1] || {}).chat_id) === '3141592653',
+        String((sent[sent.length - 1] || {}).chat_id));
+
+      // The row a route creates is the row the schema describes. Nothing here
+      // guesses at a timezone, so a new account is UTC until it says otherwise
+      // — and 07:00 is what the column defaults to, not something this route
+      // decided.
+      check('the created row carries the schema defaults',
+        rowA && rowA.timezone === 'UTC' && String(rowA.default_wake_time).slice(0, 5) === '07:00',
+        `${rowA && rowA.timezone} / ${rowA && rowA.default_wake_time}`);
+
+      // Creating one account's row is not creating anybody else's. B has done
+      // nothing and must still have nothing.
+      check('and B, who did nothing, still has no row', (await profileOf('b')) === null);
+
+      // THE SAME QUESTION OF THE OTHER ENDPOINT, on the other account, still
+      // with no row of its own. The calendar save is the worse version of this
+      // bug: it probes the feed first, so before the fix a new account waited
+      // out the fetch and was then told it had no profile.
+      const saved = await post(B, '/settings/calendar', { url: `${FEED}/b-first.ics` });
+      const savedBody = await saved.json();
+
+      check('saving a calendar is not a 404 either', saved.status === 200, String(saved.status));
+      check('the feed was read, and the answer says so', savedBody.reachable === true,
+        JSON.stringify(savedBody));
+
+      // `|| {}` on every row read from here down, because a regression puts a
+      // null here and reading a column off it throws — which ends the section
+      // on a stack trace and takes the checks below it with it. The thing you
+      // want when this breaks again is the whole list of what broke.
+      const firstB = (await profileOf('b')) || {};
+      check('and the url is on the row', firstB.calendar_ics_url === `${FEED}/b-first.ics`,
+        String(firstB.calendar_ics_url));
+
+      // WHAT AN UPSERT COULD BREAK THAT AN UPDATE COULD NOT. A second write
+      // must update its own column and leave the rest of the row alone; a
+      // payload that carried the whole row would blank whatever it omitted.
+      await post(B, '/telegram', { chat_id: '2718281828' });
+      const rowB = (await profileOf('b')) || {};
+      check('a second save keeps the first', rowB.calendar_ics_url === `${FEED}/b-first.ics`,
+        String(rowB.calendar_ics_url));
+      check('as well as its own', rowB.telegram_chat_id === '2718281828',
+        String(rowB.telegram_chat_id));
+      check('and leaves the timezone alone', rowB.timezone === 'UTC', String(rowB.timezone));
+
+      // Clearing something that was never set, on an account that has no row to
+      // clear it from. Answering this any way other than "cleared" would mean
+      // the screen has to know which state it is in before it can offer the
+      // button.
+      await H.cleanup();
+      const clearedChat = await post(A, '/telegram/clear', {});
+      const clearedChatBody = await clearedChat.json();
+      check('clearing a chat on an account with no row is not a 404',
+        clearedChat.status === 200, String(clearedChat.status));
+      check('it says cleared', clearedChatBody.cleared === true, JSON.stringify(clearedChatBody));
+
+      const clearedCal = await post(A, '/settings/calendar', { url: null });
+      const clearedCalBody = await clearedCal.json();
+      check('and so is clearing a calendar', clearedCal.status === 200, String(clearedCal.status));
+      check('it says cleared too', clearedCalBody.cleared === true, JSON.stringify(clearedCalBody));
+
+      // The settings screen an untouched account loads. It answered this
+      // correctly even while every save was failing — which is exactly how the
+      // bug survived: the sheet said "Not linked", the person pressed Save, and
+      // only then did anything go wrong.
+      await H.cleanup();
+      const fresh = await (await H.as(A)(`${BASE}/settings`)).json();
+      check('a brand new account can read its own empty settings',
+        fresh.telegram.set === false && fresh.calendar.set === false, JSON.stringify(fresh));
+      check('and is told the timezone it actually has', fresh.timezone === 'UTC', fresh.timezone);
+    }
+
   } finally {
     server.kill();
     tg.closeAllConnections();

@@ -32,6 +32,34 @@ const CHAT_ID = /^-?\d{1,20}$/;
 // long after it went out of the code.
 const CALENDAR_COLUMN = 'calendar_ics_url';
 
+// EVERY WRITE BELOW IS AN UPSERT, and that is the fix for the one bug in this
+// file that reached a real person.
+//
+// They were UPDATEs. An UPDATE that matches no row is not an error — it
+// reports, truthfully, that nothing changed — so an account with no profile row
+// got `no profile for this account` from every save on this screen. Nothing
+// created a profile row: not the page, not the server, and the sign-up posts
+// straight to Supabase without passing through this deployment at all. So that
+// was every account, on the first thing it was asked to do.
+//
+// migration-profile-on-signup.sql is the primary fix and creates the row at the
+// moment the account does. This is the second layer, and it is worth having
+// even once that trigger is in place: it is what makes these routes correct on
+// a database where the migration has not been run yet, and the account that
+// finds out otherwise is a new one — the case least likely to be tested and
+// most expensive to lose.
+//
+// THE user_id FILTER HAS NOT BEEN DROPPED, it moved into the payload. An INSERT
+// has nothing to filter; what scopes it is the user_id it carries, which comes
+// from the verified token and nowhere else. The `profile_own` policy checks
+// that same value again with `with check (user_id = auth.uid())` — the
+// duplication server.js describes is intact, one claim in the code and one in
+// the database.
+//
+// Each write names only its own column, so the ON CONFLICT branch updates only
+// that column. Linking a chat does not disturb a calendar url, and neither
+// touches a timezone.
+
 /**
  * Enough to recognise, not enough to use.
  *
@@ -124,15 +152,17 @@ router.post('/telegram', async (req, res) => {
 
   const { data, error } = await db
     .from('profile')
-    .update({ telegram_chat_id: chat_id })
-    .eq('user_id', userId)
+    .upsert({ user_id: userId, telegram_chat_id: chat_id }, { onConflict: 'user_id' })
     .select('telegram_chat_id')
     .maybeSingle();
 
   if (error) return res.status(500).json({ error: error.message });
-  // No row came back, and row level security is why: an account with no
-  // profile row has nothing to update, and the policy makes that look the same
-  // as somebody else's row. Both are "not yours to write".
+  // Kept, and it finally means what it says. It used to fire for an account
+  // that simply had no row yet, which is why it read as "you do not exist"
+  // to everyone who had just signed up. A row that is not yours is now the
+  // only thing it can be about — and a policy refusal raises rather than
+  // returning nothing, so this is a floor under a case with no known way of
+  // being reached, not a branch anybody is expected to see.
   if (!data) return res.status(404).json({ error: 'no profile for this account' });
 
   const proof = await sendToChat(chat_id, 'Linked. Your day will arrive here.');
@@ -157,8 +187,7 @@ router.post('/telegram/clear', async (req, res) => {
 
   const { data, error } = await db
     .from('profile')
-    .update({ telegram_chat_id: null })
-    .eq('user_id', userId)
+    .upsert({ user_id: userId, telegram_chat_id: null }, { onConflict: 'user_id' })
     .select('user_id')
     .maybeSingle();
 
@@ -179,6 +208,12 @@ router.post('/telegram/clear', async (req, res) => {
  * and a person who has just pasted the right thing should not have to paste it
  * again because a network blinked. What must never happen is saving it and
  * reporting success.
+ *
+ * The probe runs BEFORE the write and that is now free of the trap it used to
+ * carry. While this was an UPDATE, a new account waited out a ten-second feed
+ * fetch and was then told it had no profile — the probe was paid for and thrown
+ * away, and the slowest possible request ended in the least useful answer.
+ * There is no refusal on that path any more.
  */
 router.post('/settings/calendar', async (req, res) => {
   const { db, userId } = req.auth;
@@ -190,8 +225,7 @@ router.post('/settings/calendar', async (req, res) => {
   if (!url) {
     const { data, error } = await db
       .from('profile')
-      .update({ [CALENDAR_COLUMN]: null })
-      .eq('user_id', userId)
+      .upsert({ user_id: userId, [CALENDAR_COLUMN]: null }, { onConflict: 'user_id' })
       .select('user_id')
       .maybeSingle();
 
@@ -204,8 +238,7 @@ router.post('/settings/calendar', async (req, res) => {
 
   const { data, error } = await db
     .from('profile')
-    .update({ [CALENDAR_COLUMN]: url })
-    .eq('user_id', userId)
+    .upsert({ user_id: userId, [CALENDAR_COLUMN]: url }, { onConflict: 'user_id' })
     .select('user_id')
     .maybeSingle();
 
