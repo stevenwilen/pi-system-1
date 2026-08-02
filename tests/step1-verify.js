@@ -71,7 +71,23 @@ const server = H.spawnServer(PORT);
   // written. What must hold is the ordering and the shape.
   const baseline = feed.data.items.length;
   console.log(`    notebook currently holds ${baseline} item(s)`);
-  check('sorted coldest first', feed.data.items.every((it, i, a) => i === 0 || a[i - 1].days >= it.days));
+  // TWO HALVES: what is running out of room, then what has gone cold. No
+  // unmarked row above a marked one, severity non-increasing through the
+  // marks, and days non-increasing through the rest.
+  {
+    const items = feed.data.items;
+    const firstCold = items.findIndex((i) => !i.mark);
+    const rank = { '!!!': 3, '!!': 2, '!': 1 };
+    const down = (xs) => xs.every((x, i) => i === 0 || xs[i - 1] >= x);
+
+    check('deadlines sit above the cold',
+      firstCold === -1 || !items.slice(firstCold).some((i) => i.mark),
+      items.map((i) => i.mark || '-').join(''));
+    check('the marked half runs from least room to most',
+      down(items.filter((i) => i.mark).map((i) => rank[i.mark])));
+    check('and the rest is still coldest first',
+      down(items.filter((i) => !i.mark).map((i) => i.days)));
+  }
 
   console.log('\nvalidation');
   check('rejects bad type', (await call('/entries', { type: 'idea', title: 'x' })).status === 400);

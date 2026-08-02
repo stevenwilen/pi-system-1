@@ -38,21 +38,38 @@ const daysUntil = (from, to) =>
   Math.round((new Date(`${to}T12:00:00Z`) - new Date(`${from}T12:00:00Z`)) / 86400000);
 
 /**
- * The mark for one item: '!!!', '!!', '!', or null.
+ * Days of room left: how long until it is due, less how long it will take.
  *
- * Null whenever the question cannot be asked — no due date, no size, or a size
- * this does not recognise. A missing mark means "nothing to say", never "fine":
- * the screen shows nothing either way, and inventing a mark from a half-filled
- * row would be worse than staying quiet.
+ * Negative means the room ran out. This is the whole of the judgement, and
+ * both numbers came from the person — nothing here estimates anything.
  *
- * A due date in the past gives a negative days_until and therefore '!!!',
- * which is correct. Overdue is the most urgent thing the scale can express.
+ * Null whenever the question cannot be asked: no due date, no size, or a size
+ * this does not recognise. That is "nothing to say", never "fine".
+ *
+ * Separate from markFor because the list is now ORDERED by it. A mark is three
+ * buckets and orders badly — everything overdue by any amount is one '!!!' —
+ * so the order uses the number and the screen shows the bucket. They must
+ * agree, which is why the bucket is computed from this rather than beside it.
  */
-function markFor({ due, size, today }) {
+function slackFor({ due, size, today }) {
   if (!due || !size || !today) return null;
   if (!Object.prototype.hasOwnProperty.call(DAYS_NEEDED, size)) return null;
+  return daysUntil(today, due) - DAYS_NEEDED[size];
+}
 
-  const slack = daysUntil(today, due) - DAYS_NEEDED[size];
+/**
+ * The mark for one item: '!!!', '!!', '!', or null.
+ *
+ * Null when there is no slack to speak of, and also when there is plenty: a
+ * thing due in a year needs no mark. The screen shows nothing either way, and
+ * inventing a mark from a half-filled row would be worse than staying quiet.
+ *
+ * A due date in the past gives negative slack and therefore '!!!', which is
+ * correct. Overdue is the most urgent thing the scale can express.
+ */
+function markFor(item) {
+  const slack = slackFor(item);
+  if (slack === null) return null;
 
   if (slack <= 0) return '!!!';
   if (slack <= 3) return '!!';
@@ -60,4 +77,4 @@ function markFor({ due, size, today }) {
   return null;
 }
 
-module.exports = { DAYS_NEEDED, SIZES, markFor, daysUntil };
+module.exports = { DAYS_NEEDED, SIZES, markFor, slackFor, daysUntil };

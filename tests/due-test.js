@@ -41,6 +41,36 @@ const day = (n) => {
   return d.toISOString().slice(0, 10);
 };
 
+/**
+ * The list's order, as much of it as the payload can show.
+ *
+ * Two halves: everything carrying a mark, then everything without. The marked
+ * half is ordered by days of room left, ascending — and `slack` is not sent,
+ * so what is checked here is the consequence of that. Ascending slack means
+ * non-increasing severity, because the marks are slack's own thresholds.
+ *
+ * The unmarked half is the old rule, longest untouched first.
+ */
+const SEVERITY = { '!!!': 3, '!!': 2, '!': 1 };
+
+function wellOrdered(items) {
+  const marked = items.filter((i) => i.mark);
+  const cold = items.filter((i) => !i.mark);
+
+  // No unmarked row may appear above a marked one.
+  const firstCold = items.findIndex((i) => !i.mark);
+  if (firstCold !== -1 && items.slice(firstCold).some((i) => i.mark)) return false;
+
+  const nonIncreasing = (xs) => xs.every((x, i) => i === 0 || xs[i - 1] >= x);
+  return (
+    nonIncreasing(marked.map((i) => SEVERITY[i.mark])) &&
+    nonIncreasing(cold.map((i) => i.days))
+  );
+}
+
+const describe = (items) =>
+  items.map((i) => `${i.mark || '-'}/${i.days}d`).join(' ');
+
 const PORT = 3974;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
@@ -241,9 +271,61 @@ const get = async (path) => {
     const after = await get('/entries');
     check('and the list still reads',
       after.status === 200 && after.body.items.length === ids.length, `${after.body.items.length}`);
-    check('ordered longest left first',
-      after.body.items.every((it, i, a) => i === 0 || a[i - 1].days >= it.days),
-      after.body.items.map((i) => i.days).join(','));
+    check('still in the two-part order',
+      wellOrdered(after.body.items), describe(after.body.items));
+  }
+
+  console.log('\na deadline outranks a cold thing');
+  {
+    // RELATIVE POSITIONS, and nothing cleared first. Emptying the notebook to
+    // make the assertions easy is how a case takes the rows a later one was
+    // relying on: this deleted everything and the section after it threw on a
+    // row that no longer existed.
+    const mine = [];
+    const at = (list, title) => list.findIndex((i) => i.title === title);
+
+    // Added just now, so its staleness is zero and only the deadline can lift
+    // it. The other is the opposite: forty days cold, no deadline at all.
+    const fresh = await post('/entries', {
+      type: 'task', title: 'zz due on Friday', due: day(2), size: 'a day',
+    });
+    mine.push(fresh.body.entry.id);
+
+    const { data: old } = await H.db
+      .from('entries')
+      .insert({
+        user_id: U, type: 'task', title: 'zz cold and undated',
+        created_at: new Date(Date.now() - 40 * 86400000).toISOString(),
+      })
+      .select().single();
+    mine.push(old.id);
+
+    const list = (await get('/entries')).body.items;
+    const urgent = at(list, 'zz due on Friday');
+    const cold = at(list, 'zz cold and undated');
+
+    check('both are in the list', urgent !== -1 && cold !== -1, describe(list));
+    check('the fresh urgent thing outranks the cold one', urgent < cold,
+      `${urgent} vs ${cold}`);
+    check('even though it is the colder of the two by far',
+      list[cold].days > list[urgent].days,
+      `${list[cold].days}d vs ${list[urgent].days}d`);
+
+    // AND SLACK ORDERS WITHIN THE MARKS, not the mark itself. Both of these
+    // are '!!!' — one out of room today, the other for a month — and a sort on
+    // the mark alone would leave them in whatever order they arrived in.
+    const worse = await post('/entries', {
+      type: 'task', title: 'zz overdue by a month', due: day(-30), size: 'a day',
+    });
+    mine.push(worse.body.entry.id);
+
+    const both = (await get('/entries')).body.items;
+    check('the worse of two !!! comes first',
+      at(both, 'zz overdue by a month') < at(both, 'zz due on Friday'),
+      describe(both));
+    check('and the whole list is still well ordered', wellOrdered(both), describe(both));
+
+    for (const id of mine) await H.db.from('entries').delete().eq('user_id', U).eq('id', id);
   }
 
   console.log('\nthe endpoints that were removed really are gone');

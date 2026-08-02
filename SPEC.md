@@ -20,7 +20,8 @@ So the system's core move is to make the user **read instead of remember**.
 One screen, opened once a day. Two sections, top to bottom:
 
 1. **The day** — the builder, showing today or tomorrow.
-2. **Things** — habits, projects and tasks in one list, coldest first.
+2. **Things** — habits, projects and tasks in one list: what is running out of
+   room, then what has gone cold.
 
 Behind it: a Postgres notebook (Supabase), one read-only calendar feed, and a
 Telegram bot that only ever sends.
@@ -432,9 +433,28 @@ Habits, projects and tasks in **one list**. A task left three weeks is the same
 problem as a project left three weeks, so they share a list rather than being
 filed apart.
 
-**Ordered by how long each thing has been left, coldest first.** The order is
-arithmetic on the days, not anything the person arranged: there is no ranking and
-no drag, and `entries.sort_order` is retired — written by nothing, read by
+**Two halves: what is running out of room, then what has gone cold.**
+
+Anything carrying a mark sits above everything without one, ordered by the least
+room left — so an overdue thing beats a thing due Friday, and both beat a habit
+nobody has done in a fortnight. Below the marks the rule is unchanged: longest
+untouched first, across all three types.
+
+The break between the halves is the mark itself, **not a blended score**. A
+single number mixing "days since" with "days of room" would be a judgement this
+system has no standing to make: it is never told when work happens, only that
+something was scheduled. Two orders and one plain rule about which wins can be
+read off the screen; a score cannot.
+
+Within the marks the order uses **slack** — days until due, less the days the
+size stands for — rather than the mark. `!!!` covers everything from
+just-out-of-room to a month overdue, and those are not the same day. `slack` is
+computed in `warning.js` and the mark is derived from it, so the badge and the
+position can never disagree. It is not sent to the client: the screen shows the
+mark, and a number nothing renders is a field to keep in step for no one.
+
+All of it is still arithmetic on what the person declared. There is no ranking
+and no drag, and `entries.sort_order` is retired — written by nothing, read by
 nothing, kept only because dropping a column cannot be undone.
 
 `blocks.sort_order` is a different column and is load-bearing. It is what holds

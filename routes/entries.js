@@ -9,7 +9,7 @@ const express = require('express');
 const { todayIn } = require('../clock');
 const { create_entry, update_entry } = require('../tools');
 const { lastScheduled, daysBetween } = require('../staleness');
-const { markFor, daysUntil } = require('../warning');
+const { markFor, slackFor, daysUntil } = require('../warning');
 const { TYPES, orNull, validate, toRow } = require('../entry-shape');
 
 const router = express.Router();
@@ -69,6 +69,10 @@ router.get('/entries', async (req, res) => {
         // '!!!', '!!', '!' or null. Arithmetic on the due date and the size,
         // and nothing else — see warning.js.
         mark: markFor({ due, size: r.size, today }),
+        // Days of room left, which is what the order above is made of. Not
+        // sent: the screen shows the mark, and a number nothing renders is a
+        // field to keep in step with for no one's benefit.
+        slack: slackFor({ due, size: r.size, today }),
         // Null when this has never been scheduled, which is what lets the
         // screen say "since added" instead of claiming a scheduling that
         // never happened.
@@ -77,9 +81,29 @@ router.get('/entries', async (req, res) => {
       };
     });
 
-    // Longest left, first, across all three types. The order is arithmetic on
-    // the days rather than anything the person arranged, so the server can
-    // compute it and the screen does not have to be told.
+    // TWO HALVES: what is running out of room, then what has gone cold.
+    //
+    // Anything carrying a mark sits above everything without one, ordered by
+    // the least room left — so an overdue thing beats a thing due Friday, and
+    // both beat a habit nobody has done in a fortnight. Below the marks it is
+    // the old order: longest untouched first, across all three types.
+    //
+    // The break between them is the mark, not a blended score. A single number
+    // mixing "days since" with "days of room" would be a judgement this system
+    // does not have the standing to make — it is not told when work happens,
+    // only when something was scheduled. Two orders with one plain rule about
+    // which wins can be read off the screen; a score cannot.
+    //
+    // Within the marks the ORDER uses slack rather than the mark itself,
+    // because '!!!' covers everything from just-out-of-room to a month
+    // overdue, and those are not the same day.
+    //
+    // Still arithmetic on what the person declared, and still computed here so
+    // the screen never has to be told what order to use.
+    const order = (a, b) =>
+      (a.mark ? 0 : 1) - (b.mark ? 0 : 1) ||
+      (a.mark ? a.slack - b.slack : b.days - a.days) ||
+      a.title.localeCompare(b.title);
     res.json({
       today,
       timezone: timeZone,
@@ -93,7 +117,8 @@ router.get('/entries', async (req, res) => {
       // they are the same idea, and a second constant on the page would be a
       // copy of this one waiting to be forgotten.
       nudge_hour: Number.isInteger(profile && profile.nudge_hour) ? profile.nudge_hour : 20,
-      items: items.sort((a, b) => b.days - a.days || a.title.localeCompare(b.title)),
+      // Sorted with slack, sent without it.
+      items: items.sort(order).map(({ slack, ...item }) => item),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
