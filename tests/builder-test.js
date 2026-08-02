@@ -165,7 +165,25 @@ function boot({
   entries = null, now = null, failEntries = false,
   // What GET /settings answers. Configured by default, so no case falls into
   // the first-run screen without asking for it — the cases about that ask.
-  settings = { telegram: { set: true, hint: '…3785' }, calendar: { set: true, hint: 'x/…/basic.ics' } },
+  settings = {
+    telegram: { set: true, hint: '…3785' },
+    calendar: { set: true, hint: 'x/…/basic.ics' },
+    // What the route sends, in full. The window comes down from the server so
+    // the stepper and the route cannot disagree about what is offerable, and a
+    // stub that left it out would exercise the page's fallbacks instead of the
+    // path every real load takes.
+    timezone: 'America/New_York',
+    wake_minutes: 8 * 60,
+    wake_min: 4 * 60,
+    wake_max: 12 * 60,
+    wake_step: 30,
+    today: '2026-07-27',
+  },
+  // WHAT THE DEVICE SAYS ITS ZONE IS, which is otherwise whatever machine the
+  // suite happens to be running on. The timezone suggestion is a comparison
+  // between this and what is stored, so a case about it has to fix both sides
+  // or it passes or fails by geography.
+  deviceZone = 'America/New_York',
   // Signed in unless a case says otherwise. Every case here is about the
   // planner, and the planner is only reachable with a session — booting each
   // one through the gate would be re-testing sign-in three hundred times.
@@ -173,6 +191,10 @@ function boot({
   // Handed in when a case is simulating a RELOAD: the same device, the same
   // storage, a fresh page.
   storage = null,
+  // What POST /settings/timezone answers. Success unless a case wants the
+  // refusal path, which is a screen state of its own: the picker has to go
+  // back to what is actually stored.
+  timezoneReply = null,
   // What POST /plan answers. The confirm hands back the notes it moved off the
   // Things list and onto blocks, and a case about that has to be able to say
   // which ones arrived where.
@@ -270,8 +292,34 @@ function boot({
     );
   }
 
+  /**
+   * Intl, with one thing fixed: what this device says its own zone is.
+   *
+   * Only the no-timeZone case is touched. Every other call on the page names a
+   * zone explicitly — the date, the local hour, the clock shown beside the
+   * picker — and those must go on doing real conversions, or the cases about
+   * the day boundary would be testing this wrapper instead of the page.
+   */
+  const RealDTF = Intl.DateTimeFormat;
+  const DTF = function DateTimeFormat(locales, options) {
+    const made = new RealDTF(locales, options);
+    if (!options || !options.timeZone) {
+      const real = made.resolvedOptions.bind(made);
+      made.resolvedOptions = () => ({ ...real(), timeZone: deviceZone });
+    }
+    return made;
+  };
+  DTF.prototype = RealDTF.prototype;
+  DTF.supportedLocalesOf = RealDTF.supportedLocalesOf.bind(RealDTF);
+
+  const localIntl = {
+    DateTimeFormat: DTF,
+    NumberFormat: Intl.NumberFormat,
+    supportedValuesOf: Intl.supportedValuesOf && Intl.supportedValuesOf.bind(Intl),
+  };
+
   const sandbox = {
-    console, setTimeout, clearTimeout, Intl, Math, JSON,
+    console, setTimeout, clearTimeout, Intl: localIntl, Math, JSON,
     Date: clock,
     String, Number, Boolean, Array, Object,
     alert: () => {},
@@ -320,6 +368,10 @@ function boot({
           if (url === '/entries' && failEntries) throw new Error('offline');
           if (url.startsWith('/calendar')) return { items: calendar, failed };
           if (url.startsWith('/plan/')) return planFor(url);
+          if (url === '/settings/timezone') {
+            return timezoneReply || { timezone: 'Europe/Berlin', today: '2026-07-27' };
+          }
+          if (url === '/settings/wake') return { wake_minutes: 450 };
           if (url === '/plan') {
             return planReply || { date: 'x', blocks: 0, status: 'confirmed', ids: [], notes: [] };
           }
@@ -2558,6 +2610,207 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
         line && line.textContent === 'bring the blue folder', line && line.textContent);
       check('and the row it came off has no mark left',
         markOf(rows(byId)[1]) === null);
+    }
+  }
+
+  console.log('\nthe timezone offers itself, because nothing else can check it');
+  {
+    // What GET /settings answers for an account that has never said.
+    const untouched = (extra = {}) => ({
+      telegram: { set: true, hint: '…3785' },
+      calendar: { set: true, hint: 'x/…/basic.ics' },
+      timezone: 'UTC',
+      wake_minutes: 7 * 60,
+      wake_min: 4 * 60,
+      wake_max: 12 * 60,
+      wake_step: 30,
+      today: '2026-07-27',
+      ...extra,
+    });
+
+    const open = async (opts) => {
+      const b = boot(opts);
+      await b.ctx.load();
+      b.byId['settings-open'].onclick();
+      // loadSettings is a fetch, so the panel is filled a turn later.
+      await wait(0);
+      return b;
+    };
+
+    {
+      // THE CASE THIS EXISTS FOR. A new account is on UTC because the column
+      // defaults to it — not because anybody chose it — and every block message
+      // and the evening nudge fire off that. The device knows better and is the
+      // only thing on the screen that does.
+      const { byId, posted } = await open({
+        settings: untouched(), deviceZone: 'America/New_York',
+      });
+
+      check('the offer is showing', !byId['tz-offer']._class.has('hidden'));
+      check('and it names the zone this device is in',
+        byId['tz-suggest'].textContent === 'Use America/New_York?',
+        byId['tz-suggest'].textContent);
+      check('nothing was written by looking', posted.length === 0,
+        JSON.stringify(posted.map((p) => p.url)));
+
+      // THE VALUE, PLAINLY, on the closed row — both halves of it.
+      check('the row says what is stored', byId['when-state'].textContent === 'UTC · 7:00 AM',
+        byId['when-state'].textContent);
+      check('and does not read as settled', !byId['when-state']._class.has('on'),
+        byId['when-state'].className);
+
+      // The check a person can actually make. A name is a name; the clock is
+      // the thing to hold against the watch on their wrist.
+      check('the clock in that zone is shown', /^It is .* there now\.$/.test(byId['tz-now'].textContent),
+        byId['tz-now'].textContent);
+
+      byId['tz-suggest'].onclick();
+      await wait(0);
+
+      check('one tap writes it',
+        posted.length === 1 && posted[0].url === '/settings/timezone',
+        JSON.stringify(posted.map((p) => p.url)));
+      check('with the device zone in it',
+        posted[0].body.timezone === 'America/New_York', JSON.stringify(posted[0].body));
+    }
+
+    {
+      // AND IT DOES NOT NAG. An account already on the device's zone has
+      // nothing to be offered, and a button that sets what is already set
+      // teaches people the screen does not mean anything.
+      const { byId } = await open({
+        settings: untouched({ timezone: 'America/New_York' }),
+        deviceZone: 'America/New_York',
+      });
+
+      check('no offer when the two agree', byId['tz-offer']._class.has('hidden'));
+      check('and the row reads as settled', byId['when-state']._class.has('on'),
+        byId['when-state'].className);
+      check('still showing the value', byId['when-state'].textContent === 'America/New_York · 7:00 AM',
+        byId['when-state'].textContent);
+    }
+
+    {
+      // A DEVICE THAT WILL NOT SAY. Nothing to compare against, so nothing is
+      // offered — rather than an offer to use undefined.
+      //
+      // `null` and not `undefined`: a default parameter fires on undefined, so
+      // asking for no zone that way hands back the default one and the case
+      // asserts the opposite of what it is named for. It did exactly that on
+      // the first run.
+      const { byId } = await open({ settings: untouched(), deviceZone: null });
+
+      check('a device with no zone is not offered as one',
+        byId['tz-offer']._class.has('hidden'), byId['tz-suggest'].textContent);
+      check('and the stored value is still shown',
+        byId['when-state'].textContent === 'UTC · 7:00 AM', byId['when-state'].textContent);
+    }
+
+    {
+      // THE LIST, for anyone whose device is not where they are. Built from
+      // the browser's own tzdb rather than shipped, and holding the stored
+      // value whether or not that list has it — UTC is not on it, so a select
+      // built from the list alone would open on somewhere in Africa for every
+      // account that had never set one.
+      const { byId, posted } = await open({ settings: untouched() });
+      const pick = byId['tz-pick'].children[0];
+
+      check('there is a picker', Boolean(pick) && pick.tagName === 'select', pick && pick.tagName);
+      check('open on what is stored', pick.value === 'UTC', pick.value);
+      check('and holding the whole list', pick.children.length > 100,
+        String(pick.children.length));
+      check('with real zone names in it',
+        pick.children.some((o) => o.value === 'Europe/Berlin'));
+
+      pick.value = 'Europe/Berlin';
+      pick.onchange();
+      await wait(0);
+
+      check('choosing one writes it',
+        posted.length === 1 && posted[0].body.timezone === 'Europe/Berlin',
+        JSON.stringify(posted.map((p) => p.body)));
+    }
+
+    {
+      // REFUSED, AND THE SCREEN GOES BACK TO WHAT IS STORED. A picker left
+      // showing a value the server would not take is a screen disagreeing with
+      // the database and saying nothing about it.
+      const { byId } = await open({
+        settings: untouched(),
+        planReply: null,
+        timezoneReply: { error: 'not a timezone: Mars/Olympus.' },
+      });
+
+      const pick = byId['tz-pick'].children[0];
+      pick.value = 'Europe/Berlin';
+      pick.onchange();
+      await wait(0);
+
+      check('the refusal is shown', /Mars\/Olympus/.test(byId['when-said'].textContent),
+        byId['when-said'].textContent);
+      check('and it reads as a failure', byId['when-said']._class.has('bad'),
+        byId['when-said'].className);
+      check('the picker is back on the stored value',
+        byId['tz-pick'].children[0].value === 'UTC', byId['tz-pick'].children[0].value);
+      check('and the row still says UTC', byId['when-state'].textContent === 'UTC · 7:00 AM',
+        byId['when-state'].textContent);
+    }
+
+    {
+      // THE WAKE STEPPER, which writes once the pressing stops. Four taps
+      // carrying four absolute values can arrive in any order, and the one that
+      // lands last is not necessarily the one the person stopped on.
+      const { byId, posted } = await open({ settings: untouched() });
+
+      byId['wake-def-plus'].onclick();
+      byId['wake-def-plus'].onclick();
+      byId['wake-def-plus'].onclick();
+
+      check('the screen moves at once', byId['wake-def-time'].textContent === '8:30 AM',
+        byId['wake-def-time'].textContent);
+      check('and the row with it', byId['when-state'].textContent === 'UTC · 8:30 AM',
+        byId['when-state'].textContent);
+      check('but nothing has been written yet', posted.length === 0,
+        JSON.stringify(posted.map((p) => p.url)));
+
+      await wait(700);
+
+      check('one request, after the pressing stops',
+        posted.length === 1 && posted[0].url === '/settings/wake',
+        JSON.stringify(posted.map((p) => p.url)));
+      check('carrying where it landed, not where it passed through',
+        posted[0].body.minutes === 8 * 60 + 30, JSON.stringify(posted[0].body));
+    }
+
+    {
+      // AND THE PAUSE NEVER SWALLOWS ONE. Leaving the screen within half a
+      // second of the last press would otherwise look exactly like a setting
+      // that did not save.
+      const { byId, posted } = await open({ settings: untouched() });
+
+      byId['wake-def-plus'].onclick();
+      check('still holding it', posted.length === 0);
+
+      byId['settings-close'].onclick();
+      await wait(0);
+
+      check('closing the screen writes it',
+        posted.length === 1 && posted[0].url === '/settings/wake',
+        JSON.stringify(posted.map((p) => p.url)));
+      check('with the value it was holding', posted[0].body.minutes === 7 * 60 + 30,
+        JSON.stringify(posted[0].body));
+    }
+
+    {
+      // THE ENDS OF THE WINDOW, which come down from the server. The stepper
+      // must not offer a press the route would refuse.
+      const { byId } = await open({ settings: untouched({ wake_minutes: 4 * 60 }) });
+      check('at the bottom, minus is dead', byId['wake-def-minus'].disabled === true);
+      check('and plus is not', byId['wake-def-plus'].disabled === false);
+
+      const top = await open({ settings: untouched({ wake_minutes: 12 * 60 }) });
+      check('at the top, plus is dead', top.byId['wake-def-plus'].disabled === true);
+      check('and minus is not', top.byId['wake-def-minus'].disabled === false);
     }
   }
 

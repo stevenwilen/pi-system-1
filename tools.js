@@ -13,6 +13,8 @@ require('dotenv').config();
 
 const ical = require('node-ical');
 
+const { canonicalZone } = require('./clock');
+
 // Fields the caller may set. Anything else is dropped, so user_id, id,
 // created_at and updated_at can never be overwritten from outside.
 //
@@ -103,14 +105,18 @@ async function update_profile(db, user_id, fields) {
     };
   }
 
+  // One spelling of the rule, in clock.js, which is the module that knows what
+  // a timezone is. This was a bare `new Intl.DateTimeFormat` in a try/catch,
+  // which accepts `+05:00` — a fixed offset that stops being right the day the
+  // clocks change, with nothing anywhere able to notice.
   if (patch.timezone) {
-    try {
-      new Intl.DateTimeFormat('en', { timeZone: patch.timezone });
-    } catch {
+    const zone = canonicalZone(patch.timezone);
+    if (!zone) {
       return {
         error: `not a valid timezone: ${patch.timezone}. Use an IANA name such as America/New_York.`,
       };
     }
+    patch.timezone = zone;
   }
 
   const { data, error } = await db

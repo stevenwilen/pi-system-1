@@ -480,6 +480,168 @@ async function rowOf(which) {
       check('and is told the timezone it actually has', fresh.timezone === 'UTC', fresh.timezone);
     }
 
+    console.log('\n7. when the day happens');
+    {
+      // THE ROW THE SIGNUP TRIGGER WRITES, AND NOTHING ELSE. ensureProfile
+      // fills in a zone and a wake time, which is right for every other
+      // section and wrong for this one — the whole subject here is what an
+      // account that has never said anything is sitting on, and a fixture that
+      // says it for them would have made the first two checks below assert the
+      // harness's own defaults.
+      await H.cleanup();
+      const bareRows = await H.setup();
+      await H.db.from('profile').insert([
+        { user_id: bareRows.a.id },
+        { user_id: bareRows.b.id },
+      ]);
+
+      const settingsOf = async (who) => (await H.as(who)(`${BASE}/settings`)).json();
+      const entriesOf = async (who) => (await H.as(who)(`${BASE}/entries`)).json();
+      const rowOfA = async () => {
+        const accounts = await H.setup();
+        const { data } = await H.service
+          .from('profile')
+          .select('timezone, default_wake_time')
+          .eq('user_id', accounts.a.id)
+          .maybeSingle();
+        return data || {};
+      };
+
+      // WHAT AN UNTOUCHED ACCOUNT IS, and it is not "unset": the column is NOT
+      // NULL with a default, so there is no state that means "has not said".
+      // UTC is what the screen has to work with, and the reason it compares
+      // against the device rather than looking for an empty field.
+      const before = await settingsOf(A);
+      check('a new account is on UTC', before.timezone === 'UTC', before.timezone);
+      check('and starts its day at seven', before.wake_minutes === 420,
+        String(before.wake_minutes));
+      check('the screen is told the window it may offer',
+        before.wake_min === 240 && before.wake_max === 720 && before.wake_step === 30,
+        JSON.stringify([before.wake_min, before.wake_max, before.wake_step]));
+
+      // TWO ZONES THAT ARE NEVER ON THE SAME DATE. Kiritimati is +14 and Niue
+      // is -11, a twenty-five hour spread, so this comparison cannot pass by
+      // being run at a lucky hour — which is the failure mode of every "the
+      // date changed" test written against two ordinary zones.
+      const EAST = 'Pacific/Kiritimati';
+      const WEST = 'Pacific/Niue';
+
+      const east = await (await post(A, '/settings/timezone', { timezone: EAST })).json();
+      check('a zone is accepted', east.timezone === EAST, JSON.stringify(east));
+      check('and the answer carries the date under it', /^\d{4}-\d{2}-\d{2}$/.test(east.today || ''),
+        JSON.stringify(east));
+
+      const eastEntries = await entriesOf(A);
+      check('the list reports the new zone', eastEntries.timezone === EAST, eastEntries.timezone);
+
+      const west = await (await post(A, '/settings/timezone', { timezone: WEST })).json();
+      const westEntries = await entriesOf(A);
+      check('and the other one', westEntries.timezone === WEST, westEntries.timezone);
+
+      // THE POINT OF THE WHOLE SETTING. Everything that decides which day a
+      // block belongs to, and which day the nudge asks about, is this boundary.
+      check('THE DAY BOUNDARY MOVES WITH IT',
+        eastEntries.today !== westEntries.today,
+        `${eastEntries.today} vs ${westEntries.today}`);
+      check('and both are the date the server would compute for that zone',
+        eastEntries.today === east.today && westEntries.today === west.today,
+        `${eastEntries.today}/${east.today} ${westEntries.today}/${west.today}`);
+
+      // STORED CANONICAL. Intl takes several spellings of one place; the column
+      // holds one of them, or nothing downstream can match on it.
+      const alias = await (await post(A, '/settings/timezone', { timezone: 'us/eastern' })).json();
+      check('an alias is stored as the name it resolves to',
+        alias.timezone === 'America/New_York', JSON.stringify(alias));
+      check('and that is what is on the row',
+        (await rowOfA()).timezone === 'America/New_York',
+        String((await rowOfA()).timezone));
+
+      // REFUSED, AND NOT STORED. The second half is the half worth checking:
+      // a route that answers 400 and writes anyway is a route that looks
+      // correct from the screen and has already broken the scheduler.
+      const good = (await rowOfA()).timezone;
+      for (const bad of ['Mars/Olympus', 'America/New_Yrok', '', '   ', null, 42, { a: 1 }]) {
+        const r = await post(A, '/settings/timezone', { timezone: bad });
+        const body = await r.json();
+        check(`${JSON.stringify(bad)} is refused`, r.status === 400, `${r.status} ${JSON.stringify(body)}`);
+      }
+      check('and none of them changed the row', (await rowOfA()).timezone === good,
+        String((await rowOfA()).timezone));
+
+      // AN OFFSET IS NOT A ZONE, and Intl accepts it — which is why this is
+      // checked by name. '+05:00' never changes its clocks, so whoever stored
+      // it in January is an hour out in April and nothing can notice.
+      const offset = await post(A, '/settings/timezone', { timezone: '+05:00' });
+      check('an offset is refused, though Intl would take it', offset.status === 400,
+        String(offset.status));
+      check('the message says why', /clocks change/.test((await offset.json()).error || ''));
+      check('and the row is still the last good one', (await rowOfA()).timezone === good,
+        String((await rowOfA()).timezone));
+
+      console.log('   the hour a day starts at');
+
+      const woke = await (await post(A, '/settings/wake', { minutes: 330 })).json();
+      check('half past five is accepted', woke.wake_minutes === 330, JSON.stringify(woke));
+      check('the row holds it', String((await rowOfA()).default_wake_time).slice(0, 5) === '05:30',
+        String((await rowOfA()).default_wake_time));
+      check('and the day screen is told', (await entriesOf(A)).wake_time === '05:30',
+        (await entriesOf(A)).wake_time);
+
+      const stored = (await rowOfA()).default_wake_time;
+      for (const [minutes, why] of [
+        [345, 'off the half hour'], [180, 'before the window'], [780, 'after it'],
+        [-30, 'before the day'], ['seven', 'not a number'], [null, 'nothing at all'],
+      ]) {
+        const r = await post(A, '/settings/wake', { minutes });
+        check(`${JSON.stringify(minutes)} is refused: ${why}`, r.status === 400,
+          `${r.status} ${JSON.stringify(await r.json())}`);
+      }
+      check('and the stored hour survived all of them',
+        (await rowOfA()).default_wake_time === stored, String((await rowOfA()).default_wake_time));
+
+      // The bounds are the ones the screen is handed, so the two cannot
+      // disagree about what is offerable.
+      const edges = await settingsOf(A);
+      const low = await post(A, '/settings/wake', { minutes: edges.wake_min });
+      const high = await post(A, '/settings/wake', { minutes: edges.wake_max });
+      check('both ends of the window it advertises are accepted',
+        low.status === 200 && high.status === 200, `${low.status} ${high.status}`);
+
+      console.log('   whose day it is');
+
+      // Neither field is anybody else's. B has done nothing to their own and
+      // must still be sitting on the defaults.
+      const theirs = await settingsOf(B);
+      check('B is untouched by any of it',
+        theirs.timezone === 'UTC' && theirs.wake_minutes === 420, JSON.stringify(theirs));
+
+      await post(B, '/settings/timezone', { timezone: 'Europe/Berlin' });
+      check('and setting B\'s does not move A\'s',
+        (await settingsOf(A)).timezone === 'America/New_York',
+        (await settingsOf(A)).timezone);
+      check('while B has their own', (await settingsOf(B)).timezone === 'Europe/Berlin',
+        (await settingsOf(B)).timezone);
+
+      // THE UPSERT PATH, for the account that has no row at all. This is the
+      // case section 6 exists for, asked of the two new routes.
+      await H.cleanup();
+      const bare = await post(A, '/settings/timezone', { timezone: 'Asia/Tokyo' });
+      check('an account with no profile row can still set a zone', bare.status === 200,
+        `${bare.status} ${JSON.stringify(await bare.json())}`);
+      check('and the row it created holds it', (await rowOfA()).timezone === 'Asia/Tokyo',
+        String((await rowOfA()).timezone));
+      check('with the wake time still at the column default',
+        String((await rowOfA()).default_wake_time).slice(0, 5) === '07:00',
+        String((await rowOfA()).default_wake_time));
+
+      await H.cleanup();
+      const bareWake = await post(A, '/settings/wake', { minutes: 480 });
+      check('and one with no row can set a wake time', bareWake.status === 200,
+        String(bareWake.status));
+      check('leaving the zone at the column default',
+        (await rowOfA()).timezone === 'UTC', String((await rowOfA()).timezone));
+    }
+
   } finally {
     server.kill();
     tg.closeAllConnections();

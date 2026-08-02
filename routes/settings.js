@@ -18,6 +18,9 @@ const express = require('express');
 
 const { sendToChat } = require('../telegram');
 const { probeFeed } = require('../tools');
+const {
+  canonicalZone, toMinutes, hhmmss, todayIn, WAKE_MIN, WAKE_MAX, WAKE_STEP,
+} = require('../clock');
 
 const router = express.Router();
 
@@ -93,7 +96,7 @@ function chatHint(id) {
 async function profileOf(db, userId) {
   const { data, error } = await db
     .from('profile')
-    .select(`telegram_chat_id, ${CALENDAR_COLUMN}, timezone`)
+    .select(`telegram_chat_id, ${CALENDAR_COLUMN}, timezone, default_wake_time`)
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -102,6 +105,12 @@ async function profileOf(db, userId) {
 }
 
 function stateOf(profile) {
+  // Both defaults are the column's own, spelled again here for the one case
+  // where there is no row to read them off: an account whose signup trigger
+  // has not run. Not a guess about anybody — UTC and seven o'clock are what
+  // the schema says a row starts as, and the screen says as much.
+  const timezone = (profile && profile.timezone) || 'UTC';
+
   return {
     telegram: {
       set: Boolean(profile && profile.telegram_chat_id),
@@ -111,7 +120,23 @@ function stateOf(profile) {
       set: Boolean(profile && profile[CALENDAR_COLUMN]),
       hint: hint(profile && profile[CALENDAR_COLUMN]),
     },
-    timezone: (profile && profile.timezone) || 'UTC',
+    timezone,
+    // MINUTES, because the control that sets it is a stepper made of them and
+    // the route below takes them back the same way. `GET /entries` sends the
+    // same column as `wake_time`, 'HH:MM', because that payload is booting the
+    // day screen rather than a settings field. Both are read off one column, so
+    // they cannot disagree about anything but their shape.
+    wake_minutes: toMinutes((profile && profile.default_wake_time) || '07:00'),
+    // What today is where this account thinks it lives. The screen shows the
+    // clock in that zone itself — it has a full Intl and no reason to ask — but
+    // the DATE is the thing the day boundary turns on, and it is the server's
+    // reckoning that decides which day a plan belongs to.
+    today: todayIn(timezone),
+    // The stepper's bounds, so the screen and the route cannot disagree about
+    // what is offerable. See clock.js.
+    wake_min: WAKE_MIN,
+    wake_max: WAKE_MAX,
+    wake_step: WAKE_STEP,
   };
 }
 
@@ -195,6 +220,108 @@ router.post('/telegram/clear', async (req, res) => {
   if (!data) return res.status(404).json({ error: 'no profile for this account' });
 
   res.json({ chat_id: null, cleared: true });
+});
+
+// --- when the day happens ----------------------------------------------------
+//
+// NOTHING WROTE EITHER OF THESE. `update_profile` in tools.js has validated
+// both since the beginning and is reachable only from the brain, which nothing
+// calls — so every account created by the signup trigger sat on the column
+// defaults for ever. UTC and 07:00 are honest placeholders and silent wrong
+// answers: block messages and the evening nudge fire off the stored zone, so an
+// account in New York was being written to at four in the morning and nothing
+// on any screen said so.
+//
+// Two routes rather than one, for the reason the header gives: each write names
+// only its own column, so the ON CONFLICT branch touches only that column.
+// A single route taking both would have to decide what an absent field means,
+// and the answer that reads as obvious — leave it alone — is one careless
+// `undefined` away from writing null over the other one.
+
+/**
+ * Where this person lives, as a zone rather than an offset.
+ *
+ * Stored canonical: `america/new_york` and `US/Eastern` both come back as
+ * `America/New_York`, so the column holds one spelling of each place. See
+ * canonicalZone.
+ */
+router.post('/settings/timezone', async (req, res) => {
+  const { db, userId } = req.auth;
+
+  const asked = (req.body || {}).timezone;
+  const zone = canonicalZone(asked);
+
+  // REFUSED RATHER THAN STORED, and this is the one field on this screen where
+  // that is the right way round. A calendar url that will not load is still
+  // saved, because the network is not the url. A timezone that is not a zone
+  // is not a transient failure — every day boundary and every send time
+  // computed from it would throw, and the scheduler swallows a throw by
+  // skipping that user, which looks exactly like having nothing to send.
+  if (!zone) {
+    return res.status(400).json({
+      error:
+        `not a timezone: ${String(asked === undefined ? '' : asked)}. ` +
+        'It needs an IANA name such as America/New_York — an offset like +05:00 ' +
+        'is refused because it stops being right when the clocks change.',
+    });
+  }
+
+  const { data, error } = await db
+    .from('profile')
+    .upsert({ user_id: userId, timezone: zone }, { onConflict: 'user_id' })
+    .select('timezone')
+    .maybeSingle();
+
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'no profile for this account' });
+
+  // The date in the new zone comes back with it. That is the whole visible
+  // consequence of this setting, and a screen that has just moved somebody
+  // across the dateline should not have to ask a second time to find out.
+  res.json({ timezone: data.timezone, today: todayIn(data.timezone) });
+});
+
+/**
+ * The hour the day starts from, when nothing else has said.
+ *
+ * Not the hour of any particular day: `plans.wake_time` is that, it is set by
+ * the builder's Starts control, and confirming a day writes it. This is what a
+ * day with no plan yet begins at.
+ */
+router.post('/settings/wake', async (req, res) => {
+  const { db, userId } = req.auth;
+
+  const minutes = Number((req.body || {}).minutes);
+
+  if (!Number.isInteger(minutes)) {
+    return res.status(400).json({ error: 'minutes must be a whole number of minutes past midnight' });
+  }
+  if (minutes % WAKE_STEP !== 0) {
+    return res.status(400).json({ error: `the day starts on the half hour: ${minutes} is not a multiple of ${WAKE_STEP}` });
+  }
+  // The same window the stepper offers. A stored value outside it would be one
+  // the screen could show and never step back to.
+  if (minutes < WAKE_MIN || minutes > WAKE_MAX) {
+    // The number itself once it is off the clock face. hhmmss divides, so a
+    // negative went out as `-1:-3` — which reads as a bug in the message
+    // rather than a refusal of what was sent.
+    const said =
+      minutes >= 0 && minutes < 1440 ? hhmmss(minutes).slice(0, 5) : `${minutes} minutes`;
+    return res.status(400).json({
+      error: `a wake time between ${hhmmss(WAKE_MIN).slice(0, 5)} and ${hhmmss(WAKE_MAX).slice(0, 5)}: ${said} is outside it`,
+    });
+  }
+
+  const { data, error } = await db
+    .from('profile')
+    .upsert({ user_id: userId, default_wake_time: hhmmss(minutes) }, { onConflict: 'user_id' })
+    .select('default_wake_time')
+    .maybeSingle();
+
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'no profile for this account' });
+
+  res.json({ wake_minutes: toMinutes(data.default_wake_time) });
 });
 
 // --- calendars ---------------------------------------------------------------

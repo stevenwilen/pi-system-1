@@ -348,8 +348,12 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // focused field, the same job `.gate-field input:focus` already has. The
   // mark that says a row HAS a note is deliberately not on this list — it is
   // muted, because there is nothing to press on it.
+  //
+  // `.tzpick:focus` is the seventh, and the same one again: the timezone
+  // picker with the caret in it. The clock beside it, which is the part that
+  // says whether the zone is right, is a plain field note in no colour at all.
   const acts =
-    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.pline\.good|#paste:focus|\.back|\.thingnote:focus/;
+    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.pline\.good|#paste:focus|\.back|\.thingnote:focus|\.tzpick:focus/;
   // The divider: the knot and the line it fastens. Both are indigo now, where
   // the dark build tinted the line with a separate near-blue that belonged to
   // nothing — one fewer colour on the page, and the two halves of one object
@@ -1172,6 +1176,38 @@ console.log('\n18. every time on the page is twelve hour');
   // 24 hour `time`; only the reading of it changed.
   check('the page still sends minutes', /start_minutes: b\.start/.test(code));
   check('and still reads them', /toMinutes/.test(code));
+
+  console.log('   the hours a day may start at, in two places');
+  {
+    // THE PAGE CANNOT IMPORT clock.js. It is a browser script inside one html
+    // file, so the three numbers exist twice — and they have to agree about
+    // more than taste. The route refuses a default outside the window; the
+    // stepper is what a person has to reach it with. A window on the server
+    // wider than the one on the screen leaves values nothing can step back
+    // from; narrower, and the screen offers a press that always fails.
+    const clockSrc = fs.readFileSync(ROOT + '/clock.js', 'utf8');
+    const num = (src, name) => {
+      const m = new RegExp(`${name} = ([^;]+);`).exec(src);
+      if (!m) return null;
+      // `4 * 60` on both sides, evaluated rather than string-matched, so the
+      // check is about the value and not about how it is spelled.
+      return /^[\d\s*+]+$/.test(m[1]) ? Function(`return (${m[1]})`)() : null;
+    };
+
+    for (const name of ['WAKE_MIN', 'WAKE_MAX']) {
+      const onServer = num(clockSrc, name);
+      const onPage = num(code, name);
+      check(`${name} is the same number in clock.js and on the page`,
+        onServer !== null && onServer === onPage, `${onServer} vs ${onPage}`);
+    }
+
+    // The page calls its step STEP, because everything on that screen moves in
+    // it: durations, block starts, the wake time. The server names the one
+    // this window is measured in.
+    check('and they step by the same half hour',
+      num(clockSrc, 'WAKE_STEP') === num(code, 'STEP'),
+      `${num(clockSrc, 'WAKE_STEP')} vs ${num(code, 'STEP')}`);
+  }
 }
 
 console.log('\n19. a sheet is inside its scrim');

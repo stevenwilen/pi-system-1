@@ -1152,6 +1152,43 @@
         color: var(--faint);
         font-size: 12px;
       }
+      /* A label and the control that answers it, on one line. The two settings
+         under "Your day" are each one short value, and a stacked label above a
+         stacked field would make a two-field panel as tall as the two that
+         carry instructions and drawings. */
+      .whenline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin: 14px 0 6px;
+      }
+      .whenlabel {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      /* The whole list, for anyone whose device is not where they are.
+         A native select, so a phone gives its own wheel rather than four
+         hundred rows scrolling inside a page. */
+      .tzpick {
+        font: inherit;
+        font-size: 14px;
+        color: var(--text);
+        background: var(--bg);
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        padding: 4px 0;
+        border-radius: 0;
+        -webkit-appearance: none;
+        max-width: 62%;
+      }
+      /* Where the caret is, the same job the gate's fields give the accent. */
+      .tzpick:focus {
+        outline: none;
+        border-bottom-color: var(--accent);
+      }
+
       /* WHAT HAPPENED, in three readings that must not look alike:
          good  it works, and here is what was in it
          thin  it works, and there was nothing in it
@@ -1962,6 +1999,54 @@
               treat it like a password. It is stored against your account and
               never shown back to you here.
             </p>
+          </div>
+
+          <!-- WHEN YOUR DAY HAPPENS, and it is a row like the other two
+               because it fails the same way they do: silently. A wrong
+               timezone does not look wrong. Every block message and the
+               evening nudge fire off it, so an account left on the default was
+               being written to in the middle of its own night, and nothing
+               anywhere said so. -->
+          <button type="button" class="srow" id="when-row" aria-expanded="false">
+            <span class="srow-name">Your day</span>
+            <span class="srow-state" id="when-state">UTC</span>
+          </button>
+          <div class="sdetail hidden" id="when-detail">
+            <p class="field-note">
+              Which clock your day runs on. Blocks arrive, and the evening
+              question is asked, at these hours where you are.
+            </p>
+
+            <!-- The one-tap answer, and the only one most people need. Shown
+                 only when this device disagrees with what is stored, so it is
+                 an offer about a specific difference rather than a button
+                 sitting there being ignorable. -->
+            <div class="row-actions hidden" id="tz-offer">
+              <button type="button" class="minor go" id="tz-suggest"></button>
+            </div>
+
+            <div class="whenline">
+              <span class="whenlabel">Timezone</span>
+              <span id="tz-pick"></span>
+            </div>
+            <!-- The check on the whole thing. A name is a name; the clock is
+                 the part you can compare against the watch on your wrist. -->
+            <p class="field-note" id="tz-now"></p>
+
+            <div class="whenline">
+              <span class="whenlabel">Day starts</span>
+              <div class="stepper">
+                <button type="button" class="step" id="wake-def-minus">&minus;</button>
+                <span class="num" id="wake-def-time">7:00 AM</span>
+                <button type="button" class="step" id="wake-def-plus">+</button>
+              </div>
+            </div>
+            <p class="field-note">
+              What a day with nothing planned in it yet begins at. Any one day
+              can still be moved on the day screen.
+            </p>
+
+            <div class="said" id="when-said"></div>
           </div>
         </div>
 
@@ -4477,7 +4562,263 @@
 
         say('chat-state', s.telegram.set, s.telegram.hint, 'Not linked');
         say('cal-state', s.calendar.set, s.calendar.hint, 'Not set');
+
+        renderWhen(s);
       }
+
+      // --- when the day happens ------------------------------------------------
+      //
+      // A timezone is the one setting on this screen that cannot report itself.
+      // A chat id can be messaged and a feed can be fetched, and the answer
+      // comes back in a second. There is nothing to ask about a zone — it is
+      // either where you are or it is not, and only the person can say. So what
+      // this offers instead is the clock: the name is a name, but the time is
+      // something to hold up against the watch on your wrist.
+
+      // What is stored, and what the day boundary is under it. Held rather than
+      // re-fetched so the stepper and the picker can both redraw off one state.
+      let when = { timezone: 'UTC', wake_minutes: 7 * 60, min: 4 * 60, max: 12 * 60, step: 30 };
+
+      /**
+       * The zone this device believes it is in.
+       *
+       * Guarded, and the guard is not ceremony: this is the one browser API on
+       * the page with no fallback of its own, and a runtime that answers
+       * undefined would otherwise offer "Use undefined?" as a button.
+       */
+      function deviceZone() {
+        try {
+          const z = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          return typeof z === 'string' && z.includes('/') ? z : null;
+        } catch {
+          return null;
+        }
+      }
+
+      /** The wall clock in a zone right now, or null if the zone is not one. */
+      function clockIn(zone) {
+        try {
+          return new Intl.DateTimeFormat('en-GB', {
+            timeZone: zone,
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+          }).format(new Date());
+        } catch {
+          return null;
+        }
+      }
+
+      function renderWhen(s) {
+        when = {
+          timezone: s.timezone || 'UTC',
+          wake_minutes: Number.isInteger(s.wake_minutes) ? s.wake_minutes : 7 * 60,
+          min: Number.isInteger(s.wake_min) ? s.wake_min : 4 * 60,
+          max: Number.isInteger(s.wake_max) ? s.wake_max : 12 * 60,
+          step: Number.isInteger(s.wake_step) ? s.wake_step : 30,
+        };
+
+        drawWhen();
+      }
+
+      function drawWhen() {
+        const here = deviceZone();
+        const agrees = here !== null && here === when.timezone;
+
+        // THE VALUE, PLAINLY, on the closed row. Both halves of it: the zone
+        // says which clock and the hour says where in it the day starts, and
+        // either being wrong is the same silent failure.
+        $('when-state').textContent = `${when.timezone} · ${clock(when.wake_minutes)}`;
+        // Ink when this device agrees with what is stored, faint when it does
+        // not — the same reading the other two rows give an unset field. It is
+        // not a claim that a different zone is wrong; someone away from home
+        // has set theirs on purpose. It is a claim that the row is worth
+        // opening, which for everyone who has never opened it is true.
+        $('when-state').className = `srow-state ${agrees ? 'on' : ''}`;
+
+        const now = clockIn(when.timezone);
+        $('tz-now').textContent = now
+          ? `It is ${now} there now.`
+          : 'That zone is not one this device knows.';
+
+        // The offer, and only when there is something to offer. A device that
+        // will not say where it is, or one that agrees already, gets nothing —
+        // a button that sets what is already set is a button that teaches
+        // people the screen does not mean anything.
+        $('tz-offer').classList.toggle('hidden', agrees || here === null);
+        if (here && !agrees) $('tz-suggest').textContent = `Use ${here}?`;
+
+        drawPick();
+
+        $('wake-def-time').textContent = clock(when.wake_minutes);
+        $('wake-def-minus').disabled = when.wake_minutes <= when.min;
+        $('wake-def-plus').disabled = when.wake_minutes >= when.max;
+      }
+
+      /**
+       * The full list, built rather than shipped.
+       *
+       * `Intl.supportedValuesOf` is the tzdb the browser already carries, so
+       * four hundred names cost nothing to send and cannot go stale against the
+       * runtime that has to accept them. Where it is missing the control is a
+       * text field instead — one that can be typed into is worse than a list
+       * and far better than a select holding a single option, which is a dead
+       * control wearing the clothes of a live one.
+       */
+      function drawPick() {
+        const box = $('tz-pick');
+        box.replaceChildren();
+
+        const zones =
+          typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : null;
+
+        if (!zones) {
+          const field = document.createElement('input');
+          field.type = 'text';
+          field.className = 'tzpick';
+          field.value = when.timezone;
+          field.setAttribute('autocapitalize', 'none');
+          field.setAttribute('autocomplete', 'off');
+          field.setAttribute('spellcheck', 'false');
+          field.setAttribute('aria-label', 'Timezone');
+          field.onblur = () => setZone(field.value);
+          box.append(field);
+          return;
+        }
+
+        const pick = document.createElement('select');
+        pick.className = 'tzpick';
+        pick.setAttribute('aria-label', 'Timezone');
+
+        // The stored value first, whatever it is. UTC is not on that list —
+        // it is the column's default and the honest placeholder for an account
+        // that has not said — so a select built from the list alone would open
+        // showing somewhere in Africa to every account that had never set one.
+        const all = zones.includes(when.timezone) ? zones : [when.timezone, ...zones];
+
+        for (const z of all) {
+          const opt = document.createElement('option');
+          opt.value = z;
+          opt.textContent = z;
+          if (z === when.timezone) opt.selected = true;
+          pick.append(opt);
+        }
+
+        pick.value = when.timezone;
+        pick.onchange = () => setZone(pick.value);
+        box.append(pick);
+      }
+
+      /**
+       * Store a zone, and rebuild the day underneath.
+       *
+       * THE DAY ON SCREEN IS DATED IN THE OLD ZONE. Which date is today, which
+       * blocks have begun, and what "tomorrow" means are all read off it, so
+       * leaving the day section alone would leave a screen that is confidently
+       * describing the wrong day — the exact failure this setting exists to
+       * end, moved one layer up.
+       *
+       * `today = null` is what makes load() re-read it rather than keep what it
+       * has. The cost is real and worth naming: showDay drops anything
+       * unconfirmed, so a day half built at the moment somebody changes their
+       * timezone is lost. That is a trade rather than an oversight — a half
+       * built day dated in a zone you have just said you are not in is not
+       * worth keeping.
+       */
+      async function setZone(name) {
+        const zone = String(name || '').trim();
+        if (!zone || zone === when.timezone) return;
+
+        said('when-said', 'Saving…');
+
+        let body;
+        try {
+          body = await (await api('/settings/timezone', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ timezone: zone }),
+          })).json();
+        } catch (err) {
+          return said('when-said', `Could not save: ${err.message}`, 'bad');
+        }
+
+        if (body.error) {
+          // Back to what is actually stored. A picker left showing a value the
+          // server refused is a screen that disagrees with the database and
+          // says nothing about it.
+          drawWhen();
+          return said('when-said', body.error, 'bad');
+        }
+
+        when.timezone = body.timezone;
+        drawWhen();
+        said('when-said', `Saved. It is ${clockIn(body.timezone)} there.`, 'good');
+
+        today = null;
+        await load();
+      }
+
+      $('tz-suggest').onclick = () => {
+        const here = deviceZone();
+        if (here) setZone(here);
+      };
+
+      /**
+       * The default wake time, written a moment after the last press.
+       *
+       * NOT ON EVERY PRESS. Stepping from seven to nine is four taps, and four
+       * requests carrying four different absolute values can arrive in any
+       * order — the one that lands last wins, and it is not necessarily the one
+       * the person stopped on. Waiting for the presses to stop means one
+       * request holding the value they chose.
+       *
+       * Flushed on the way out of the screen and on the page going away, so the
+       * pause is never long enough to swallow a change.
+       */
+      let wakeWrite = null;
+
+      function stepWake(to) {
+        const at = Math.max(when.min, Math.min(when.max, to));
+        if (at === when.wake_minutes) return;
+
+        when.wake_minutes = at;
+        drawWhen();
+        said('when-said', '');
+
+        clearTimeout(wakeWrite);
+        wakeWrite = setTimeout(saveWake, 500);
+      }
+
+      async function saveWake() {
+        clearTimeout(wakeWrite);
+        wakeWrite = null;
+
+        const minutes = when.wake_minutes;
+
+        let body;
+        try {
+          body = await (await api('/settings/wake', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ minutes }),
+          })).json();
+        } catch (err) {
+          return said('when-said', `Could not save: ${err.message}`, 'bad');
+        }
+
+        if (body.error) return said('when-said', body.error, 'bad');
+        said('when-said', `Saved. New days start at ${clock(body.wake_minutes)}.`, 'good');
+      }
+
+      /** Whatever the stepper is still holding, written now. */
+      const flushWake = () => {
+        if (wakeWrite) saveWake();
+      };
+
+      window.addEventListener('pagehide', flushWake);
+
+      $('wake-def-minus').onclick = () => stepWake(when.wake_minutes - when.step);
+      $('wake-def-plus').onclick = () => stepWake(when.wake_minutes + when.step);
 
       /**
        * Where the time went, over the last month.
@@ -4581,7 +4922,7 @@
        * bottom of the screen behind the keyboard.
        */
       function openRow(which) {
-        for (const name of ['chat', 'cal']) {
+        for (const name of ['chat', 'cal', 'when']) {
           const open = name === which && $(`${name}-detail`).classList.contains('hidden');
           $(`${name}-detail`).classList.toggle('hidden', !open);
           $(`${name}-row`).classList.toggle('open', open);
@@ -4589,7 +4930,7 @@
         }
       }
 
-      for (const name of ['chat', 'cal']) {
+      for (const name of ['chat', 'cal', 'when']) {
         $(`${name}-row`).onclick = () => openRow(name);
       }
 
@@ -4622,7 +4963,7 @@
        */
       function openSettings() {
         $('settings-scrim').classList.remove('hidden');
-        for (const id of ['chat-said', 'cal-said']) said(id, '');
+        for (const id of ['chat-said', 'cal-said', 'when-said']) said(id, '');
         // Every row shut. It opens on the list, which is the answer to the
         // question it is usually opened with.
         openRow(null);
@@ -4635,6 +4976,11 @@
       }
 
       function closeSettings() {
+        // Anything the stepper is still holding back, written before the
+        // screen goes. Otherwise leaving within half a second of the last
+        // press would look exactly like a setting that did not save.
+        flushWake();
+
         $('settings-scrim').classList.add('hidden');
         // The boxes are emptied on the way out. A calendar address left
         // sitting in a field is the same leak the hints exist to avoid.

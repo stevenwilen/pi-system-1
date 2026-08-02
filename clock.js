@@ -7,6 +7,66 @@
 // arithmetic on minutes past midnight, so times arrive as integers and leave
 // as integers.
 
+/**
+ * The hours a person actually gets up, and the step between them.
+ *
+ * THE PAGE HOLDS THE SAME THREE NUMBERS and cannot import this file — it is a
+ * browser script in one html file. They are pinned equal by a check in
+ * plan-layout-check.js, because the two have to agree about more than taste:
+ * the profile must never hold a default the day screen has no way to show or
+ * to step back to.
+ *
+ * Half past four in the morning is not a wake time this system refuses to
+ * believe in — it is a stepper that would be being flexible rather than
+ * helpful if it ran the whole clock.
+ */
+const WAKE_MIN = 4 * 60;
+const WAKE_MAX = 12 * 60;
+const WAKE_STEP = 30;
+
+/**
+ * The canonical IANA name for a zone, or null if it is not one.
+ *
+ * RESOLVED, NOT MERELY ACCEPTED. `Intl` takes `america/new_york`,
+ * `US/Eastern` and `Zulu`, all of which are real zones under other spellings —
+ * so this hands back what they resolve to and the column holds one spelling of
+ * each place. Anything else stored would be a second name for a row nothing
+ * would match on.
+ *
+ * IT ALSO TAKES `+05:00`, AND THAT IS THE ONE TO REFUSE. A fixed offset is not
+ * a zone: it is a place that never changes its clocks, so the person who
+ * stored it in January is an hour out from April and nothing in the system has
+ * any way to notice. `supportedValuesOf` is the tzdb's own list, which is why
+ * it is asked rather than a pattern being invented here.
+ *
+ * UTC is allowed by name and is not on that list — it is the column's default
+ * and the honest placeholder for an account that has not said yet.
+ */
+function canonicalZone(name) {
+  if (typeof name !== 'string' || !name.trim()) return null;
+
+  let resolved;
+  try {
+    resolved = new Intl.DateTimeFormat('en', { timeZone: name.trim() })
+      .resolvedOptions().timeZone;
+  } catch {
+    return null;
+  }
+
+  if (resolved === 'UTC') return 'UTC';
+
+  const known =
+    typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : null;
+
+  // No list to check against on a runtime that does not offer one. Falling
+  // back to "Intl accepted it" is weaker — it would let an offset through —
+  // so the shape of an offset is refused by hand in that case and nothing
+  // else is.
+  if (!known) return /^[+-]/.test(resolved) ? null : resolved;
+
+  return known.includes(resolved) ? resolved : null;
+}
+
 /** Today, where this person lives. */
 function todayIn(timeZone) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -60,4 +120,7 @@ const toMinutes = (time) => {
 const hhmmss = (mins) =>
   `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}:00`;
 
-module.exports = { todayIn, yesterdayOf, tomorrowOf, minutesOfDay, toMinutes, hhmmss };
+module.exports = {
+  todayIn, yesterdayOf, tomorrowOf, minutesOfDay, toMinutes, hhmmss,
+  canonicalZone, WAKE_MIN, WAKE_MAX, WAKE_STEP,
+};

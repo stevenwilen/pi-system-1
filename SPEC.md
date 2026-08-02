@@ -204,7 +204,8 @@ url is what makes that safe.
 ### 2.8 Setup verifies itself, or it has not happened
 
 Everything a person must configure sits on one screen behind the `···` in the day
-header, and none of it needs SQL: the Telegram chat, the calendar, and Sign out.
+header, and none of it needs SQL: the Telegram chat, the calendar, when the day
+happens, and Sign out.
 
 **A full page, not a sheet.** A sheet is a card held against the bottom of the
 window with the day greyed out behind it, and its shape says "answer this and get
@@ -285,6 +286,97 @@ them is the smaller thing that does the same job.
 
 `entry-shape.js` stays. It holds the rules for what a habit, project or task may
 be, and the add form is now its only caller.
+
+#### Your day: the timezone and the hour it starts
+
+The third row, and it is a row like the other two because it fails the same way:
+silently. **Nothing wrote either column.** `update_profile` in `tools.js` has
+validated both since the beginning and is reachable only from the brain, which
+nothing calls — so every account created by the signup trigger sat on
+`timezone = 'UTC'` and `default_wake_time = '07:00'` for ever. Both are honest
+placeholders and silent wrong answers: block messages and the evening nudge fire
+off the stored zone, so an account in New York was being written to at four in
+the morning and no screen said so.
+
+**A timezone is the one setting here that cannot report itself.** A chat id can
+be messaged and a feed can be fetched, and the answer comes back in a second.
+There is nothing to ask about a zone — it is either where you are or it is not,
+and only the person can say. So the screen offers two things instead:
+
+- **The clock.** `It is 4:12 PM there now.` A name is a name; the time is
+  something to hold up against the watch on your wrist.
+- **The device.** If `Intl.DateTimeFormat().resolvedOptions().timeZone` differs
+  from what is stored, a one-tap button: `Use America/New_York?` Most people
+  want the zone they are standing in, and a four-hundred-row list is a long
+  scroll to reach it.
+
+The offer appears **only when the two differ**. A button that sets what is
+already set teaches people the screen does not mean anything. A device that will
+not say its zone is offered as nothing at all, rather than as `Use undefined?`.
+
+The row's state line shows the value plainly — `America/New_York · 7:00 AM` —
+and reads as settled only when the device agrees. That is not a claim that a
+different zone is wrong; someone away from home has set theirs on purpose. It is
+a claim that the row is worth opening, which for everyone who has never opened
+it is true.
+
+**The full list is there too**, built from `Intl.supportedValuesOf('timeZone')`
+rather than shipped: it is the tzdb the browser already carries, it cannot go
+stale against the runtime that has to accept it, and a native `<select>` gives a
+phone its own wheel. The stored value is prepended when the list does not hold
+it — `UTC` is not on that list, so a select built from the list alone would open
+on somewhere in Africa for every account that had never set one.
+
+**Refused rather than stored, and this is the one field on this screen where
+that is the right way round.** A calendar url that will not load is still saved,
+because the network is not the url. A timezone that is not a zone is not a
+transient failure: every day boundary and send time computed from it throws, and
+the scheduler swallows a throw by skipping that user — which looks exactly like
+having nothing to send.
+
+`canonicalZone` in `clock.js` is the one spelling of the rule, used by the route
+and by `update_profile`:
+
+- **Resolved, not merely accepted.** `america/new_york`, `US/Eastern` and `Zulu`
+  are all real zones under other spellings, and the column holds what they
+  resolve to. Anything else would be a second name for a place nothing matches
+  on.
+- **An offset is refused**, though `Intl` takes it. `+05:00` is not a zone, it is
+  a place that never changes its clocks — whoever stores it in January is an hour
+  out in April, and nothing in the system can notice. The check is
+  `Intl.supportedValuesOf`, the tzdb's own list, rather than a pattern invented
+  here.
+- **`UTC` is allowed by name** and is not on that list. It is the column's
+  default and the honest placeholder for an account that has not said.
+
+**Changing the zone rebuilds the day underneath.** Which date is today, which
+blocks have begun, and what "tomorrow" means are all read off it. The cost is
+named rather than hidden: `showDay` drops anything unconfirmed, so a day half
+built at the moment somebody changes their timezone is lost. A half-built day
+dated in a zone you have just said you are not in is not worth keeping.
+
+**The wake time** is `default_wake_time` — what a day with no plan yet begins at,
+not the hour of any particular day. `plans.wake_time` is that, and the builder's
+Starts control still owns it. Same stepper, same half hours.
+
+It **writes once the pressing stops**, half a second after the last tap. Four
+taps carrying four absolute values can arrive in any order, and the one that
+lands last is not necessarily the one the person stopped on. Leaving the screen
+and the page going away both flush it, so the pause can never swallow a change.
+
+**The window is one window.** `WAKE_MIN`, `WAKE_MAX` and `WAKE_STEP` live in
+`clock.js`; the route refuses anything outside them and `GET /settings` sends
+them down so the stepper offers exactly what the route accepts. The page cannot
+import `clock.js` — it is a browser script in one html file — so it holds its own
+copies and `plan-layout-check.js` pins the numbers equal. A window wider on the
+server than on the screen leaves values nothing can step back from; narrower, and
+the screen offers a press that always fails.
+
+Both writes upsert, and each names **only its own column**, so linking a chat
+does not disturb a calendar and neither touches a timezone. Two routes rather
+than one for that reason: a single route taking both would have to decide what an
+absent field means, and the answer that reads as obvious — leave it alone — is
+one careless `undefined` away from writing null over the other.
 
 
 #### Where your time went
@@ -1435,11 +1527,14 @@ process start time, the Node version, and whether the scheduler is running.
 
 | | |
 |---|---|
-| `profile.timezone` | which day and which hour everything is measured in |
-| `profile.default_wake_time` | where the builder starts the first block |
+| `profile.timezone` | which day and which hour everything is measured in. **Set on the setup screen** (§2.8) |
+| `profile.default_wake_time` | where the builder starts the first block. **Set on the setup screen**, 04:00–12:00 in half hours |
 | `profile.telegram_chat_id` | where outbound goes, or nowhere if unset |
 | `profile.nudge_hour` | the evening nudge hour, 0–23, and the hour the screen starts opening on Tomorrow. Null means 20 |
 | `profile.plans_in` | `morning` or `evening`. Which day the evening nudge asks about. It no longer decides which day the app opens on — that is always today. Null means evening |
+
+The last two are still SQL-only. They are the two nobody has needed to change,
+and a screen for a setting nobody moves is a screen to keep working for nothing.
 
 ---
 
