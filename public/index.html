@@ -965,6 +965,70 @@
         padding: 2px 2px 20px;
         border-bottom: 1px solid var(--line);
       }
+
+      /* The instructions. Numbered because they are done in order and a person
+         may put the phone down halfway and need to find their place again. */
+      .steps {
+        margin: 0 0 16px;
+        padding-left: 20px;
+        font-size: 13px;
+        line-height: 1.7;
+        color: var(--text);
+      }
+      .steps li {
+        margin-bottom: 4px;
+      }
+      .steps b {
+        font-weight: 500;
+      }
+
+      /* DRAWN, NOT PHOTOGRAPHED.
+         A sketch of what to look for rather than a picture of a screen: it
+         cannot go stale when Telegram or Google moves a button, it weighs
+         nothing, and it belongs to this page's own hand rather than importing
+         two other companies' visual languages into it.
+
+         Ink on paper, like everything else. The one filled shape in each is
+         the thing to copy. */
+      .figure {
+        display: block;
+        width: 100%;
+        max-width: 300px;
+        height: auto;
+        margin: 0 0 18px;
+      }
+      .fig-line {
+        fill: none;
+        stroke: var(--line);
+        stroke-width: 1;
+      }
+      .fig-fill {
+        fill: var(--card-spent);
+        stroke: none;
+      }
+      .fig-head {
+        fill: var(--faint);
+        font-size: 11px;
+        font-family: var(--face);
+        letter-spacing: 0.06em;
+      }
+      .fig-text {
+        fill: var(--text);
+        font-size: 9px;
+        font-family: var(--face);
+      }
+      /* The one warm mark in the drawing, doing the pointing. */
+      .fig-mark {
+        fill: none;
+        stroke: var(--warn);
+        stroke-width: 1.4;
+        stroke-linecap: round;
+      }
+      .fig-note {
+        fill: var(--warn);
+        font-size: 9px;
+        font-family: var(--face);
+      }
       .sdetail.hidden {
         display: none;
       }
@@ -997,56 +1061,6 @@
         color: var(--faint);
         font-size: 12px;
       }
-      /* THE SEAL, USED TWICE MORE. Both buttons in this block are the same
-         object the day is confirmed with, and for the same reason: one takes
-         the prompt away with you, the other commits a whole pasted setup, and
-         both are things you press once and mean. A smaller, quieter control
-         for either would have been a second grammar for "this is the button".
-
-         There was a paper chit here for one build — raised stock with a torn
-         edge, the undo bar's object. It read as a button, but it read as a
-         lesser one than the seal on the day screen, which is not the ranking
-         these two deserve. */
-
-      /* THIS ONE HUGS ITS WORDS. The seal on the day screen is full width
-         because it is the end of the whole screen — there is one thing to do
-         and it spans everything. Copy is not that: it sits inside a block, it
-         is one of two, and stretched to the block's width it stopped reading
-         as a stamp and started reading as a bar.
-
-         Full width also ran its torn edge the entire length of the block, a
-         hair inside the block's own edge, which reads as an outline around it
-         rather than as the ragged bite of a stamp. Pulled in to the width of
-         its words, the edge is just the edge again. */
-      #copy-prompt {
-        display: inline-block;
-        width: auto;
-        padding: 14px 20px;
-      }
-      /* Its answer goes under it, not beside it — the button is a block-level
-         box on its own line either way. */
-      #copy-prompt + .said {
-        margin-top: 12px;
-      }
-
-      /* The bulk path, set apart as its own block on the card colour so it
-         reads as an alternative to the list above rather than a fourth item
-         in it. */
-      .allatonce {
-        background: var(--card-spent);
-        padding: 16px 16px 18px;
-        margin-bottom: 24px;
-      }
-      /* Both seals in this block stand clear of what is above them. Full width
-         and inked, they read as the end of a thought rather than another line
-         of one. */
-      .allatonce .confirm {
-        margin-top: 16px;
-      }
-      #paste-save {
-        margin-top: 18px;
-      }
-
       /* WHAT HAPPENED, in three readings that must not look alike:
          good  it works, and here is what was in it
          thin  it works, and there was nothing in it
@@ -1078,29 +1092,6 @@
       .pline.thin { color: var(--faint); }
       .pline.bad { color: var(--warn); }
 
-      #paste {
-        display: block;
-        width: 100%;
-        box-sizing: border-box;
-        /* Clear of the seal above it. A control butted against the thing that
-           produced it reads as one control. */
-        margin-top: 22px;
-        background: var(--bg);
-        border: 1px solid var(--line);
-        padding: 10px;
-        font-family: inherit;
-        font-size: 16px; /* under 16 and iOS zooms the page on focus */
-        color: var(--text);
-        /* NOT RESIZABLE. Nothing is composed in here: a reply is pasted whole
-           and then checked or cleared. A drag handle offers to help with
-           editing that nobody does, and on a phone it is a corner that eats
-           taps meant for the button under it. */
-        resize: none;
-      }
-      #paste:focus {
-        outline: none;
-        border-color: var(--accent);
-      }
 
       /* Below the whole page, and deliberately hard to hit by accident. */
       .signout {
@@ -1736,11 +1727,34 @@
           </button>
           <div class="sdetail hidden" id="chat-detail">
             <p class="field-note">
-              Where your day arrives: each block a few minutes before it starts.
-              Message <b>@userinfobot</b> on Telegram and it replies with your id.
+              Where your day arrives: each block turns up a few minutes before
+              it starts.
             </p>
+
+            <ol class="steps">
+              <li>Open Telegram and search for <b>@userinfobot</b>.</li>
+              <li>Press <b>Start</b>.</li>
+              <li>It answers straight away with your id, a number.</li>
+            </ol>
+
+            <!-- Drawn rather than photographed. It is a sketch of what to look
+                 for, not a picture of a screen, so nothing here goes stale when
+                 Telegram moves a button. -->
+            <svg class="figure" viewBox="0 0 260 108" role="img"
+                 aria-label="A chat with userinfobot. Its reply reads Id, then a number, which is the part to copy.">
+              <rect class="fig-line" x="6" y="6" width="248" height="96" rx="4" />
+              <text class="fig-head" x="18" y="26">userinfobot</text>
+              <line class="fig-line" x1="6" y1="36" x2="254" y2="36" />
+              <rect class="fig-fill" x="18" y="48" width="150" height="38" rx="4" />
+              <text class="fig-text" x="30" y="64">Id: 8906223785</text>
+              <text class="fig-text" x="30" y="78">First: Steve</text>
+              <path class="fig-mark" d="M46 68 h74" />
+              <path class="fig-mark" d="M132 66 l14 -10" />
+              <text class="fig-note" x="150" y="54">this</text>
+            </svg>
+
             <input type="text" id="f-chat" inputmode="numeric" autocomplete="off"
-                   placeholder="Your chat id, a number" />
+                   placeholder="Paste the number here" />
             <div class="row-actions">
               <button type="button" class="minor go" id="save-chat">Save and send a test</button>
               <button type="button" class="minor quiet" id="clear-chat">Clear</button>
@@ -1754,56 +1768,48 @@
           </button>
           <div class="sdetail hidden" id="cal-detail">
             <p class="field-note">
-              Shown at the top of the day as reference: what is already
-              happening, so you can build around it. Nothing on it is ever
-              turned into a block or changed by this system.
+              Shown at the top of your day as reference, so you can plan around
+              what is already happening. Nothing on it is ever changed.
             </p>
+
+            <ol class="steps">
+              <li>Open <b>Google Calendar</b> on a computer. The phone app cannot
+                do this.</li>
+              <li>Click the gear, then <b>Settings</b>.</li>
+              <li>In the left column, under <b>Settings for my calendars</b>,
+                click the calendar you want.</li>
+              <li>Scroll down to <b>Integrate calendar</b>.</li>
+              <li>Copy the <b>Secret address in iCal format</b>.</li>
+            </ol>
+
+            <svg class="figure" viewBox="0 0 260 118" role="img"
+                 aria-label="The Integrate calendar panel in Google Calendar settings. The secret address in iCal format is the last row, and is the one to copy.">
+              <rect class="fig-line" x="6" y="6" width="248" height="106" rx="4" />
+              <text class="fig-head" x="18" y="26">Integrate calendar</text>
+              <line class="fig-line" x1="6" y1="36" x2="254" y2="36" />
+              <text class="fig-text" x="18" y="54">Public address in iCal format</text>
+              <rect class="fig-line" x="18" y="60" width="180" height="12" rx="2" />
+              <rect class="fig-fill" x="12" y="80" width="200" height="26" rx="4" />
+              <text class="fig-text" x="18" y="92">Secret address in iCal format</text>
+              <rect class="fig-line" x="18" y="97" width="180" height="6" rx="2" />
+              <path class="fig-mark" d="M226 93 l-16 0" />
+              <text class="fig-note" x="228" y="96">this</text>
+            </svg>
+
             <input type="url" id="f-cal" autocomplete="off"
-                   placeholder="Secret iCal address" />
+                   placeholder="Paste the address here" />
             <div class="row-actions">
               <button type="button" class="minor go" id="save-cal">Save and check</button>
               <button type="button" class="minor quiet" id="clear-cal">Clear</button>
             </div>
             <div class="said" id="cal-said"></div>
+
+            <p class="field-note warn-note">
+              That address lets anyone who has it read your whole calendar, so
+              treat it like a password. It is stored against your account and
+              never shown back to you here.
+            </p>
           </div>
-        </div>
-
-        <p class="field-note warn-note">
-          A secret iCal address grants read access to that whole calendar, to
-          anyone who has the address. Treat it like a password. It is stored
-          against your account and never shown back to you here.
-        </p>
-
-        <!-- ALL AT ONCE. Below the list rather than above it: for someone
-             coming back to change one thing this is not what they want, and for
-             someone new the three "Not set" lines above are the question this
-             answers. -->
-        <div class="allatonce">
-          <p class="field-note">
-            Copy the prompt into any AI chat, answer its questions, and paste
-            the reply here. It sets up everything above and your first list of
-            things.
-          </p>
-          <button type="button" class="confirm" id="copy-prompt">Copy setup prompt</button>
-          <div class="said" id="copy-said"></div>
-
-          <!-- Paste-only. There is nothing to compose in here — a reply is
-               dropped in whole and then either checked or cleared — so it does
-               not offer a drag handle for editing that nobody does. -->
-          <textarea id="paste" rows="3" placeholder="Paste the whole reply."></textarea>
-
-          <!-- Hidden until there is something to check. An offer to inspect an
-               empty box is a question with no answer. -->
-          <div class="row-actions hidden" id="paste-actions">
-            <button type="button" class="minor" id="paste-check">See what this would do</button>
-          </div>
-
-          <div class="preview hidden" id="paste-preview"></div>
-
-          <!-- AFTER the preview, not beside the check. You read what it says it
-               will do, and then the seal to commit it is the next thing under
-               your thumb. -->
-          <button type="button" class="confirm hidden" id="paste-save">Save all of it</button>
         </div>
 
         <div class="signout">
@@ -1823,119 +1829,6 @@
       with a non-JavaScript type is inert — the browser will not run it and the
       page can read its text exactly as written.
     -->
-    <script type="text/plain" id="prompt-text">
-You are helping one person set up a planning app. Work through the steps below
-in order. Finish each one before starting the next. Do not skip ahead, even if
-they ask you to.
-
-After each step, say one line like this:
-
-  Done: your things. Now: reminders. Remaining: your calendar.
-
-If someone opens by pasting a line like that, carry on from where it says.
-
-Do not write the box at the end until every step is finished. If they ask for
-it early, say what is still missing.
-
----
-
-STEP 1. WHAT THEY WANT TO GET DONE
-
-This one is required. Ask about one kind at a time.
-
-Habits are things done again and again that are never finished. Exercise,
-reading, practising a language. Ask how often each one: daily, few times a
-week, weekly, or monthly.
-
-Projects are work with an end, too big for one sitting.
-
-Tasks are single things, done once.
-
-For each project and task, ask whether it has a real deadline. If it does, get
-the date, and ask roughly how long the work will take: a day, a few days, a
-week, a few weeks, or months. Get both or neither. The app compares the two to
-warn them when something is getting tight.
-
-Aim for eight to fifteen things. Do not invent anything they did not say.
-
-Read the whole list back and ask them to confirm or correct it.
-
-Then say the progress line.
-
----
-
-STEP 2. REMINDERS AND CALENDAR
-
-Ask exactly this:
-
-  Do you want to set up daily phone reminders and your calendar now, or skip
-  and do it later in the app?
-
-Tell them both can be added at any time in the app's settings, so skipping now
-costs them nothing.
-
-If they skip: put null for the reminders and null for the calendar, and go
-straight to the end.
-
-If they want to: do the reminders first, then the calendar, one at a time.
-They can still skip either one on its own.
-
-REMINDERS. This is how the app messages them through the day.
-
-  1. Open Telegram and start the bot they were given.
-  2. Search for @userinfobot and press Start.
-  3. It replies with a number.
-
-Ask them to paste that number back to you. Do not accept "done" or "got it".
-If what they paste is not a plain number, say what is wrong and ask again.
-
-Then say the progress line.
-
-CALENDAR. The app shows it beside their day so they can plan around what is
-already happening. It never changes anything on it.
-
-Warn them before they paste: this address lets anyone who has it read that
-whole calendar, so it should be treated like a password.
-
-  1. Google Calendar, on a computer rather than the phone app.
-  2. Settings, then that calendar's own Settings and sharing.
-  3. Scroll to Integrate calendar.
-  4. Copy the Secret address in iCal format.
-
-Ask them to paste it back to you. Check it starts with https:// and ends with
-.ics. Do not accept "done".
-
-Then say the progress line.
-
----
-
-FINISHING
-
-Once everything above is finished, say:
-
-  Copy everything in the box below and paste it back into the app.
-
-Then write the box, and nothing after it.
-
-Rules for the box:
-
-  Use null for anything they skipped. Not "", and do not leave it out.
-  Put "frequency" only on habits.
-  Put "due" and "size" only on things that have a deadline.
-  "size" must be one of: a day, a few days, a week, a few weeks, months.
-
-```
-{
-  "telegram_chat_id": "123456789",
-  "calendar_ics_url": "https://calendar.google.com/calendar/ical/.../basic.ics",
-  "items": [
-    { "type": "habit", "title": "Read before bed", "frequency": "daily" },
-    { "type": "project", "title": "Rewire the study", "due": "2026-09-30", "size": "a few weeks" },
-    { "type": "task", "title": "Return the router" }
-  ]
-}
-```
-    </script>
 
     <!-- the add sheet ------------------------------------------------------- -->
     <div class="scrim hidden" id="add-scrim">
@@ -4053,7 +3946,7 @@ Rules for the box:
       /**
        * One row open at a time.
        *
-       * Not a preference: the sheet is three rows and a paste box on a phone,
+       * Not a preference: the sheet is two rows on a phone,
        * and two panels open at once puts the thing you are typing into off the
        * bottom of the screen behind the keyboard.
        */
@@ -4099,8 +3992,7 @@ Rules for the box:
        */
       function openSettings() {
         $('settings-scrim').classList.remove('hidden');
-        for (const id of ['chat-said', 'cal-said', 'copy-said']) said(id, '');
-        pasteChanged();
+        for (const id of ['chat-said', 'cal-said']) said(id, '');
         // Every row shut. It opens on the list, which is the answer to the
         // question it is usually opened with.
         openRow(null);
@@ -4113,11 +4005,9 @@ Rules for the box:
 
       function closeSettings() {
         $('settings-scrim').classList.add('hidden');
-        // The boxes are emptied on the way out. A pasted setup blob holds a
-        // calendar url, and leaving it sitting in a field is the same leak the
-        // hints exist to avoid.
-        for (const id of ['f-chat', 'f-cal', 'paste']) $(id).value = '';
-        pasteChanged();
+        // The boxes are emptied on the way out. A calendar address left
+        // sitting in a field is the same leak the hints exist to avoid.
+        for (const id of ['f-chat', 'f-cal']) $(id).value = '';
       }
 
       $('settings-open').onclick = openSettings;
@@ -4186,141 +4076,6 @@ Rules for the box:
         });
         said('cal-said', 'Cleared.', '');
         loadSettings();
-      };
-
-      // --- the prompt
-
-      /**
-       * Copied from the page's own inert copy.
-       *
-       * Read synchronously, because Safari only allows a clipboard write
-       * inside the gesture that asked for it — an `await` before the write is
-       * a copy that silently does nothing on a phone.
-       */
-      $('copy-prompt').onclick = () => {
-        const text = $('prompt-text').textContent.trim();
-        try {
-          navigator.clipboard.writeText(text);
-          said('copy-said', 'Copied.', 'good');
-        } catch {
-          said('copy-said', 'Could not copy. Select it from the page instead.', 'bad');
-        }
-      };
-
-      // --- the paste
-
-      function renderPreview(p) {
-        const box = $('paste-preview');
-        box.replaceChildren();
-        box.classList.remove('hidden');
-
-        const line = (text, tone) => {
-          const el = document.createElement('div');
-          el.className = `pline ${tone || ''}`;
-          el.textContent = text;
-          box.append(el);
-        };
-
-        if (p.problems && p.problems.length) {
-          line('Nothing will be saved:', 'bad');
-          for (const problem of p.problems) line(`· ${problem}`, 'bad');
-          $('paste-save').classList.add('hidden');
-          return;
-        }
-
-        if (p.telegram) {
-          const t = (p.checks && p.checks.telegram) || {};
-          line(`Telegram ${p.telegram.hint}`);
-          if (t.delivered) line('  · the test message arrived', 'good');
-          else line(`  · nothing arrived: ${t.error}`, 'bad');
-        }
-
-        if (p.calendar) {
-          const check = (p.checks && p.checks.calendar) || {};
-          line(`Calendar · ${p.calendar.hint}`);
-          const [text, tone] = feedResult(check);
-          line(`  · ${text}`, tone);
-        }
-
-        line(`${p.items.length} thing${p.items.length === 1 ? '' : 's'} to add:`);
-        for (const item of p.items) {
-          const bits = [item.type, item.frequency, item.due, item.size].filter(Boolean);
-          line(`  · ${item.title} (${bits.join(', ')})`);
-        }
-
-        $('paste-save').classList.remove('hidden');
-      }
-
-      /**
-       * What the paste box offers depends on whether it holds anything.
-       *
-       * Empty, there is nothing to check, and a button that inspects nothing
-       * is a question with no answer.
-       *
-       * And any edit retires the last answer. A preview describes the text
-       * that produced it; change a character and it is a report about
-       * something else, with a Save under it that would commit the new text on
-       * the strength of the old text's verdict.
-       */
-      function pasteChanged() {
-        $('paste-actions').classList.toggle('hidden', !$('paste').value.trim());
-        $('paste-preview').classList.add('hidden');
-        $('paste-save').classList.add('hidden');
-      }
-
-      $('paste').oninput = pasteChanged;
-
-      $('paste-check').onclick = async () => {
-        const paste = $('paste').value.trim();
-        if (!paste) return;
-
-        $('paste-preview').classList.remove('hidden');
-        $('paste-preview').textContent = 'Checking…';
-
-        const res = await api('/settings/preview', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paste }),
-        });
-        const body = await res.json();
-
-        if (body.error) {
-          $('paste-preview').textContent = body.error;
-          $('paste-save').classList.add('hidden');
-          return;
-        }
-        renderPreview(body);
-      };
-
-      $('paste-save').onclick = async () => {
-        const paste = $('paste').value.trim();
-        if (!paste) return;
-
-        $('paste-save').disabled = true;
-        try {
-          const res = await api('/settings/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ paste }),
-          });
-          const body = await res.json();
-
-          if (!body.saved) {
-            $('paste-preview').textContent =
-              body.error + (body.problems ? `\n${body.problems.join('\n')}` : '');
-            return;
-          }
-
-          $('paste').value = '';
-          pasteChanged();
-          // Said after the reset, because the reset hides this box.
-          $('paste-preview').classList.remove('hidden');
-          $('paste-preview').textContent = `Saved. ${body.added.length} thing${body.added.length === 1 ? '' : 's'} added.`;
-          await loadSettings();
-          await load();
-        } finally {
-          $('paste-save').disabled = false;
-        }
       };
 
       // --- the gate ------------------------------------------------------------

@@ -204,8 +204,7 @@ url is what makes that safe.
 ### 2.8 Setup verifies itself, or it has not happened
 
 Everything a person must configure sits on one screen behind the `···` in the day
-header, and none of it needs SQL: the Telegram chat, the calendar, the paste from
-a setup conversation, and Sign out.
+header, and none of it needs SQL: the Telegram chat, the calendar, and Sign out.
 
 **A full page, not a sheet.** A sheet is a card held against the bottom of the
 window with the day greyed out behind it, and its shape says "answer this and get
@@ -265,64 +264,28 @@ It is stored, and reported as failing.
 segment, or the last four digits, and no more. A secret iCal address is a bearer
 credential — whoever holds the string reads that calendar for ever, with no
 sign-in and no audit — so the settings screen must not become the easiest place
-in the system to photograph one. The sheet says this in as many words, and so
-does the prompt.
+in the system to photograph one. The screen says this in as many words, beside
+the field it applies to.
 
-**A paste is one answer, applied whole or not at all.** One malformed item stops
-the chat id and the calendars being written too. Half a paste in the notebook is
-worse than none: you cannot tell which half, and running it again duplicates
-whatever landed. The preview runs every check the import runs, so the two cannot
-disagree, and it writes nothing.
+**Each field carries its own instructions.** Numbered steps naming the exact
+words a person will see on the other screen, and a small drawing of what to
+look for: the bot reply with the number marked, and the Integrate calendar
+panel with the secret address row marked. Drawn as inline SVG rather than
+captured, so nothing goes stale when Telegram or Google moves a button and the
+page stays self-contained. Each carries an `aria-label` saying what it shows,
+because a picture that says nothing to a screen reader is decoration in the
+middle of an instruction.
 
-**The paste is read bare, fenced, or buried in prose**, taking the LAST balanced
-object — a setup conversation shows the shape before it fills it in, so the first
-object in a transcript is an example and the last one is the answer.
+**There was a paste box, and it is gone.** A prompt you copied into an AI chat,
+a conversation that interviewed you, and a block of JSON you pasted back — which
+set both fields and your first list of things in one go. It worked, and it
+asked a new person to leave the app, talk to a second system, and trust a
+machine-readable answer they could not read. Two fields with instructions beside
+them is the smaller thing that does the same job.
 
-`entry-shape.js` holds the rules for what a habit, project or task may be, shared
-by the add form and the paste. Two ways into one list must not be able to
-disagree about what belongs in it.
+`entry-shape.js` stays. It holds the rules for what a habit, project or task may
+be, and the add form is now its only caller.
 
-#### The setup prompt
-
-A `<script type="text/plain">` block in the page, copied to the clipboard by a
-button. **Engine text**: identical for every user, nothing interpolated into it,
-naming nobody. It is inert markup rather than a JavaScript string because it
-contains a fenced JSON block, and a template literal full of escaped backticks
-is a string the next edit breaks.
-
-It is strictly linear and refuses to move on. Each step is verified by asking
-the person to paste the value back, never by asking "got it?", and after each
-one it restates progress on a single line — `Done: your things. Now: reminders.
-Remaining: your calendar.` — which is how a paused conversation is resumed. It
-holds the closing block back until everything is finished and names what is
-missing, and ends with that block and nothing after it.
-
-**The interview comes first, and it is the only required step.** Projects,
-habits, tasks, deadlines and sizes. Without them there is nothing to plan, so
-that is what a setup conversation is for; reminders and the calendar are
-conveniences that make the result reach you.
-
-**Then one question, which can be answered "later".** *Do you want to set up
-daily phone reminders and your calendar now, or skip and do it later in the
-app?* Declining returns null for both and ends the conversation there, and the
-prompt says plainly that either can be added any time in settings, so skipping
-costs nothing. Accepting walks through the reminders and then the calendar, one
-at a time, each still individually skippable.
-
-That order was the other way round for two releases: Telegram first, on the
-reasoning that it was the fiddliest step and best done while motivation was
-high. That is true of somebody who has already decided to use the system, and
-wrong for somebody deciding whether to. The first thing asked for should be the
-thing the app is for.
-
-**Plain words only.** It never says JSON, field, blob, endpoint or bucket, and
-it does not explain how any of this works inside — a thing is explained in a
-sentence at the moment it is needed, or not at all. It closes by asking them to
-*copy everything in the box below and paste it back into the app*.
-
-Its fence therefore carries no language tag, which the paste parser has always
-accepted and is now tested for directly: what the prompt actually produces is
-the commonest paste there will ever be.
 
 ### 2.9 A request is whoever its token says, and nothing else
 
@@ -1257,8 +1220,8 @@ npm test       # every suite, sequentially
 | `public/switch.html` | the reference for the Today / Tomorrow switch and past blocks |
 | `PLANNING-RULES.md` | **archive.** Notes from the pre-strip system, kept and marked as such |
 | `brain.js`, `usage.js`, `untrusted.js` | **wired and unused.** See 1. `brain.js` requires the other two |
-| `entry-shape.js` | what a habit, project or task may be. Shared by the add form and the setup paste |
-| `routes/settings.js` | the setup sheet: linking, feeds, and the paste |
+| `entry-shape.js` | what a habit, project or task may be |
+| `routes/settings.js` | the setup screen: linking Telegram and the calendar |
 | `calendar-test.js`, `send-test.js` | run by hand, not part of the running system |
 | `make-icons.js` | regenerates the PNGs from the SVG |
 

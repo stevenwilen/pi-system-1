@@ -1,4 +1,4 @@
-// The setup sheet's endpoints: saving, and proving what was saved works.
+// The setup screen's two endpoints: saving, and proving what was saved works.
 //
 // THE VERIFICATION IS THE FEATURE. Every value here is one that looks correct
 // when it is wrong — a mistyped chat id is still ten digits, a revoked
@@ -111,8 +111,6 @@ async function rowOf(which) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body || {}),
     });
-  const paste = (as, text) => post(as, '/settings/import', { paste: text });
-  const preview = (as, text) => post(as, '/settings/preview', { paste: text });
 
   try {
     console.log('1. what is set, without saying what it is');
@@ -166,7 +164,7 @@ async function rowOf(which) {
       check('a page that is not a calendar is refused too', html.reachable === false,
         JSON.stringify(html));
 
-      // Saved even when the check failed — the network is not the paste — but
+      // Saved even when the check failed — the network is not the url — but
       // never reported as working.
       check('a failing url is still stored', (await rowOf('a')).calendar_ics_url ===
         `${FEED}/notacalendar.ics`, String((await rowOf('a')).calendar_ics_url));
@@ -176,170 +174,20 @@ async function rowOf(which) {
       check('and empties the row', (await rowOf('a')).calendar_ics_url === null);
     }
 
-    console.log('\n3. a paste, however it arrives');
+    console.log('\n3. two accounts setting up at once do not touch each other');
     {
-      const body = {
-        telegram_chat_id: '111222333',
-        calendar_ics_url: `${FEED}/know.ics`,
-        items: [
-          { type: 'habit', title: 'Read before bed', frequency: 'daily' },
-          { type: 'task', title: 'Return the router' },
-        ],
-      };
-
-      for (const [what, text] of [
-        ['bare', JSON.stringify(body)],
-        ['fenced', '```json\n' + JSON.stringify(body, null, 2) + '\n```'],
-        // WHAT THE PROMPT ACTUALLY PRODUCES. It ends with a bare fence, no
-        // language tag, because "json" is one of the words it is not allowed
-        // to say — so the commonest paste in the world is this one, and it
-        // would be an odd thing for the parser to be worse at.
-        ['fenced with no language tag', '```\n' + JSON.stringify(body, null, 2) + '\n```'],
-        ['buried in prose', `Great, here it is!\n\n${JSON.stringify(body)}\n\nLet me know.`],
-        // A setup conversation shows the shape before it fills it in, so the
-        // first object in a transcript is an example and the last is the answer.
-        ['after an example', `Shape: {"items": []}\n\nYours:\n${JSON.stringify(body)}`],
-      ]) {
-        const res = await preview(A, text);
-        const p = await res.json();
-        check(`${what} is understood`, res.status === 200 && p.items && p.items.length === 2,
-          JSON.stringify(p).slice(0, 90));
-      }
-
-      const nonsense = await preview(A, 'no json here at all');
-      check('and prose with no JSON is refused', nonsense.status === 400, String(nonsense.status));
-    }
-
-    console.log('\n4. a preview writes nothing');
-    {
-      const before = await rowOf('a');
-      await preview(A, JSON.stringify({
-        telegram_chat_id: '444555666',
-        items: [{ type: 'task', title: 'Should not exist yet' }],
-      }));
-      const after = await rowOf('a');
-
-      check('the row is untouched', before.telegram_chat_id === after.telegram_chat_id,
-        `${before.telegram_chat_id} -> ${after.telegram_chat_id}`);
-
-      const { data } = await H.service
-        .from('entries').select('id').eq('user_id', A.id).eq('title', 'Should not exist yet');
-      check('and nothing was added', (data || []).length === 0, `${(data || []).length}`);
-    }
-
-    console.log('\n5. a bad chat id saves nothing and says the send failed');
-    {
-      const before = await rowOf('a');
-      const { data: countBefore } = await H.service
-        .from('entries').select('id').eq('user_id', A.id);
-
-      sent.length = 0;
-      const res = await paste(A, JSON.stringify({
-        telegram_chat_id: '999999999',
-        items: [{ type: 'task', title: 'Rides along with a bad chat id' }],
-      }));
-      const body = await res.json();
-
-      // It IS saved — the id is well-formed, and Telegram refusing it today is
-      // not proof it is wrong for ever. What must never happen is silence.
-      check('the request succeeds', res.status === 200, String(res.status));
-      check('and reports that nothing arrived',
-        body.checks && body.checks.telegram && body.checks.telegram.delivered === false,
-        JSON.stringify(body.checks));
-      check("in Telegram's own words",
-        /chat not found/i.test(((body.checks || {}).telegram || {}).error || ''),
-        ((body.checks || {}).telegram || {}).error);
-      check('a message really was attempted', sent.length === 1, JSON.stringify(sent));
-
-      await H.service.from('entries').delete().eq('user_id', A.id)
-        .eq('title', 'Rides along with a bad chat id');
-      void before; void countBefore;
-    }
-
-    console.log('\n6. one bad item and NOTHING is written');
-    {
-      await post(A, '/telegram/clear');
-      await post(A, '/settings/calendar', { url: null });
-
-      const res = await paste(A, JSON.stringify({
-        telegram_chat_id: '777888999',
-        calendar_ics_url: `${FEED}/know.ics`,
-        items: [
-          { type: 'task', title: 'This one is fine' },
-          // A due date with no size cannot produce a warning mark, so it is
-          // refused — the same rule the add form applies.
-          { type: 'task', title: 'This one is not', due: '2031-05-05' },
-        ],
-      }));
-      const body = await res.json();
-
-      check('the whole paste is refused', res.status === 400, String(res.status));
-      check('and says so plainly', /nothing was saved/i.test(body.error || ''), body.error);
-      check('naming the item', /This one is not/.test((body.problems || []).join(' ')),
-        JSON.stringify(body.problems));
-
-      // ALL OR NOTHING. Half a paste in the notebook is worse than none: you
-      // cannot tell which half, and running it again duplicates what landed.
-      const row = await rowOf('a');
-      check('the chat id was not written', row.telegram_chat_id === null,
-        String(row.telegram_chat_id));
-      check('the calendar was not written', row.calendar_ics_url === null,
-        String(row.calendar_ics_url));
-
-      const { data } = await H.service
-        .from('entries').select('title').eq('user_id', A.id).eq('title', 'This one is fine');
-      check('and the good item was not added either', (data || []).length === 0,
-        `${(data || []).length}`);
-    }
-
-    console.log('\n7. a paste with an unreachable calendar is reported, not hidden');
-    {
-      const dead = await (await paste(A, JSON.stringify({
-        calendar_ics_url: `${FEED}/gone.ics`, items: [],
-      }))).json();
-
-      check('it saves', dead.saved === true, JSON.stringify(dead).slice(0, 80));
-      check('and the calendar is named as unreachable',
-        dead.checks.calendar && dead.checks.calendar.reachable === false,
-        JSON.stringify(dead.checks.calendar));
-
-      // Stored anyway, because a feed that is down today is not a wrong url.
-      check('but it is stored', Boolean((await rowOf('a')).calendar_ics_url));
-
-      const empty = await (await paste(A, JSON.stringify({
-        calendar_ics_url: `${FEED}/empty.ics`, items: [],
-      }))).json();
-
-      check('an empty one is reachable',
-        empty.checks.calendar && empty.checks.calendar.reachable === true,
-        JSON.stringify(empty.checks.calendar));
-      check('and reports zero events rather than a failure',
-        empty.checks.calendar.events === 0, JSON.stringify(empty.checks.calendar));
-      check('so the two do not read alike',
-        dead.checks.calendar.reachable !== empty.checks.calendar.reachable);
-    }
-
-    console.log('\n8. two accounts pasting at once do not touch each other');
-    {
+      // The paste that used to do this in one request is gone. The same
+      // question, asked of the two endpoints that replaced it.
       await H.cleanup();
       await H.ensureProfile(undefined, undefined, 'a');
       await H.ensureProfile(undefined, undefined, 'b');
 
-      const forA = JSON.stringify({
-        telegram_chat_id: '1010101010',
-        calendar_ics_url: `${FEED}/a-only.ics`,
-        items: [{ type: 'task', title: "A's imported task" }],
-      });
-      const forB = JSON.stringify({
-        telegram_chat_id: '2020202020',
-        calendar_ics_url: `${FEED}/b-only.ics`,
-        items: [{ type: 'task', title: "B's imported task" }],
-      });
-
-      // Together, so neither can be said to have finished before the other
-      // started.
-      const [ra, rb] = await Promise.all([paste(A, forA), paste(B, forB)]);
-      check('both saved', ra.status === 200 && rb.status === 200, `${ra.status} / ${rb.status}`);
+      await Promise.all([
+        post(A, '/telegram', { chat_id: '1010101010' }),
+        post(B, '/telegram', { chat_id: '2020202020' }),
+        post(A, '/settings/calendar', { url: `${FEED}/a-only.ics` }),
+        post(B, '/settings/calendar', { url: `${FEED}/b-only.ics` }),
+      ]);
 
       const rowA = await rowOf('a');
       const rowB = await rowOf('b');
@@ -353,115 +201,47 @@ async function rowOf(which) {
       check('B kept theirs', rowB.calendar_ics_url === `${FEED}/b-only.ics`,
         String(rowB.calendar_ics_url));
 
-      const titlesOf = async (id) => {
-        const { data } = await H.service.from('entries').select('title').eq('user_id', id);
-        return (data || []).map((r) => r.title).sort();
-      };
-      const ta = await titlesOf(A.id);
-      const tb = await titlesOf(B.id);
-
-      check("A has only A's thing", ta.join(',') === "A's imported task", ta.join(','));
-      check("B has only B's", tb.join(',') === "B's imported task", tb.join(','));
-      // Neither list is empty, or the two checks above pass against two
-      // accounts that both imported nothing.
-      check('and neither import was a no-op', ta.length === 1 && tb.length === 1,
-        `${ta.length} / ${tb.length}`);
+      // Neither row is empty, or the four checks above pass just as well
+      // against two accounts that both saved nothing.
+      check('and neither save was a no-op',
+        Boolean(rowA.telegram_chat_id && rowB.telegram_chat_id));
     }
 
-    console.log('\n9. the prompt is engine text');
+    console.log('\n4. there is no paste to make any more');
     {
-      const fs = require('fs');
-      const html = fs.readFileSync(ROOT + '/public/index.html', 'utf8');
-      const block = html.match(/<script type="text\/plain" id="prompt-text">([\s\S]*?)<\/script>/);
-      check('the page carries one', Boolean(block));
-      const prompt = block[1].trim();
-
-      // The prompt is hard-wrapped prose, so any phrase longer than a few
-      // words straddles a newline and an exact match fails on the wrapping
-      // rather than on the meaning. Everything asserting what it SAYS runs
-      // against this; the two checks about its SHAPE — no interpolation, ends
-      // with the fence — stay on the raw text.
-      const flat = prompt.replace(/\s+/g, ' ');
-
-      // IDENTICAL FOR EVERYONE. It is copied out of the page as written, so
-      // anything interpolated into it would be one person's data travelling
-      // into someone else's chat window.
-      check('nothing is interpolated into it', !/\$\{/.test(flat));
-      check('and it names nobody', !/steven|@gmail|b586ea65/i.test(prompt));
-
-      check('it is strictly ordered', /in order/i.test(flat));
-      check('and refuses to move on',
-        /Finish each one before starting the next/i.test(flat));
-      check('and says so even when asked to skip ahead',
-        /Do not skip ahead/i.test(flat));
-
-      // THE ORDER, and it is the whole point of this rewrite. The interview
-      // comes first because without it there is nothing to plan; reminders and
-      // the calendar are conveniences and go second, together, behind one
-      // question that can be answered "later".
-      const things = prompt.indexOf('STEP 1. WHAT THEY WANT TO GET DONE');
-      const rest = prompt.indexOf('STEP 2. REMINDERS AND CALENDAR');
-      const reminders = prompt.indexOf('REMINDERS. This is how');
-      const calendar = prompt.indexOf('CALENDAR. The app shows it');
-
-      check('the interview comes first', things !== -1 && things < rest, `${things} then ${rest}`);
-      check('and it is not optional', /This one is required/i.test(flat));
-      check('reminders and the calendar come after it', rest !== -1);
-      check('reminders before the calendar within that step',
-        reminders !== -1 && calendar !== -1 && reminders < calendar,
-        `${reminders} then ${calendar}`);
-
-      // ONE QUESTION, and the whole of the second step can be answered by
-      // declining it. A setup that cannot be declined is a setup people
-      // abandon halfway.
-      check('it offers to skip both at once',
-        /Do you want to set up daily phone reminders and your calendar now, or skip and do it later in the app\?/.test(flat));
-      check('and says where they can be added later',
-        /added at any time in the app's settings/i.test(flat));
-      check('and that skipping costs nothing', /costs them nothing/i.test(flat));
-      check('skipping ends it immediately',
-        /put null for the reminders and null for the calendar, and go straight to the end/i.test(flat));
-      check('and either can still be skipped on its own',
-        /skip either one on its own/i.test(flat));
-
-      check('it verifies by asking for evidence',
-        /paste (?:that number|it) back to you/i.test(flat),
-        'must ask for the value, not "got it?"');
-      check('and says not to accept an assurance', /Do not accept "done"/i.test(flat));
-      check('it restates progress in a resumable line',
-        /Done: your things\. Now: reminders\. Remaining: your calendar\./.test(flat));
-      check('and says that line is how you resume',
-        /carry on from where it says/i.test(flat));
-      check('it holds the box back until everything is finished',
-        /Do not write the box at the end until every step is finished/i.test(flat));
-      check('and names what is missing', /say what is still missing/i.test(flat));
-
-      // PLAIN WORDS ONLY. Every one of these is a word about the machinery
-      // rather than about the person's day, and this prompt is read by someone
-      // who has never seen the app.
-      for (const word of ['JSON', 'field', 'blob', 'endpoint', 'bucket']) {
-        check(`it never says "${word}"`,
-          !new RegExp(`\\b${word}\\b`, 'i').test(flat));
+      // The prompt, the box, the preview and the import are gone. What is left
+      // is two fields that each prove themselves, which is what the paste was
+      // wrapping.
+      for (const path of ['/settings/preview', '/settings/import']) {
+        const res = await post(A, path, { paste: '{}' });
+        check(`${path} is gone`, res.status === 404, String(res.status));
       }
-      check('and asks for a copy and paste in those words',
-        /Copy everything in the box below and paste it back into the app/i.test(flat));
 
-      // The warning has to be in the prompt as well as the sheet: someone
-      // pasting a secret address is doing it in the chat, not here.
-      check('it warns that the address grants read access',
-        /lets anyone who has it read that whole calendar/i.test(flat));
-      check('and says the calendar is never written to',
-        /It never changes anything on it/i.test(flat));
-      check('there is only one calendar in it',
-        !/calendar_action_ics_url/.test(flat) && !/things to DO/i.test(flat));
+      const html = require('fs').readFileSync(ROOT + '/public/index.html', 'utf8');
+      check('and the page carries no prompt to copy', !/prompt-text/.test(html));
+      check('nor a box to paste into', !/id="paste"/.test(html));
 
-      check('it ends with the fenced block and nothing after',
-        prompt.trimEnd().endsWith('```'), prompt.slice(-60));
+      // WHAT REPLACED IT. Instructions a person can follow with the app in one
+      // hand, naming the exact words they will see on the other screen.
+      check('the Telegram steps name the bot', /@userinfobot<\/b>/.test(html));
+      check('the calendar steps name the panel', /Integrate calendar<\/b>/.test(html));
+      check('and the row to copy', /Secret address in iCal format<\/b>/.test(html));
+      check('and say the phone app cannot do it', /phone app cannot/i.test(html));
 
-      const html2 = fs.readFileSync(ROOT + '/public/index.html', 'utf8');
-      check('and the sheet carries the same warning',
-        /grants read access to that whole calendar/i.test(html2));
+      const figures = html.match(/class="figure"/g) || [];
+      check('both steps are drawn as well as written', figures.length === 2,
+        String(figures.length));
+      // A drawing that says nothing to a screen reader is decoration sitting
+      // in the middle of an instruction.
+      const described = html.match(/class="figure"[\s\S]{0,200}?aria-label="/g) || [];
+      check('and each drawing says what it shows', described.length === 2,
+        String(described.length));
+
+      check('the calendar warning is still on the screen',
+        /read your whole calendar/i.test(html));
     }
+
+
   } finally {
     server.kill();
     tg.closeAllConnections();

@@ -489,8 +489,13 @@ console.log('\n7. the warn colour warns; it does not narrate');
   // came back broken, which is the job `.failed` already does for a feed on
   // the day screen. `.row-actions .go` is the button that commits a whole
   // pasted setup — ink, like the seal, because it is the same kind of act.
+  //
+  // And two in the setup drawings. `.fig-mark` and `.fig-note` are the one
+  // warm thing in each sketch: the arrow and the word pointing at the row you
+  // are meant to copy. Everything else in those figures is line and paper, so
+  // the only colour in them is doing the only job they have.
   const allowed =
-    /\.mark|\.ends\.late|\.failed|\.danger|\.problem|\.confirm|\.gate-problem|\.said\.bad|\.pline\.bad|\.row-actions \.go/;
+    /\.mark|\.ends\.late|\.failed|\.danger|\.problem|\.confirm|\.gate-problem|\.said\.bad|\.pline\.bad|\.row-actions \.go|\.fig-mark|\.fig-note/;
   check('used only on marks, failures, Delete and the seal',
     warn.every((s) => allowed.test(s)), warn.join(' | '));
   check('and nothing is left claiming a miss', !/askmiss|wasmissed/.test(css));
