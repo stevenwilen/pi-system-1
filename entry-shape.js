@@ -10,6 +10,16 @@ const { SIZES } = require('./warning');
 const TYPES = ['habit', 'project', 'task'];
 const FREQUENCIES = ['daily', 'few times a week', 'weekly', 'monthly'];
 
+// How long a note may be, on a thing and on a block alike.
+//
+// ONE NUMBER, because the text moves between them: a note written on a thing
+// is carried onto a block when the day is confirmed. Two ceilings would mean a
+// note this list accepted could be refused by the confirm that delivered it,
+// and the refusal would land on the day rather than on the field that was
+// typed into. It is described as a line or two and it goes out verbatim in a
+// message, so this is a ceiling rather than a target.
+const NOTE_MAX = 500;
+
 // Which types may carry a deadline. A habit has a cadence instead, and a habit
 // with a deadline would be two different ideas in one row.
 const DATED = ['project', 'task'];
@@ -81,4 +91,4 @@ function toRow(body) {
   return fields;
 }
 
-module.exports = { TYPES, FREQUENCIES, DATED, SIZES, orNull, validate, toRow };
+module.exports = { TYPES, FREQUENCIES, DATED, SIZES, NOTE_MAX, orNull, validate, toRow };

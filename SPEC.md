@@ -473,9 +473,9 @@ reporting a scheduling that never happened.
 Tapping a row adds it to tomorrow, which is what this list is for.
 
 At the right edge of every row is a quiet `···`. Tapping it reveals **Done**
-(tasks only), **Edit** and **Delete**. Tapping the row while a menu is open
-closes the menu rather than scheduling — tapping away from something you opened
-should undo the opening, not commit to something.
+(tasks only) and **Edit**. Tapping the row while a menu is open closes the menu
+rather than scheduling — tapping away from something you opened should undo the
+opening, not commit to something.
 
 The hint is faint rather than muted. It repeats down the whole list, and at
 muted it would draw a second column of emphasis competing with the titles.
@@ -485,37 +485,128 @@ actions reachable only by already knowing they were there — and one of those
 three, Edit, had no route into it at all: the update endpoint existed and
 nothing on the page ever called it.
 
-Delete is last and is the only one in the warn colour. Between two ordinary
-actions it is a misclick waiting to happen.
+**Delete left the menu.** It is a swipe now, and the menu holds only what has no
+gesture. Two routes to the same irreversible write, two paces apart, one of them
+reachable by a finger that only meant to open the menu, was one route too many.
 
-#### Done and Delete offer an undo, and write nothing until it lapses
+#### A row is worked by gesture, like a block
 
-Both take the row off the list at once and show **Done · Undo** or
-**Deleted · Undo** for six seconds, the same bar the block swipes use. **Delete
-no longer asks first** — the undo replaces the confirm, and is the better of the
-two for the same reason it is on the swipes: a confirm interrupts every delete to
-catch the rare wrong one, the undo interrupts none of them and still catches it.
+Left removes, right writes a note — **the same two directions the blocks use**,
+because they are the same two questions asked of a different kind of row. A list
+where left meant one thing here and another there would be a list you had to
+remember rather than read.
 
-**The write waits for the window to close.** This is forced rather than chosen.
-`status = 'deleted'` is a tombstone (§2.2) and `update_entry` refuses to revive
-one as anything, so there is no request that reverses a Delete — the only way for
-undo to restore *the same row* is for nothing to have happened to it yet. Undo
-does not reverse the write; it cancels it.
+Both reveal a backing under the travelling row, with the word on the edge the
+finger is heading for, fading in with the distance so the action is readable
+**before** the release. The row itself is opaque in the page colour and the
+hairline divider hangs on the slot rather than the row, so the list holds still
+while one row slides.
 
-Done goes the same way even though `done` → `active` would in fact be allowed.
-One mechanism, because two would differ only in ways nobody could see, and an
-invisible difference is the kind that rots.
+The commit distance is the same 72px the blocks use: most of a thumb's travel, so
+neither gesture is reachable by a hand that was doing something else.
+
+**Delete asks; the block swipe does not.** The row turns into `Delete [title]?`
+with **Cancel** and **Delete**, and only Delete writes. This is the one place
+this system asks first, and the asymmetry is the point:
+
+- A block is one day. Taking one out is how you record that something did not
+  happen, and it is written back the moment you confirm; the six-second undo
+  catches the rare wrong one and interrupts none of the right ones.
+- A thing may be weeks of history. Every block that ever carried its id stops
+  being attributable to anything, and `status = 'deleted'` is a tombstone (§2.2)
+  that `update_entry` refuses to revive — so there is no undo that could put the
+  *same* row back an hour later. The doubt has to be raised before the write.
+
+Cancel comes first and Delete is last and in the warn colour, for the reason the
+menu ordered it that way: the destructive one does not sit where the finger
+arrives by default, and after a leftward swipe what the finger lands on is the
+way out.
+
+The removing backing wears the warn colour and a block's does not. That is
+deliberate and it is the only place the two swipes are unalike: colour on a
+gesture that carries an undo would be shouting about something already caught.
+
+There is **no undo on a delete** — the question was the window. An offer to undo
+something just confirmed would be the same doubt raised on both sides of one
+write.
+
+#### Done offers an undo, and writes nothing until it lapses
+
+Done takes the row off the list at once and shows **Done · Undo** for six
+seconds, the same bar the block swipes use.
+
+**The write waits for the window to close.** `done` → `active` would in fact be
+allowed by the server, so this one could have been written the other way round.
+It is not, because the row that comes back has to be *the same row* and not a new
+one carrying a new id — and because the mechanism was already there.
 
 Three consequences, all of them deliberate:
 
-- **A second action commits the first.** Deleting two things in a row deletes
-  both; the bar can only ever describe one of them.
+- **A second action commits the first.** Finishing one thing and then deleting
+  another writes both; the bar can only ever describe one of them.
 - **Leaving the page commits.** A `pagehide` listener settles the offer, with
   `keepalive` on the request so it survives the page going away. Without it,
-  deleting something and closing the tab would leave the row on the list.
+  finishing something and closing the tab would leave the row on the list.
 - **For six seconds the screen and the database disagree.** A reload inside the
   window brings the row back. That is the price of the undo restoring the same
   row rather than a new one.
+
+#### The note on a thing
+
+Swiping a row right opens a plain input: one line, capitalised by sentence,
+spellcheck on, autocomplete and autocorrect off. It is meant to be **dictated at
+the list**, and a field that guesses at the next word is in the way of someone
+talking at it. Leaving the field saves it; Enter saves it; clearing it removes it
+— empty is not a note.
+
+**It is not the note on a block, and the difference is the whole design.**
+`blocks.note` says what you are doing in that session: "finish the pricing page"
+is true of Tuesday morning and not of the project (§3.2). `entries.note` says
+what to remember **when you next schedule this** — and it is spent once
+delivered.
+
+**Scheduling moves it.** Confirming a day writes the note onto the first new
+block for that thing and sets `entries.note` back to null. A note that stayed
+would be read again on every future scheduling, which is how a sentence about one
+morning becomes a standing instruction nobody meant to give.
+
+Four rules follow from that, and each one is a case in `note-test.js`:
+
+- **The confirm spends it, not the tap.** A block does not exist until `POST
+  /plan`, so a person who taps a row and then changes their mind has not spent
+  anything. The move is decided on the server for the same reason.
+- **New blocks only, and the first one per thing.** Scheduling something twice in
+  a day is two sessions of the same work, not the same message twice. A block
+  that already exists was given its note by whichever confirm created it.
+- **A block's own words win.** If the first new block already carries a note, the
+  thing keeps its own, undelivered, and nothing is overwritten. Someone who wrote
+  on the block has said something more recent about that session; the message on
+  the thing is still waiting for a scheduling with room for it.
+- **One ceiling, 500 characters, shared with `blocks.note` in `entry-shape.js`.**
+  The text moves between them, so two ceilings would let the confirm refuse what
+  the field that wrote it accepted — and the refusal would land on the day rather
+  than on the field.
+
+**The list never shows the words.** A row with a note carries a small muted dot
+and nothing else. The list must not get longer: a second line of prose on every
+row that has one turns a list you scan into a page you read, and the note is
+addressed to the person about to schedule this rather than to the person
+scanning. Swiping right again is how it is read, and how it is edited.
+
+The dot is muted rather than either ink. Something waiting is not something
+wrong, so not persimmon; there is nothing to press on it, so not indigo.
+
+The note reaches an entry through `POST /entries/:id/note` and **no other
+route**. `/update` re-validates the whole row — title, due date, and the size
+that has to accompany it — and a note has no rules to break beyond its ceiling;
+sending it through there would mean a note could be refused for something on the
+far side of the row. `note` is in `UPDATABLE` and deliberately not in
+`CREATABLE`: nothing writes one at the moment a thing is added, because there is
+no such thing to say about a row that does not exist yet.
+
+`POST /plan` answers with `notes`, an array parallel to `ids` holding the text of
+each note it moved and null everywhere else. That is what lets both ends of the
+move show without a reload — the block gains its line, the row loses its dot.
 
 #### Adding and editing
 
@@ -877,6 +968,15 @@ about a different day.
 
 It follows from that. Change the plan and the note goes with the day.
 Re-confirm without it and it is cleared, like everything else on the block.
+
+A thing can carry a note too (§3.1), and it is not this one. That one is
+addressed to the next scheduling of the thing rather than to a session, which is
+why it does not stay put: the confirm moves it onto the first new block for that
+thing and clears the column behind it. A note that arrived that way is
+indistinguishable from one typed here afterwards, which is correct — once it has
+landed it is about this block and nothing else. What it never does is overwrite:
+if the block already carries words of its own, the thing keeps its note and waits
+for a scheduling with room for it.
 
 A block that has one shows it under the title, small and muted, so a glance down
 the day shows which blocks carry one without any of them shouting. Swiping right
@@ -1273,6 +1373,7 @@ Run once each, by hand, in the Supabase SQL editor. All are safe to run twice.
 | `migration-nudge.sql` | `profile.nudge_hour` |
 | `migration-size.sql` | `entries.size`, and the check constraint on its five buckets |
 | `migration-note.sql` | `blocks.note` |
+| `migration-entry-note.sql` | `entries.note` — a different note from the one above, and §3.1 says why |
 | `migration-plans-in.sql` | `profile.plans_in`, and the check constraint on its two values |
 
 **No column or table has ever been dropped.** The strip retired

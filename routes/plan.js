@@ -12,12 +12,13 @@ const express = require('express');
 
 const { minutesOfDay, toMinutes, hhmmss } = require('../clock');
 const { readCalendar } = require('../tools');
+// The same ceiling the Things list applies, and deliberately the same number:
+// a note written on a thing is carried onto a block by the confirm below, so
+// two ceilings would let this route refuse text the field that wrote it
+// accepted. See entry-shape.js.
+const { NOTE_MAX } = require('../entry-shape');
 
 const router = express.Router();
-
-// How long a note may be. It is described as a line or two and it is sent
-// verbatim in a message, so this is a ceiling rather than a target.
-const NOTE_MAX = 500;
 
 /**
  * What is on the calendar for one date.
@@ -293,6 +294,58 @@ router.post('/plan', async (req, res) => {
       }
     }
 
+    // --- the messages waiting on the things being scheduled ----------------
+    //
+    // A note on a thing is written for the next time it is put in a day, and
+    // this is that moment: it moves onto the block and is cleared from the
+    // thing, spent once delivered. A note that stayed behind would be read
+    // again on every future scheduling, which is how a sentence about one
+    // morning becomes a standing instruction nobody meant to give.
+    //
+    // HERE AND NOT ON THE SCREEN, because a block does not exist until this
+    // request. The tap that puts a thing in the day writes nothing, and a
+    // person who taps a row and then changes their mind must not have spent
+    // the note on a block that was never saved.
+    //
+    // NEW BLOCKS ONLY, and the first one per thing. Scheduling something twice
+    // in a day is two sessions of the same work, not the same message twice;
+    // and a block that already exists was delivered its note by whichever
+    // confirm created it.
+    const firstNewFor = new Map();
+    for (const [i, b] of blocks.entries()) {
+      if (b.id || !b.entryId) continue;
+      if (!firstNewFor.has(b.entryId)) firstNewFor.set(b.entryId, i);
+    }
+
+    // Block position -> the text moving onto it.
+    const delivered = new Map();
+
+    if (firstNewFor.size) {
+      const { data: waiting, error } = await db
+        .from('entries')
+        .select('id, note')
+        .eq('user_id', userId)
+        .in('id', [...firstNewFor.keys()]);
+      if (error) throw new Error(error.message);
+
+      for (const e of waiting || []) {
+        const text = String(e.note || '').trim();
+        if (!text) continue;
+
+        const at = firstNewFor.get(e.id);
+
+        // The block's own words win, and the thing keeps its note.
+        //
+        // Nothing is overwritten and nothing is thrown away: someone who wrote
+        // on the block itself has said something more recent about this
+        // session, and the message waiting on the thing is still waiting for a
+        // scheduling that has room for it.
+        if (String(blocks[at].note || '').trim()) continue;
+
+        delivered.set(at, text);
+      }
+    }
+
     // Rows the day no longer mentions. Computed here, with the rest of the
     // refusals, so a request that cannot go through has not written anything
     // by the time it is turned away.
@@ -358,11 +411,12 @@ router.post('/plan', async (req, res) => {
       const { data: made, error } = await db
         .from('blocks')
         .insert(
-          freshAt.map((i) => ({
-            user_id: userId,
-            plan_id: planId,
-            ...blockFields(blocks[i], i),
-          }))
+          freshAt.map((i) => {
+            const fields = blockFields(blocks[i], i);
+            // The thing's note, arriving on the block that schedules it.
+            if (delivered.has(i)) fields.note = delivered.get(i);
+            return { user_id: userId, plan_id: planId, ...fields };
+          })
         )
         .select('id, sort_order');
       if (error) throw new Error(error.message);
@@ -375,7 +429,30 @@ router.post('/plan', async (req, res) => {
       for (const i of freshAt) ids[i] = bySort.get(i) || null;
     }
 
-    res.json({ date, blocks: blocks.length, status: 'confirmed', ids });
+    // Cleared only once the blocks carrying them exist. Clearing first and
+    // failing on the insert would lose the note outright, with nothing on
+    // either side holding it.
+    if (delivered.size) {
+      const spent = [...delivered.keys()].map((i) => blocks[i].entryId);
+      const { error } = await db
+        .from('entries')
+        .update({ note: null })
+        .eq('user_id', userId)
+        .in('id', spent);
+      if (error) throw new Error(error.message);
+    }
+
+    res.json({
+      date,
+      blocks: blocks.length,
+      status: 'confirmed',
+      ids,
+      // The notes this confirm moved onto blocks, by position, null everywhere
+      // else. Sent so the screen can show the arrival without reloading the
+      // day: the person wrote those words and the block they landed on is on
+      // screen in front of them.
+      notes: blocks.map((b, i) => (delivered.has(i) ? delivered.get(i) : null)),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -30,7 +30,10 @@ const ical = require('node-ical');
 // is.
 const CREATABLE = ['type', 'title', 'frequency', 'due', 'size'];
 
-const UPDATABLE = [...CREATABLE, 'status'];
+// `note` is updatable and not creatable. Nothing writes one at the moment a
+// thing is added — it is a message to yourself for the next time you schedule
+// it, and there is no such thing to say about a row that does not exist yet.
+const UPDATABLE = [...CREATABLE, 'status', 'note'];
 
 function pick(fields, allowed) {
   const out = {};

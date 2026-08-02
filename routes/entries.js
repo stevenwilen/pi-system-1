@@ -10,7 +10,7 @@ const { todayIn } = require('../clock');
 const { create_entry, update_entry } = require('../tools');
 const { lastScheduled, daysBetween } = require('../staleness');
 const { markFor, slackFor, daysUntil } = require('../warning');
-const { TYPES, orNull, validate, toRow } = require('../entry-shape');
+const { TYPES, NOTE_MAX, orNull, validate, toRow } = require('../entry-shape');
 
 const router = express.Router();
 
@@ -40,7 +40,7 @@ router.get('/entries', async (req, res) => {
 
     const { data: rows, error } = await db
       .from('entries')
-      .select('id, type, title, frequency, due, size, created_at')
+      .select('id, type, title, frequency, due, size, note, created_at')
       .eq('user_id', userId)
       .eq('status', 'active')
       .in('type', TYPES);
@@ -73,6 +73,14 @@ router.get('/entries', async (req, res) => {
         // sent: the screen shows the mark, and a number nothing renders is a
         // field to keep in step with for no one's benefit.
         slack: slackFor({ due, size: r.size, today }),
+        // The message waiting for the next time this is scheduled, or null.
+        //
+        // Sent in full rather than as a "there is one" flag, because swiping
+        // the row again is how a note is edited and the field has to open
+        // with what is already in it. The screen shows a mark and not the
+        // text: the list is a list, and a second line of prose on every row
+        // is how it stops being one.
+        note: r.note || null,
         // Null when this has never been scheduled, which is what lets the
         // screen say "since added" instead of claiming a scheduling that
         // never happened.
@@ -185,6 +193,39 @@ router.post('/entries/:id/update', async (req, res) => {
   const row = await update_entry(db, userId, req.params.id, toRow(merged));
   if (row.error) return res.status(400).json({ error: row.error });
   res.json({ entry: row });
+});
+
+/**
+ * The note, written or cleared.
+ *
+ * Its own route rather than a field on `/update`, because it is not the same
+ * kind of edit. `/update` re-validates the whole row — a title, a due date and
+ * the size that has to accompany it — and a note has no rules to break beyond
+ * a ceiling. Sending it through there would mean a note could be refused for
+ * something on the other side of the row, and would mean the edit sheet and a
+ * swipe wrote through the same door for no shared reason.
+ *
+ * Empty is not a note. Clearing the field is how one is removed, which is why
+ * null, '' and whitespace all mean the same thing here.
+ */
+router.post('/entries/:id/note', async (req, res) => {
+  const { db, userId } = req.auth;
+  const raw = (req.body || {}).note;
+
+  if (raw !== undefined && raw !== null && typeof raw !== 'string') {
+    return res.status(400).json({ error: 'a note must be text' });
+  }
+  if (String(raw || '').length > NOTE_MAX) {
+    return res.status(400).json({
+      error: `a note is a line or two, not ${String(raw).length} characters`,
+    });
+  }
+
+  const note = String(raw || '').trim() || null;
+
+  const row = await update_entry(db, userId, req.params.id, { note });
+  if (row.error) return res.status(400).json({ error: row.error });
+  res.json({ id: row.id, note: row.note || null });
 });
 
 /**

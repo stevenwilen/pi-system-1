@@ -241,11 +241,34 @@ async function cleanup() {
     check('and it posts to the done route', /entries\/\$\{item\.id\}\$\{path\}/.test(html));
     check('which Done names', /takeOff\(item, 'Done', '\/done'\)/.test(html));
 
-    // Delete used to ask first. The undo replaced the confirm — it interrupts
-    // no deletes at all and still catches the wrong one.
-    check('Delete no longer asks first', !/confirm\(`Delete/.test(html));
-    check('it offers an undo instead', /takeOff\(item, 'Deleted', '\/delete'\)/.test(html));
-    check('and the write waits for the offer to lapse',
+    // DELETE ASKS AGAIN, and this time in the page rather than at the browser.
+    //
+    // It went the other way once: the undo replaced a native confirm, on the
+    // grounds that a confirm interrupts every delete to catch the rare wrong
+    // one. That argument holds for a block, which is one day and is rewritten
+    // on the next confirm. It does not hold for a thing, which may be weeks of
+    // history behind it and cannot come back at all — `status = 'deleted'` is
+    // a tombstone, as the cases above this one prove twice over. There is no
+    // undo to offer, so the doubt is raised before the write instead.
+    check('deleting a thing asks first', /`Delete \$\{item\.title\}\?`/.test(html));
+    // In the list, so it can name the thing and so the words can be Cancel and
+    // Delete rather than OK and Cancel.
+    check('and it asks in the page, not at the browser',
+      !/confirm\(`Delete/.test(html) && /className = 'row asking'/.test(html));
+    check('the way out comes first, the destructive one last',
+      /acts\.append\(cancel, del\);/.test(html));
+
+    const remove = (html.match(/function remove\(item\) \{[\s\S]*?\n      \}/) || [''])[0];
+    check('it offers no undo, because the question was the window',
+      Boolean(remove) && !/offerUndo/.test(remove), remove.slice(0, 120));
+    check('and no longer goes through the deferred path',
+      !/takeOff\(item, 'Deleted'/.test(html));
+    check('the write lands at once',
+      /apiNow\(`\/entries\/\$\{item\.id\}\/delete`, \{ method: 'POST', keepalive: true \}\)/.test(remove),
+      remove.slice(-200));
+
+    // Done kept the undo, and with it the deferred write.
+    check('Done still waits for the offer to lapse',
       /offerUndo\([\s\S]{0,700}apiNow\(`\/entries\/\$\{item\.id\}\$\{path\}`/.test(html));
 
     // apiNow, NOT api, and the difference is the whole reason this write

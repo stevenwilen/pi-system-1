@@ -202,13 +202,28 @@ console.log('\n2. one label style, and the action is quieter than it');
 console.log('\n3. rows are rows; only builder blocks are cards');
 {
   const row = rule('.row');
-  const divider = rule('.row + .row');
+  const divider = rule('.thing + .thing');
 
-  check('a row has no background', !/background/.test(row), row);
+  // A ROW IS OPAQUE NOW, AND ONLY THAT. It slides aside to show a backing, and
+  // a transparent row would let the word underneath read straight through the
+  // title. The page's own colour is the whole of what is allowed: `--card` here
+  // would be the thing this section exists to refuse, because a row wearing the
+  // slip's colour is a row claiming to be a slip.
+  const paper = (row.match(/background:[^;]*/) || [''])[0];
+  check('a row is opaque in the page colour, or in nothing',
+    !paper || /background:\s*var\(--bg\)/.test(paper), paper);
+  check('never in a card colour', !/var\(--card/.test(row), row);
   check('nor a radius', !/border-radius/.test(row), row);
+
+  // The hairline moved off the row and onto the slot that holds it, and that
+  // is load-bearing rather than tidy: a divider travelling with the row would
+  // make the whole list look like it was coming apart under one finger.
   check('rows are separated by a hairline', /border-top: 1px solid var\(--line\)/.test(divider));
   check('and only between them, never around them',
-    !/border:/.test(row) && css.indexOf('.row + .row') > -1);
+    !/border:/.test(row) && css.indexOf('.thing + .thing') > -1);
+  check('the divider is on the slot, not on the row that moves',
+    !/border-top/.test(rule('.row + .row')) && !/border-top/.test(row),
+    rule('.row + .row') + row);
 
   const block = rule('.block');
   // The paper sits on the layer behind the text, so that is where to look for
@@ -328,8 +343,13 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   //
   // `.back` is the fifth, and the plainest of them: it is the way out of the
   // setup screen, and leaving a place is an action.
+  //
+  // `.thingnote:focus` is the sixth and is not a new idea at all: it is a
+  // focused field, the same job `.gate-field input:focus` already has. The
+  // mark that says a row HAS a note is deliberately not on this list — it is
+  // muted, because there is nothing to press on it.
   const acts =
-    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.pline\.good|#paste:focus|\.back/;
+    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.pline\.good|#paste:focus|\.back|\.thingnote:focus/;
   // The divider: the knot and the line it fastens. Both are indigo now, where
   // the dark build tinted the line with a separate near-blue that belonged to
   // nothing — one fewer colour on the page, and the two halves of one object
@@ -473,9 +493,17 @@ console.log('\n6. blue is actionable, and nothing else is blue');
 console.log('\n7. the warn colour warns; it does not narrate');
 {
   // It marks a deadline running out, a day running past midnight, a feed that
-  // failed, and Delete in the row menu. It had two other jobs and has lost
-  // both: a missed block, which is a concept that no longer exists, and the
-  // swipe backing, which filled the whole card while a finger was on it.
+  // failed, and Delete. It had two other jobs and has lost both: a missed
+  // block, which is a concept that no longer exists, and the BLOCK swipe
+  // backing, which filled the whole card while a finger was on it.
+  //
+  // THE THING SWIPE'S BACKING TAKES IT BACK, on the removing side only and as
+  // one word rather than a fill — and it is the same job it has always had,
+  // which is Delete. It is deliberately unlike the block swipe: a block
+  // carries a six-second undo, so colour there would be shouting about
+  // something already caught. Deleting a thing asks first and then writes for
+  // good, and the colour is what says which of the two swipes you are in
+  // before your finger comes off.
   const warn = selectorsUsing('var(--warn)').filter((s) => !/^:root/.test(s));
   // THE HANKO JOINS THE LIST, and it is the only addition this theme makes.
   // A seal is stamped in persimmon; it is the one warm thing on the page and
@@ -495,7 +523,7 @@ console.log('\n7. the warn colour warns; it does not narrate');
   // are meant to copy. Everything else in those figures is line and paper, so
   // the only colour in them is doing the only job they have.
   const allowed =
-    /\.mark|\.ends\.late|\.failed|\.danger|\.problem|\.confirm|\.gate-problem|\.said\.bad|\.pline\.bad|\.row-actions \.go|\.fig-mark|\.fig-note/;
+    /\.mark|\.ends\.late|\.failed|\.danger|\.problem|\.confirm|\.gate-problem|\.said\.bad|\.pline\.bad|\.row-actions \.go|\.fig-mark|\.fig-note|\.thing \.backing\.left/;
   check('used only on marks, failures, Delete and the seal',
     warn.every((s) => allowed.test(s)), warn.join(' | '));
   check('and nothing is left claiming a miss', !/askmiss|wasmissed/.test(css));
@@ -873,17 +901,51 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
   check('and not autocompleted at', /'autocomplete', 'off'/.test(code));
   check('leaving the field saves it', /area\.onblur = \(\) => saveNote/.test(code));
   check('an empty one is no note', /blocks\[i\]\.note = clean \|\| null/.test(code));
-  // On the block, never on the entry. "Finish the pricing page" is true of
-  // Tuesday morning and not of the project, and putting it on the entry would
-  // make it a claim that outlives the session it describes.
-  check('the page never sends a note to /entries', !/body\.note/.test(code));
-  check('nor to the update route',
+  // TWO NOTES, AND THEY MUST NOT BECOME ONE FIELD BY ACCIDENT.
+  //
+  // A block's note says what you are doing in that session. "Finish the
+  // pricing page" is true of Tuesday morning and not of the project, and this
+  // used to be the whole rule: nothing on an entry, anywhere, at all.
+  //
+  // A thing now carries one too, and it is a different claim — a message to
+  // yourself for the NEXT time you schedule this. What keeps them apart is
+  // that it does not stay: the confirm moves it onto the first new block for
+  // that thing and clears the column. So the checks below are no longer "there
+  // is no note on an entry" but "the one on an entry is spent when it lands",
+  // which is the property that stops it becoming a standing instruction.
+  const entriesRoute = fs.readFileSync(ROOT + '/routes/entries.js', 'utf8');
+  const toolsSrc = fs.readFileSync(ROOT + '/tools.js', 'utf8');
+  const shape = fs.readFileSync(ROOT + '/entry-shape.js', 'utf8');
+
+  check('the add sheet still sends no note', !/body\.note/.test(code));
+  check('nor does the edit route carry one',
     !/entries\/\$\{editingId\}\/update[\s\S]{0,400}note/.test(code));
-  check('and the entries write path has no note in it', (() => {
-    const entries = fs.readFileSync(ROOT + '/routes/entries.js', 'utf8');
-    const tools = fs.readFileSync(ROOT + '/tools.js', 'utf8');
-    return !/\bnote\b/.test(entries) && !/'note'/.test(tools);
-  })());
+  // The merged object of the edit route, and nothing after it. A lazy
+  // `[\s\S]*?` reached past the closing brace and found the word in the note
+  // route further down the file, which made this pass by looking at the thing
+  // it was meant to rule out.
+  const merged = (entriesRoute.match(/merged = \{[^}]*\}/) || [''])[0];
+  check('a note reaches a thing by its own route and no other',
+    /'\/entries\/:id\/note'/.test(entriesRoute) && !/note/.test(merged), merged);
+  check('and toRow, which the sheet writes through, has no note in it',
+    !/note/.test((shape.match(/function toRow[\s\S]*?\n\}/) || [''])[0]));
+  check('it is updatable but never creatable: nothing writes one at birth',
+    /UPDATABLE = \[\.\.\.CREATABLE, 'status', 'note'\]/.test(toolsSrc) &&
+    !/CREATABLE = \[[^\]]*'note'/.test(toolsSrc));
+
+  // The move itself, in the confirm. Read from the route rather than restated,
+  // so a change to how it works has to come through here.
+  const planRoute = fs.readFileSync(ROOT + '/routes/plan.js', 'utf8');
+  check('the confirm gives it to the first NEW block for that thing',
+    /if \(b\.id \|\| !b\.entryId\) continue;/.test(planRoute) &&
+    /if \(!firstNewFor\.has\(b\.entryId\)\) firstNewFor\.set/.test(planRoute));
+  check('and clears it from the thing once the block exists',
+    /\.update\(\{ note: null \}\)/.test(planRoute));
+  check('never over the top of a note the block already carries',
+    /if \(String\(blocks\[at\]\.note \|\| ''\)\.trim\(\)\) continue;/.test(planRoute));
+  check('one ceiling for both, because the text moves between them',
+    /NOTE_MAX/.test(shape) && /NOTE_MAX \} = require\('\.\.\/entry-shape'\)/.test(planRoute) &&
+    !/NOTE_MAX = /.test(planRoute));
   check('a block with one shows it under the title', /className = 'note'/.test(code));
   check('and it rides with the block through a confirm',
     /note: b\.note \|\| null/.test(code));

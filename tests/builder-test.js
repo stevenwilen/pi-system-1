@@ -173,6 +173,10 @@ function boot({
   // Handed in when a case is simulating a RELOAD: the same device, the same
   // storage, a fresh page.
   storage = null,
+  // What POST /plan answers. The confirm hands back the notes it moved off the
+  // Things list and onto blocks, and a case about that has to be able to say
+  // which ones arrived where.
+  planReply = null,
 } = {}) {
   // Frozen by default, not just when a case asks.
   //
@@ -316,7 +320,9 @@ function boot({
           if (url === '/entries' && failEntries) throw new Error('offline');
           if (url.startsWith('/calendar')) return { items: calendar, failed };
           if (url.startsWith('/plan/')) return planFor(url);
-          if (url === '/plan') return { date: 'x', blocks: 0, status: 'confirmed', ids: [] };
+          if (url === '/plan') {
+            return planReply || { date: 'x', blocks: 0, status: 'confirmed', ids: [], notes: [] };
+          }
           return entries || ENTRIES;
         },
       };
@@ -365,6 +371,20 @@ function boot({
     setClock: (hhmm) => clock.moveTo && clock.moveTo(hhmm),
   };
 }
+
+/**
+ * The rows of the Things list.
+ *
+ * A row is one level down now. It sits inside a `.thing`, which is what holds
+ * still while the row slides off the backing behind it — so `#things`'s own
+ * children are the slots and not the rows. Every case reached in and read
+ * `.row` off the children directly, which stopped finding anything at all the
+ * day the wrapper arrived.
+ */
+const thingSlots = (byId) => byId.things.children.filter((c) => c._class.has('thing'));
+const thingRows = (byId) =>
+  thingSlots(byId).map((t) => t.children.find((c) => c._class.has('row'))).filter(Boolean);
+const backingOfThing = (slot) => slot.children.find((c) => c._class.has('backing'));
 
 const cancel = (card) => card.onpointercancel({ pointerId: 1 });
 
@@ -1495,7 +1515,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     });
     await ctx.load();
 
-    const rows = () => byId.things.children.filter((c) => c._class.has('row'));
+    const rows = () => thingRows(byId);
     const rowFor = (title) => rows().find((r) => r.text().includes(title));
     const markOf = (r) => r.children[0].children.find((c) => c._class.has('mark'));
 
@@ -1534,7 +1554,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // The page opens on today, so a case about tomorrow's plan reaches it.
     await byId['pick-tomorrow'].onclick();
 
-    const rows = () => byId.things.children.filter((c) => c._class.has('row'));
+    const rows = () => thingRows(byId);
     const rowFor = (t) => rows().find((r) => r.text().includes(t));
 
     check('tomorrow holds one block', titles().join() === 'Spanish', titles().join());
@@ -1587,7 +1607,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // The plan under test is tomorrow's, and the page opens on today.
     await byId['pick-tomorrow'].onclick();
 
-    const rowFor = (t) => byId.things.children.filter((c) => c._class.has('row'))
+    const rowFor = (t) => thingRows(byId)
       .find((r) => r.text().includes(t));
 
     check('three blocks, two of them the same thing',
@@ -1620,7 +1640,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     });
     await ctx.load();
 
-    const rowFor = (t) => byId.things.children.filter((c) => c._class.has('row'))
+    const rowFor = (t) => thingRows(byId)
       .find((r) => r.text().includes(t));
 
     check('both rows are greyed', rowFor('Reading')._class.has('locked') &&
@@ -2150,13 +2170,17 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     });
     await ctx.load();
 
-    const row = byId.things.children.filter((c) => c._class.has('row'))[0];
+    const row = thingRows(byId)[0];
     check('it is locked', row._class.has('locked'));
 
     const acts = row.children.find((c) => c._class.has('rowacts'));
     check('it still has a menu', Boolean(acts));
-    check('with all three actions',
-      acts.children.map((c) => c.textContent).join() === 'Done,Edit,Delete',
+    // DELETE IS NOT IN IT. It left for the swipe, which is where the
+    // confirmation is; a Delete in the menu as well would be a second route to
+    // the same write, two paces from the hint, reachable by a finger that only
+    // meant to open the menu.
+    check('with edit and done, and no delete',
+      acts.children.map((c) => c.textContent).join() === 'Done,Edit',
       acts.children.map((c) => c.textContent).join());
 
     const hint = row.children[0].children.find((c) => c._class.has('hint'));
@@ -2164,22 +2188,22 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('and the hint still opens it', !acts._class.has('hidden'));
   }
 
-  console.log('\nDone and Delete offer an undo, and write nothing until it lapses');
+  console.log('\nDone offers an undo; Delete asks first and writes at once');
   {
     // Built fresh per boot. The page holds the array the fetch stub handed it
     // and splices that array, so one shared fixture would be emptied by the
     // first case and every later one would start short. A real fetch parses
     // new JSON each time; the stub does not.
     const items = () => [
-      { id: 'e-a', type: 'task', title: 'Alpha', days: 1, mark: null, due: null, size: null, last_scheduled: null },
-      { id: 'e-b', type: 'task', title: 'Beta', days: 2, mark: null, due: null, size: null, last_scheduled: null },
-      { id: 'e-c', type: 'habit', title: 'Gamma', days: 3, mark: null, due: null, size: null, last_scheduled: null },
+      { id: 'e-a', type: 'task', title: 'Alpha', days: 1, mark: null, due: null, size: null, note: null, last_scheduled: null },
+      { id: 'e-b', type: 'task', title: 'Beta', days: 2, mark: null, due: null, size: null, note: null, last_scheduled: null },
+      { id: 'e-c', type: 'habit', title: 'Gamma', days: 3, mark: null, due: null, size: null, note: null, last_scheduled: null },
     ];
     const fresh = () => boot({
       entries: utcEntries({ plans_in: 'morning', items: items() }), now: '11:00',
     });
 
-    const rowsIn = (byId) => byId.things.children.filter((c) => c._class.has('row'));
+    const rowsIn = (byId) => thingRows(byId);
     const namesIn = (byId) =>
       rowsIn(byId).map((r) => r.children[0].children[0].textContent).join();
     const menuOf = (row) => row.children.find((c) => c._class.has('rowacts'));
@@ -2189,54 +2213,126 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     };
     const undoBar = (byId) => byId['undo-host'].children[0];
 
+    // A swipe far enough to mean it, on a row rather than a block.
+    const swipe = (byId, at, dx) => {
+      const row = rowsIn(byId)[at];
+      down(row, 0, 0);
+      move(row, dx, 0);
+      up(row, dx, 0);
+    };
+    // The question a swipe left leaves behind, or null.
+    const askOf = (byId) =>
+      thingSlots(byId)
+        .map((t) => t.children.find((c) => c._class.has('asking')))
+        .find(Boolean) || null;
+    const pressAsk = (byId, word) => {
+      const b = askOf(byId).children
+        .find((c) => c._class.has('askacts'))
+        .children.find((c) => c.textContent === word);
+      b.onclick({ stopPropagation() {} });
+    };
+
     {
-      // DELETE, undone. Nothing may have been written, because a delete cannot
-      // be reversed: status='deleted' is a tombstone the server will not revive.
+      // DELETE ASKS. The undo is gone from this one: a thing may be weeks of
+      // history and the row cannot come back, so the doubt is raised before
+      // the write rather than after it.
       const { ctx, byId, posted } = fresh();
       await ctx.load();
       posted.length = 0;
 
-      press(rowsIn(byId)[1], 'Delete');
-      check('the row goes at once', namesIn(byId) === 'Alpha,Gamma', namesIn(byId));
-      check('and the bar says what happened',
-        undoBar(byId).text().includes('Deleted'), undoBar(byId).text());
-      check('but NOTHING was posted yet', posted.length === 0,
+      swipe(byId, 1, -80);
+      const ask = askOf(byId);
+      check('the row turns into the question', Boolean(ask));
+      check('and the question names the thing',
+        Boolean(ask) && ask.text().includes('Delete Beta?'), ask && ask.text());
+      check('and the list is still three rows long', thingSlots(byId).length === 3,
+        String(thingSlots(byId).length));
+      check('nothing was written', posted.length === 0,
         JSON.stringify(posted.map((p) => p.url)));
+      check('and no undo was offered', byId['undo-host'].children.length === 0);
 
-      undoBar(byId).children.find((c) => c.textContent === 'Undo').onclick();
-      check('undo puts it back where it was', namesIn(byId) === 'Alpha,Beta,Gamma',
+      // CANCEL PUTS IT BACK. This is the half a confirm exists for.
+      pressAsk(byId, 'Cancel');
+      check('cancel restores the row', namesIn(byId) === 'Alpha,Beta,Gamma',
         namesIn(byId));
-      check('and still nothing was posted', posted.length === 0,
+      check('and still nothing was written', posted.length === 0,
         JSON.stringify(posted.map((p) => p.url)));
-      check('the bar is gone', byId['undo-host'].children.length === 0);
+      check('with no question left on screen', askOf(byId) === null);
     }
 
     {
-      // DELETE, left alone. The write happens when the offer lapses.
+      // DELETE COMMITS. No window, because the question was the window.
       const { ctx, byId, posted } = fresh();
       await ctx.load();
       posted.length = 0;
 
-      press(rowsIn(byId)[1], 'Delete');
-      await wait(UNDO_LAPSED);
-      check('the write lands after the window', posted.length === 1,
+      swipe(byId, 1, -80);
+      pressAsk(byId, 'Delete');
+
+      check('the row goes', namesIn(byId) === 'Alpha,Gamma', namesIn(byId));
+      check('and it is written at once, with no window',
+        posted.length === 1 && posted[0].url === '/entries/e-b/delete',
         JSON.stringify(posted.map((p) => p.url)));
-      check('on the delete route, for that row',
-        posted[0] && posted[0].url === '/entries/e-b/delete', posted[0] && posted[0].url);
-      check('and the row stays gone', namesIn(byId) === 'Alpha,Gamma', namesIn(byId));
-      check('with the bar cleared', byId['undo-host'].children.length === 0);
+      check('the request survives the page closing',
+        posted[0] && posted[0].keepalive === true, JSON.stringify(posted[0]));
+      check('and no undo was offered for it',
+        byId['undo-host'].children.length === 0);
     }
 
     {
-      // DONE, the same machinery.
+      // SHORT OF IT IS NOTHING. The commit distance is most of a thumb's
+      // travel on purpose: this one cannot be taken back.
+      const { ctx, byId, posted } = fresh();
+      await ctx.load();
+      posted.length = 0;
+
+      swipe(byId, 1, -40);
+      check('a half swipe asks nothing', askOf(byId) === null);
+      check('and the list is untouched', namesIn(byId) === 'Alpha,Beta,Gamma',
+        namesIn(byId));
+      check('with nothing written', posted.length === 0);
+    }
+
+    {
+      // AND THE SWIPE IS NOT A TAP. The row schedules on a tap, so a finger
+      // that swiped and released must not also put the thing in the day.
+      const { ctx, byId, slots } = fresh();
+      await ctx.load();
+
+      const row = rowsIn(byId)[0];
+      down(row, 0, 0);
+      move(row, -80, 0);
+      up(row, -80, 0);
+      const before = slots().length;
+      row.onclick({});
+      check('the click after a swipe schedules nothing',
+        slots().length === before, String(slots().length));
+
+      // And the next real tap still works, which is what a flag held across
+      // gestures would have broken: a browser that fires no click after a
+      // swipe would leave it set, and the next tap anywhere in the list would
+      // be eaten by something that happened on another row a minute ago.
+      pressAsk(byId, 'Cancel');
+      const again = rowsIn(byId)[0];
+      down(again, 0, 0);
+      up(again, 0, 0);
+      again.onclick({});
+      check('but the next plain tap does', slots().length === before + 1,
+        String(slots().length));
+    }
+
+    {
+      // DONE, which kept the undo. It is not the same kind of loss: a finished
+      // task is work that happened, and the server would in fact take it back.
       const { ctx, byId, posted } = fresh();
       await ctx.load();
       posted.length = 0;
 
       press(rowsIn(byId)[0], 'Done');
-      check('it says Done, not Deleted', undoBar(byId).text().includes('Done'),
+      check('it says Done', undoBar(byId).text().includes('Done'),
         undoBar(byId).text());
       check('nothing posted yet', posted.length === 0);
+      check('and it asks no question', askOf(byId) === null);
 
       await wait(UNDO_LAPSED);
       check('then it posts to done', posted.length === 1 && posted[0].url === '/entries/e-a/done',
@@ -2244,33 +2340,12 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     }
 
     {
-      // A second action commits the first. Two deletes in a row must delete
-      // both, and one bar cannot describe two rows.
-      const { ctx, byId, posted } = fresh();
-      await ctx.load();
-      posted.length = 0;
-
-      press(rowsIn(byId)[0], 'Delete');
-      press(rowsIn(byId)[0], 'Delete');
-      check('the first is written when the second arrives',
-        posted.length === 1 && posted[0].url === '/entries/e-a/delete',
-        JSON.stringify(posted.map((p) => p.url)));
-      check('and both rows are off the list', namesIn(byId) === 'Gamma', namesIn(byId));
-
-      await wait(UNDO_LAPSED);
-      check('then the second is written too', posted.length === 2,
-        JSON.stringify(posted.map((p) => p.url)));
-      check('undoing now would be too late for either',
-        byId['undo-host'].children.length === 0);
-    }
-
-    {
-      // A closed tab inside the window still means it.
+      // A closed tab inside a Done window still means it.
       const { ctx, byId, posted, win } = fresh();
       await ctx.load();
       posted.length = 0;
 
-      press(rowsIn(byId)[0], 'Delete');
+      press(rowsIn(byId)[0], 'Done');
       check('nothing posted while the offer stands', posted.length === 0);
 
       win.fire('pagehide');
@@ -2281,11 +2356,208 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     }
 
     {
-      // Delete no longer asks first — the undo replaces the confirm.
+      // A delete while a Done offer stands commits the Done. Two actions, two
+      // writes, and one bar that can only ever describe one of them.
+      const { ctx, byId, posted } = fresh();
+      await ctx.load();
+      posted.length = 0;
+
+      press(rowsIn(byId)[0], 'Done');
+      swipe(byId, 0, -80);
+      pressAsk(byId, 'Delete');
+
+      check('both were written', posted.length === 2, JSON.stringify(posted.map((p) => p.url)));
+      check('the Done first', posted[0].url === '/entries/e-a/done', posted[0].url);
+      check('then the delete', posted[1].url === '/entries/e-b/delete', posted[1].url);
+      check('and the bar is gone', byId['undo-host'].children.length === 0);
+    }
+
+    {
+      // NOT A NATIVE CONFIRM. The question is a row in the list, so it can name
+      // the thing, and so Cancel and Delete can be the words rather than OK.
       const { ctx, byId, confirmed } = fresh();
       await ctx.load();
-      press(rowsIn(byId)[1], 'Delete');
-      check('nothing was confirmed', confirmed.length === 0, JSON.stringify(confirmed));
+      swipe(byId, 1, -80);
+      check('nothing was raised at the browser', confirmed.length === 0,
+        JSON.stringify(confirmed));
+      const ask = askOf(byId);
+      const words = ask.children.find((c) => c._class.has('askacts'))
+        .children.map((c) => c.textContent).join();
+      check('the way out comes first', words === 'Cancel,Delete', words);
+    }
+  }
+
+  console.log('\na note on a thing is a message to the next scheduling of it');
+  {
+    // One with a note waiting and one without, so every check about the mark
+    // has both halves in front of it.
+    const items = () => [
+      { id: 'e-a', type: 'project', title: 'Rewire the study', days: 1, mark: null, due: null, size: null, note: null, last_scheduled: null },
+      { id: 'e-b', type: 'task', title: 'Return the router', days: 2, mark: null, due: null, size: null, note: 'bring the blue folder', last_scheduled: null },
+    ];
+    const fresh = (extra = {}) => boot({
+      entries: utcEntries({ plans_in: 'morning', items: items() }), now: '11:00', ...extra,
+    });
+
+    const rows = (byId) => thingRows(byId);
+    const markOf = (row) =>
+      row.children[0].children.find((c) => c._class.has('notemark')) || null;
+    const fieldOf = (row) => row.children.find((c) => c._class.has('thingnote')) || null;
+    const swipe = (row, dx) => {
+      down(row, 0, 0);
+      move(row, dx, 0);
+      up(row, dx, 0);
+    };
+
+    {
+      // THE MARK SAYS THERE IS ONE. It does not say what it says: the list
+      // must not get longer, and the note is addressed to the person about to
+      // schedule this rather than to the person scanning the list.
+      const { ctx, byId } = fresh();
+      await ctx.load();
+
+      check('a thing with a note carries a mark', Boolean(markOf(rows(byId)[1])));
+      check('and one without carries none', markOf(rows(byId)[0]) === null);
+      check('the row never shows the words',
+        !rows(byId)[1].text().includes('blue folder'), rows(byId)[1].text());
+      check('and the row is still two lines',
+        rows(byId)[1].children.filter((c) => c._class.has('thingnote')).length === 0);
+    }
+
+    {
+      // SWIPE RIGHT WRITES ONE. The same direction the blocks use, because it
+      // is the same question asked of a different kind of row.
+      const { ctx, byId, posted } = fresh();
+      await ctx.load();
+      posted.length = 0;
+
+      swipe(rows(byId)[0], 80);
+      const field = fieldOf(rows(byId)[0]);
+      check('the field opens', Boolean(field));
+      check('empty, because there was nothing there', field.value === '', field.value);
+      check('it is a plain input, not the block textarea',
+        field.tagName === 'input' && field.type === 'text', field.tagName);
+      check('capitalised by sentence, for dictation',
+        field.getAttribute('autocapitalize') === 'sentences');
+      check('and not autocompleted at',
+        field.getAttribute('autocomplete') === 'off' &&
+        field.getAttribute('autocorrect') === 'off');
+      check('nothing was written by opening it', posted.length === 0);
+
+      field.value = 'start with the pricing page';
+      field.onblur();
+      // The write goes through api(), which awaits a token before it fetches.
+      // Without a turn of the loop this reads an empty list and passes on nothing.
+      await wait(0);
+
+      check('leaving the field writes it',
+        posted.length === 1 && posted[0].url === '/entries/e-a/note',
+        JSON.stringify(posted.map((p) => p.url)));
+      check('with the words in it',
+        posted[0].body.note === 'start with the pricing page', JSON.stringify(posted[0].body));
+      check('the field closes', fieldOf(rows(byId)[0]) === null);
+      check('and the row gains its mark', Boolean(markOf(rows(byId)[0])));
+    }
+
+    {
+      // SWIPING AGAIN IS HOW ONE IS READ, and how it is edited.
+      const { ctx, byId, posted } = fresh();
+      await ctx.load();
+      posted.length = 0;
+
+      swipe(rows(byId)[1], 80);
+      check('it opens with what is already there',
+        fieldOf(rows(byId)[1]).value === 'bring the blue folder',
+        fieldOf(rows(byId)[1]).value);
+
+      // Unchanged is not a write. A field opened to be read and closed again
+      // must not send anything.
+      fieldOf(rows(byId)[1]).onblur();
+      await wait(0);
+      check('closing it unchanged writes nothing', posted.length === 0,
+        JSON.stringify(posted.map((p) => p.url)));
+      check('and the note is still there', Boolean(markOf(rows(byId)[1])));
+    }
+
+    {
+      // EMPTY IS NOT A NOTE. Clearing the field is how one is removed.
+      const { ctx, byId, posted } = fresh();
+      await ctx.load();
+      posted.length = 0;
+
+      swipe(rows(byId)[1], 80);
+      const field = fieldOf(rows(byId)[1]);
+      field.value = '   ';
+      field.onblur();
+      // The write goes through api(), which awaits a token before it fetches.
+      // Without a turn of the loop this reads an empty list and passes on nothing.
+      await wait(0);
+
+      check('whitespace clears it',
+        posted.length === 1 && posted[0].body.note === null,
+        JSON.stringify(posted.map((p) => p.body)));
+      check('and the mark goes with it', markOf(rows(byId)[1]) === null);
+    }
+
+    {
+      // ONCE, HOWEVER IT IS LEFT. Enter and blur both arrive on a phone — the
+      // keyboard's own Done fires one and dismissing it fires the other — and
+      // two writes for one sentence is one request too many.
+      const { ctx, byId, posted } = fresh();
+      await ctx.load();
+      posted.length = 0;
+
+      swipe(rows(byId)[0], 80);
+      const field = fieldOf(rows(byId)[0]);
+      field.value = 'said once';
+      field.onkeydown({ key: 'Enter' });
+      field.onblur();
+      // The write goes through api(), which awaits a token before it fetches.
+      // Without a turn of the loop this reads an empty list and passes on nothing.
+      await wait(0);
+
+      check('Enter then blur writes once', posted.length === 1,
+        JSON.stringify(posted.map((p) => p.body)));
+    }
+
+    {
+      // A ROW BEING WRITTEN ON IS NOT A ROW BEING TAPPED. The tap schedules,
+      // and reaching for the field would otherwise put the thing in the day
+      // under the keyboard that just opened.
+      const { ctx, byId, slots } = fresh();
+      await ctx.load();
+
+      swipe(rows(byId)[0], 80);
+      const before = slots().length;
+      rows(byId)[0].onclick({});
+      check('a tap on the row does not schedule it',
+        slots().length === before, String(slots().length));
+    }
+
+    {
+      // AND IT IS THE CONFIRM THAT SPENDS IT. The server decides — a block
+      // does not exist until then — and both ends of the move show without a
+      // reload: the block gains the line, the row loses the mark.
+      const { ctx, byId, slots, noteOf } = fresh({
+        planReply: {
+          date: 'x', blocks: 1, status: 'confirmed', ids: ['b1'],
+          notes: ['bring the blue folder'],
+        },
+      });
+      await ctx.load();
+
+      rows(byId)[1].onclick({});
+      check('the thing is in the day', slots().length === 1, String(slots().length));
+      check('and the block has no note yet', !noteOf(slots()[0]));
+
+      await byId['confirm'].onclick();
+
+      const line = noteOf(slots()[0]);
+      check('the confirm brings it back onto the block', Boolean(line));
+      check('with the words that were waiting',
+        line && line.textContent === 'bring the blue folder', line && line.textContent);
+      check('and the row it came off has no mark left',
+        markOf(rows(byId)[1]) === null);
     }
   }
 

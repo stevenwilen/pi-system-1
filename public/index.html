@@ -254,12 +254,50 @@
 
       /* --- plain rows, hairline dividers ---------------------------------- */
 
-      .row {
-        padding: 12px 0;
+      /* The slot a row slides inside, and the reason there is a wrapper at all:
+         a backing has to be positioned against something that does not move.
+
+         The divider lives here rather than on the row, so the list holds still
+         while one row travels. A hairline that slid off with the row would make
+         the whole list look like it was coming apart under one finger. */
+      .thing {
+        position: relative;
       }
 
-      .row + .row {
+      .thing + .thing {
         border-top: 1px solid var(--line);
+      }
+
+      .row {
+        padding: 12px 0;
+        /* Opaque, so the backing is behind the row rather than through it.
+           The list is otherwise transparent and every word underneath would
+           read straight through the title. */
+        background: var(--bg);
+        position: relative;
+        /* Vertical pans belong to the page, horizontal ones are ours. The same
+           line the blocks carry, and the same reason: a swipe and a scroll
+           live on one element without anything arbitrating in script. */
+        touch-action: pan-y;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      /* The word under a row, at the edge the finger is heading for.
+         Flush to the page rather than inset the way a block's is: these rows
+         run to the margin and a label 18px in would sit under the title.
+
+         DELETE WEARS THE WARN COLOUR AND A BLOCK'S REMOVE DOES NOT, which is
+         the one place those two gestures are deliberately unalike. A block
+         carries a six-second undo, so shouting at the person would be shouting
+         about something already caught. This one asks first and then writes for
+         good — the colour is the difference between the two, arriving before
+         the release rather than after it. */
+      .thing .backing {
+        padding: 0;
+      }
+      .thing .backing.left {
+        color: var(--warn);
       }
 
       .row-top {
@@ -335,12 +373,14 @@
 
       /* Revealed by the hint. Hidden at rest, so the list reads as a list
          rather than as a menu. */
-      .rowacts {
+      .rowacts,
+      .askacts {
         display: flex;
         gap: 18px;
         margin-top: 9px;
       }
-      .rowacts button {
+      .rowacts button,
+      .askacts button {
         font-size: 12px;
         color: var(--muted);
         background: none;
@@ -349,8 +389,59 @@
         font-family: inherit;
         cursor: pointer;
       }
-      .rowacts .danger {
+      .askacts .danger {
         color: var(--warn);
+      }
+
+      /* The question a swipe left asks.
+         Set at the title's size and weight, because it has taken the title's
+         place: the row is not describing a thing any more, it is asking about
+         one. */
+      .ask {
+        font-size: 15px;
+        line-height: 1.35;
+      }
+
+      /* A note is waiting on this row, and that is all the mark says.
+         An ink dot rather than a word or a count. The list must not get
+         longer, and the note is a message to yourself for the next time you
+         schedule this — reading it is not what the list is for.
+
+         Muted, and neither of the two coloured inks. Something waiting is not
+         something wrong, so not persimmon; and there is nothing here to press,
+         so not indigo. A quiet dot is the whole of what was asked for. */
+      .notemark {
+        width: 5px;
+        height: 5px;
+        background: var(--muted);
+        border-radius: 50%;
+        flex: none;
+      }
+
+      /* The field, open on a row. A plain input and not the block's textarea:
+         this is a line meant to be dictated at a list, and a box that grows to
+         two rows would push the list around every time one was opened. */
+      .thingnote {
+        width: 100%;
+        margin-top: 9px;
+        box-sizing: border-box;
+        font: inherit;
+        font-size: 14px;
+        color: var(--text);
+        background: var(--bg);
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        padding: 4px 0;
+        border-radius: 0;
+        -webkit-appearance: none;
+        user-select: text;
+        -webkit-user-select: text;
+      }
+      /* Where the caret is, which is the same job the gate's fields give the
+         accent. No ring: the rule under the words is the whole affordance. */
+      .thingnote:focus {
+        outline: none;
+        border-bottom-color: var(--accent);
       }
 
       /* --- the calendar aside --------------------------------------------- */
@@ -2448,21 +2539,325 @@
           return;
         }
 
-        for (const item of things) box.append(thingRow(item));
+        for (const item of things) box.append(thingSlot(item));
+      }
+
+      /**
+       * The row being asked about before it is deleted, and the row with its
+       * note open, both by id.
+       *
+       * IDS RATHER THAN POSITIONS, which is the one difference from the block
+       * versions of these. The list re-sorts itself on every load — by mark,
+       * then by how long something has been sitting there — so an index would
+       * come back pointing at whichever row had moved into that place.
+       */
+      let askOn = null;
+      let noteOn = null;
+
+      /**
+       * A row, and the paper it slides off to reveal.
+       *
+       * The wrapper exists for the backing: something has to hold still while
+       * the row travels, and the divider hangs on it for the same reason.
+       */
+      function thingSlot(item) {
+        const slot = document.createElement('div');
+        slot.className = 'thing';
+
+        const backing = document.createElement('div');
+        backing.className = 'backing';
+
+        const row = thingRow(item);
+        slot.append(backing, row);
+
+        // A row mid-question and a row being written on take no gestures. In
+        // both cases the row is already showing what the swipe would ask for.
+        if (askOn !== item.id && noteOn !== item.id) {
+          attachThing({ row, backing, item });
+        }
+
+        return slot;
+      }
+
+      /**
+       * Delete, asked before it is done.
+       *
+       * THE ONE PLACE THIS SYSTEM ASKS, and the block swipes deliberately do
+       * not. A block is one day: taking it out is how you record that
+       * something did not happen, and it is written back the moment you
+       * confirm. A thing may be weeks of history — every block that ever
+       * carried its id stops being attributable to anything the moment the row
+       * goes — and `status = 'deleted'` is a tombstone the server refuses to
+       * revive, so there is no undo that could put the same row back an hour
+       * later.
+       *
+       * Cancel first, Delete last and in the warn colour, which is the order
+       * the ··· menu used for the same reason: the destructive one does not sit
+       * where a finger arrives by default. Here the finger has just travelled
+       * left, so what it lands on is the way out.
+       */
+      function askRow(item) {
+        const row = document.createElement('div');
+        row.className = 'row asking';
+        row.dataset.id = item.id;
+
+        const q = document.createElement('div');
+        q.className = 'ask';
+        q.textContent = `Delete ${item.title}?`;
+
+        const acts = document.createElement('div');
+        acts.className = 'askacts';
+
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.textContent = 'Cancel';
+        cancel.onclick = (e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+          askOn = null;
+          renderThings();
+        };
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'danger';
+        del.textContent = 'Delete';
+        del.onclick = (e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+          remove(item);
+        };
+
+        acts.append(cancel, del);
+        row.append(q, acts);
+        return row;
+      }
+
+      /**
+       * The note field, open on a row.
+       *
+       * A plain input, not the block's textarea. This is a line said at a
+       * list, and a box that opened two rows tall would shove the list around
+       * every time one was reached for.
+       *
+       * Set up for dictation: capitalised by sentence, spellchecked, and with
+       * autocomplete off — a field guessing at the next word is in the way of
+       * someone talking at it.
+       */
+      function thingNote(item) {
+        const field = document.createElement('input');
+        field.type = 'text';
+        field.className = 'thingnote';
+        field.value = item.note || '';
+        field.placeholder = 'For the next time you schedule this';
+        field.setAttribute('autocapitalize', 'sentences');
+        field.setAttribute('autocomplete', 'off');
+        field.setAttribute('autocorrect', 'off');
+        field.setAttribute('spellcheck', 'true');
+        field.setAttribute('enterkeyhint', 'done');
+        field.setAttribute('aria-label', `Note for ${item.title}`);
+
+        // Once, however it is left. Enter and blur both arrive on a phone —
+        // the keyboard's own Done fires one and dismissing it fires the other
+        // — and saving twice would send a second write for text that had not
+        // changed since the first.
+        let done = false;
+        const save = () => {
+          if (done) return;
+          done = true;
+          saveThingNote(item, field.value);
+        };
+
+        field.onblur = save;
+        field.onkeydown = (e) => {
+          if (e && e.key === 'Enter') save();
+        };
+
+        // A press in the field is a press in the field. Without this the row
+        // beneath it takes the tap and schedules the thing being written about.
+        field.onpointerdown = (e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+        };
+        field.onclick = (e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+        };
+
+        setTimeout(() => field.focus(), 0);
+        return field;
+      }
+
+      /**
+       * Written on the thing, and spent when the thing is next scheduled.
+       *
+       * Not the same field as a block's note and not the same claim. A block's
+       * note says what you are doing on Tuesday morning; this one says what to
+       * remember WHEN you put this in a day, and the confirm moves it onto the
+       * block and clears it from here.
+       *
+       * Empty is not a note. Clearing the field is how one is removed.
+       */
+      function saveThingNote(item, text) {
+        noteOn = null;
+
+        const clean = String(text || '').trim();
+        const before = item.note || null;
+        const next = clean || null;
+        item.note = next;
+        renderThings();
+
+        // Written now, not at the next confirm. There is no Confirm over this
+        // list — nothing else on a row waits — and a note that lived only in
+        // the page until some unrelated button was pressed would be lost by
+        // the reload that is meant to bring it back.
+        if (next === before) return;
+
+        api(`/entries/${item.id}/note`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note: next }),
+        }).catch(() => {
+          // The row already shows it. A failed write is corrected by the next
+          // load rather than by an alert over a list.
+        });
+      }
+
+      function openThingNote(item) {
+        askOn = null;
+        noteOn = item.id;
+        renderThings();
+      }
+
+      function askDelete(item) {
+        noteOn = null;
+        askOn = item.id;
+        renderThings();
+      }
+
+      /**
+       * Left removes, right writes a note. The same two directions the blocks
+       * use, because they are the same two questions asked of a different kind
+       * of row — and a list where left meant one thing here and another there
+       * would be a list you had to remember rather than read.
+       *
+       * No hold and no reorder. There is no order to change: this list is
+       * sorted by what is running out of room and then by what has gone cold,
+       * and a drag would be offering to overrule arithmetic with a preference
+       * nothing stores.
+       */
+      function attachThing({ row, backing, item }) {
+        // Whether this pointer became a swipe, so the click that may follow it
+        // does not also schedule the thing.
+        //
+        // Reset on every press rather than held globally, and this is the
+        // difference from the flag the blocks use: a browser that decides not
+        // to fire a click after a swipe would leave a global one set, and the
+        // next real tap anywhere in the list would be eaten by a gesture that
+        // happened on some other row a minute ago.
+        let swiped = false;
+
+        // The tap the row was given, behind the guard. Wrapped here rather
+        // than checked inside it, so the reason a click is being dropped sits
+        // with the gesture that dropped it.
+        const tap = row.onclick;
+        row.onclick = (e) => {
+          if (swiped) {
+            swiped = false;
+            return;
+          }
+          if (tap) tap(e);
+        };
+
+        row.onpointerdown = (e) => {
+          // One at a time. A second finger is not a second gesture, and a
+          // block being carried owns the screen.
+          if (gesture) return;
+          if (e.button !== undefined && e.button !== 0) return;
+
+          swiped = false;
+          gesture = {
+            id: e.pointerId,
+            mode: 'pending',
+            x0: e.clientX,
+            y0: e.clientY,
+            dx: 0,
+          };
+        };
+
+        row.onpointermove = (e) => {
+          if (!gesture || gesture.id !== e.pointerId) return;
+
+          const dx = e.clientX - gesture.x0;
+          const dy = e.clientY - gesture.y0;
+
+          if (gesture.mode === 'pending') {
+            if (Math.abs(dx) < SLOP && Math.abs(dy) < SLOP) return;
+
+            if (Math.abs(dy) >= Math.abs(dx)) {
+              // Vertical: the page is scrolling. Step out of the way rather
+              // than competing with it.
+              gesture.mode = 'scroll';
+              return;
+            }
+
+            gesture.mode = 'swipe';
+            swiped = true;
+            if (row.setPointerCapture) row.setPointerCapture(e.pointerId);
+          }
+
+          if (gesture.mode !== 'swipe') return;
+
+          gesture.dx = dx;
+          row.style.transform = `translateX(${dx}px)`;
+
+          // Which one will fire, readable before the release. Two words and
+          // two edges, and the removing side in the warn colour — the one
+          // place these swipes are louder than a block's, because this one
+          // cannot be taken back afterwards.
+          const [side, label] = dx > 0 ? ['right', 'Note'] : ['left', 'Delete'];
+          backing.className = `backing ${side}`;
+          backing.textContent = label;
+          backing.style.opacity = String(Math.min(1, Math.abs(dx) / SWIPE_COMMIT));
+        };
+
+        row.onpointerup = (e) => {
+          if (!gesture || gesture.id !== e.pointerId) return;
+
+          const { mode, dx } = gesture;
+          gesture = null;
+
+          if (mode !== 'swipe') return;
+
+          // Far enough to mean it. Both re-render the list, which is also what
+          // clears the transform this gesture left on the row.
+          if (dx <= -SWIPE_COMMIT) return askDelete(item);
+          if (dx >= SWIPE_COMMIT) return openThingNote(item);
+
+          if (!reduceMotion()) row.style.transition = `transform ${SETTLE_MS}ms ease-out`;
+          row.style.transform = '';
+          backing.style.opacity = '0';
+          setTimeout(() => {
+            row.style.transition = '';
+          }, SETTLE_MS);
+        };
+
+        row.onpointercancel = () => {
+          if (!gesture) return;
+          gesture = null;
+          row.style.transform = '';
+          backing.style.opacity = '0';
+        };
       }
 
       /**
        * One thing.
        *
        * Tapping the row puts it in tomorrow, which is what this list is for.
-       * Everything else you can do to it sits behind the hint at the right
-       * edge, so the resting state of the list is still a list — but the fact
-       * that there is more there is visible rather than something you have to
-       * already know.
+       * Swiping it left asks whether to delete it and swiping it right opens a
+       * note. What is left behind the hint at the right edge is what has no
+       * gesture: editing, and finishing a task.
        *
        * This used to be a long press with nothing on screen to suggest it.
        */
       function thingRow(item) {
+        if (askOn === item.id) return askRow(item);
         // Already in the day on screen. It cannot be added twice, so the row
         // says where it is instead of offering to put it there again.
         const locked = inShownPlan(item.id);
@@ -2478,6 +2873,23 @@
         title.className = 'title';
         title.textContent = item.title;
         top.append(title);
+
+        // THAT there is a note, never what it says. The list must not get
+        // longer: a second line of prose on every row that has one would turn
+        // a list you scan into a page you read, and the note is not addressed
+        // to the person scanning — it is addressed to the person about to
+        // schedule this. Swiping right is how it is read.
+        //
+        // Shown on a locked row too, unlike the deadline mark. Being in the
+        // day answers a deadline; it does not spend a note, which is still
+        // sitting on the thing until the day is confirmed.
+        if (item.note) {
+          const has = document.createElement('span');
+          has.className = 'notemark';
+          has.setAttribute('role', 'img');
+          has.setAttribute('aria-label', 'has a note');
+          top.append(has);
+        }
 
         // '!!!', '!!' or '!'. Computed on the server and arithmetic all the
         // way down: the days the size needs against the days that are left.
@@ -2535,25 +2947,13 @@
           openSheet(item);
         };
         acts.append(edit);
-
-        // Last, and the only one in the warn colour. Delete sitting between
-        // two ordinary actions is a misclick waiting to happen.
-        //
-        // It used to ask first. The undo replaces the confirm, and is the
-        // better of the two for the same reason it is on the block swipes: a
-        // confirm interrupts every delete to catch the rare wrong one, and the
-        // undo interrupts none of them and still catches it.
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'danger';
-        del.textContent = 'Delete';
-        del.onclick = (e) => {
-          e.stopPropagation();
-          acts.classList.add('hidden');
-          remove(item);
-        };
-        acts.append(del);
         row.append(acts);
+
+        // EDIT AND DONE, and no Delete. It left for the swipe, which is where
+        // the confirmation is: a Delete in a menu that asked a question would
+        // be a second route to the same write, two paces apart, one of them
+        // reachable by a finger that only meant to open the menu.
+        if (noteOn === item.id) row.append(thingNote(item));
 
         hint.onclick = (e) => {
           // Without this the row's own handler fires straight afterwards and
@@ -2563,6 +2963,9 @@
         };
 
         row.onclick = () => {
+          // Being written on, not handled. The field's own handlers stop most
+          // of this, and the row is the one that would schedule the thing.
+          if (noteOn === item.id) return;
           // An open menu closes rather than scheduling. Tapping away from a
           // menu you opened should undo the opening, not commit to something.
           if (!acts.classList.contains('hidden')) {
@@ -2581,19 +2984,21 @@
       /**
        * Off the list now, written when the offer to undo runs out.
        *
-       * THE WRITE WAITS. Both of these used to post first and then take the row
-       * off the screen, which cannot be undone: `status = 'deleted'` is a
-       * tombstone and the server refuses to bring one back as anything, so
-       * there is no request that reverses a Delete. The only way for undo to
-       * restore the same row is for nothing to have happened to it yet.
+       * THE WRITE WAITS. This used to post first and then take the row off the
+       * screen, which cannot be undone. The only way for undo to restore the
+       * same row is for nothing to have happened to it yet.
        *
        * That is the cost, and it is worth naming: for six seconds the screen
        * and the database disagree. A reload inside the window brings the row
        * back, and the pagehide above is what stops a closed tab doing the same.
        *
-       * Done goes the same way, though `done` → `active` would in fact be
-       * allowed. One mechanism, because two would differ only in ways nobody
-       * could see, and the invisible difference is the kind that rots.
+       * DONE ONLY, now. Delete came through here as well and no longer does:
+       * it asks first (see askRow), and an offer to undo something that was
+       * just confirmed would be asking the same question twice, once on either
+       * side of the write. `done` → `active` is in fact allowed by the server,
+       * so this one could have been written the other way round; it is not,
+       * because the row coming back has to be the same row and not a new one
+       * carrying a new id.
        */
       function takeOff(item, what, path) {
         const at = things.findIndex((t) => t.id === item.id);
@@ -2623,7 +3028,35 @@
       }
 
       const finish = (item) => takeOff(item, 'Done', '/done');
-      const remove = (item) => takeOff(item, 'Deleted', '/delete');
+
+      /**
+       * Gone, because you said so twice.
+       *
+       * Written at once, with no window to change your mind in. The question
+       * was the window: an undo after a confirmation would be the same doubt
+       * raised on both sides of the write, and the six seconds it bought would
+       * be six seconds a person who had already answered spent watching a bar
+       * they had no use for.
+       */
+      function remove(item) {
+        askOn = null;
+
+        // An offer still standing describes some other row, and this is a
+        // second action. Deleting one thing while another waits to be finished
+        // must finish that one rather than discard it.
+        settleUndo();
+
+        const at = things.findIndex((t) => t.id === item.id);
+        if (at !== -1) things.splice(at, 1);
+        renderThings();
+
+        // keepalive, so a tab closed on the same breath as the press still
+        // means it. There is nothing left in the page to retry with.
+        apiNow(`/entries/${item.id}/delete`, { method: 'POST', keepalive: true }).catch(() => {
+          // The row is already off the screen. A failed write is corrected by
+          // the next load rather than by an alert.
+        });
+      }
 
       // --- 3. tomorrow ---------------------------------------------------------
 
@@ -3804,11 +4237,35 @@
           });
         }
 
+        // The notes that moved off the Things list and onto blocks.
+        //
+        // The server decides this, not the page: a block does not exist until
+        // this request, so the moment a note is spent is the moment the day is
+        // written. What comes back is where each one landed, and both ends of
+        // the move are on screen — the block gains a line, the row loses its
+        // mark — without a reload to make either of them show.
+        let arrived = false;
+        if (Array.isArray(res.notes)) {
+          res.notes.forEach((note, i) => {
+            if (!note || !blocks[i]) return;
+            blocks[i].note = note;
+            arrived = true;
+
+            const thing = things.find((t) => t.id === blocks[i].entryId);
+            if (thing) thing.note = null;
+          });
+        }
+
         // What is stored is now what is on screen, so nothing has drifted.
         // Without this a confirmed day would immediately read as unconfirmed
         // again, because every block it had just moved still remembered the
         // hour it used to be at.
         for (const b of blocks) b.storedStart = b.start;
+
+        if (arrived) {
+          renderBuilder();
+          renderThings();
+        }
 
         // The day is committed, and so is anything removed on the way to it.
         // A pending undo would put back a block holding the id of a row this
