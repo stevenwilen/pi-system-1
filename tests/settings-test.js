@@ -276,28 +276,47 @@ async function rowOf(which) {
         .insert({ user_id: A.id, date: today, wake_time: '08:00:00', status: 'confirmed' })
         .select().single();
 
+      // FIRST, A DAY HOLDING ONLY A BLOCK THAT BELONGS TO NOTHING. This is
+      // the third state: days were planned, but none of the time was given to
+      // anything in the list, so there is no answer to the question the
+      // section asks. It must not read as an empty account, and it must not
+      // read as half an hour of anything.
+      await H.db.from('blocks').insert({
+        user_id: A.id, plan_id: plan.id, title: 'Dentist', entry_id: null,
+        start_time: '14:00:00', duration_minutes: 30, sort_order: 2,
+      });
+
+      const loose = await stats(A);
+      check('a day of nothing-in-particular still counts as a day planned',
+        loose.days === 1, String(loose.days));
+      check('but none of its minutes are counted',
+        loose.minutes === 0, String(loose.minutes));
+      check('and no bar is drawn for it',
+        loose.by_kind.length === 0, JSON.stringify(loose.by_kind));
+
       await H.db.from('blocks').insert([
         { user_id: A.id, plan_id: plan.id, title: 'Gym', entry_id: gym.id,
           start_time: '08:00:00', duration_minutes: 60, sort_order: 0 },
         { user_id: A.id, plan_id: plan.id, title: 'Rewire the study', entry_id: study.id,
           start_time: '09:00:00', duration_minutes: 120, sort_order: 1 },
-        { user_id: A.id, plan_id: plan.id, title: 'Dentist', entry_id: null,
-          start_time: '14:00:00', duration_minutes: 30, sort_order: 2 },
       ]);
 
       const mine = await stats(A);
       check('one day planned', mine.days === 1, String(mine.days));
-      check('three blocks', mine.blocks === 3, String(mine.blocks));
-      check('and three and a half hours', mine.minutes === 210, String(mine.minutes));
+      // Two, not three. The Dentist block is still sitting in the day.
+      check('two blocks count, the third belonging to nothing',
+        mine.blocks === 2, String(mine.blocks));
+      check('and three hours, not three and a half',
+        mine.minutes === 180, String(mine.minutes));
 
       const kind = Object.fromEntries(mine.by_kind.map((k) => [k.kind, k.minutes]));
       check('the project took the most', kind.project === 120, JSON.stringify(kind));
       check('the habit next', kind.habit === 60, JSON.stringify(kind));
-      // A block typed straight into the day belongs to no thing in the list,
-      // and is counted apart rather than dropped: the parts have to add up to
-      // the whole or the bars are lying about the total above them.
-      check('and the untagged half hour is kept apart',
-        kind.untagged === 30, JSON.stringify(kind));
+      // The half hour typed straight into the day is gone from every figure,
+      // not moved to a share of its own. The question is what the time was
+      // given TO, and that block answers it with nothing.
+      check('and the untagged half hour is nowhere',
+        kind.untagged === undefined, JSON.stringify(kind));
       check('the parts add up to the whole',
         mine.by_kind.reduce((n, k) => n + k.minutes, 0) === mine.minutes);
       check('and nothing empty is drawn',
@@ -323,7 +342,7 @@ async function rowOf(which) {
 
       const still = await stats(A);
       check('a day two months back is outside the window',
-        still.minutes === 210 && still.days === 1,
+        still.minutes === 180 && still.days === 1,
         `${still.minutes} minutes across ${still.days} day(s)`);
 
       // AND IT IS ONLY EVER YOUR OWN TIME. The route reads with the caller's
@@ -333,7 +352,7 @@ async function rowOf(which) {
       const theirs = await stats(B);
       check('B sees none of it', theirs.days === 0 && theirs.minutes === 0,
         JSON.stringify(theirs));
-      check('and A still sees their own', (await stats(A)).minutes === 210);
+      check('and A still sees their own', (await stats(A)).minutes === 180);
     }
 
   } finally {

@@ -69,9 +69,9 @@ router.get('/stats', async (req, res) => {
 
     if (blockErr) throw new Error(blockErr.message);
 
-    // Every kind, including the ones that were deleted or finished since. The
-    // hours were still given, and dropping them would make the parts stop
-    // adding up to the whole.
+    // Every status, including deleted and finished. The hours were still given
+    // to it, and a project that got twelve hours and was then finished should
+    // not vanish out of the month it took.
     const { data: entries, error: entryErr } = await db
       .from('entries')
       .select('id, type, title')
@@ -81,23 +81,28 @@ router.get('/stats', async (req, res) => {
 
     const of = new Map((entries || []).map((e) => [e.id, e]));
 
-    const kinds = { habit: 0, project: 0, task: 0, untagged: 0 };
+    const kinds = { habit: 0, project: 0, task: 0 };
     const perThing = new Map();
     let minutes = 0;
+    let counted = 0;
 
     for (const b of blocks || []) {
-      const mins = b.duration_minutes || 0;
-      minutes += mins;
-
       const entry = b.entry_id ? of.get(b.entry_id) : null;
 
-      // A block typed straight into the day belongs to nothing in the list.
-      // It is counted, and counted separately: the difference between planned
-      // hours and hours against a thing is worth being able to see.
-      if (!entry) {
-        kinds.untagged += mins;
-        continue;
-      }
+      // A BLOCK TIED TO NOTHING IS NOT COUNTED AT ALL. It was shown for a
+      // while as its own share, on the grounds that the parts should add up to
+      // the planned total. But this section answers "what did I give my time
+      // to", and a block typed straight into a day answers it with nothing —
+      // so including those hours only inflated a figure about things in the
+      // list with hours that were not about them.
+      //
+      // The total is therefore hours on your things, not hours planned, and
+      // the screen says so.
+      if (!entry) continue;
+
+      const mins = b.duration_minutes || 0;
+      minutes += mins;
+      counted += 1;
 
       if (kinds[entry.type] === undefined) kinds[entry.type] = 0;
       kinds[entry.type] += mins;
@@ -107,7 +112,8 @@ router.get('/stats', async (req, res) => {
     res.json({
       window_days: WINDOW_DAYS,
       days: plans.length,
-      blocks: (blocks || []).length,
+      // Blocks that count, which is blocks tied to something in the list.
+      blocks: counted,
       minutes,
       // Sorted here so the screen renders what it is given. Zero-minute kinds
       // are dropped: a bar of nothing is a row that says nothing.

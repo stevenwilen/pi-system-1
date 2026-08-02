@@ -1132,17 +1132,6 @@
         height: 100%;
         background: var(--text);
       }
-      /* The untagged share is the hours that belong to no thing in the list.
-         Faint, because it is the absence of an answer rather than one. */
-      .statrow.loose .much,
-      .statrow.loose .bar span {
-        color: var(--faint);
-        background: var(--faint);
-      }
-      .statrow.loose .much {
-        background: none;
-      }
-
       .toprow {
         display: flex;
         gap: 10px;
@@ -4063,11 +4052,24 @@
           return;
         }
 
+        // A THIRD STATE. Days were planned, but nothing in them was tied to
+        // anything in the list, so there is no answer to what the time went
+        // to — which is not the same as no days and not the same as no hours.
+        if (!s.minutes) {
+          $('stat-head').textContent =
+            `${s.days} day${s.days === 1 ? '' : 's'} planned in the last ` +
+            `${s.window_days}, but nothing in them was tied to one of your things.`;
+          return;
+        }
+
         const perDay = s.minutes / s.days / 60;
+        // "On your things", because that is what is counted. Blocks typed
+        // straight into a day are not here, and a bare hours figure would be
+        // read as everything planned.
         $('stat-head').textContent =
-          `${hours(s.minutes)} hours across ${s.days} ` +
+          `${hours(s.minutes)} hours on your things across ${s.days} ` +
           `day${s.days === 1 ? '' : 's'}, in the last ${s.window_days}. ` +
-          `About ${perDay.toFixed(1)} hours a day.`;
+          `About ${perDay.toFixed(1)} a day.`;
 
         // Bars are drawn against the biggest, not against the total, so the
         // smallest one is still visible rather than a sliver.
@@ -4075,11 +4077,11 @@
 
         for (const k of s.by_kind) {
           const row = document.createElement('div');
-          row.className = k.kind === 'untagged' ? 'statrow loose' : 'statrow';
+          row.className = 'statrow';
 
           const who = document.createElement('span');
           who.className = 'who';
-          who.textContent = k.kind === 'untagged' ? 'not on a thing' : `${k.kind}s`;
+          who.textContent = `${k.kind}s`;
 
           const much = document.createElement('span');
           much.className = 'much';

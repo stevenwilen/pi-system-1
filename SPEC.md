@@ -304,12 +304,16 @@ grows and stops describing this month. The window is stated on screen so the
 number is never read as more than it is.
 
 **Nothing planned is not zero hours.** An account that has not started and a
-month of empty days are different facts and get different sentences.
+month of empty days are different facts and get different sentences. A third
+sentence covers days that were planned but held nothing tied to the list.
 
-**Blocks typed straight into a day are counted apart**, as `not on a thing`,
-rather than dropped. The parts have to add up to the total above them or the
-bars are lying about it — and the gap between planned hours and hours against
-something in the list is worth being able to see.
+**Blocks typed straight into a day are not counted at all.** They were shown
+for a while as their own share, `not on a thing`, on the grounds that the parts
+should add up to the planned total. But the question this section answers is
+what you gave your time to, and a block belonging to nothing answers it with
+nothing — so those hours only inflated a figure about the things in the list
+with hours that were not about them. The total is therefore hours **on your
+things**, not hours planned, and the sentence on screen says so.
 
 ### 2.9 A request is whoever its token says, and nothing else
 
