@@ -119,6 +119,32 @@ console.log('1. the palette is exactly the one specified');
     check(`${name} is ${value}`, new RegExp(`${name}:\\s*${value}\\s*;`, 'i').test(root));
   }
 
+  // AND THE SPEC SAYS THE SAME EIGHT, which it did not.
+  //
+  // Its table still listed the dark build — #16130F paper, a #6E8CB8 blue —
+  // long after the theme became washi, so the one document anybody would read
+  // to answer "what colour is this app" answered with the colours of a build
+  // that no longer exists. Nothing went red, because nothing was comparing
+  // them: the mockup was pinned to the page and the prose was pinned to
+  // nothing.
+  //
+  // Checked by value rather than by table row. The spec is prose and its shape
+  // is allowed to change; what is not allowed is a hex in it that the page has
+  // never heard of.
+  const spec = fs.readFileSync(ROOT + '/SPEC.md', 'utf8');
+  const look = spec.slice(spec.indexOf('## 7. The look'));
+  const inks = new Set(Object.values(want).map((v) => v.toLowerCase()));
+  const strays = [...look.matchAll(/#[0-9a-fA-F]{6}\b/g)]
+    .map((m) => m[0].toLowerCase())
+    .filter((hex) => !inks.has(hex));
+
+  check('and the spec names no colour the page does not have',
+    strays.length === 0, [...new Set(strays)].join(', '));
+
+  for (const [name, value] of Object.entries(want)) {
+    check(`the spec's table has ${name}`, new RegExp(value, 'i').test(look), value);
+  }
+
   // CONTRAST, because this is the failure the theme is most prone to and the
   // one that cost the reference its legibility. Paper is the look; readable is
   // the requirement, and where they disagree the requirement wins.
@@ -336,10 +362,14 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // focused field is where the caret is, which is the orienting job the divider
   // does for the day. Named here so a third has to be argued for.
   //
-  // AND THE SETUP SHEET ADDS FOUR, all the same idea again. `.row-actions
-  // .minor` is that sheet's own buttons, `#paste:focus` is where the caret is,
-  // and the two `.good` classes are a check that came back working — which is
-  // the one thing on that screen you can act on the strength of.
+  // AND THE SETUP SHEET ADDS TWO, both the same idea again. `.row-actions
+  // .minor` is that sheet's own buttons, and `.said.good` is a check that came
+  // back working — which is the one thing on that screen you can act on the
+  // strength of.
+  //
+  // It added four. `#paste:focus` and `.pline.good` were the paste pipeline's,
+  // which was deleted without its stylesheet — see section 7, and the
+  // dead-class check that now catches this.
   //
   // `.back` is the fifth, and the plainest of them: it is the way out of the
   // setup screen, and leaving a place is an action.
@@ -353,7 +383,7 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // picker with the caret in it. The clock beside it, which is the part that
   // says whether the zone is right, is a plain field note in no colour at all.
   const acts =
-    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.pline\.good|#paste:focus|\.back|\.thingnote:focus|\.tzpick:focus/;
+    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.back|\.thingnote:focus|\.tzpick:focus/;
   // The divider: the knot and the line it fastens. Both are indigo now, where
   // the dark build tinted the line with a separate near-blue that belonged to
   // nothing — one fewer colour on the page, and the two halves of one object
@@ -517,17 +547,22 @@ console.log('\n7. the warn colour warns; it does not narrate');
   // saying why it will not accept what it was given. Not a new use of the
   // colour, the same one on a second form.
   //
-  // The setup sheet's three. `.said.bad` and `.pline.bad` are a check that
-  // came back broken, which is the job `.failed` already does for a feed on
-  // the day screen. `.row-actions .go` is the button that commits a whole
-  // pasted setup — ink, like the seal, because it is the same kind of act.
+  // The setup sheet's two. `.said.bad` is a check that came back broken, which
+  // is the job `.failed` already does for a feed on the day screen.
+  // `.row-actions .go` is the button that commits a row of setup — ink, like
+  // the seal, because it is the same kind of act.
+  //
+  // There were three. `.pline.bad` belonged to the paste pipeline, and the
+  // pipeline was deleted while its stylesheet was not: four orphan rules, two
+  // of them coloured, counted by this list as live uses of both inks. The
+  // dead-class check in section 19 is what would have said so.
   //
   // And two in the setup drawings. `.fig-mark` and `.fig-note` are the one
   // warm thing in each sketch: the arrow and the word pointing at the row you
   // are meant to copy. Everything else in those figures is line and paper, so
   // the only colour in them is doing the only job they have.
   const allowed =
-    /\.mark|\.ends\.late|\.failed|\.danger|\.problem|\.confirm|\.gate-problem|\.said\.bad|\.pline\.bad|\.row-actions \.go|\.fig-mark|\.fig-note|\.thing \.backing\.left/;
+    /\.mark|\.ends\.late|\.failed|\.danger|\.problem|\.confirm|\.gate-problem|\.said\.bad|\.row-actions \.go|\.fig-mark|\.fig-note|\.thing \.backing\.left/;
   check('used only on marks, failures, Delete and the seal',
     warn.every((s) => allowed.test(s)), warn.join(' | '));
   check('and nothing is left claiming a miss', !/askmiss|wasmissed/.test(css));
@@ -1241,6 +1276,36 @@ console.log('\n19. a sheet is inside its scrim');
   const undefinedClasses = [...used].filter((name) => !new RegExp(`\\.${name}[\\s,:.{>]`).test(css));
   check('no class is used that the stylesheet does not define',
     undefinedClasses.length === 0, undefinedClasses.join(', '));
+
+  // AND THE SAME QUESTION THE OTHER WAY ROUND, which is the half that was
+  // missing. A class defined and never worn is not a broken screen, so nothing
+  // ever went red for one — the paste pipeline was deleted and left `.preview`
+  // and `.pline` behind, four rules of styling for a feature that no longer
+  // exists. Two of them were coloured, so the page had ink spent on nothing,
+  // and the colour rules below counted them as live uses.
+  //
+  // Every word outside the stylesheet counts as wearing it, however it got
+  // there — a class attribute, a className, a classList call. Bluntly, because
+  // a false "dead" costs more than a false "alive": one of them deletes
+  // something that renders.
+  // BOTH, and the script is the half that matters. `body` is the markup alone,
+  // and most of this page's classes are set from script — every block, every
+  // row, every bar. Asking the markup only reported forty-eight live classes
+  // as dead on the first run.
+  const worn = new Set();
+  for (const m of (body + code).matchAll(/[a-zA-Z][\w-]*/g)) worn.add(m[0]);
+
+  const defined = new Set();
+  for (const m of css.matchAll(/\.([a-zA-Z][\w-]*)/g)) defined.add(m[1]);
+
+  // `.w3` and `.org` are not classes. They are the middle of `www.w3.org` in
+  // an inline SVG data uri that lives inside the stylesheet, which is the one
+  // place a dot-word appears in this file without being a selector.
+  const notSelectors = new Set(['w3', 'org']);
+
+  const unworn = [...defined].filter((c) => !worn.has(c) && !notSelectors.has(c));
+  check('nor does the stylesheet define one that nothing wears',
+    unworn.length === 0, unworn.map((c) => '.' + c).join(', '));
 
   // A tap inside a sheet must not close it: a scrim guards on the target
   // being the scrim itself, or every tap on the sheet bubbles up and dismisses

@@ -1547,16 +1547,23 @@ Today / Tomorrow switch and the shape of a past block.
 tabular figures. Storage is untouched: the page still sends minutes, the row is
 still a 24-hour `time`, and one function on each side decides how a time reads.
 
+**Paper, not a dark screen.** This table went on listing the dark build long
+after the washi one shipped — near-black paper, a pale blue — so the one
+document anybody would read to answer "what colour is this app" answered with a
+build that no longer exists. `plan-layout-check.js` now reads both and refuses
+**any** hex in this section that `:root` has never heard of, prose included,
+which is why the old values are described here rather than quoted.
+
 | | |
 |---|---|
-| bg | `#16130F` |
-| card | `#211D18` |
-| hairline | `#2C2721` |
-| text | `#EDE7DE` |
-| muted | `#8B8177` |
-| faint | `#6B6459` |
-| accent | `#6E8CB8` |
-| warn | `#C4694A` |
+| bg | `#f5f1e8` |
+| card | `#e7e0d2` |
+| hairline | `#ded7c8` |
+| text | `#2b2a28` |
+| muted | `#5f5a52` |
+| faint | `#8a857c` |
+| accent — indigo | `#37516e` |
+| warn — persimmon | `#b8492a` |
 
 The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
 
@@ -1570,29 +1577,49 @@ The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
   `+ Add` sit on its baseline and are **quieter** than it, never louder.
 - **Two text sizes per row:** 15px title, 12px muted meta on its own line with
   real space between them.
-- **Blue is actionable, with one exception.** It appears on the Starts steppers,
-  the duration chip, Undo, Confirm and Save — everything a press acts on — and on
-  the **dot of the divider**, which no press acts on and which says *here is
-  where you are*. That is the whole list, enforced by name in the layout check;
-  nothing decorative is ever blue.
+- **There are two inks, and neither is subordinate to the other.** Indigo says
+  *you can press this*; persimmon says *this warns you, or this commits*. Both
+  lists are enforced **by name** in the layout check, so a third use of either
+  has to be argued for in that file rather than added quietly. Collapsing them
+  into one would leave the day screen with no way to tell a control from a
+  warning at a glance — a duration chip and a deadline mark would read alike.
 
-  The exception used to be two selectors, the dot and the word beside it. The
-  word is gone, so it is one.
+- **Blue is actionable, plus two things that are not.** The Starts steppers, the
+  duration chip, `+ Block`, Undo, Save, Back, Clear and a focused field are all
+  presses. The two that are not:
+
+  - the **line of the divider**, which says *here is where you are* — the
+    nearest thing to an action that is not one;
+  - **`.said.good`**, a setup check that came back working, which is the one
+    thing on that screen you can act on the strength of. It needs a colour of
+    its own: `.said.bad` is persimmon and `.said.thin` is faint, and those three
+    readings must not look alike (§2.8).
+
+  **Confirm is not on this list.** It stopped being blue when it became the
+  seal, and the layout check asserts as much by name.
 
   The near miss is the **active** label. It says much the same thing as the
   divider a line above it, so blue is the obvious reach — and it is wrong,
   because it sits in the slot the duration chip occupies on every other block.
   Blue there is an invitation to press something that does nothing. Pinned by
-  name in the layout check so it cannot drift back.
+  name so it cannot drift back.
 
-  The rule was relaxed to two exceptions when the day switch arrived and is back
-  to one: the *in today's plan* badge was the other, and removing it narrowed the
-  rule again rather than widening it further.
 - **The warn colour warns; it does not narrate.** The deadline mark, a day
-  running past midnight, a feed that failed, and Delete in the row menu. That is
-  the list. It has lost two other jobs: a missed block, a concept that no longer
-  exists, and the swipe backing, which filled the whole card under a finger for
-  an action that carries an undo.
+  running past midnight, a feed that failed, Delete and the backing of the swipe
+  that offers it, a setup check that failed, and the seal. It has lost one job —
+  a missed block, a concept that no longer exists — and the **block** swipe
+  backing, which filled the whole card under a finger for an action that carries
+  an undo. The **thing** swipe backing took the colour back, on the removing side
+  only and as one word: that delete asks and then writes for good, and the colour
+  is what says which of the two swipes you are in before your finger comes off
+  (§3.1).
+
+- **Nothing is styled for a feature that is gone.** The layout check reads the
+  stylesheet both ways: no class worn that is undefined, and no class defined
+  that nothing wears. The second half was missing, and the paste pipeline left
+  `.preview` and `.pline` behind when it was deleted — four orphan rules, two of
+  them coloured, which the two ink lists above counted as live uses for two
+  releases.
 - **The calendar aside is a left rule with indented text**, in neutral warm grey.
   Reference material: not a card, not blue, not a warning.
 - **Tabular figures on every time.**
