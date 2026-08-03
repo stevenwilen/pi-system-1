@@ -10,7 +10,7 @@
 
 const express = require('express');
 
-const { minutesOfDay, toMinutes, hhmmss } = require('../clock');
+const { minutesOfDay, toMinutes, hhmmss, DEFAULT_ZONE } = require('../clock');
 const { readCalendar } = require('../tools');
 // The same ceiling the Things list applies, and deliberately the same number:
 // a note written on a thing is carried onto a block by the confirm below, so
@@ -43,7 +43,7 @@ router.get('/calendar/:date', async (req, res) => {
     .eq('user_id', userId)
     .maybeSingle();
 
-  const timeZone = (profile && profile.timezone) || 'UTC';
+  const timeZone = (profile && profile.timezone) || DEFAULT_ZONE;
 
   // readCalendar returns what it could read and says whether it failed, so a
   // feed that is down never costs the builder — but the failure travels with

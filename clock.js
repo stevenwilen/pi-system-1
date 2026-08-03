@@ -25,6 +25,27 @@ const WAKE_MAX = 12 * 60;
 const WAKE_STEP = 30;
 
 /**
+ * The zone an account has before anybody says otherwise.
+ *
+ * IT WAS UTC, AND UTC IS NOT A PLACE ANYONE LIVES. That reads like the neutral
+ * choice and is not: every question this system answers about *which day it is*
+ * comes off this column, so an account left on it has its date roll over at
+ * eight in the evening, its blocks fire four hours early, and its plan for
+ * "tomorrow" land the day after. None of that announces itself — the screen
+ * shows a date and an hour, and both are simply wrong.
+ *
+ * It cost a real person a real day: an evening's planning went onto the wrong
+ * date, silently, because at 9pm his clock said the 2nd and the column said the
+ * 3rd. A default that is wrong for everyone who uses this is worse than one
+ * that is wrong for whoever moves away — and the second is visible in Setup,
+ * where the screen offers the device's own zone in one tap.
+ *
+ * Everyone this is built for is here. When that stops being true, this is one
+ * constant and one migration.
+ */
+const DEFAULT_ZONE = 'America/New_York';
+
+/**
  * The canonical IANA name for a zone, or null if it is not one.
  *
  * RESOLVED, NOT MERELY ACCEPTED. `Intl` takes `america/new_york`,
@@ -122,5 +143,5 @@ const hhmmss = (mins) =>
 
 module.exports = {
   todayIn, yesterdayOf, tomorrowOf, minutesOfDay, toMinutes, hhmmss,
-  canonicalZone, WAKE_MIN, WAKE_MAX, WAKE_STEP,
+  canonicalZone, DEFAULT_ZONE, WAKE_MIN, WAKE_MAX, WAKE_STEP,
 };

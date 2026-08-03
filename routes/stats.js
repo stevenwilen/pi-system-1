@@ -13,7 +13,7 @@
 
 const express = require('express');
 
-const { todayIn } = require('../clock');
+const { todayIn, DEFAULT_ZONE } = require('../clock');
 
 const router = express.Router();
 
@@ -40,7 +40,7 @@ router.get('/stats', async (req, res) => {
       .eq('user_id', userId)
       .maybeSingle();
 
-    const today = todayIn((profile && profile.timezone) || 'UTC');
+    const today = todayIn((profile && profile.timezone) || DEFAULT_ZONE);
     const from = backFrom(today, WINDOW_DAYS);
 
     const { data: plans, error: planErr } = await db

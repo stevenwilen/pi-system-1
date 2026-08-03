@@ -13,7 +13,7 @@ require('dotenv').config();
 
 const ical = require('node-ical');
 
-const { canonicalZone } = require('./clock');
+const { canonicalZone, DEFAULT_ZONE } = require('./clock');
 
 // Fields the caller may set. Anything else is dropped, so user_id, id,
 // created_at and updated_at can never be overwritten from outside.
@@ -316,7 +316,7 @@ async function timezoneFor(db, user_id) {
     .eq('user_id', user_id)
     .maybeSingle();
 
-  return (data && data.timezone) || 'UTC';
+  return (data && data.timezone) || DEFAULT_ZONE;
 }
 
 /**
@@ -337,7 +337,7 @@ async function calendarSettings(db, user_id) {
     .maybeSingle();
 
   return {
-    timeZone: (data && data.timezone) || 'UTC',
+    timeZone: (data && data.timezone) || DEFAULT_ZONE,
     url: (data && data[CALENDAR_COLUMN]) || null,
   };
 }

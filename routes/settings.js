@@ -19,7 +19,7 @@ const express = require('express');
 const { sendToChat, botName, fixFor } = require('../telegram');
 const { probeFeed } = require('../tools');
 const {
-  canonicalZone, toMinutes, hhmmss, todayIn, WAKE_MIN, WAKE_MAX, WAKE_STEP,
+  canonicalZone, toMinutes, hhmmss, todayIn, DEFAULT_ZONE, WAKE_MIN, WAKE_MAX, WAKE_STEP,
 } = require('../clock');
 
 const router = express.Router();
@@ -107,9 +107,10 @@ async function profileOf(db, userId) {
 function stateOf(profile) {
   // Both defaults are the column's own, spelled again here for the one case
   // where there is no row to read them off: an account whose signup trigger
-  // has not run. Not a guess about anybody — UTC and seven o'clock are what
-  // the schema says a row starts as, and the screen says as much.
-  const timezone = (profile && profile.timezone) || 'UTC';
+  // has not run. DEFAULT_ZONE is the same constant the column now defaults to,
+  // and the two have to agree — see migration-default-zone.sql, and clock.js
+  // for why it is a real place rather than UTC.
+  const timezone = (profile && profile.timezone) || DEFAULT_ZONE;
 
   return {
     telegram: {

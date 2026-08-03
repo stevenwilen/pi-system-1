@@ -6,7 +6,7 @@
 
 const express = require('express');
 
-const { todayIn } = require('../clock');
+const { todayIn, DEFAULT_ZONE } = require('../clock');
 const { create_entry, update_entry } = require('../tools');
 const { lastScheduled, daysBetween } = require('../staleness');
 const { markFor, slackFor, daysUntil } = require('../warning');
@@ -35,7 +35,7 @@ router.get('/entries', async (req, res) => {
       .eq('user_id', userId)
       .maybeSingle();
 
-    const timeZone = (profile && profile.timezone) || 'UTC';
+    const timeZone = (profile && profile.timezone) || DEFAULT_ZONE;
     const today = todayIn(timeZone);
 
     const { data: rows, error } = await db

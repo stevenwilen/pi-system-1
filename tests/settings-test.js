@@ -18,6 +18,11 @@
 // Nothing real is sent: Telegram's API is served locally.
 
 const H = require('./harness');
+// The default a row is born with, read from the code so this suite compares the
+// app's constant against the DATABASE's column default rather than against
+// itself. If the migration has not been run the two disagree and these go red,
+// which is the whole point of asking.
+const { DEFAULT_ZONE } = require('../clock');
 const ROOT = H.ROOT;
 process.chdir(ROOT);
 
@@ -443,7 +448,7 @@ async function rowOf(which) {
       // — and 07:00 is what the column defaults to, not something this route
       // decided.
       check('the created row carries the schema defaults',
-        rowA && rowA.timezone === 'UTC' && String(rowA.default_wake_time).slice(0, 5) === '07:00',
+        rowA && rowA.timezone === DEFAULT_ZONE && String(rowA.default_wake_time).slice(0, 5) === '07:00',
         `${rowA && rowA.timezone} / ${rowA && rowA.default_wake_time}`);
 
       // Creating one account's row is not creating anybody else's. B has done
@@ -478,7 +483,7 @@ async function rowOf(which) {
         String(rowB.calendar_ics_url));
       check('as well as its own', rowB.telegram_chat_id === '2718281828',
         String(rowB.telegram_chat_id));
-      check('and leaves the timezone alone', rowB.timezone === 'UTC', String(rowB.timezone));
+      check('and leaves the timezone alone', rowB.timezone === DEFAULT_ZONE, String(rowB.timezone));
 
       // Clearing something that was never set, on an account that has no row to
       // clear it from. Answering this any way other than "cleared" would mean
@@ -504,7 +509,7 @@ async function rowOf(which) {
       const fresh = await (await H.as(A)(`${BASE}/settings`)).json();
       check('a brand new account can read its own empty settings',
         fresh.telegram.set === false && fresh.calendar.set === false, JSON.stringify(fresh));
-      check('and is told the timezone it actually has', fresh.timezone === 'UTC', fresh.timezone);
+      check('and is told the timezone it actually has', fresh.timezone === DEFAULT_ZONE, fresh.timezone);
     }
 
     console.log('\n7. when the day happens');
@@ -539,7 +544,13 @@ async function rowOf(which) {
       // UTC is what the screen has to work with, and the reason it compares
       // against the device rather than looking for an empty field.
       const before = await settingsOf(A);
-      check('a new account is on UTC', before.timezone === 'UTC', before.timezone);
+      // NOT UTC ANY MORE, and the change is the point. UTC is not a place
+      // anyone lives: an account left on it has its date roll over at 8pm, its
+      // blocks fire four hours early, and its evening plan for 'tomorrow' land
+      // two days out. None of it announces itself.
+      check('a new account is on the default zone, which is somewhere real',
+        before.timezone === DEFAULT_ZONE, before.timezone);
+      check('and that zone is not UTC', DEFAULT_ZONE !== 'UTC', DEFAULT_ZONE);
       check('and starts its day at seven', before.wake_minutes === 420,
         String(before.wake_minutes));
       check('the screen is told the window it may offer',
@@ -640,7 +651,7 @@ async function rowOf(which) {
       // must still be sitting on the defaults.
       const theirs = await settingsOf(B);
       check('B is untouched by any of it',
-        theirs.timezone === 'UTC' && theirs.wake_minutes === 420, JSON.stringify(theirs));
+        theirs.timezone === DEFAULT_ZONE && theirs.wake_minutes === 420, JSON.stringify(theirs));
 
       await post(B, '/settings/timezone', { timezone: 'Europe/Berlin' });
       check('and setting B\'s does not move A\'s',
@@ -666,7 +677,7 @@ async function rowOf(which) {
       check('and one with no row can set a wake time', bareWake.status === 200,
         String(bareWake.status));
       check('leaving the zone at the column default',
-        (await rowOfA()).timezone === 'UTC', String((await rowOfA()).timezone));
+        (await rowOfA()).timezone === DEFAULT_ZONE, String((await rowOfA()).timezone));
     }
 
   } finally {

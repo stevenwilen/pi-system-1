@@ -369,8 +369,30 @@ and by `update_profile`:
   out in April, and nothing in the system can notice. The check is
   `Intl.supportedValuesOf`, the tzdb's own list, rather than a pattern invented
   here.
-- **`UTC` is allowed by name** and is not on that list. It is the column's
-  default and the honest placeholder for an account that has not said.
+- **`UTC` is allowed by name** and is not on that list. It is a real answer for
+  somebody; it is no longer the default one.
+
+**The default is a real place, and that is a correction.** It was `UTC`, which
+reads like the neutral choice and is not. Every question about *which day it is*
+comes off this column, so an account left on UTC has its date roll over at 8pm,
+its blocks fire four hours early, and its evening plan for "tomorrow" land two
+days out. None of that announces itself: the screen shows a date and an hour and
+both look ordinary.
+
+It cost a real person a real day. An evening's planning went onto the wrong date
+because at 9pm his clock said the 2nd and the column said the 3rd, so the day he
+built was written for the 4th and the morning he built it for was empty. He had
+done nothing wrong and nothing on any screen suggested what had happened.
+
+A default that is wrong for everyone who uses this is worse than one that is
+wrong for whoever moves away — and the second case is visible and one tap to fix.
+`DEFAULT_ZONE` in `clock.js` is the app's copy and the column default is the
+database's. **They must agree**, so `settings-test.js` asks the database what a
+fresh row is born with and compares it to the constant: a migration that has not
+been run goes red rather than passing quietly.
+
+Everyone this is built for is in one place. When that stops being true it is one
+constant and one migration.
 
 **Changing the zone rebuilds the day underneath.** Which date is today, which
 blocks have begun, and what "tomorrow" means are all read off it. The cost is
@@ -1607,6 +1629,7 @@ Run once each, by hand, in the Supabase SQL editor. All are safe to run twice.
 | `migration-note.sql` | `blocks.note` |
 | `migration-entry-note.sql` | `entries.note` — a different note from the one above, and §3.1 says why |
 | `migration-untimed.sql` | drops NOT NULL from `blocks.start_time` and `blocks.duration_minutes`, so a block can be committed to a day and not to an hour |
+| `migration-default-zone.sql` | `profile.timezone` defaults to `America/New_York` rather than UTC, and moves the accounts already sitting on UTC |
 | `migration-plans-in.sql` | `profile.plans_in`, and the check constraint on its two values |
 
 **No column or table has ever been dropped.** The strip retired
@@ -1668,7 +1691,7 @@ process start time, the Node version, and whether the scheduler is running.
 
 | | |
 |---|---|
-| `profile.timezone` | which day and which hour everything is measured in. **Set on the setup screen** (§2.8) |
+| `profile.timezone` | which day and which hour everything is measured in. **Set on the setup screen** (§2.8), and defaults to `America/New_York` rather than UTC — §2.8 says what UTC cost |
 | `profile.default_wake_time` | where the builder starts the first block. **Set on the setup screen**, 04:00–12:00 in half hours |
 | `profile.telegram_chat_id` | where outbound goes, or nowhere if unset |
 | `profile.nudge_hour` | the evening nudge hour, 0–23, and the hour the screen starts opening on Tomorrow. Null means 20 |
