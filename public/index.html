@@ -1038,12 +1038,17 @@
       /* Sticky, so Back is reachable from anywhere down the page rather than
          only from the top of it. On the page colour, so nothing shows through
          it as it passes underneath. */
+      /* CENTRED, NOT BASELINED, and the button is why. Baseline was right while
+         the way out read "‹ Back" at 13px — two pieces of text, sharing a line.
+         It is a single 22px glyph beside a 9.5px label now, and sitting those
+         two on one baseline drops the chevron well below the word it belongs
+         to: a baseline aligns letters, and one of these is not a letter. */
       .page-top {
         position: sticky;
         top: 0;
         z-index: 1;
         display: flex;
-        align-items: baseline;
+        align-items: center;
         gap: 16px;
         background: var(--bg);
         padding: calc(18px + env(safe-area-inset-top)) 0 18px;
@@ -1064,7 +1069,11 @@
         line-height: 1;
         color: var(--accent);
         cursor: pointer;
-        padding: 4px 12px 6px 0;
+        /* EVEN TOP AND BOTTOM. It was 4 and 6, which is invisible on a button
+           whose baseline is what lines it up and a two-pixel lie once its box
+           is what does — the row centres these now, so any difference between
+           them shifts the chevron off the label by half of it. */
+        padding: 6px 12px 6px 0;
       }
       .back:focus {
         outline: none;

@@ -1426,6 +1426,14 @@ console.log('\n19. a sheet is inside its scrim');
   // AND IT IS STILL NAMED. Stripped to one glyph, this button is punctuation:
   // a screen reader announces "less-than sign", or nothing. The label is the
   // only thing left saying what it does.
+  // A GLYPH BESIDE A LABEL IS CENTRED, NOT BASELINED. It was baselined while
+  // the way out read '‹ Back' at 13px: two pieces of text sharing a line. One
+  // 22px glyph beside a 9.5px label is not that, and a baseline aligns letters
+  // — which one of these is not.
+  check('the setup header centres its chevron against its title',
+    /align-items: center/.test(rule('.page-top')), rule('.page-top'));
+  check('and the button is padded evenly, so centring is not skewed by it',
+    /padding: 6px 12px 6px 0/.test(rule('.back')), rule('.back'));
   check('and it still says Back to anything that cannot see it',
     /id="settings-close"[^>]*aria-label="Back"/.test(body), 'aria-label is the whole name now');
   check('and never a word for having been sent there',
