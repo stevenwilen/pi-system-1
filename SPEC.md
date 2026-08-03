@@ -554,7 +554,33 @@ Habits, projects and tasks in **one list**. A task left three weeks is the same
 problem as a project left three weeks, so they share a list rather than being
 filed apart.
 
-**Two halves: what is running out of room, then what has gone cold.**
+**Pinned first, then two halves: what is running out of room, then what has
+gone cold.**
+
+**A pin is the one thing here ordered by hand**, and it sits above everything —
+including a deadline that has run out. That cost is real and deliberate:
+something genuinely overdue can be pushed below a pinned habit, and the screen
+does not argue about it.
+
+It is **not** the ranking this list retired, though it revives the column that
+ranking used. What was refused was a *score* — one number blending "days since"
+with "days of room" — which cannot be read off a screen and which the system has
+no standing to compute. A pin blends nothing. It is a fact the person stated,
+and §2.1 is that nothing is inferred which can be declared: the arithmetic
+*guesses* at what needs attention, and a pin is someone saying it outright.
+
+Inside the pinned group the arithmetic is unchanged, so pins are ordered among
+themselves exactly as everything else is. The group carries a **Pinned** heading
+and a gap after its last row — without them nothing on screen would explain why
+a habit sits above something overdue, and the order would be correct but
+illegible. The heading appears only when something is pinned.
+
+`entries.priority` is the column: `1` or null, set by `POST /entries/:id/pin`.
+It was *"a way of ordering this list by hand"*, retired when the order became
+arithmetic and — like every column here — never dropped. Every row still held
+null, so there was no stale value to collide with and **no migration to run**.
+The third column to come back this way, after `completed` for untimed items and
+`paused_at` waiting for saved-for-later.
 
 Anything carrying a mark sits above everything without one, ordered by the least
 room left — so an overdue thing beats a thing due Friday, and both beat a habit
@@ -574,9 +600,13 @@ computed in `warning.js` and the mark is derived from it, so the badge and the
 position can never disagree. It is not sent to the client: the screen shows the
 mark, and a number nothing renders is a field to keep in step for no one.
 
-All of it is still arithmetic on what the person declared. There is no ranking
-and no drag, and `entries.sort_order` is retired — written by nothing, read by
-nothing, kept only because dropping a column cannot be undone.
+Below the pins it is all arithmetic on what the person declared. There is no
+drag and no score, and `entries.sort_order` stays retired — written by nothing,
+read by nothing, kept only because dropping a column cannot be undone. The pin
+uses `priority`, which was the other retired ordering column; `sort_order` was
+left alone because eleven rows still hold values from when it was live, and a
+feature built on stale data is a feature that behaves differently for whoever
+was there first.
 
 `blocks.sort_order` is a different column and is load-bearing. It is what holds
 the order of blocks within a plan, written on every confirm and read back by both

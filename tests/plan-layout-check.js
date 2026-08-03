@@ -866,7 +866,16 @@ console.log('\n11. everything cut is really cut');
     // The Things list's hand-ordering. Not the builder's reorder gesture,
     // which is a different thing that happens to share the word.
     ['hand-ordering the list', /sort_order|draggable|ondragstart|\.sortable/i],
-    ['pinned blocks', /\bpinned\b/i],
+    // The BLOCK flag: one that held its start_time and never moved when the
+    // chain above it shifted. A pinned ENTRY is a live feature that happens to
+    // share the word, so this cannot look for the word.
+    //
+    // `\bb\.pinned\b` was the first attempt and is worse than useless: `b` is
+    // the second argument of every comparator on this page, so it matched the
+    // Things list's own sort. What the retired feature looked like on the page
+    // is a boolean written into a block payload, and that is what this looks
+    // for now.
+    ['pinned blocks', /pinned:\s*(true|false)/i],
     ['auto-placement', /to_place|\/place\b|autoPlace/i],
   ]) {
     check(`${what}: gone from the markup`, !pattern.test(body), what);
@@ -1054,7 +1063,7 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
   check('and toRow, which the sheet writes through, has no note in it',
     !/note/.test((shape.match(/function toRow[\s\S]*?\n\}/) || [''])[0]));
   check('it is updatable but never creatable: nothing writes one at birth',
-    /UPDATABLE = \[\.\.\.CREATABLE, 'status', 'note'\]/.test(toolsSrc) &&
+    /UPDATABLE = \[\.\.\.CREATABLE, 'status', 'note', 'priority'\]/.test(toolsSrc) &&
     !/CREATABLE = \[[^\]]*'note'/.test(toolsSrc));
 
   // The move itself, in the confirm. Read from the route rather than restated,

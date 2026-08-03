@@ -54,6 +54,18 @@ const day = (n) => {
 const SEVERITY = { '!!!': 3, '!!': 2, '!': 1 };
 
 function wellOrdered(items) {
+  // THREE HALVES NOW, and the pinned one is declared rather than computed.
+  // Everything pinned sits above everything else, including a deadline that
+  // has run out — and INSIDE each half the old two-part rule still holds, so
+  // this is the same invariant applied twice rather than a new one.
+  const firstLoose = items.findIndex((i) => !i.pinned);
+  if (firstLoose !== -1 && items.slice(firstLoose).some((i) => i.pinned)) return false;
+
+  return [items.filter((i) => i.pinned), items.filter((i) => !i.pinned)]
+    .every(halfIsOrdered);
+}
+
+function halfIsOrdered(items) {
   const marked = items.filter((i) => i.mark);
   const cold = items.filter((i) => !i.mark);
 
@@ -69,7 +81,7 @@ function wellOrdered(items) {
 }
 
 const describe = (items) =>
-  items.map((i) => `${i.mark || '-'}/${i.days}d`).join(' ');
+  items.map((i) => `${i.pinned ? 'PIN ' : ''}${i.mark || '-'}/${i.days}d`).join(' ');
 
 const PORT = 3974;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -326,6 +338,69 @@ const get = async (path) => {
     check('and the whole list is still well ordered', wellOrdered(both), describe(both));
 
     for (const id of mine) await H.db.from('entries').delete().eq('user_id', U).eq('id', id);
+  }
+
+  console.log('\na pin outranks the arithmetic, which is the point of it');
+  {
+    // THE ONE THING ON THIS LIST A PERSON ORDERS BY HAND. Everything else is
+    // subtraction on what they declared — and so, in the end, is this: the
+    // arithmetic GUESSES at what needs attention, and a pin is saying it.
+    //
+    // It is not the ranking that was retired, though it revives that column.
+    // What was refused was a SCORE blending "days since" with "days of room",
+    // which cannot be read off a screen. A pin blends nothing.
+    const at = (list, title) => list.findIndex((i) => i.title === title);
+
+    const made = [];
+    const coldRes = await post('/entries', { type: 'habit', title: 'zz pin me', frequency: 'daily' });
+    const cold = coldRes.body.entry.id;
+    made.push(cold);
+    const urgentRes = await post('/entries', {
+      type: 'task', title: 'zz runs out today', due: TODAY, size: 'a week',
+    });
+    made.push(urgentRes.body.entry.id);
+
+    const before = (await get('/entries')).body.items;
+    check('the urgent one starts above the cold one',
+      at(before, 'zz runs out today') < at(before, 'zz pin me'), describe(before));
+    check('and nothing is pinned yet',
+      before.every((i) => i.pinned === false), describe(before));
+
+    const pinned = await post(`/entries/${cold}/pin`, { pinned: true });
+    check('pinning is accepted', pinned.status === 200, JSON.stringify(pinned.body));
+    check('and it says so', pinned.body.pinned === true, JSON.stringify(pinned.body));
+
+    const after = (await get('/entries')).body.items;
+    check('THE PIN NOW OUTRANKS THE DEADLINE',
+      at(after, 'zz pin me') < at(after, 'zz runs out today'), describe(after));
+    check('it is first in the whole list', at(after, 'zz pin me') === 0, describe(after));
+    check('the list still says which row is pinned',
+      after.find((i) => i.title === 'zz pin me').pinned === true, describe(after));
+    check('and the order is still well formed inside each half',
+      wellOrdered(after), describe(after));
+
+    // The mark is untouched. A pin says where a row sits, not whether it is
+    // running out of room, and those are two different questions.
+    check('the urgent one keeps its mark',
+      after.find((i) => i.title === 'zz runs out today').mark === '!!!',
+      describe(after));
+
+    const off = await post(`/entries/${cold}/pin`, { pinned: false });
+    check('unpinning is accepted', off.status === 200 && off.body.pinned === false,
+      JSON.stringify(off.body));
+
+    const back = (await get('/entries')).body.items;
+    check('and it falls back to where the arithmetic puts it',
+      at(back, 'zz runs out today') < at(back, 'zz pin me'), describe(back));
+
+    const junk = await post(`/entries/${cold}/pin`, { pinned: 'yes' });
+    check('pinned must be true or false', junk.status === 400, JSON.stringify(junk.body));
+
+    const missing = await post('/entries/00000000-0000-0000-0000-000000000000/pin', { pinned: true });
+    check('and a row that is not yours cannot be pinned', missing.status === 400,
+      JSON.stringify(missing.body));
+
+    for (const id of made) await H.db.from('entries').delete().eq('user_id', U).eq('id', id);
   }
 
   console.log('\nthe endpoints that were removed really are gone');

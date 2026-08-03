@@ -40,7 +40,7 @@ router.get('/entries', async (req, res) => {
 
     const { data: rows, error } = await db
       .from('entries')
-      .select('id, type, title, frequency, due, size, note, created_at')
+      .select('id, type, title, frequency, due, size, note, priority, created_at')
       .eq('user_id', userId)
       .eq('status', 'active')
       .in('type', TYPES);
@@ -81,6 +81,8 @@ router.get('/entries', async (req, res) => {
         // text: the list is a list, and a second line of prose on every row
         // is how it stops being one.
         note: r.note || null,
+        // Held at the top of the list by hand. See the order below.
+        pinned: Boolean(r.priority),
         // Null when this has never been scheduled, which is what lets the
         // screen say "since added" instead of claiming a scheduling that
         // never happened.
@@ -108,7 +110,24 @@ router.get('/entries', async (req, res) => {
     //
     // Still arithmetic on what the person declared, and still computed here so
     // the screen never has to be told what order to use.
+    // THREE HALVES NOW, AND THE FIRST ONE IS DECLARED RATHER THAN COMPUTED.
+    //
+    // A pin sits above everything, including a deadline that has run out. That
+    // is a real cost and worth naming: something genuinely overdue can be
+    // pushed below a pinned habit, and the screen will not argue about it.
+    //
+    // It is not the ranking that was retired, though it uses the column that
+    // ranking used. What was refused was a SCORE — a single number blending
+    // "days since" with "days of room", which cannot be read off the screen and
+    // which the system has no standing to compute. A pin blends nothing. It is
+    // a fact the person stated, and §2.1 is that nothing is inferred which can
+    // be declared: the arithmetic guesses at what needs attention, and a pin is
+    // someone saying it outright.
+    //
+    // Inside the pinned half the arithmetic is unchanged, so pins are ordered
+    // among themselves exactly as the list orders everything else.
     const order = (a, b) =>
+      (a.pinned ? 0 : 1) - (b.pinned ? 0 : 1) ||
       (a.mark ? 0 : 1) - (b.mark ? 0 : 1) ||
       (a.mark ? a.slack - b.slack : b.days - a.days) ||
       a.title.localeCompare(b.title);
@@ -226,6 +245,32 @@ router.post('/entries/:id/note', async (req, res) => {
   const row = await update_entry(db, userId, req.params.id, { note });
   if (row.error) return res.status(400).json({ error: row.error });
   res.json({ id: row.id, note: row.note || null });
+});
+
+/**
+ * Held at the top of the list, or let go of.
+ *
+ * Its own route rather than a field on `/update`, for the reason the note has
+ * one: `/update` re-validates the whole row — a title, a due date, the length
+ * that has to accompany it — and a pin has no rules to break at all. Sending it
+ * through there would mean a pin could be refused for something on the far side
+ * of the row it has nothing to do with.
+ *
+ * `priority` is the column, holding 1 or null. It was the hand-ordering field
+ * this list retired, every row still holds null, and it is coming back for the
+ * one thing it was always for.
+ */
+router.post('/entries/:id/pin', async (req, res) => {
+  const { db, userId } = req.auth;
+  const pinned = (req.body || {}).pinned;
+
+  if (typeof pinned !== 'boolean') {
+    return res.status(400).json({ error: 'pinned must be true or false' });
+  }
+
+  const row = await update_entry(db, userId, req.params.id, { priority: pinned ? 1 : null });
+  if (row.error) return res.status(400).json({ error: row.error });
+  res.json({ id: row.id, pinned: Boolean(row.priority) });
 });
 
 /**

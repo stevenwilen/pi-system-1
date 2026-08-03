@@ -379,6 +379,12 @@ function boot({
           }
           if (url === '/settings/wake') return { wake_minutes: 450 };
           if (/\/plan\/block\/[^/]+\/done$/.test(url)) return { id: 'b', done: true };
+          if (/\/entries\/[^/]+\/pin$/.test(url)) {
+            // A case about the refusal path sets this on the context.
+            return ctx && ctx.__failPin
+              ? { error: 'no' }
+              : { id: 'x', pinned: JSON.parse((opts && opts.body) || '{}').pinned };
+          }
           if (url === '/plan') {
             return planReply || { date: 'x', blocks: 0, status: 'confirmed', ids: [], notes: [] };
           }
@@ -2252,8 +2258,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // confirmation is; a Delete in the menu as well would be a second route to
     // the same write, two paces from the hint, reachable by a finger that only
     // meant to open the menu.
-    check('with edit, done and anytime, and no delete',
-      acts.children.map((c) => c.textContent).join() === 'Done,Anytime,Edit',
+    check('with everything that has no gesture, and no delete',
+      acts.children.map((c) => c.textContent).join() === 'Done,Anytime,Pin,Edit',
       acts.children.map((c) => c.textContent).join());
 
     const hint = row.children[0].children.find((c) => c._class.has('hint'));
@@ -2944,6 +2950,160 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
         preventDefault: () => { stopped = true; },
       });
       check('a live pull prevents the default scroll', stopped);
+    }
+  }
+
+  console.log('\npinned things are held at the top, and the screen says why');
+  {
+    // A pin is the only thing on this screen that changes the order by hand.
+    // Everything else about it is arithmetic on what the person declared — and
+    // so is this, in the end: the list GUESSES at what needs attention, and a
+    // pin is somebody saying it outright.
+    const items = () => [
+      // IN THE ORDER THE SERVER WOULD SEND THEM. The stub hands this array
+      // back untouched and the page does not re-sort on load, so a fixture in
+      // any other order is a starting state that cannot happen: marked first,
+      // then coldest.
+      { id: 'e-uf', type: 'project', title: 'UF application', days: 6, mark: '!!!', due: '2026-07-28', size: 'a week', note: null, pinned: false, last_scheduled: null },
+      { id: 'e-read', type: 'habit', title: 'Reading', days: 11, mark: null, due: null, size: null, note: null, pinned: false, last_scheduled: null },
+      { id: 'e-gym', type: 'habit', title: 'Gym', days: 2, mark: null, due: null, size: null, note: null, pinned: false, last_scheduled: null },
+    ];
+    const fresh = (extra = {}) => boot({
+      entries: utcEntries({ plans_in: 'morning', items: items(), ...extra }), now: '11:00',
+    });
+
+    const names = (byId) => thingRows(byId)
+      .map((r) => r.children[0].children[0].textContent).join();
+    const menuOf = (row) => row.children.find((c) => c._class.has('rowacts'));
+    const press = (byId, at, word) => {
+      const b = menuOf(thingRows(byId)[at]).children.find((c) => c.textContent === word);
+      b.onclick({ stopPropagation() {} });
+    };
+    const heading = (byId) =>
+      byId.things.children.find((c) => c._class && c._class.has('pinhead'));
+
+    {
+      // NOTHING PINNED, NOTHING SAID. A standing label over an empty group is
+      // a section of the list that says nothing on almost every day.
+      const { ctx, byId } = fresh();
+      await ctx.load();
+
+      check('the list is in its usual order', names(byId) === 'UF application,Reading,Gym',
+        names(byId));
+      check('and there is no heading over it', !heading(byId));
+      check('the menu offers a pin', Boolean(menuOf(thingRows(byId)[1])
+        .children.find((c) => c.textContent === 'Pin')));
+    }
+
+    {
+      // PINNING MOVES IT AT ONCE, above a deadline that has run out. That cost
+      // is the deliberate part: a pin outranks the arithmetic, and the screen
+      // does not argue about it.
+      const { ctx, byId, posted } = fresh();
+      await ctx.load();
+      posted.length = 0;
+
+      press(byId, 2, 'Pin');
+
+      check('the pinned thing goes to the top', names(byId) === 'Gym,UF application,Reading',
+        names(byId));
+      check('ABOVE SOMETHING OVERDUE, which is the whole decision',
+        names(byId).indexOf('Gym') < names(byId).indexOf('UF application'));
+      check('and a heading appears to say why it is there', Boolean(heading(byId)));
+      check('which reads Pinned', heading(byId).textContent === 'Pinned',
+        heading(byId).textContent);
+
+      // Written at once. There is no Confirm over this list, and a pin that
+      // lived only in the page would be lost by the reload meant to restore it.
+      await wait(0);
+      check('it is written straight away',
+        posted.length === 1 && posted[0].url === '/entries/e-gym/pin',
+        JSON.stringify(posted.map((p) => p.url)));
+      check('saying which way it went', posted[0].body.pinned === true,
+        JSON.stringify(posted[0].body));
+    }
+
+    {
+      // AND THE GROUP IS SEPARATED BY SPACE, not by a rule: this list already
+      // has a hairline between every row, so one more would not read as a break.
+      const { ctx, byId } = fresh();
+      await ctx.load();
+      press(byId, 2, 'Pin');
+
+      const slots = thingSlots(byId);
+      check('the first unpinned row carries the gap',
+        slots.some((t) => t._class.has('afterpins')),
+        slots.map((t) => t.className).join('|'));
+    }
+
+    {
+      // UNPINNING PUTS IT BACK where the arithmetic wants it.
+      const { ctx, byId, posted } = fresh();
+      await ctx.load();
+      press(byId, 2, 'Pin');
+      await wait(0);
+      posted.length = 0;
+
+      check('it says Unpin once it is pinned', Boolean(menuOf(thingRows(byId)[0])
+        .children.find((c) => c.textContent === 'Unpin')));
+
+      press(byId, 0, 'Unpin');
+      await wait(0);
+
+      check('it drops back into the order', names(byId) === 'UF application,Reading,Gym',
+        names(byId));
+      check('the heading goes with the last pin', !heading(byId));
+      check('and that is written too',
+        posted.length === 1 && posted[0].body.pinned === false,
+        JSON.stringify(posted.map((p) => p.body)));
+    }
+
+    {
+      // TWO PINS ARE ORDERED BY THE SAME ARITHMETIC as everything else, so the
+      // pinned group is not a second list with its own rules.
+      const { ctx, byId } = fresh();
+      await ctx.load();
+      press(byId, 1, 'Pin');   // Reading, no mark, 11 days
+      press(byId, 2, 'Pin');   // Gym, no mark, 2 days — after Reading
+
+      check('the colder of the two pins comes first',
+        names(byId) === 'Reading,Gym,UF application', names(byId));
+    }
+
+    {
+      // A REFUSED PIN PUTS THE ROW BACK. A row sitting at the top of a list the
+      // database does not agree with is wrong in a way that survives until the
+      // next load and then silently corrects itself.
+      const { ctx, byId } = fresh();
+      await ctx.load();
+      ctx.__failPin = true;
+
+      press(byId, 2, 'Pin');
+      check('it moves on the press', names(byId) === 'Gym,UF application,Reading',
+        names(byId));
+
+      await wait(0);
+      check('and goes back when the write is refused',
+        names(byId) === 'UF application,Reading,Gym', names(byId));
+      check('with no heading left behind', !heading(byId));
+    }
+
+    {
+      // WHAT THE SERVER SENDS IS WHAT IS DRAWN. A pin that arrives already set
+      // needs no press to be at the top.
+      // By id, not by position: the fixture is ordered the way the server
+      // orders it, and an index into that is a second thing to keep in step.
+      // It also lands the pin on a row that is NOT already first, which is the
+      // half worth checking — the page groups by the flag rather than trusting
+      // the order it was handed.
+      const already = items();
+      already.find((t) => t.id === 'e-read').pinned = true;
+      const b = boot({ entries: utcEntries({ plans_in: 'morning', items: already }), now: '11:00' });
+      await b.ctx.load();
+
+      check('a thing that arrives pinned is already at the top',
+        names(b.byId).startsWith('Reading'), names(b.byId));
+      check('and the heading is there on the first render', Boolean(heading(b.byId)));
     }
   }
 

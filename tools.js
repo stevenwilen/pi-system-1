@@ -35,7 +35,12 @@ const CREATABLE = ['type', 'title', 'frequency', 'due', 'size'];
 // `note` is updatable and not creatable. Nothing writes one at the moment a
 // thing is added — it is a message to yourself for the next time you schedule
 // it, and there is no such thing to say about a row that does not exist yet.
-const UPDATABLE = [...CREATABLE, 'status', 'note'];
+// `priority` is the pin, and it is a column coming back rather than a new one.
+// It was "a way of ordering this list by hand", retired when the order became
+// pure arithmetic, and never dropped — every row still holds null, so there is
+// no stale value to collide with and no migration to run. See routes/entries.js
+// for why a pin is a declaration rather than the ranking that was retired.
+const UPDATABLE = [...CREATABLE, 'status', 'note', 'priority'];
 
 function pick(fields, allowed) {
   const out = {};

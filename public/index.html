@@ -264,6 +264,16 @@
         position: relative;
       }
 
+      /* The heading over the pinned group, and the gap that ends it. Space
+         separates them rather than a rule, because this list already has a
+         hairline between every row and one more would not read as a break. */
+      .pinhead {
+        margin: 2px 0 6px;
+      }
+      .afterpins {
+        margin-top: 20px;
+      }
+
       .thing + .thing {
         border-top: 1px solid var(--line);
       }
@@ -2790,7 +2800,92 @@
           return;
         }
 
-        for (const item of things) box.append(thingSlot(item));
+        // PINNED FIRST, AND SAID SO. The server already sends them in front,
+        // so this could have been one flat list — and then nothing on screen
+        // would explain why a habit sits above something overdue. A heading
+        // over them, and a gap after the last one, is what makes the order
+        // legible instead of merely correct.
+        //
+        // The heading appears only when something is pinned. A standing label
+        // over an empty group is a section of the list that says nothing on
+        // almost every day.
+        const pinned = things.filter((t) => t.pinned);
+        const rest = things.filter((t) => !t.pinned);
+
+        if (pinned.length) {
+          const head = document.createElement('div');
+          head.className = 'label pinhead';
+          head.textContent = 'Pinned';
+          box.append(head);
+        }
+
+        for (const item of pinned) box.append(thingSlot(item));
+
+        for (const [i, item] of rest.entries()) {
+          const slot = thingSlot(item);
+          // The break between the two, made of space rather than a rule: the
+          // list already has a hairline between every row, so one more would
+          // be invisible as a divider.
+          if (pinned.length && i === 0) slot.classList.add('afterpins');
+          box.append(slot);
+        }
+      }
+
+      /**
+       * Held at the top, or let go of.
+       *
+       * Written at once, like the note and unlike everything on the day screen.
+       * There is no Confirm over this list, and a pin that lived only in the
+       * page until some unrelated button was pressed would be lost by the
+       * reload meant to bring it back.
+       *
+       * The list re-sorts on the spot rather than waiting for the next load,
+       * because the whole point of the press is where the row ends up.
+       */
+      async function setPinned(item, pinned) {
+        const was = item.pinned;
+        item.pinned = pinned;
+        sortThings();
+        renderThings();
+
+        let body;
+        try {
+          body = await (await api(`/entries/${item.id}/pin`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pinned }),
+          })).json();
+        } catch {
+          body = { error: 'offline' };
+        }
+
+        // Back where it was. A row sitting at the top of a list the database
+        // does not agree with is the kind of wrong that survives a reload and
+        // then quietly corrects itself, which is worse than never moving.
+        if (body.error) {
+          item.pinned = was;
+          sortThings();
+          renderThings();
+        }
+      }
+
+      /**
+       * The order the server sends, kept after a pin changes it here.
+       *
+       * THE SAME THREE HALVES, and they have to be: a second opinion about
+       * this order living on the page is how the screen and the list start
+       * disagreeing about which thing is most urgent. `slack` is not sent —
+       * the screen shows the mark and not the number — so within the marked
+       * half this falls back to the mark itself, which is the same ordering at
+       * one step's coarser grain and is only ever used between two renders.
+       */
+      function sortThings() {
+        const rank = (t) => (t.mark ? t.mark.length : 0);
+        things.sort((a, b) =>
+          (a.pinned ? 0 : 1) - (b.pinned ? 0 : 1) ||
+          (a.mark ? 0 : 1) - (b.mark ? 0 : 1) ||
+          (a.mark ? rank(b) - rank(a) : b.days - a.days) ||
+          a.title.localeCompare(b.title));
       }
 
       /**
@@ -3254,6 +3349,20 @@
           addAnytime({ title: item.title, entryId: item.id, note: item.note || null });
         };
         acts.append(anytime);
+
+        // HELD AT THE TOP, or let go of. The only thing on this screen that
+        // changes the order by hand — everything else about it is arithmetic —
+        // and it is a declaration rather than a ranking: the list guesses at
+        // what needs attention, and this is saying so outright.
+        const hold = document.createElement('button');
+        hold.type = 'button';
+        hold.textContent = item.pinned ? 'Unpin' : 'Pin';
+        hold.onclick = (e) => {
+          e.stopPropagation();
+          acts.classList.add('hidden');
+          setPinned(item, !item.pinned);
+        };
+        acts.append(hold);
 
         acts.append(edit);
         row.append(acts);
