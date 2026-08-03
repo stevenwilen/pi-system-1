@@ -1070,6 +1070,8 @@
         z-index: 1;
         display: flex;
         align-items: center;
+        /* The title takes the room and the × is pushed to the far edge. */
+        justify-content: space-between;
         gap: 16px;
         background: var(--bg);
         padding: calc(18px + env(safe-area-inset-top)) 0 18px;
@@ -1090,11 +1092,12 @@
         line-height: 1;
         color: var(--accent);
         cursor: pointer;
-        /* EVEN TOP AND BOTTOM. It was 4 and 6, which is invisible on a button
-           whose baseline is what lines it up and a two-pixel lie once its box
-           is what does — the row centres these now, so any difference between
-           them shifts the chevron off the label by half of it. */
-        padding: 6px 12px 6px 0;
+        /* EVEN TOP AND BOTTOM, because the row centres these and any
+           difference between them shifts the glyph off the title by half of
+           it. The right side is pulled in so the × sits on the page's own
+           margin rather than indented from it — the mirror of what the left
+           padding did when this was a back chevron. */
+        padding: 6px 0 6px 12px;
       }
       .back:focus {
         outline: none;
@@ -2125,15 +2128,17 @@
     <div class="page hidden" id="settings-scrim">
       <div class="page-inner">
         <div class="page-top">
-          <!-- The chevron alone. It said "‹ Back", and the word was doing no
-               work a chevron pointing left does not already do at the top of a
-               screen you opened from somewhere else.
-               THE LABEL IS NOT OPTIONAL. Read aloud, this button is now a
-               punctuation mark: a screen reader announces "less-than sign", or
-               nothing at all. aria-label is what keeps it the way out rather
-               than an unnamed control. -->
-          <button type="button" class="back" id="settings-close" aria-label="Back">‹</button>
           <span class="label">Setup</span>
+          <!-- CLOSED FROM THE TOP RIGHT, which is where a screen laid over
+               another one is closed. It was a back chevron on the left, and a
+               chevron is a claim about where you go rather than what happens:
+               this is a page over the day, not a place further into it, so an
+               × saying "put this away" is the truer word.
+
+               THE LABEL IS NOT OPTIONAL. Read aloud, this button is a
+               punctuation mark — a screen reader announces "multiplication
+               sign", or nothing at all. aria-label is its entire name. -->
+          <button type="button" class="back" id="settings-close" aria-label="Close">×</button>
         </div>
 
         <!-- WHAT IS DONE, first and as a list.

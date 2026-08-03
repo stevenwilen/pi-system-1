@@ -1427,24 +1427,31 @@ console.log('\n19. a sheet is inside its scrim');
   //
   // So the way out is Back and only Back — there is always a day behind it —
   // and nothing decides on your behalf that you should be looking at this.
-  // The word went and the chevron stayed, which changes nothing about the
-  // rule: what matters is that it points BACK — to the day that is always
-  // behind it — and is never a word for having been sent here.
-  check('the way out of setup is a back chevron',
-    /id="settings-close"[^>]*>‹</.test(body));
+  // A CLOSE, NOT A BACK, and the rule survives the change: what matters is
+  // that the way out is never a word for having been SENT here. "Close" is
+  // truer than "back" for a page laid over the day rather than a place further
+  // into it.
+  check('the way out of setup closes it',
+    /id="settings-close"[^>]*>×</.test(body));
+  // Top right, which is where a screen laid over another one is closed.
+  check('and it sits at the far edge, with the title taking the room',
+    /justify-content: space-between/.test(rule('.page-top')), rule('.page-top'));
   // AND IT IS STILL NAMED. Stripped to one glyph, this button is punctuation:
-  // a screen reader announces "less-than sign", or nothing. The label is the
-  // only thing left saying what it does.
+  // a screen reader announces "multiplication sign", or nothing. The label is
+  // the only thing left saying what it does.
   // A GLYPH BESIDE A LABEL IS CENTRED, NOT BASELINED. It was baselined while
   // the way out read '‹ Back' at 13px: two pieces of text sharing a line. One
   // 22px glyph beside a 9.5px label is not that, and a baseline aligns letters
   // — which one of these is not.
-  check('the setup header centres its chevron against its title',
+  check('the setup header centres its control against its title',
     /align-items: center/.test(rule('.page-top')), rule('.page-top'));
+  // Even top and bottom, and the inset on the side it does NOT sit against —
+  // the × is at the right edge now, so the padding that keeps the glyph on the
+  // page's own margin moved with it.
   check('and the button is padded evenly, so centring is not skewed by it',
-    /padding: 6px 12px 6px 0/.test(rule('.back')), rule('.back'));
-  check('and it still says Back to anything that cannot see it',
-    /id="settings-close"[^>]*aria-label="Back"/.test(body), 'aria-label is the whole name now');
+    /padding: 6px 0 6px 12px/.test(rule('.back')), rule('.back'));
+  check('and it says so to anything that cannot see it',
+    /id="settings-close"[^>]*aria-label="Close"/.test(body), 'aria-label is the whole name');
   check('and never a word for having been sent there',
     !/Skip for now/.test(body) && !/Skip for now/.test(code));
   check('opening setup takes no argument, so nothing can force it',
