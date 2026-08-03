@@ -382,69 +382,67 @@ reachable, since every option came out of the browser's own tzdb, but a row
 showing a value the server would not take is a screen disagreeing with the
 database and saying nothing about it.
 
-#### How often you got to things
+#### How the month has gone
 
-The last thing on the setup screen, and read-only. Over the last thirty days:
-what the list holds, how close each habit came to the cadence it declared, and
-the five things given the most days.
+The last thing on the setup screen, and read-only.
 
-**It counted hours until untimed items arrived**, and then stopped describing
-the app. A thing committed to a day without an hour adds nothing to a total made
-of minutes, so the more of your day you kept off the clock, the emptier the
-section looked. What replaced it is the question this system is built around: a
-habit declares a cadence, the Things list orders by how long since something was
-last scheduled, and **nothing ever checked one against the other**. *"You said
-daily and you got to it nine times in thirty days"* is the one thing that list
-cannot say.
+**The headline is how much of the month was planned at all**, because everything
+under it depends on that: *"5 days planned in the last 30."* It leads rather than
+sitting in a footnote.
+
+**Under about ten days it says so and shows nothing else.** Five days out of
+thirty is not a habit slipping, it is a month barely planned, and ranking
+anything off it would be dressing a sample of five up as a verdict.
+
+Above that, one line per habit: **how long since you got to it, and the cadence
+it was meant to keep.**
+
+```
+12 days planned in the last 30. How long since you got to each habit,
+against how often you meant to.
+
+  Call home        not in 30 days, meant to be weekly
+  Abs              11 days, meant to be few times a week
+  Reading          2 days, meant to be daily
+```
+
+**Sorted by how far past its own cadence each one is**, worst first — days late,
+not a ratio. That is the only figure here that puts a daily habit and a monthly
+one on the same scale.
+
+**Two false starts, and both failed the same way**: they presented thin data as
+though it were a trend.
+
+- **Hours** — minutes per habit, project and task. It stopped describing the app
+  the day untimed items arrived, because a thing committed to a day without an
+  hour adds nothing to a total made of minutes.
+- **Ratios** — `scheduled / expected`, with a bar. Every row had a *different
+  denominator*: `0/1`, `2/7`, `2/3`. A column like that cannot be read down —
+  the eye has nothing to rest on and every figure has to be worked out alone.
+
+**No bars.** A bar is a comparison, and one can only be drawn once every row
+means the same thing by its length. These do not.
+
+Two things also went, for the same reason — not legible, or not worth knowing:
+
+- **Most days given to.** At this sample size every count was 1 or 2, which is
+  noise; and it was a weaker version of a time-versus-priority review that would
+  need real data to mean anything.
+- **The inventory line** — *"4 habits · 8 projects · 4 tasks"*. Visible by
+  scrolling the list.
 
 **Got to, never did.** The system is never told that anything happened — an
-untimed item ticked off is the single exception. It knows something was
-scheduled and left in a confirmed day. Reporting that as work done would be a
-claim no row supports.
-
-| | |
-|---|---|
-| **The counts** | habits, projects and tasks **on the list now** — plus tasks **finished this month**, which is the only one about the window. The words say which is which |
-| **Habits** | `scheduled / expected`, with a bar. Furthest behind first |
-| **Most days given to** | everything with no cadence, by days scheduled, top five |
-
-**Expected comes from the declared frequency**: daily is every day, *few times a
-week* is three in seven, weekly is one, monthly is one. Three for *few times a
-week* because the phrase covers two to four and the middle is the honest reading
-— taking the low end would flatter every habit carrying it.
+untimed item ticked off is the single exception. It knows something was scheduled
+and left in a confirmed day, and an untimed item counts exactly when staleness
+says it does: `completed`, ticked rather than merely present (§3.2). The same
+filter, deliberately — two screens disagreeing about whether you got to something
+would be worse than either being wrong.
 
 **Never measured against a month it was not alive for.** A habit added five days
-ago is measured against five days. Otherwise the first thing a new habit does is
-report a failure nobody was given the chance to commit.
-
-**Days, not blocks.** Scheduling one thing twice on a Tuesday is one Tuesday you
-got to it. Counting it twice would let a single busy day stand in for a cadence
-it says nothing about.
-
-**An untimed item counts exactly when staleness says it does** — `completed`,
-which is true for a timed block because it stayed in the day, and true for an
-untimed one only once it has been ticked (§3.2). The same filter, deliberately:
-two screens disagreeing about whether you got to something would be worse than
-either being wrong.
-
-**Finished tasks are dated by `updated_at`**, which is the nearest thing to a
-completion date the schema has — there is no `done_at`. Right for the ordinary
-case, where a task is finished and never touched again; a task edited afterwards
-would count from the edit. That is the known cost of not having the column, and
-it is smaller than dropping the figure.
-
-**A month's record does not change shape because of what the list holds today.**
-Finished and deleted entries still appear in *days given to*: a task done last
-week was worked on last week.
-
-**Thirty days, not all time.** All time is the honest default at four days of
-history and the wrong one at four hundred, when it becomes a figure that only
-grows and stops describing this month. The window is stated on screen so the
-number is never read as more than it is.
-
-**Nothing planned is not nothing kept.** An account that has not started and a
-month of empty days get different sentences — and the counts are shown either
-way, because what the list holds is true regardless.
+ago and never scheduled reports five days, not thirty. Otherwise the first thing
+a new habit says about itself is a failure nobody was given the chance to commit.
+One never got to *at all* inside the window says **"not in 30 days"** rather than
+a number — that figure is a floor, not a measurement, and reads as one.
 
 ### 2.9 A request is whoever its token says, and nothing else
 
@@ -1247,10 +1245,9 @@ an untimed item would fall past the too-early test, past the too-late test, and
 be **sent**, as `NaN:NaN to NaN:NaN`. A guard that fails open into a delivered
 message is the kind worth writing twice.
 
-They are **not** left out of **How often you got to things** (§2.8) — that
-section stopped counting hours partly because of them. A ticked untimed item
-counts there exactly as a timed block does, which is the whole reason the
-section was rewritten.
+They are **not** left out of **How the month has gone** (§2.8) — that section
+stopped counting hours partly because of them. A ticked untimed item counts
+there exactly as a timed block does.
 
 #### A block is worked by gesture
 

@@ -1,21 +1,19 @@
-// How often you got to things.
+// How long since you got to each habit, against how often you meant to.
 //
 // Arithmetic on what was scheduled, and nothing else. This is never told that
-// anything happened — the one exception is an untimed item, which is ticked by
-// hand — so every figure here is about what was PLANNED, and the words on the
-// screen say so.
+// anything happened — an untimed item ticked off is the one exception — so
+// every figure here is about what was PLANNED, and the words on screen say so.
 //
-// IT USED TO COUNT HOURS. "Where your time went": minutes per habit, project
-// and task, and the five things given the most. That stopped describing the app
-// the day untimed items arrived, because a thing committed to a day without an
-// hour contributes nothing to a total made of minutes — the more of your day
-// you kept out of the clock, the emptier the section looked.
+// IT COUNTED HOURS ONCE, then ratios, and both were wrong in the same way: they
+// presented thin data as though it were a trend. Hours stopped describing the
+// app the day untimed items arrived. The ratios that replaced them — 0/1, 2/7,
+// 2/3 — could not be compared down the column, because every row had a
+// different denominator and the eye has nothing to rest on.
 //
-// What replaced it is the question this system is actually built around. A
-// habit declares a cadence; the Things list orders by how long since something
-// was last scheduled. Neither of those is ever checked against the other, and
-// "you said daily and you got to it nine times in thirty days" is the one thing
-// that list cannot say.
+// What is left is one number per habit that means the same thing on every row:
+// DAYS SINCE, beside the cadence it was meant to keep. Those two can be read
+// against each other without arithmetic, and sorted by how far past its own
+// frequency each one is.
 //
 // THIRTY DAYS, not all time. All time is the honest default at four days of
 // history and the wrong one at four hundred, when it becomes a number that only
@@ -31,23 +29,21 @@ const router = express.Router();
 
 const WINDOW_DAYS = 30;
 
-// The five biggest. A list of everything would be the Things list again in a
-// different order, and the question this answers is what got worked on rather
-// than what exists.
-const TOP = 5;
-
 /**
- * What share of the days a cadence asks for.
+ * Below this, the window has not got enough in it to describe anything.
  *
- * The four frequencies `entry-shape.js` allows, and the plainest reading of
- * each. "few times a week" is three: the phrase covers two to four, three is
- * the middle, and taking the low end would flatter every habit carrying it.
+ * Five days out of thirty is not a habit that is slipping, it is a month that
+ * was barely planned — and a screen that ranked habits off it would be dressing
+ * up a sample of five as a verdict. It says so instead.
  */
-const PER_DAY = {
+const THIN_DAYS = 10;
+
+/** How many days a cadence allows to pass before it has been missed. */
+const EVERY = {
   daily: 1,
-  'few times a week': 3 / 7,
-  weekly: 1 / 7,
-  monthly: 1 / 30,
+  'few times a week': 3,
+  weekly: 7,
+  monthly: 30,
 };
 
 const backFrom = (date, days) => {
@@ -69,13 +65,12 @@ router.get('/stats', async (req, res) => {
     const today = todayIn((profile && profile.timezone) || DEFAULT_ZONE);
     const from = backFrom(today, WINDOW_DAYS);
 
-    // Every entry, finished and deleted ones included. A task done last week
-    // was worked on last week, and dropping it would make the record of a month
-    // depend on what the list happens to hold today.
     const { data: entries, error: entryErr } = await db
       .from('entries')
-      .select('id, type, title, frequency, status, created_at, updated_at')
-      .eq('user_id', userId);
+      .select('id, type, title, frequency, status, created_at')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .eq('type', 'habit');
 
     if (entryErr) throw new Error(entryErr.message);
 
@@ -89,32 +84,15 @@ router.get('/stats', async (req, res) => {
 
     if (planErr) throw new Error(planErr.message);
 
-    const live = (entries || []).filter((e) => e.status === 'active');
+    const days = (plans || []).length;
 
-    // WHAT THE LIST HOLDS RIGHT NOW, which is a different question from the
-    // window and does not pretend otherwise: these count what exists, not what
-    // happened in thirty days. `finished` is the exception and says so.
-    const counts = {
-      habits: live.filter((e) => e.type === 'habit').length,
-      projects: live.filter((e) => e.type === 'project').length,
-      tasks: live.filter((e) => e.type === 'task').length,
-      // Finished IN THE WINDOW, by when the row was last written. `updated_at`
-      // is the nearest thing to a completion date this schema has — there is no
-      // `done_at` — and it is right for the ordinary case, where a task is
-      // finished and never touched again. One edited afterwards would count
-      // from the edit: the known cost of not having the column, and smaller
-      // than dropping the figure.
-      finished: (entries || []).filter(
-        (e) => e.type === 'task' && e.status === 'done' &&
-          String(e.updated_at).slice(0, 10) >= from
-      ).length,
-    };
+    // THE HEADLINE FIRST, AND IT EXPLAINS EVERYTHING UNDER IT. How much of the
+    // month was planned at all is the fact the rest depends on, so it is not a
+    // footnote — and when it is small the screen says less rather than ranking
+    // habits off five days of history.
+    const base = { window_days: WINDOW_DAYS, days, thin: days < THIN_DAYS, habits: [] };
 
-    if (!plans || !plans.length) {
-      return res.json({
-        window_days: WINDOW_DAYS, days: 0, counts, habits: [], top: [],
-      });
-    }
+    if (!days) return res.json(base);
 
     const dateOf = new Map(plans.map((p) => [p.id, p.date]));
 
@@ -124,70 +102,54 @@ router.get('/stats', async (req, res) => {
       .eq('user_id', userId)
       .in('plan_id', plans.map((p) => p.id))
       .not('entry_id', 'is', null)
-      // THE SAME FILTER STALENESS USES, and deliberately the same one. A timed
-      // block is true because it stayed in the day; an untimed item is true
-      // only once it has been ticked. Counting them differently here would let
-      // two screens disagree about whether you got to something.
+      // THE SAME FILTER STALENESS USES. A timed block is true because it stayed
+      // in the day; an untimed item is true only once it has been ticked.
+      // Counting them differently here would let two screens disagree about
+      // whether you got to something.
       .eq('completed', true);
 
     if (blockErr) throw new Error(blockErr.message);
 
-    // DAYS, not blocks. Scheduling one thing twice on a Tuesday is one Tuesday
-    // you got to it, and counting it twice would let a single busy day stand in
-    // for a cadence it says nothing about.
-    const daysFor = new Map();
+    // The most recent day each thing was got to, inside the window.
+    const lastOf = new Map();
     for (const b of blocks || []) {
       const date = dateOf.get(b.plan_id);
       if (!date) continue;
-      if (!daysFor.has(b.entry_id)) daysFor.set(b.entry_id, new Set());
-      daysFor.get(b.entry_id).add(date);
+      const seen = lastOf.get(b.entry_id);
+      if (!seen || date > seen) lastOf.set(b.entry_id, date);
     }
 
-    const scheduledDays = (id) => (daysFor.get(id) || new Set()).size;
-
-    const habits = live
-      .filter((e) => e.type === 'habit' && PER_DAY[e.frequency])
+    const habits = (entries || [])
+      .filter((e) => EVERY[e.frequency])
       .map((e) => {
-        // NEVER LONGER THAN IT HAS EXISTED. A habit added five days ago and
-        // measured against thirty is one that cannot help but look abandoned,
-        // and the first thing a new one would do is report a failure nobody
-        // had been given the chance to commit.
-        const since = String(e.created_at).slice(0, 10);
-        const known = Math.min(WINDOW_DAYS, Math.max(1, daysBetween(since, today) + 1));
+        const last = lastOf.get(e.id) || null;
+
+        // NEVER LONGER THAN IT HAS EXISTED. A habit added five days ago has not
+        // been neglected for thirty, and reporting that would be the first
+        // thing a new one ever said about itself.
+        const since = last
+          ? daysBetween(last, today)
+          : Math.min(WINDOW_DAYS, daysBetween(String(e.created_at).slice(0, 10), today));
+
+        const every = EVERY[e.frequency];
 
         return {
           title: e.title,
           frequency: e.frequency,
-          days_known: known,
-          // Never below one: every cadence asks for something.
-          expected: Math.max(1, Math.round(known * PER_DAY[e.frequency])),
-          scheduled: scheduledDays(e.id),
+          days: Math.max(0, since),
+          // Whether it has been seen at all in the window, so the screen can
+          // say "not in the last 30 days" rather than a number that reads as a
+          // measurement when it is really a floor.
+          ever: Boolean(last),
+          // How far past its own cadence it is. This is what the order is made
+          // of, and it is the only figure here that compares two habits with
+          // different frequencies on the same scale: days late, not a ratio.
+          over: Math.max(0, since) - every,
         };
       })
-      // FURTHEST BEHIND FIRST, the order every other list on this screen uses.
-      // It is also the half that is not already visible: the Things list says
-      // how long since something was last scheduled and says nothing at all
-      // about the cadence it was meant to keep.
-      .sort((a, b) =>
-        a.scheduled / a.expected - b.scheduled / b.expected ||
-        a.title.localeCompare(b.title));
+      .sort((a, b) => b.over - a.over || a.title.localeCompare(b.title));
 
-    // Everything with no declared cadence. There is nothing to measure them
-    // against, so the figure is the plain one: how many days you gave them.
-    const top = (entries || [])
-      .filter((e) => e.type !== 'habit')
-      .map((e) => ({ title: e.title, type: e.type, days: scheduledDays(e.id) }))
-      .filter((e) => e.days > 0)
-      .sort((a, b) => b.days - a.days || a.title.localeCompare(b.title))
-      .slice(0, TOP);
-
-    res.json({
-      window_days: WINDOW_DAYS,
-      days: plans.length,
-      counts,
-      habits,
-      top,
-    });
+    res.json({ ...base, habits });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
