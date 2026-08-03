@@ -1382,6 +1382,14 @@ console.log('\n19. a sheet is inside its scrim');
   // there — a class attribute, a className, a classList call. Bluntly, because
   // a false "dead" costs more than a false "alive": one of them deletes
   // something that renders.
+  //
+  // THE KNOWN GAP, and it is the price of that choice rather than an oversight:
+  // a class named after a common English word hides in prose. `.bar` outlived
+  // the section that used it because the comments elsewhere say "undo bar" and
+  // "address bar", and this read those as somebody wearing it. Erring the other
+  // way would mean this check occasionally proposing to delete live styling,
+  // which is worse — so short generic class names are the thing to avoid rather
+  // than the check being the thing to loosen.
   // BOTH, and the script is the half that matters. `body` is the markup alone,
   // and most of this page's classes are set from script — every block, every
   // row, every bar. Asking the markup only reported forty-eight live classes
