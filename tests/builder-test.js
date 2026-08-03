@@ -318,8 +318,14 @@ function boot({
     supportedValuesOf: Intl.supportedValuesOf && Intl.supportedValuesOf.bind(Intl),
   };
 
+  // Reloads are counted, not performed. A suite that actually reloaded would
+  // be a suite that stopped.
+  const reloads = [];
+
   const sandbox = {
     console, setTimeout, clearTimeout, Intl: localIntl, Math, JSON,
+    location: { reload: () => reloads.push(true) },
+    navigator: { vibrate: () => {} },
     Date: clock,
     String, Number, Boolean, Array, Object,
     alert: () => {},
@@ -414,11 +420,26 @@ function boot({
   };
   const titles = () => slots().map(titleOf);
 
-  const touchmoves = () => listeners.filter((l) => l.type === 'touchmove');
+  // The reorder's scroll blocker, and only that one.
+  //
+  // It used to be every touchmove listener on the document, which was the same
+  // thing right up until it was not: pull-to-reload registers one when the
+  // script loads and never removes it, so "nothing is held before the press"
+  // started failing against a listener that has nothing to do with holding a
+  // block. Anything present the moment the script finished is not the thing
+  // this measures — what it measures is what a HOLD installs and a release
+  // takes away.
+  const standing = listeners.filter((l) => l.type === 'touchmove').length;
+  const touchmoves = () =>
+    listeners.filter((l) => l.type === 'touchmove').slice(standing);
 
   return {
     ctx, byId, slots, cardOf, backingOf, rowOf, chipOf, noteOf, editorOf,
     titleOf, titles, listeners, touchmoves, win, posted, confirmed, asked, stored,
+    reloads,
+    // Every document listener of a kind, in order, so a case can drive the
+    // page-level gestures the way the browser would.
+    fire: (type, event) => listeners.filter((l) => l.type === type).forEach((l) => l.fn(event)),
     // Wind the frozen clock on without re-rendering, the way a page left
     // open on a phone experiences time passing.
     setClock: (hhmm) => clock.moveTo && clock.moveTo(hhmm),
@@ -2788,6 +2809,141 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
         /<label class="srow tzrow" id="when-row">/.test(html));
       check('and it is named for the one thing it now does',
         /<span class="srow-name">Timezone<\/span>/.test(html));
+    }
+  }
+
+  console.log('\npulling the top of the page down reloads it');
+  {
+    // WHY THIS EXISTS. An installed app has no address bar and no browser
+    // pull-to-refresh, so there was no way from inside it to make the page
+    // fetch itself again — which is how a phone ends up running a build from a
+    // fortnight ago and showing a screen that no longer exists.
+    //
+    // WHAT THIS CANNOT TELL YOU: these are synthetic touch events. They cover
+    // the state machine — what commits, what is refused, what is put back —
+    // and nothing about touch itself. That needs a real phone.
+    const touch = (y) => ({ touches: [{ clientY: y }], cancelable: true, preventDefault() {} });
+
+    const boot0 = async (opts = {}) => {
+      const b = boot(opts);
+      await b.ctx.load();
+      // The cases here call load() rather than start(), so the boot cover is
+      // never dismissed — and a pull is refused while it is up. Driving the
+      // same path the browser does rather than loosening the guard to suit
+      // the harness.
+      b.ctx.uncover();
+      return b;
+    };
+
+    {
+      // A FULL PULL RELOADS. Far enough to mean it, and the same distance a
+      // swipe commits at.
+      const { byId, fire, reloads } = await boot0();
+
+      fire('touchstart', touch(0));
+      fire('touchmove', touch(40));
+      check('the day follows the finger', /translateY/.test(byId['day'].style.transform || ''),
+        byId['day'].style.transform);
+      check('and the dot comes up with it',
+        Number(byId['pull'].style.opacity) > 0, byId['pull'].style.opacity);
+      check('nothing has reloaded yet', reloads.length === 0);
+
+      fire('touchmove', touch(160));
+      fire('touchend', {});
+
+      check('a full pull reloads the page', reloads.length === 1, String(reloads.length));
+      check('and the dot is left spinning rather than snapping back',
+        byId['pull']._class.has('going'), byId['pull'].className);
+    }
+
+    {
+      // SHORT OF IT PUTS EVERYTHING BACK. The commit distance is most of a
+      // thumb's travel on purpose: a reload throws away anything unconfirmed.
+      const { byId, fire, reloads } = await boot0();
+
+      fire('touchstart', touch(0));
+      fire('touchmove', touch(40));
+      fire('touchend', {});
+
+      check('a short pull reloads nothing', reloads.length === 0, String(reloads.length));
+      check('the day goes back', !byId['day'].style.transform, byId['day'].style.transform);
+      check('and the dot with it', byId['pull'].style.opacity === '0', byId['pull'].style.opacity);
+    }
+
+    {
+      // UPWARD IS A SCROLL, NOT A PULL, and must be left entirely alone.
+      const { byId, fire, reloads } = await boot0();
+
+      fire('touchstart', touch(100));
+      fire('touchmove', touch(40));
+      fire('touchend', {});
+
+      check('dragging up does nothing', reloads.length === 0 && !byId['day'].style.transform,
+        byId['day'].style.transform);
+    }
+
+    {
+      // NOT FROM PART-WAY DOWN THE PAGE. Anywhere but the very top, this is an
+      // ordinary scroll and the browser owns it.
+      const { byId, fire, reloads, win } = await boot0();
+      win.scrollY = 300;
+
+      fire('touchstart', touch(0));
+      fire('touchmove', touch(160));
+      fire('touchend', {});
+
+      check('a pull that starts mid-page is not a pull',
+        reloads.length === 0 && !byId['day'].style.transform, byId['day'].style.transform);
+      win.scrollY = 0;
+    }
+
+    {
+      // NOT OVER A SHEET. A pull begun on the setup screen would drag the day
+      // around behind it.
+      const { byId, fire, reloads } = await boot0();
+      byId['settings-open'].onclick();
+
+      fire('touchstart', touch(0));
+      fire('touchmove', touch(160));
+      fire('touchend', {});
+
+      check('setup being open refuses the pull', reloads.length === 0, String(reloads.length));
+      check('and the day underneath does not move', !byId['day'].style.transform,
+        byId['day'].style.transform);
+    }
+
+    {
+      // NOT MID-GESTURE. A block being carried owns the screen, and the two
+      // would fight over the same finger.
+      const { byId, slots, cardOf, fire, reloads, ctx } = await boot0();
+      ctx.addBlock({ title: 'A' });
+      down(cardOf(slots()[0]), 100, 100);
+      await wait(HELD);
+
+      fire('touchstart', touch(0));
+      fire('touchmove', touch(160));
+      fire('touchend', {});
+
+      check('a block being handled refuses the pull', reloads.length === 0,
+        String(reloads.length));
+      check('and the day does not move under it', !byId['day'].style.transform,
+        byId['day'].style.transform);
+    }
+
+    {
+      // THE SCROLL IS TAKEN, or the browser scrolls the page under the pull
+      // and the two fight. A passive listener could not do this, which is why
+      // the registration says so.
+      const { fire } = await boot0();
+      let stopped = false;
+
+      fire('touchstart', touch(0));
+      fire('touchmove', {
+        touches: [{ clientY: 90 }],
+        cancelable: true,
+        preventDefault: () => { stopped = true; },
+      });
+      check('a live pull prevents the default scroll', stopped);
     }
   }
 

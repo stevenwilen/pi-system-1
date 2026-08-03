@@ -1040,6 +1040,43 @@ is the one decision this system had been quietly taking.
 Reading a day is therefore repeatable and claims nothing. There is no placement
 endpoint and no `placed:` rows.
 
+#### Pull the top down to reload
+
+Drag the day down from the very top and let go past 72px, and the page reloads.
+
+**It exists because an installed app has no other way to.** No address bar, no
+browser pull-to-refresh — `overscroll-behavior-y: none` turned off what little
+there was — so nothing inside the app could make it fetch itself again. That is
+exactly how a phone ends up running a build from a fortnight ago and showing a
+screen that no longer exists, which happened twice: a missing stats section and
+a missing timezone row, both diagnosed as a stale page.
+
+**It reloads the page, not the day.** Re-reading the data would be quicker and
+would miss the point — the thing that goes stale is the app itself, and only a
+reload replaces it.
+
+72px is the same distance a swipe commits at: one number for *a deliberate drag*
+reads as one decision rather than two. The travel is damped, so the page slows as
+it goes and plainly reaches the end of its own rope, which is what says let go.
+The dot turns **with the finger** and only starts spinning once the reload is
+under way — the moment it stops being under your control.
+
+Refused unless the day screen is at rest at the very top: not mid-scroll, not
+over the gate or either sheet, and never while a block or row is being handled,
+which would be two gestures fighting over one finger.
+
+The `touchmove` listener is **non-passive**, because preventing the default
+scroll is the entire mechanism — without it the browser scrolls the page under
+the pull and the two fight. It is also the second such listener on the document
+(the reorder installs one while a block is carried), which broke a test that
+counted them all; that test now measures only what a hold installs.
+
+Its first version never ran at all. `canPull` checked four elements for the
+class `hidden`, and the boot cover is dismissed with `done` — so the guard was
+always false and the gesture was dead in the browser as much as in the suite. A
+gesture that does nothing looks exactly like one nobody has tried yet, which is
+why it is pinned by name.
+
 #### The builder
 
 - **Starts** — an inline control, 30-minute steppers, clamped to 04:00–12:00.

@@ -828,6 +828,38 @@
         animation: spin 1100ms cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite;
       }
 
+      /* --- pulled down to reload ------------------------------------------ */
+      /* Behind the page and revealed by it: the day slides down over this, so
+         the dot comes out from under the top edge rather than being drawn on
+         top of the day. Fixed, because what moves is the page uncovering it. */
+      #pull {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        pointer-events: none;
+      }
+      /* The boot cover's dot at two thirds the size, and NOT spinning: it turns
+         with the pull instead, so the movement belongs to the finger. It spins
+         only once the reload is under way, which is the moment it stops being
+         under your control. */
+      #pull span {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 2.4px solid var(--text);
+        border-right-color: transparent;
+        opacity: 0.82;
+      }
+      #pull.going span {
+        animation: spin 1100ms cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite;
+      }
+
       /* The room a block would take, on a day that has none. `visibility`
          rather than `display: none`, which is the whole point: it has to keep
          its space while showing nothing. */
@@ -1949,7 +1981,17 @@
       </form>
     </div>
 
-    <main>
+    <!-- PULLED DOWN FROM THE TOP TO RELOAD. An installed app has no address
+         bar and no browser pull-to-refresh, so until now there was no way at
+         all to make this page fetch itself again — which is exactly how a
+         phone ends up running a build from a fortnight ago and showing a
+         screen that no longer exists.
+
+         The dot is the one the boot cover uses, because it is the same
+         statement: something is on its way. -->
+    <div id="pull" aria-hidden="true"><span></span></div>
+
+    <main id="day">
       <!-- 1. THE DAY -------------------------------------------------------- -->
       <!--
         First on the screen, because it is what the screen is opened to look at.
@@ -4669,6 +4711,158 @@
           card.style.transform = '';
           backing.style.opacity = '0';
         };
+      }
+
+      // --- pull the top of the page down to reload it --------------------------
+      //
+      // WHY THIS EXISTS AT ALL, and it is not decoration. An installed app has
+      // no address bar and no browser pull-to-refresh — `overscroll-behavior-y:
+      // none` on the body turned off what little there was — so there was no
+      // way from inside the app to make the page fetch itself again. That is
+      // exactly how a phone ends up running a build from a fortnight ago and
+      // showing a screen that no longer exists, which has happened twice.
+      //
+      // It reloads the PAGE rather than re-reading the day. Re-fetching the
+      // data would be quicker and would miss the point: the thing that goes
+      // stale is the app itself, and only a reload replaces that.
+
+      // Far enough to mean it, and the same distance a swipe commits at. One
+      // number for "a deliberate drag" reads as one decision rather than two.
+      const PULL_COMMIT = 72;
+
+      // Where the page stops following the finger. Past this it is plainly at
+      // the end of its travel, which is what tells you to let go.
+      const PULL_MAX = 108;
+
+      let pulling = null;
+
+      /**
+       * Is a pull allowed to start here?
+       *
+       * Every clause is a way of saying "the day screen, at rest, at the very
+       * top". A pull that began over a sheet would drag the day around behind
+       * it, and one that began mid-gesture would fight the block being carried.
+       */
+      function canPull() {
+        if (gesture) return false;
+        if ((typeof window !== 'undefined' ? window.scrollY : 0) > 0) return false;
+
+        // THE CLASS EACH ONE ACTUALLY USES, which is not the same class. The
+        // sheets and the gate are dismissed with `hidden`; the boot cover is
+        // dismissed with `done` and then display:none. Checking every one of
+        // them for `hidden` made this always false — the pull never started at
+        // all, in the browser exactly as in the suite, and it took a test to
+        // see because a gesture that does nothing looks like a gesture nobody
+        // has tried yet.
+        for (const [id, gone] of [
+          ['gate', 'hidden'],
+          ['settings-scrim', 'hidden'],
+          ['add-scrim', 'hidden'],
+          ['booting', 'done'],
+        ]) {
+          const el = $(id);
+          if (el && el.classList && !el.classList.contains(gone)) return false;
+        }
+        return true;
+      }
+
+      /** How far the page has actually moved, which is not how far the finger has. */
+      const damped = (travel) => PULL_MAX * (1 - Math.exp(-travel / PULL_MAX));
+
+      function drawPull(shift) {
+        const day = $('day');
+        if (day) day.style.transform = shift ? `translateY(${shift}px)` : '';
+
+        const dot = $('pull');
+        if (!dot) return;
+        dot.style.opacity = String(Math.min(1, shift / PULL_COMMIT));
+        // Turns with the finger rather than under its own steam, so the
+        // movement is yours until the moment it is not.
+        dot.style.transform = `rotate(${Math.round(shift * 3)}deg)`;
+      }
+
+      function endPull(reset = true) {
+        pulling = null;
+        if (!reset) return;
+
+        const day = $('day');
+        if (day) {
+          if (!reduceMotion()) day.style.transition = `transform ${SETTLE_MS}ms ease-out`;
+          day.style.transform = '';
+          setTimeout(() => {
+            day.style.transition = '';
+          }, SETTLE_MS);
+        }
+        const dot = $('pull');
+        if (dot) {
+          dot.style.opacity = '0';
+          dot.style.transform = '';
+        }
+      }
+
+      function startedPull(e) {
+        if (!canPull()) return;
+        const t = e.touches && e.touches[0];
+        if (!t) return;
+        pulling = { y0: t.clientY, travel: 0, live: false };
+      }
+
+      function movedPull(e) {
+        if (!pulling) return;
+        const t = e.touches && e.touches[0];
+        if (!t) return;
+
+        const travel = t.clientY - pulling.y0;
+
+        // Upward, or the page has scrolled out from under it. Either way this
+        // is a scroll and not a pull, and it stops being ours.
+        if (travel <= 0 || (typeof window !== 'undefined' && window.scrollY > 0)) {
+          if (pulling.live) endPull();
+          else pulling = null;
+          return;
+        }
+
+        // Past the slop it becomes a pull, and only then is the scroll taken.
+        // Deciding earlier would swallow the first few pixels of every
+        // downward scroll that starts at the top of the page.
+        if (!pulling.live && travel < SLOP) return;
+        pulling.live = true;
+
+        // NON-PASSIVE, and this is what makes the whole thing work: without
+        // preventing the default the browser scrolls the page under the pull
+        // and the two fight. See the listener registration below.
+        if (e.cancelable) e.preventDefault();
+
+        pulling.travel = damped(travel);
+        drawPull(pulling.travel);
+      }
+
+      function releasedPull() {
+        if (!pulling) return;
+
+        const far = pulling.travel >= PULL_COMMIT;
+        if (!far) return endPull();
+
+        // Held where it is, spinning, until the page goes. Snapping back and
+        // then reloading reads as the pull having been ignored.
+        pulling = null;
+        const dot = $('pull');
+        if (dot) {
+          dot.classList.add('going');
+          dot.style.opacity = '1';
+        }
+        if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(10);
+        if (typeof location !== 'undefined' && location.reload) location.reload();
+      }
+
+      // Registered here rather than on an element because the gesture starts on
+      // whatever happens to be at the top of the day, and non-passive because a
+      // passive listener cannot preventDefault — the one thing this needs.
+      if (typeof document.addEventListener === 'function') {
+        document.addEventListener('touchstart', startedPull, { passive: true });
+        document.addEventListener('touchmove', movedPull, { passive: false });
+        document.addEventListener('touchend', releasedPull, { passive: true });
+        document.addEventListener('touchcancel', () => endPull(), { passive: true });
       }
 
       $('add-block').onclick = () => {
