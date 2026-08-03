@@ -268,6 +268,29 @@ sign-in and no audit — so the settings screen must not become the easiest plac
 in the system to photograph one. The screen says this in as many words, beside
 the field it applies to.
 
+**Start this bot before pasting an id, and the steps say so.** A Telegram bot
+may not message anyone who has not pressed Start on it. The id comes from
+`@userinfobot`, which is a **different bot**, so starting that one grants
+nothing here — and this step was missing. Following the instructions exactly
+saved the chat id and returned `Bad Request: chat not found`, a sentence that
+reads as *your number is wrong* and gave no reason to suspect the real cause.
+It reached the second person who ever used the app.
+
+The bot's name is **asked of Telegram** — `getMe`, once per process, memoised —
+rather than configured. A `TELEGRAM_BOT_USERNAME` in the environment is one more
+thing to set wrongly, and a name disagreeing with the token would send someone
+to press Start on the wrong bot, which is precisely the failure this prevents.
+When Telegram cannot be reached the screen says "the planner's bot", because a
+setup page that will not load because Telegram is down is worse than a vague one.
+
+**A failed send says what to do, and keeps Telegram's words too.** `fixFor`
+translates the three failures anyone can act on — not started, blocked,
+deactivated — into an instruction naming the bot, and returns null for anything
+else, because a guess about an unknown failure is worse than the exact words.
+The screen shows the instruction first and `(Telegram said: …)` after it.
+The raw `error` is unchanged in the response: it is what you want in a log, and
+what the suites assert on.
+
 **Each field carries its own instructions.** Numbered steps naming the exact
 words a person will see on the other screen, and a small drawing of what to
 look for: the bot reply with the number marked, and the Integrate calendar

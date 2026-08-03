@@ -1907,10 +1907,19 @@
               it starts.
             </p>
 
+            <!-- THE FIRST STEP IS THE ONE THAT WAS MISSING, and leaving it out
+                 broke this for everybody who followed the rest exactly. A
+                 Telegram bot may not message anyone who has not pressed Start
+                 on it. The id comes from @userinfobot, which is a DIFFERENT
+                 bot, so starting that one grants nothing here — the number
+                 saved, the test message came back "chat not found", and the
+                 instructions gave no reason to suspect why. -->
             <ol class="steps">
-              <li>Open Telegram and search for <b>@userinfobot</b>.</li>
-              <li>Press <b>Start</b>.</li>
+              <li>In Telegram, search for <b id="bot-name">the planner's bot</b>
+                and press <b>Start</b>. It cannot message you until you do.</li>
+              <li>Then search for <b>@userinfobot</b> and press <b>Start</b>.</li>
               <li>It answers straight away with your id, a number.</li>
+              <li>Paste that number below.</li>
             </ol>
 
             <!-- Drawn rather than photographed. It is a sketch of what to look
@@ -4549,6 +4558,12 @@
         say('chat-state', s.telegram.set, s.telegram.hint, 'Not linked');
         say('cal-state', s.calendar.set, s.calendar.hint, 'Not set');
 
+        // Which bot to start. Left as the words already in the markup when the
+        // server could not say — "the planner's bot" is vague and true, and a
+        // step naming the wrong bot would be the exact failure this step
+        // exists to prevent.
+        if (s.bot) $('bot-name').textContent = s.bot;
+
         renderWhen(s);
       }
 
@@ -4998,6 +5013,11 @@
 
         if (body.error && !body.chat_id) return said('chat-said', body.error, 'bad');
         if (body.delivered) said('chat-said', 'Saved. The test message arrived.', 'good');
+        // WHAT TO DO FIRST, and Telegram's own words after it. Those words are
+        // exact and worth keeping — but "chat not found" is a diagnosis, not an
+        // instruction, and the person reading it is halfway through setting up
+        // an app rather than debugging one.
+        else if (body.fix) said('chat-said', `${body.fix} (Telegram said: ${body.error})`, 'bad');
         else said('chat-said', `Saved, but nothing arrived: ${body.error}`, 'bad');
 
         $('f-chat').value = '';

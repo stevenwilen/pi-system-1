@@ -84,10 +84,84 @@ async function sendToChat(chat_id, text) {
 
   if (result.ok) return { sent: true, message_id: result.body.result.message_id };
 
-  // Telegram's own words. "chat not found" and "bot was blocked by the user"
-  // are the two a person can actually act on, and paraphrasing them would cost
-  // exactly the detail that makes them useful.
+  // Telegram's own words, kept verbatim. They are precise and they are what
+  // you want in a log — but they are not instructions, which is what the
+  // screen needs. `fixFor` below is that half. See routes/settings.js.
   return { error: result.body.description || `telegram returned ${result.status}` };
+}
+
+/**
+ * Which bot this is, as @name.
+ *
+ * ASKED RATHER THAN CONFIGURED. A `TELEGRAM_BOT_USERNAME` in the environment
+ * is one more thing to set and one more thing to set wrongly — and a name that
+ * disagrees with the token would send people to press Start on the wrong bot,
+ * which is exactly the failure this exists to explain.
+ *
+ * Once per process. It is asked when the setup screen is opened and when a send
+ * fails, neither of which should pay for it twice, and it cannot change without
+ * a new token.
+ *
+ * Null when it cannot be had. Every caller must read as "we do not know which
+ * bot" rather than breaking: a setup screen that will not load because Telegram
+ * is down is worse than one that says "the planner's bot".
+ */
+let botNamePromise = null;
+
+function botName() {
+  if (!TOKEN) return Promise.resolve(null);
+
+  if (!botNamePromise) {
+    botNamePromise = fetch(`${API_BASE}/bot${TOKEN}/getMe`, {
+      signal: AbortSignal.timeout(4000),
+    })
+      .then((r) => r.json())
+      .then((b) => (b && b.ok && b.result && b.result.username ? `@${b.result.username}` : null))
+      .catch(() => null)
+      // Not cached when it failed, so a Telegram outage does not leave this
+      // process saying "the planner's bot" for ever.
+      .then((name) => {
+        if (!name) botNamePromise = null;
+        return name;
+      });
+  }
+
+  return botNamePromise;
+}
+
+/**
+ * What to do about a failed send, in words a person can act on.
+ *
+ * THE COMMON ONE IS NOT WHAT IT LOOKS LIKE. "chat not found" reads as "your
+ * number is wrong", and it usually means something else entirely: a Telegram
+ * bot may not message anyone who has not pressed Start on it. Getting your id
+ * from @userinfobot does not do that — @userinfobot is a different bot — so
+ * every person who followed the instructions and stopped there got a saved
+ * chat id and a message that never arrived.
+ *
+ * The instructions on the screen now say to start this bot first. This is the
+ * other half: the person who has already hit it needs to be told why.
+ *
+ * Null for anything not recognised. A guess about an unknown failure is worse
+ * than Telegram's own words, which the caller shows either way.
+ */
+function fixFor(error, name) {
+  const said = String(error || '');
+  const bot = name || 'the planner\'s bot';
+
+  if (/chat not found|can'?t initiate conversation|user not found/i.test(said)) {
+    return `Open ${bot} in Telegram and press Start, then save this again. A bot cannot message you until you have started it — the id from @userinfobot is not enough on its own. If you have started it, check the number.`;
+  }
+
+  if (/blocked by the user/i.test(said)) {
+    return `${bot} is blocked in your Telegram. Unblock it and save this again.`;
+  }
+
+  if (/deactivated/i.test(said)) {
+    return 'That Telegram account is deactivated.';
+  }
+
+  return null;
 }
 
 /**
@@ -158,4 +232,4 @@ async function sendTelegram(db, user_id, text) {
 // toTelegramHtml is exported for one reason: it is the only place tags are
 // allowed back in after escaping, and that allowlist is worth a test rather
 // than a reading. Nothing in production imports it.
-module.exports = { sendTelegram, sendToChat, toTelegramHtml };
+module.exports = { sendTelegram, sendToChat, toTelegramHtml, botName, fixFor };

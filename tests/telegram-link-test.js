@@ -52,6 +52,15 @@ async function chatIdOf(which) {
 
   // A stand-in for api.telegram.org. Accepts any bot token in the path.
   tg = http.createServer((req, res) => {
+    // WHICH BOT THIS IS. Asked rather than configured, so a name on the screen
+    // cannot disagree with the token that sends. The real API answers this on
+    // a GET; the stand-in has to as well or the suite exercises only the
+    // path where Telegram could not be reached.
+    if (/\/getMe$/.test(req.url)) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ ok: true, result: { username: 'pisuite_bot' } }));
+    }
+
     let body = '';
     req.on('data', (c) => (body += c));
     req.on('end', () => {
@@ -128,6 +137,47 @@ async function chatIdOf(which) {
       // was never written with a bot that answers once and then goes quiet.
       check('the row was still written', (await chatIdOf('a')) === '999999999',
         String(await chatIdOf('a')));
+
+      // AND IT SAYS WHAT TO DO, which Telegram's words do not.
+      //
+      // THE BUG THIS EXISTS FOR reached the second person who ever used this
+      // app. A Telegram bot may not message anyone who has not pressed Start on
+      // it; the id comes from @userinfobot, which is a DIFFERENT bot, so
+      // following the instructions exactly ended in a saved chat id and
+      // "Bad Request: chat not found" — a sentence that reads as "your number
+      // is wrong" and gave no reason to suspect the real cause.
+      check('it says what to do about it', Boolean(body.fix), JSON.stringify(body));
+      check('naming the bot to press Start on', /@pisuite_bot/.test(body.fix || ''),
+        body.fix);
+      check('and saying why the id alone was not enough',
+        /press Start/i.test(body.fix || '') && /@userinfobot/.test(body.fix || ''),
+        body.fix);
+      // Kept as well as translated. They are exact, and they are what you want
+      // in a log — the screen shows both.
+      check("Telegram's own words survive alongside it",
+        /chat not found/i.test(body.error || ''), body.error);
+    }
+
+    console.log('\n2b. a failure nobody has a fix for is not guessed at');
+    {
+      // A blocked bot is a different instruction, and anything unrecognised
+      // gets none at all: a guess about an unknown failure is worse than
+      // Telegram's own words, which go out either way.
+      const { fixFor } = require(ROOT + '/telegram.js');
+
+      check('a blocked bot says to unblock it',
+        /[Uu]nblock/.test(fixFor('Forbidden: bot was blocked by the user', '@x') || ''),
+        fixFor('Forbidden: bot was blocked by the user', '@x'));
+      check('a bot that cannot start the conversation gets the Start advice',
+        /press Start/i.test(fixFor("Forbidden: bot can't initiate conversation with a user", '@x') || ''));
+      check('and something nobody has seen before gets no advice at all',
+        fixFor('Bad Request: some new thing', '@x') === null,
+        String(fixFor('Bad Request: some new thing', '@x')));
+      // The screen still has to read as a sentence when the bot cannot be
+      // named, which is what a Telegram outage looks like.
+      check('with no bot name it still reads as English',
+        /the planner's bot/.test(fixFor('Bad Request: chat not found', null) || ''),
+        fixFor('Bad Request: chat not found', null));
     }
 
     console.log('\n3. what is not a chat id');

@@ -16,7 +16,7 @@
 
 const express = require('express');
 
-const { sendToChat } = require('../telegram');
+const { sendToChat, botName, fixFor } = require('../telegram');
 const { probeFeed } = require('../tools');
 const {
   canonicalZone, toMinutes, hhmmss, todayIn, WAKE_MIN, WAKE_MAX, WAKE_STEP,
@@ -144,7 +144,15 @@ function stateOf(profile) {
 router.get('/settings', async (req, res) => {
   const { db, userId } = req.auth;
   try {
-    res.json(stateOf(await profileOf(db, userId)));
+    res.json({
+      ...stateOf(await profileOf(db, userId)),
+      // Which bot to press Start on, asked of Telegram rather than configured
+      // so it cannot name a different one from the token that sends. Null when
+      // Telegram cannot be reached, and the screen has wording for that: a
+      // setup page that will not load because Telegram is down would be a
+      // worse failure than the one it is explaining.
+      bot: await botName(),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -194,10 +202,20 @@ router.post('/telegram', async (req, res) => {
 
   if (proof.sent) return res.json({ chat_id: chatHint(chat_id), delivered: true });
 
+  const said = proof.error || 'the message did not arrive';
+
   res.json({
     chat_id: chatHint(chat_id),
     delivered: false,
-    error: proof.error || 'the message did not arrive',
+    // Telegram's own words, unchanged. Precise, and what you want in a log.
+    error: said,
+    // AND WHAT TO DO ABOUT THEM, which is not the same thing. "chat not found"
+    // reads as "your number is wrong" and usually means "you have not started
+    // this bot" — the failure every person who followed the old instructions
+    // hit, because the id comes from @userinfobot and starting @userinfobot
+    // does not start this one. Null when the failure is not one we recognise:
+    // a guess would be worse than Telegram's words, which go out either way.
+    fix: fixFor(said, await botName()),
   });
 });
 

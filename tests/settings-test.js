@@ -65,6 +65,15 @@ async function rowOf(which) {
   await H.ensureProfile(undefined, undefined, 'b');
 
   tg = http.createServer((req, res) => {
+    // WHICH BOT THIS IS. Asked rather than configured, so a name on the screen
+    // cannot disagree with the token that sends. The real API answers this on
+    // a GET; the stand-in has to as well or the suite exercises only the
+    // path where Telegram could not be reached.
+    if (/\/getMe$/.test(req.url)) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ ok: true, result: { username: 'pisuite_bot' } }));
+    }
+
     let body = '';
     req.on('data', (c) => (body += c));
     req.on('end', () => {
@@ -224,6 +233,24 @@ async function rowOf(which) {
       // WHAT REPLACED IT. Instructions a person can follow with the app in one
       // hand, naming the exact words they will see on the other screen.
       check('the Telegram steps name the bot', /@userinfobot<\/b>/.test(html));
+
+      // AND THE STEP THAT WAS MISSING FROM THEM, which broke this for
+      // everybody who followed the rest exactly. A Telegram bot may not message
+      // anyone who has not pressed Start on it, and @userinfobot — the one
+      // these steps named — is a different bot, so starting it grants nothing
+      // here. The number saved, the test message came back "chat not found",
+      // and nothing on the screen gave a reason to suspect why.
+      check('they say to start THIS bot first', /id="bot-name"/.test(html));
+      check('and say why, rather than leaving it as a step to obey',
+        /cannot message you until you do/i.test(html));
+
+      // The name is filled in from the server, which asks Telegram. A hardcoded
+      // one could name a different bot from the token that sends — the exact
+      // failure the step exists to prevent.
+      const s = await (await H.as(A)(`${BASE}/settings`)).json();
+      check('the server says which bot it is', s.bot === '@pisuite_bot', String(s.bot));
+      check('and the markup carries wording for when it cannot',
+        /the planner's bot/.test(html));
       check('the calendar steps name the panel', /Integrate calendar<\/b>/.test(html));
       check('and the row to copy', /Secret address in iCal format<\/b>/.test(html));
       check('and say the phone app cannot do it', /phone app cannot/i.test(html));
