@@ -233,6 +233,86 @@ async function cleanup() {
     check('still a tombstone after that', still && still.status === 'deleted', JSON.stringify(still));
   }
 
+  console.log('\nan untimed item counts for staleness only when it is ticked');
+  {
+    // THE PART OF "ANYTIME TODAY" THAT MATTERS, and the reason the completed
+    // column came back to life.
+    //
+    // A timed block counts by staying in the day: it had an hour, the hour
+    // passed, and taking it out is how you say otherwise. An untimed item has
+    // no hour to have passed, so the same rule would count it the moment it
+    // was added — reading would report "0 days since" for something nobody
+    // did. The opposite mistake is worse and is the one this fixes: without
+    // any rule at all, a thing done every day as an untimed item would read
+    // "11 days since" for ever, because staleness only ever saw timed blocks.
+    const daily = await entry('habit', 'Reading, untimed');
+    const DAY = '2031-04-01';
+
+    // CONFIRMED THROUGH THE ROUTE, not inserted behind it. The rule that an
+    // untimed item is written not-done lives in the confirm, and a fixture
+    // that wrote `completed: false` by hand would be asserting its own setup:
+    // the first version of this did exactly that, and setting the column true
+    // in the route changed nothing here at all.
+    const day = await post('/plan', {
+      date: DAY, wake_minutes: 480,
+      blocks: [
+        { title: 'Reading, untimed', entryId: daily, start_minutes: null, duration_minutes: null },
+      ],
+    });
+    check('the day confirms', day.status === 200, JSON.stringify(day.body));
+
+    const { data: plan } = await H.db
+      .from('plans').select('id').eq('user_id', U).eq('date', DAY).single();
+    made.plans.push(plan.id);
+
+    const item = { id: day.body.ids[0] };
+    check('and the item exists', Boolean(item.id), JSON.stringify(day.body.ids));
+
+    const seen = async () => (await lastScheduled(H.db, U)).get(daily);
+
+    check('an untimed item nobody ticked does not count', (await seen()) === undefined,
+      String(await seen()));
+
+    // AND THE CONTROL. The same row, ticked, must count — or the check above
+    // passes just as well against a staleness query that is simply broken.
+    const marked = await post(`/plan/block/${item.id}/done`, { done: true });
+    check('ticking it is accepted', marked.status === 200, JSON.stringify(marked.body));
+    check('AND IT COUNTS FROM THAT DAY', (await seen()) === DAY, String(await seen()));
+
+    // Unticked again, it stops counting. The clock keeps running, which is
+    // what an item left unmarked at the end of a day means.
+    await post(`/plan/block/${item.id}/done`, { done: false });
+    check('unticking stops it counting again', (await seen()) === undefined,
+      String(await seen()));
+
+    // A TIMED BLOCK IS NOT TICKED OFF. Its completion is not a thing this
+    // system tracks — it counts by staying in the day — and a route that could
+    // set it false would be a second, quieter answer to the same question,
+    // with staleness reading whichever of them wrote last.
+    const { data: timed } = await H.db
+      .from('blocks')
+      .insert({
+        user_id: U, plan_id: plan.id, entry_id: daily, title: 'Reading, timed',
+        start_time: '09:00:00', duration_minutes: 30, sort_order: 1,
+      })
+      .select('id')
+      .single();
+
+    const refused = await post(`/plan/block/${timed.id}/done`, { done: false });
+    check('a block with an hour cannot be ticked off', refused.status === 400,
+      JSON.stringify(refused.body));
+    check('and it says what to do instead', /take it out of the day/i.test(refused.body.error || ''),
+      refused.body.error);
+
+    // It counted all along, by existing.
+    check('the timed one counted the whole time', (await seen()) === DAY, String(await seen()));
+
+    const junk = await post(`/plan/block/${item.id}/done`, { done: 'yes' });
+    check('done must be true or false', junk.status === 400, JSON.stringify(junk.body));
+
+    await cleanup();
+  }
+
   console.log('\nthe page offers Done where it means something');
   {
     const fs = require('fs');

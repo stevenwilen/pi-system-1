@@ -981,11 +981,97 @@ endpoint and no `placed:` rows.
   midnight. An empty day reads `0:00`, not a dash: a day with nothing in it has
   a perfectly good answer and the answer is nothing. The dash belongs to the day
   switch, which shows one while it fetches — a different statement, and the old
-  hour is no longer true by then.
+  hour is no longer true by then. It counts **timed blocks only**, so a day of
+  nothing but untimed items ends at `0:00` — the hours really are empty.
 - **Confirm** saves the plan. Any edit afterwards un-saves it. It stays visibly
   pressed from the tap until the save answers — the round trip takes about a
   second, and a seal that says nothing for that long reads as a tap that
   missed.
+
+#### Anytime today
+
+Below the timed blocks and above **Day ends**: things committed to the day and
+not to an hour. Ring the dentist, put the bins out. Real commitments that belong
+to a day and would be a lie at 10:30 — and putting them at 10:30 is what a
+schedule made only of timed blocks forces you to do.
+
+**They are blocks with no time, in the same table.** `start_time` and
+`duration_minutes` are null **together**; a row with one and not the other is
+refused, because it is not a state anything has a meaning for. A second table
+would have needed its own ordering, its own reconciliation on confirm, its own
+tie to an entry and its own answer to the staleness question — four copies of
+what `blocks` already does, kept in step by hand.
+
+**They take no time.** `reflow` gives them no start and, the half that matters,
+does not advance its cursor past them, so nothing below shifts and the end time
+is the timed blocks alone.
+
+Adding one: **long-press** a row in Things, or **Anytime** in its `···` menu. The
+menu carries it in words because a gesture with nothing on screen to suggest it
+is a feature only the person who built it knows about — the mistake the `···`
+was added to correct in the first place. A plain tap still schedules a timed
+block, as before.
+
+Each row is a title, the note it arrived with, and a tick. The note is shown
+rather than hidden behind a gesture: a row with no hour has room for it.
+
+- **Ticked off leaves it visible, struck through.** What you got through is
+  worth seeing at the end of a day.
+- **The tick is written at once**, not at the next Confirm. Ticking happens all
+  through the day, hours after the last Confirm, and a person who ticked three
+  things and closed the app would lose all three — along with the staleness
+  those ticks were the only record of. A row built in this session has no id to
+  write against, so that one rides along with the next Confirm.
+- **Swipe left removes it, with the undo**, not the Things list's confirmation.
+  This is one day: taking it off is how you say it is not happening today, and
+  there is no history to lose.
+- **Tapping it promotes it** to a timed block at the end of the day, keeping its
+  id, its note and its thing. One row changing shape, not a new one appearing.
+
+The heading follows the day on screen — *Anytime tomorrow* while tomorrow is
+showing — and the whole section is hidden when empty, because a heading over an
+empty list would be blank on most days.
+
+##### Staleness is the part that matters
+
+A timed block counts for staleness **by staying in the day**: it had an hour, the
+hour passed, and taking it out is how you say otherwise. An untimed item has no
+hour to have passed, so the same rule would count it the moment it was added.
+
+So `blocks.completed` comes back to life, and this is what it was kept for. It
+has been inert for a long time — defaults true, nothing set it, and
+`staleness.js` filtered on it anyway, in as many words *in case anything ever
+set it again*. This is that:
+
+| | |
+|---|---|
+| timed block | `completed = true`, always. It counts because it is in the day |
+| untimed, unticked | `completed = false`. It does not count, and the clock keeps running |
+| untimed, ticked | `completed = true`. It counts from that day, exactly like a timed block |
+
+Without this, something done every day as an untimed item would read **"11 days
+since"** for ever, because staleness only ever saw blocks with hours. `POST
+/plan/block/:id/done` **refuses a timed block by name**: a route that could set
+`completed` false on one would be a second, quieter answer to a question this
+system settled long ago, and staleness would read whichever wrote last.
+
+##### Telegram sends nothing for them
+
+**Asked and answered: nothing at all is simpler, and it is also the only one
+without a hole.** A closing line on the morning's first block message would need
+the delivery path to identify that message, and it would go out on no day that
+has no timed blocks — which is exactly the day where untimed items are the whole
+plan. The app is where they live.
+
+They are **not in the delivery queue at all**: `dueBlocks` filters
+`start_time is null` out. The loop guards again by hand, and that duplication is
+deliberate — `toMinutes(null)` is NaN, every comparison against NaN is false, so
+an untimed item would fall past the too-early test, past the too-late test, and
+be **sent**, as `NaN:NaN to NaN:NaN`. A guard that fails open into a delivered
+message is the kind worth writing twice.
+
+They are also left out of **Where your time went** (§2.8): that section answers
+where the time went, and an item with no hour took no measured time.
 
 #### A block is worked by gesture
 
@@ -1489,6 +1575,7 @@ Run once each, by hand, in the Supabase SQL editor. All are safe to run twice.
 | `migration-size.sql` | `entries.size`, and the check constraint on its five buckets |
 | `migration-note.sql` | `blocks.note` |
 | `migration-entry-note.sql` | `entries.note` — a different note from the one above, and §3.1 says why |
+| `migration-untimed.sql` | drops NOT NULL from `blocks.start_time` and `blocks.duration_minutes`, so a block can be committed to a day and not to an hour |
 | `migration-plans-in.sql` | `profile.plans_in`, and the check constraint on its two values |
 
 **No column or table has ever been dropped.** The strip retired

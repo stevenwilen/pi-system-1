@@ -672,8 +672,10 @@ console.log('\n7a-iii. an empty day keeps a block\'s worth of room');
 
   check('it is a block card, so it cannot drift from one',
     /ghost\.className = 'block ghost'/.test(code));
-  check('shown only when the day is empty',
-    /if \(!blocks\.length\) box\.append\(emptySpace\(\)\)/.test(code));
+  // EMPTY OF BLOCKS WITH AN HOUR IN THEM. A day holding nothing but untimed
+  // items has hours as empty as they look, and the spacer is about the hours.
+  check('shown only when the day has no timed block in it',
+    /if \(!timedBlocks\(\)\.length\) box\.append\(emptySpace\(\)\)/.test(code));
   check('and hidden from a screen reader',
     /setAttribute\('aria-hidden', 'true'\)/.test(code));
 }
@@ -1209,7 +1211,8 @@ console.log('\n18. every time on the page is twelve hour');
 
   // Storage is untouched. The page still sends minutes and the row is still a
   // 24 hour `time`; only the reading of it changed.
-  check('the page still sends minutes', /start_minutes: b\.start/.test(code));
+  check('the page still sends minutes',
+    /start_minutes: untimed\(b\) \? null : b\.start/.test(code));
   check('and still reads them', /toMinutes/.test(code));
 
   console.log('   the hours a day may start at, in two places');

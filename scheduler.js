@@ -205,6 +205,12 @@ async function dueBlocks(user_id, date) {
     .select('id, title, start_time, duration_minutes, note, created_at')
     .eq('plan_id', plan.id)
     .is('message_sent_at', null)
+    // AN UNTIMED ITEM IS NOT IN THIS QUEUE AT ALL. It has no hour to fire at,
+    // so there is nothing for the loop below to be early or late for — and it
+    // must not be marked sent or retired either, because `message_sent_at` is
+    // what this queue is made of and an item that never leaves it is simply an
+    // item that is never asked about again.
+    .not('start_time', 'is', null)
     .order('start_time');
 
   if (error) throw new Error(`could not read blocks: ${error.message}`);
@@ -285,6 +291,14 @@ async function deliverDue(profile, now) {
   const blocks = await dueBlocks(profile.user_id, now.date);
 
   for (const block of blocks) {
+    // Belt and braces with the filter in dueBlocks, and worth the duplication
+    // for the shape of the failure it prevents. `toMinutes(null)` is NaN, and
+    // every comparison below is false against NaN — so an untimed item would
+    // fall past the "too early" test, past the "too late" test, and be SENT,
+    // as a message reading "NaN:NaN to NaN:NaN". A guard that fails open into
+    // a delivered message is the one kind worth writing twice.
+    if (block.start_time === null || block.start_time === undefined) continue;
+
     const start = toMinutes(block.start_time);
     const late = nowMinutes - start;
 

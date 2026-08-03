@@ -1207,6 +1207,84 @@
       .said.thin { color: var(--faint); }
       .said.bad { color: var(--warn); }
 
+      /* --- anytime today --------------------------------------------------- */
+      /* Committed to the day, not to an hour. Plain rows and not slips: a slip
+         is a thing that sits at a time, and the whole point of these is that
+         they do not. They are the Things list's shape, in the day's section. */
+      .anytime {
+        margin: 22px 0 4px;
+      }
+      .anytime .label {
+        margin-bottom: 6px;
+      }
+
+      /* The slot a row slides inside, the same arrangement the Things list
+         uses and for the same reason: the backing needs something that holds
+         still, and a divider that travelled with the row would make the list
+         look like it was coming apart. */
+      .atime {
+        position: relative;
+      }
+      .atime + .atime {
+        border-top: 1px solid var(--line);
+      }
+
+      .arow {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        padding: 11px 0;
+        background: var(--bg);
+        position: relative;
+        touch-action: pan-y;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      /* The tick. A box rather than a word, because it is pressed far more
+         often than it is read, and it is the only control on the row. */
+      .atick {
+        flex: none;
+        width: 17px;
+        height: 17px;
+        padding: 0;
+        border: 1px solid var(--faint);
+        background: none;
+        font-family: inherit;
+        font-size: 12px;
+        line-height: 1;
+        color: var(--text);
+        cursor: pointer;
+        align-self: center;
+      }
+      .arow.did .atick {
+        border-color: var(--text);
+      }
+
+      .atext {
+        flex: 1;
+        min-width: 0;
+      }
+      .atitle {
+        font-size: 15px;
+        line-height: 1.35;
+      }
+      /* STRUCK THROUGH AND STILL THERE. What you got through is worth seeing at
+         the end of a day, so a tick does not remove the row — it marks it. */
+      .arow.did .atitle {
+        text-decoration: line-through;
+        color: var(--faint);
+      }
+      .anote {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 5px;
+        line-height: 1.45;
+      }
+      .arow.did .anote {
+        color: var(--faint);
+      }
+
       /* WHERE THE TIME WENT. Bars rather than a table: the question is which
          of these is bigger, and a bar answers that without being read. */
       .stats {
@@ -1840,6 +1918,18 @@
         <div id="builder"></div>
 
         <button type="button" class="addblock" id="add-block">+ Block</button>
+
+        <!-- ANYTIME TODAY. Things committed to the day and not to an hour —
+             ring the dentist, put the bins out. Below the day because they are
+             not in it, and above "Day ends" because they belong to it: the
+             end time counts the blocks above and none of these.
+
+             Hidden when empty. A heading with nothing under it would be a
+             section of the day screen that is blank on almost every day. -->
+        <div class="anytime hidden" id="anytime">
+          <div class="label" id="anytime-label">Anytime today</div>
+          <div id="anytime-list"></div>
+        </div>
 
         <div class="ends" id="ends">
           <span>Day ends</span>
@@ -2858,6 +2948,18 @@
             x0: e.clientX,
             y0: e.clientY,
             dx: 0,
+            // HELD, NOT TAPPED, puts it in the day with no hour. The same 400ms
+            // the blocks use to pick one up, because it is the same shape of
+            // press: hold a thing to do the other thing with it. The ··· menu
+            // carries the same action in words, so this is a shortcut rather
+            // than the only way in.
+            hold: setTimeout(() => {
+              if (!gesture || gesture.mode !== 'pending') return;
+              gesture.mode = 'held';
+              swiped = true;
+              if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(10);
+              addAnytime({ title: item.title, entryId: item.id, note: item.note || null });
+            }, HOLD_MS),
           };
         };
 
@@ -2869,6 +2971,9 @@
 
           if (gesture.mode === 'pending') {
             if (Math.abs(dx) < SLOP && Math.abs(dy) < SLOP) return;
+
+            // Moved, so this is not a hold.
+            clearTimeout(gesture.hold);
 
             if (Math.abs(dy) >= Math.abs(dx)) {
               // Vertical: the page is scrolling. Step out of the way rather
@@ -2899,6 +3004,7 @@
 
         row.onpointerup = (e) => {
           if (!gesture || gesture.id !== e.pointerId) return;
+          clearTimeout(gesture.hold);
 
           const { mode, dx } = gesture;
           gesture = null;
@@ -2920,6 +3026,7 @@
 
         row.onpointercancel = () => {
           if (!gesture) return;
+          clearTimeout(gesture.hold);
           gesture = null;
           row.style.transform = '';
           backing.style.opacity = '0';
@@ -3026,6 +3133,20 @@
           acts.classList.add('hidden');
           openSheet(item);
         };
+        // Into the day without an hour. The long press does this too, and this
+        // is the half of it that can be seen: a gesture with nothing on screen
+        // to suggest it is a feature only the person who built it knows about,
+        // which is the mistake the ··· itself was added to correct.
+        const anytime = document.createElement('button');
+        anytime.type = 'button';
+        anytime.textContent = 'Anytime';
+        anytime.onclick = (e) => {
+          e.stopPropagation();
+          acts.classList.add('hidden');
+          addAnytime({ title: item.title, entryId: item.id, note: item.note || null });
+        };
+        acts.append(anytime);
+
         acts.append(edit);
         row.append(acts);
 
@@ -3207,8 +3328,13 @@
           id: b.id || null,
           title: b.title,
           entryId: b.entryId,
+          // Null on an untimed item, which is what makes untimed() true of
+          // it for the rest of its life on this screen.
           duration: b.duration_minutes,
           note: b.note || null,
+          // Only meaningful on an untimed item. A timed block comes back true
+          // and nothing on the screen reads it.
+          done: Boolean(b.done),
           // `sent` is deliberately not kept. The screen used to read it to
           // decide what to offer on a delivered block, and now decides that
           // from the clock instead — a block that has begun keeps its hour and
@@ -3244,6 +3370,20 @@
       const hasBegun = (b, now) =>
         b.storedStart !== undefined && b.storedStart !== null && b.storedStart <= now;
 
+      /**
+       * Committed to the day, not to an hour.
+       *
+       * ONE DEFINITION, asked everywhere. The length is what decides it rather
+       * than the start, because the start is computed — reflow assigns one to
+       * every timed block on every render — while the length is what the
+       * person set or did not set. Reading the start would make this true of a
+       * block for the first frame of its life and false afterwards.
+       */
+      const untimed = (b) => b.duration === null || b.duration === undefined;
+
+      /** The day, in the order it happens. Untimed items are not in it. */
+      const timedBlocks = () => blocks.filter((b) => !untimed(b));
+
       function reflow() {
         const live = onToday();
         const now = live ? nowMinutes() : 0;
@@ -3252,6 +3392,13 @@
         let cursor = wake;
 
         for (const b of blocks) {
+          // AN UNTIMED ITEM TAKES NO TIME. It gets no start, and — the half
+          // that matters — it does not move the cursor, so nothing below it
+          // shifts and the day ends where the timed blocks say it ends.
+          if (untimed(b)) {
+            b.start = null;
+            continue;
+          }
           b.start = live && hasBegun(b, now) ? b.storedStart : live ? Math.max(cursor, floor) : cursor;
           cursor = b.start + b.duration;
         }
@@ -3321,6 +3468,10 @@
         let seenPast = false;
 
         for (const [i, b] of blocks.entries()) {
+          // Drawn below, in its own section. It has no hour, so it has no
+          // place in a list whose whole order is the hour.
+          if (untimed(b)) continue;
+
           // Two different lines, and the difference is the whole of this.
           //
           //   begun  its start time has passed. It is the day that happened,
@@ -3373,8 +3524,12 @@
           box.append(blockCard(b, i, { begun, past }));
         }
 
-        // An empty day still takes up a day's worth of room.
-        if (!blocks.length) box.append(emptySpace());
+        // An empty day still takes up a day's worth of room. A day of nothing
+        // but untimed items is one: they are listed below, and the hours are
+        // as empty as they look.
+        if (!timedBlocks().length) box.append(emptySpace());
+
+        renderAnytime();
 
         // 0:00 on an empty day, not a dash. A dash reads as "we could not work
         // this out"; a day with nothing in it has a perfectly good answer and
@@ -3383,12 +3538,18 @@
         // The dash survives in showWaiting, which is a different statement: the
         // day is being fetched and the old hour is no longer true, so there is
         // genuinely nothing to say yet.
-        $('end-time').textContent = !blocks.length
+        //
+        // THE TIMED BLOCKS AND NOTHING ELSE. An untimed item is committed to
+        // the day and takes none of it, so a day holding four of them and no
+        // blocks ends at 0:00 — which is the true answer to "when does my
+        // scheduled time run out" and the only one the arithmetic supports.
+        const timed = timedBlocks();
+        $('end-time').textContent = !timed.length
           ? '0:00'
           : end >= 1440
             ? `${clock(end)} next day`
             : clock(end);
-        $('ends').classList.toggle('late', blocks.length > 0 && end >= 1440);
+        $('ends').classList.toggle('late', timed.length > 0 && end >= 1440);
 
         // The day on screen no longer matches the day stored, so it is not
         // confirmed however it got that way.
@@ -3418,6 +3579,286 @@
        * The non-breaking spaces are load-bearing: empty divs have no line box,
        * so the card would collapse to its padding.
        */
+      // --- anytime today -------------------------------------------------------
+      //
+      // Things committed to the day and not to an hour. They live in `blocks`
+      // with the rest of the day and carry a null length, which is what every
+      // question about them is asked with — see `untimed`. A second array would
+      // have meant a second confirm, a second reconciliation, a second answer
+      // to which things are already in the day, and a second place for all of
+      // it to drift.
+
+      function renderAnytime() {
+        const box = $('anytime-list');
+        box.replaceChildren();
+
+        // The index into `blocks` travels with the row. Everything that acts on
+        // one — the tick, the swipe, the promotion — names a block by its place
+        // in that array, and filtering would renumber them.
+        const items = blocks
+          .map((b, at) => ({ b, at }))
+          .filter(({ b }) => untimed(b));
+
+        $('anytime').classList.toggle('hidden', !items.length);
+        if (!items.length) return;
+
+        // The heading follows the day on screen. "Anytime today" over
+        // tomorrow's list would be a heading that is simply untrue every
+        // evening, which is when this screen is most used.
+        $('anytime-label').textContent = onToday() ? 'Anytime today' : 'Anytime tomorrow';
+
+        for (const { b, at } of items) box.append(anytimeRow(b, at));
+      }
+
+      /**
+       * One thing with no hour.
+       *
+       * Plain rows rather than slips, and the difference is the point: a slip
+       * is an object that sits at a time and can be carried to another one.
+       * These sit nowhere, so they take the shape of the Things list instead.
+       */
+      function anytimeRow(b, i) {
+        const slot = document.createElement('div');
+        slot.className = 'atime';
+        slot.dataset.at = String(i);
+
+        const backing = document.createElement('div');
+        backing.className = 'backing';
+
+        const row = document.createElement('div');
+        row.className = b.done ? 'arow did' : 'arow';
+
+        const tick = document.createElement('button');
+        tick.type = 'button';
+        tick.className = 'atick';
+        tick.textContent = b.done ? '✓' : '';
+        tick.setAttribute('aria-pressed', String(Boolean(b.done)));
+        tick.setAttribute('aria-label',
+          b.done ? `${b.title}, done. Press to undo.` : `Mark ${b.title} done`);
+        // On click rather than in a pointer handler, so a keyboard reaches it:
+        // this is a real button and Enter works. The stop is what keeps the
+        // press off the row underneath, which would promote it instead.
+        tick.onclick = (e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+          toggleDone(i);
+        };
+
+        const text = document.createElement('div');
+        text.className = 'atext';
+
+        const title = document.createElement('div');
+        title.className = 'atitle';
+        title.textContent = b.title;
+        text.append(title);
+
+        // The note it came with, shown rather than hidden behind a gesture. A
+        // row with no hour has room for it, and it is usually the reason the
+        // thing is on the list at all.
+        if (b.note) {
+          const note = document.createElement('div');
+          note.className = 'anote';
+          note.textContent = b.note;
+          text.append(note);
+        }
+
+        row.append(tick, text);
+
+        // Tapping promotes it into the day. Set before the gesture is attached,
+        // which wraps this behind its own guard so a swipe never lands as a tap.
+        row.onclick = () => promote(i);
+
+        slot.append(backing, row);
+        attachAnytime({ row, backing, index: i });
+        return slot;
+      }
+
+      /**
+       * Ticked off, and written at once.
+       *
+       * EVERY OTHER CHANGE TO A DAY WAITS FOR CONFIRM. That is right for
+       * building a plan and wrong for this: ticking things off happens all
+       * through the day, hours after the last Confirm, and a person who ticked
+       * three things and closed the app would lose all three — along with the
+       * staleness those ticks were the only record of.
+       *
+       * A row built in this session has no id to write against, so its tick
+       * rides along with the next Confirm instead. That is the one case where
+       * the button reappears.
+       */
+      async function toggleDone(i) {
+        const b = blocks[i];
+        if (!b || !untimed(b)) return;
+
+        const next = !b.done;
+        b.done = next;
+        renderBuilder();
+
+        if (!b.id) {
+          // Nothing to write to yet. The confirm carries it.
+          saved = false;
+          renderConfirm();
+          return;
+        }
+
+        let body;
+        try {
+          body = await (await api(`/plan/block/${b.id}/done`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ done: next }),
+          })).json();
+        } catch {
+          body = { error: 'offline' };
+        }
+
+        // PUT BACK IF IT DID NOT LAND. A tick is the only record that this
+        // happened, and a screen showing one the database does not have is the
+        // failure this whole feature exists to avoid — reading would go on
+        // saying "11 days since" while the row says it was done.
+        if (body.error) {
+          b.done = !next;
+          renderBuilder();
+        }
+      }
+
+      /**
+       * Give it an hour after all.
+       *
+       * It keeps its id, its note and its thing, so this is one row changing
+       * shape rather than a new one appearing — a re-confirm updates it in
+       * place and whatever was written about it stays written.
+       *
+       * To the END of the day, like anything else newly placed. It had no
+       * position, so there is no position to restore it to, and dropping it
+       * wherever it happened to sit in the array would put it in the middle of
+       * an afternoon for no reason a person could see.
+       */
+      function promote(i) {
+        const b = blocks[i];
+        if (!b || !untimed(b)) return;
+
+        blocks.splice(i, 1);
+        b.duration = STEP;
+        b.start = undefined;
+        blocks.push(b);
+
+        saved = false;
+        renderBuilder();
+      }
+
+      /**
+       * Swipe left to remove, with the undo the blocks have.
+       *
+       * NOT THE THINGS LIST'S CONFIRMATION, and the difference is the same one
+       * that separates a block from a thing: this is one day. Taking it off is
+       * how you say it is not happening today, and the next confirm writes
+       * that — there is no history to lose and nothing a tombstone would make
+       * unrecoverable.
+       *
+       * No right swipe. A note arrives with the thing and is shown on the row;
+       * there is nothing here for a second gesture to open.
+       */
+      function attachAnytime({ row, backing, index }) {
+        let swiped = false;
+
+        const tap = row.onclick;
+        row.onclick = (e) => {
+          if (swiped) {
+            swiped = false;
+            return;
+          }
+          if (tap) tap(e);
+        };
+
+        row.onpointerdown = (e) => {
+          if (gesture) return;
+          if (e.button !== undefined && e.button !== 0) return;
+
+          swiped = false;
+          gesture = { id: e.pointerId, mode: 'pending', x0: e.clientX, y0: e.clientY, dx: 0 };
+        };
+
+        row.onpointermove = (e) => {
+          if (!gesture || gesture.id !== e.pointerId) return;
+
+          // Left only. Clamped rather than refused on release: letting the row
+          // follow a finger the whole way right and then doing nothing would be
+          // offering something and taking it back.
+          const raw = e.clientX - gesture.x0;
+          const dx = Math.min(0, raw);
+          const dy = e.clientY - gesture.y0;
+
+          if (gesture.mode === 'pending') {
+            // Decided on the RAW movement. A finger dragging right has moved,
+            // and reading that as stillness would leave the gesture pending and
+            // let the release land as a tap that promotes the row.
+            if (Math.abs(raw) < SLOP && Math.abs(dy) < SLOP) return;
+
+            if (Math.abs(dy) >= Math.abs(raw)) {
+              gesture.mode = 'scroll';
+              return;
+            }
+
+            gesture.mode = 'swipe';
+            swiped = true;
+            if (row.setPointerCapture) row.setPointerCapture(e.pointerId);
+          }
+
+          if (gesture.mode !== 'swipe') return;
+
+          gesture.dx = dx;
+
+          if (!dx) {
+            row.style.transform = '';
+            backing.style.opacity = '0';
+            return;
+          }
+
+          row.style.transform = `translateX(${dx}px)`;
+          backing.className = 'backing left';
+          backing.textContent = 'Remove';
+          backing.style.opacity = String(Math.min(1, Math.abs(dx) / SWIPE_COMMIT));
+        };
+
+        row.onpointerup = (e) => {
+          if (!gesture || gesture.id !== e.pointerId) return;
+
+          const { mode, dx } = gesture;
+          gesture = null;
+
+          if (mode !== 'swipe') return;
+
+          if (dx <= -SWIPE_COMMIT) return removeBlock(index);
+
+          if (!reduceMotion()) row.style.transition = `transform ${SETTLE_MS}ms ease-out`;
+          row.style.transform = '';
+          backing.style.opacity = '0';
+          setTimeout(() => {
+            row.style.transition = '';
+          }, SETTLE_MS);
+        };
+
+        row.onpointercancel = () => {
+          if (!gesture) return;
+          gesture = null;
+          row.style.transform = '';
+          backing.style.opacity = '0';
+        };
+      }
+
+      /**
+       * Put a thing in the day without an hour.
+       *
+       * Its note comes with it, and is spent the same way a timed block's is:
+       * the confirm moves it off the thing and onto this row. Nothing about
+       * that is special-cased — it is the same field on the same table.
+       */
+      function addAnytime({ title, entryId = null, note = null }) {
+        blocks.push({ title, entryId, duration: null, note, done: false });
+        saved = false;
+        renderBuilder();
+      }
+
       function emptySpace() {
         const ghost = document.createElement('div');
         ghost.className = 'block ghost';
@@ -3601,9 +4042,28 @@
         closeOver(slot, () => dropBlock(gone));
       }
 
-      /** The i-th block's slot. The divider is a child of the builder too. */
+      /**
+       * The element standing for the i-th block, wherever it is drawn.
+       *
+       * BY WHAT IT SAYS IT IS, not by where it sits. This counted slots inside
+       * the builder and took the i-th, which is the same thing only while
+       * every block is timed and every one of them is drawn: an untimed item
+       * sits in a different container, so from the first one onwards the count
+       * and the index part company and a removal animates the wrong row.
+       *
+       * The divider and the empty-day spacer were the earlier version of this
+       * problem, and the filter on `.slot` was the earlier fix. Reading the
+       * index off the element is the fix that does not need a new clause every
+       * time the day grows something else to draw.
+       */
       function slotAt(i) {
-        return [...$('builder').children].filter((c) => c.classList.contains('slot'))[i] || null;
+        const at = String(i);
+        for (const box of [$('builder'), $('anytime-list')]) {
+          for (const el of box.children) {
+            if (el.dataset && el.dataset.at === at) return el;
+          }
+        }
+        return null;
       }
 
       /**
@@ -3803,6 +4263,8 @@
       function blockCard(b, i, { begun = false, past = false } = {}) {
         const slot = document.createElement('div');
         slot.className = 'slot';
+        // Which block this draws, so slotAt can find it without counting.
+        slot.dataset.at = String(i);
 
         const backing = document.createElement('div');
         backing.className = 'backing';
@@ -4289,9 +4751,14 @@
                   id: b.id || null,
                   title: b.title,
                   entryId: b.entryId,
-                  start_minutes: b.start,
-                  duration_minutes: b.duration,
+                  // Null together on an untimed item, which is the shape the
+                  // route refuses to see half of.
+                  start_minutes: untimed(b) ? null : b.start,
+                  duration_minutes: untimed(b) ? null : b.duration,
                   note: b.note || null,
+                  // Only read for an untimed one. A timed block is completed
+                  // because it stayed in the day, and the route says so.
+                  done: Boolean(b.done),
                 })),
               }),
             })

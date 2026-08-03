@@ -73,6 +73,13 @@ async function makePlan(date, status, blocks) {
   if (error) throw new Error(error.message);
   made.push(plan.id);
 
+  // EVERY ROW CARRIES EVERY KEY, which is what these defaults are for and why
+  // `completed` had to join them. A batch insert aligns its columns across the
+  // rows it is given, so a key present on one row and absent from another is
+  // sent as an explicit NULL for the row that lacked it — not as "leave it to
+  // the column default". One case here passes `completed: false` for an
+  // untimed item, and that alone was enough to make every timed block beside
+  // it violate the NOT NULL on the same column.
   const rows = blocks.map((b, i) => ({
     user_id: U,
     plan_id: plan.id,
@@ -81,6 +88,7 @@ async function makePlan(date, status, blocks) {
     pinned: false,
     note: null,
     message_sent_at: null,
+    completed: true,
     ...b,
   }));
   const { error: blockErr } = await supabase.from('blocks').insert(rows);
@@ -202,6 +210,51 @@ const statusOf = async (planId) => {
     check('the header goes out on its own', sent.length === 1 && !sent[0].text.includes('\n\n'),
       JSON.stringify(sent[0] && sent[0].text));
     check('and it is marked sent, not retried', (await statusOf(buffer))[0].message_sent_at !== null);
+  }
+
+  console.log('\nan untimed item is not in this queue at all');
+  {
+    // A THING COMMITTED TO THE DAY AND NOT TO AN HOUR. It has no start time,
+    // so there is nothing for the loop to be early or late for.
+    //
+    // THE FAILURE THIS GUARDS AGAINST IS NOT "IT DOES NOTHING". toMinutes(null)
+    // is NaN, and every comparison against NaN is false — so an untimed item
+    // would fall past the too-early test, past the too-late test, and be SENT,
+    // as a message reading "NaN:NaN to NaN:NaN". A guard that fails open into a
+    // delivered message is worth checking by name.
+    const mixed = await makePlan('2031-06-12', 'confirmed', [
+      { title: 'Ring the dentist', start_time: null, duration_minutes: null, completed: false, created_at: old },
+      { title: 'Deep work', start_time: at(-1), duration_minutes: 30, note: 'the pricing page', created_at: old },
+    ]);
+
+    sent.length = 0;
+    await scheduler.deliverDue(profile, { ...now, date: '2031-06-12' });
+
+    check('the timed block goes out', sent.length === 1, String(sent.length));
+    check('and it is the one with an hour',
+      sent[0] && /Deep work/.test(sent[0].text), JSON.stringify(sent[0] && sent[0].text));
+    check('nothing anywhere says NaN',
+      !sent.some((m) => /NaN/.test(m.text)), JSON.stringify(sent.map((m) => m.text)));
+
+    const rows = await statusOf(mixed);
+    const untimedRow = rows.find((r) => r.title === 'Ring the dentist');
+    const timedRow = rows.find((r) => r.title === 'Deep work');
+
+    check('the timed one is marked sent', timedRow.message_sent_at !== null);
+    // NOT EXPIRED EITHER, which is the half a "nothing was sent" check would
+    // miss. Expiring writes message_sent_at as well — same column, opposite
+    // meaning — so an untimed item that got retired would look identical to
+    // one correctly skipped if only the message count were checked.
+    check('AND THE UNTIMED ONE IS NEITHER SENT NOR RETIRED',
+      untimedRow.message_sent_at === null, String(untimedRow.message_sent_at));
+
+    // A tick at the end of the day, when a timed block that far back would
+    // long since have been retired. It must still be left alone.
+    sent.length = 0;
+    await scheduler.deliverDue(profile, { ...now, date: '2031-06-12', hour: 23, minute: 30 });
+    check('and a later tick does not retire it either',
+      (await statusOf(mixed)).find((r) => r.title === 'Ring the dentist').message_sent_at === null);
+    check('with nothing sent for it', sent.length === 0, String(sent.length));
   }
 
   console.log('\na pending day is never delivered');

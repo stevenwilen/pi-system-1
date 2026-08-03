@@ -552,6 +552,97 @@ const DATE = '2031-03-09';
   check('no plans left behind', plansLeft === 0, `${plansLeft}`);
   check('no blocks left behind', blocksLeft === 0, `${blocksLeft}`);
   check('probe entry removed', probeLeft === 0, `${probeLeft}`);
+  console.log('\nblocks with no hour: committed to the day, not to a time');
+  {
+    const DAY = '2031-07-04';
+
+    const saved = await call('/plan', {
+      date: DAY, wake_minutes: 480,
+      blocks: [
+        { title: 'Deep work', start_minutes: 540, duration_minutes: 60 },
+        { title: 'Ring the dentist', start_minutes: null, duration_minutes: null, note: 'before five' },
+      ],
+    });
+    check('a day holding both is accepted', saved.status === 200, JSON.stringify(saved.data));
+
+    const back = (await call(`/plan/${DAY}`)).data;
+    const timed = back.blocks.find((b) => b.title === 'Deep work');
+    const loose = back.blocks.find((b) => b.title === 'Ring the dentist');
+
+    check('both come back', Boolean(timed) && Boolean(loose),
+      JSON.stringify(back.blocks.map((b) => b.title)));
+
+    // NULL RATHER THAN NaN. toMinutes(null) is NaN, which compares false
+    // against everything — a screen holding one would lay the block out at no
+    // position, draw no time, and report no error at all.
+    check('the untimed one has no start', loose.start_minutes === null,
+      JSON.stringify(loose.start_minutes));
+    check('and no length', loose.duration_minutes === null,
+      JSON.stringify(loose.duration_minutes));
+    check('nothing about it is NaN',
+      !Number.isNaN(loose.start_minutes) && !Number.isNaN(loose.duration_minutes),
+      JSON.stringify(loose));
+    check('it kept its note', loose.note === 'before five', String(loose.note));
+    check('and it is not done', loose.done === false, String(loose.done));
+
+    check('the timed one is unchanged', timed.start_minutes === 540 && timed.duration_minutes === 60,
+      JSON.stringify(timed));
+    check('and reads as done, because it stayed in the day', timed.done === true,
+      String(timed.done));
+
+    // HALF OF ONE IS NOT A STATE. A start with no length, or a length with no
+    // start, is something the day could not lay out and the end time could not
+    // decide whether to count.
+    const halfA = await call('/plan', {
+      date: DAY, wake_minutes: 480,
+      blocks: [{ title: 'Neither one thing', start_minutes: 540, duration_minutes: null }],
+    });
+    check('a start with no length is refused', halfA.status === 400, JSON.stringify(halfA.data));
+    check('and says which rule it broke', /start and a length, or neither/.test(halfA.data.error || ''),
+      halfA.data.error);
+
+    const halfB = await call('/plan', {
+      date: DAY, wake_minutes: 480,
+      blocks: [{ title: 'Nor the other', start_minutes: null, duration_minutes: 30 }],
+    });
+    check('a length with no start is refused too', halfB.status === 400, JSON.stringify(halfB.data));
+
+    // The ceiling on a note applies to a row with no hour as much as to one
+    // with. It was checked below the untimed shortcut once, which left the
+    // rule true of half the table.
+    const wordy = await call('/plan', {
+      date: DAY, wake_minutes: 480,
+      blocks: [{ title: 'Wordy', start_minutes: null, duration_minutes: null, note: 'x'.repeat(501) }],
+    });
+    check('and a note on one still has a ceiling', wordy.status === 400,
+      JSON.stringify(wordy.data));
+
+    // PROMOTION IS AN UPDATE, not a new row. It keeps its id, so whatever was
+    // written about it stays written.
+    const id = loose.id;
+    const promoted = await call('/plan', {
+      date: DAY, wake_minutes: 480,
+      blocks: [
+        { id: timed.id, title: 'Deep work', start_minutes: 540, duration_minutes: 60 },
+        { id, title: 'Ring the dentist', start_minutes: 660, duration_minutes: 30, note: 'before five' },
+      ],
+    });
+    check('giving it an hour is accepted', promoted.status === 200, JSON.stringify(promoted.data));
+
+    const after = (await call(`/plan/${DAY}`)).data;
+    const now = after.blocks.find((b) => b.id === id);
+    check('it is the same row', Boolean(now), JSON.stringify(after.blocks.map((b) => b.id)));
+    check('with an hour now', now.start_minutes === 660 && now.duration_minutes === 30,
+      JSON.stringify(now));
+    check('its note came with it', now.note === 'before five', String(now.note));
+    check('and it counts as done, like any other block in the day', now.done === true,
+      String(now.done));
+
+    await supabase.from('blocks').delete().eq('user_id', U).eq('plan_id',
+      (await supabase.from('plans').select('id').eq('user_id', U).eq('date', DAY).single()).data.id);
+    await supabase.from('plans').delete().eq('user_id', U).eq('date', DAY);
+  }
+
 
   console.log(bad === 0 ? '\nStep 3 clean' : `\n${bad} FAILURE(S)`);
   server.kill();

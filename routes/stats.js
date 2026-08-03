@@ -65,7 +65,13 @@ router.get('/stats', async (req, res) => {
       .from('blocks')
       .select('entry_id, duration_minutes')
       .eq('user_id', userId)
-      .in('plan_id', ids);
+      .in('plan_id', ids)
+      // Untimed items are left out, and the section's own name is the reason:
+      // this answers where the time went, and an item committed to a day
+      // without an hour took no measured time. Counting it would add a row to
+      // the block count and nothing to the hours, which is a figure that only
+      // ever makes the average per day look smaller.
+      .not('start_time', 'is', null);
 
     if (blockErr) throw new Error(blockErr.message);
 

@@ -107,7 +107,7 @@ router.get('/plan/:date', async (req, res) => {
 
   const { data: rows, error: blockErr } = await db
     .from('blocks')
-    .select('id, title, entry_id, start_time, duration_minutes, note, sort_order, message_sent_at')
+    .select('id, title, entry_id, start_time, duration_minutes, note, completed, sort_order, message_sent_at')
     .eq('plan_id', plan.id)
     .order('sort_order');
 
@@ -119,25 +119,42 @@ router.get('/plan/:date', async (req, res) => {
       status: plan.status,
       wake_minutes: toMinutes(plan.wake_time),
     },
-    blocks: (rows || []).map((b) => ({
-      // The row's own id, handed to the client so it can hand it back. This
-      // is what lets a re-confirm update the day rather than rebuild it, and
-      // it is the only reason identity survives at all: nothing here matches
-      // blocks by title or by time, because reordering and retiming are
-      // exactly what re-confirming is for.
-      id: b.id,
-      title: b.title,
-      entryId: b.entry_id,
-      start_minutes: toMinutes(b.start_time),
-      duration_minutes: b.duration_minutes,
-      note: b.note,
-      // Already gone out, so the screen can refuse to offer the things that
-      // would rewrite it: a delivered block cannot be moved or resized. It can
-      // still be removed, and its title and note can still be changed.
-      sent: Boolean(b.message_sent_at),
-    })),
+    blocks: (rows || []).map((b) => untimedSafe(b)),
   });
 });
+
+/**
+ * One block, in the shape the builder holds it.
+ *
+ * NULL RATHER THAN NaN, which is what this exists for. `toMinutes(null)` is
+ * `Number('null') * 60`, and that is NaN — a value that compares false against
+ * everything, so a screen holding one lays the block out at no position, draws
+ * no time, and reports no error. Untimed is a state; NaN is a bug wearing its
+ * clothes.
+ */
+const untimedSafe = (b) => {
+  const timed = b.start_time !== null && b.start_time !== undefined;
+  return {
+    // The row's own id, handed to the client so it can hand it back. This is
+    // what lets a re-confirm update the day rather than rebuild it, and it is
+    // the only reason identity survives at all: nothing here matches blocks by
+    // title or by time, because reordering and retiming are exactly what
+    // re-confirming is for.
+    id: b.id,
+    title: b.title,
+    entryId: b.entry_id,
+    start_minutes: timed ? toMinutes(b.start_time) : null,
+    duration_minutes: timed ? b.duration_minutes : null,
+    note: b.note,
+    // Only ever meaningful on an untimed item, which is inserted false and set
+    // true by hand. A timed block is true because it stayed in the day.
+    done: Boolean(b.completed),
+    // Already gone out, so the screen can refuse to offer the things that
+    // would rewrite it: a delivered block cannot be moved or resized. It can
+    // still be removed, and its title and note can still be changed.
+    sent: Boolean(b.message_sent_at),
+  };
+};
 
 function validatePlan(date, blocks, wakeMinutes) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return 'date must be YYYY-MM-DD';
@@ -163,6 +180,36 @@ function validatePlan(date, blocks, wakeMinutes) {
   for (const b of blocks) {
     if (!String(b.title || '').trim()) return 'every block needs a title';
 
+    // AN UNTIMED ITEM IS BOTH OR NEITHER. A block with a start and no length,
+    // or a length and no start, is not a state this system has a meaning for:
+    // the day could not lay it out and the end time could not decide whether
+    // to count it. Refused here rather than stored as half of something.
+    const noStart = b.start_minutes === null || b.start_minutes === undefined;
+    const noLength = b.duration_minutes === null || b.duration_minutes === undefined;
+
+    if (noStart !== noLength) {
+      return `${b.title}: a block has a start and a length, or neither. Untimed means both are empty.`;
+    }
+
+    // The note is free text and stays free text. The only rule is a ceiling,
+    // because it goes out verbatim in a message and an unbounded field
+    // eventually meets Telegram's own limit somewhere less helpful than here.
+    //
+    // ABOVE THE UNTIMED SHORTCUT, deliberately. An untimed item carries a note
+    // like any other block — it is the whole of what a row says beyond its
+    // title — and checking the ceiling only on the timed ones would leave the
+    // rule true of half the table.
+    if (b.note !== undefined && b.note !== null && typeof b.note !== 'string') {
+      return `${b.title}: a note must be text`;
+    }
+    if (String(b.note || '').length > NOTE_MAX) {
+      return `${b.title}: a note is a line or two, not ${String(b.note).length} characters`;
+    }
+
+    // Untimed. Nothing below applies: there is no hour to be inside the day
+    // and no length to land on the step.
+    if (noStart) continue;
+
     const start = Number(b.start_minutes);
     const duration = Number(b.duration_minutes);
 
@@ -178,30 +225,33 @@ function validatePlan(date, blocks, wakeMinutes) {
     if (duration % 30 !== 0) {
       return `${b.title}: duration must be a multiple of 30 minutes`;
     }
-
-    // The note is free text and stays free text. The only rule is a ceiling,
-    // because it goes out verbatim in a message and an unbounded field
-    // eventually meets Telegram's own limit somewhere less helpful than here.
-    if (b.note !== undefined && b.note !== null && typeof b.note !== 'string') {
-      return `${b.title}: a note must be text`;
-    }
-    if (String(b.note || '').length > NOTE_MAX) {
-      return `${b.title}: a note is a line or two, not ${String(b.note).length} characters`;
-    }
   }
   return null;
 }
+
+/** Is this payload block one committed to a day but not to an hour? */
+const isUntimed = (b) => b.start_minutes === null || b.start_minutes === undefined;
 
 /** The columns a confirm owns. Everything else on a block belongs to the day. */
 const blockFields = (b, i) => ({
   title: String(b.title).trim(),
   entry_id: b.entryId || null,
-  start_time: hhmmss(Number(b.start_minutes)),
-  duration_minutes: Number(b.duration_minutes),
+  start_time: isUntimed(b) ? null : hhmmss(Number(b.start_minutes)),
+  duration_minutes: isUntimed(b) ? null : Number(b.duration_minutes),
   sort_order: i,
   // Trimmed, and an empty one is no note rather than an empty string —
   // clearing the field is how a note is removed.
   note: String(b.note || '').trim() || null,
+  // WHAT MAKES STALENESS WORK, and the whole reason this column came back to
+  // life. A timed block counts for staleness by staying in the day — nothing
+  // sets this false and it is true here for the same reason it defaults true.
+  // An untimed item has no hour to have passed, so it counts only when the
+  // person says it is done, and it is written false until they do.
+  //
+  // Sent by the day rather than only by the marking route so that an item
+  // ticked before the day was ever confirmed is not un-ticked by confirming
+  // it — the screen holds the tick, and this is where the screen is written.
+  completed: isUntimed(b) ? Boolean(b.done) : true,
 });
 
 /**
@@ -283,6 +333,14 @@ router.post('/plan', async (req, res) => {
       // Retiming and resizing only. Removing a delivered block is allowed, and
       // is handled below.
       const was = known.get(b.id);
+
+      // A block with no hour was never in the delivery queue, so there is no
+      // message to have contradicted. Skipped by name rather than left to the
+      // arithmetic below, which would compare `toMinutes(null)` — NaN — against
+      // a number, find them unequal, and refuse every untimed item on the
+      // grounds that it had been moved.
+      if (was.start_time === null && isUntimed(b)) continue;
+
       if (
         was.message_sent_at &&
         (toMinutes(was.start_time) !== Number(b.start_minutes) ||
@@ -456,6 +514,61 @@ router.post('/plan', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+/**
+ * Tick an untimed item off, or untick it.
+ *
+ * WRITTEN AT ONCE, unlike everything else about a day. Every other change to a
+ * block waits for Confirm, which is right for building a plan and wrong for
+ * this: ticking things off happens all through the day, hours after the last
+ * Confirm, and a person who ticked three things and closed the app would have
+ * lost all three — along with the staleness those ticks were the only record
+ * of. There is nothing to weigh up here that a Confirm would be confirming.
+ *
+ * UNTIMED ONLY, and refused on anything else by name. `completed` on a timed
+ * block means something this system decided long ago it would not track: a
+ * timed block counts because it stayed in the day, and taking it out is how
+ * you say it did not happen. A route that could set it false would be a second,
+ * quieter answer to that question — and staleness reads this column, so the two
+ * answers would disagree about how long ago you last did something.
+ */
+router.post('/plan/block/:id/done', async (req, res) => {
+  const { db, userId } = req.auth;
+  const done = (req.body || {}).done;
+
+  if (typeof done !== 'boolean') {
+    return res.status(400).json({ error: 'done must be true or false' });
+  }
+
+  const { data: block, error: readErr } = await db
+    .from('blocks')
+    .select('id, start_time')
+    .eq('id', req.params.id)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (readErr) return res.status(500).json({ error: readErr.message });
+  if (!block) return res.status(404).json({ error: 'block not found for this user' });
+
+  if (block.start_time !== null) {
+    return res.status(400).json({
+      error: 'a block with an hour is not ticked off. Take it out of the day to say it did not happen.',
+    });
+  }
+
+  const { data, error } = await db
+    .from('blocks')
+    .update({ completed: done })
+    .eq('id', block.id)
+    .eq('user_id', userId)
+    .select('id, completed')
+    .maybeSingle();
+
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'block not found for this user' });
+
+  res.json({ id: data.id, done: Boolean(data.completed) });
 });
 
 module.exports = router;

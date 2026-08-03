@@ -372,6 +372,7 @@ function boot({
             return timezoneReply || { timezone: 'Europe/Berlin', today: '2026-07-27' };
           }
           if (url === '/settings/wake') return { wake_minutes: 450 };
+          if (/\/plan\/block\/[^/]+\/done$/.test(url)) return { id: 'b', done: true };
           if (url === '/plan') {
             return planReply || { date: 'x', blocks: 0, status: 'confirmed', ids: [], notes: [] };
           }
@@ -437,6 +438,27 @@ const thingSlots = (byId) => byId.things.children.filter((c) => c._class.has('th
 const thingRows = (byId) =>
   thingSlots(byId).map((t) => t.children.find((c) => c._class.has('row'))).filter(Boolean);
 const backingOfThing = (slot) => slot.children.find((c) => c._class.has('backing'));
+
+/**
+ * The "Anytime today" rows: things committed to the day and not to an hour.
+ *
+ * Drawn in their own container, so none of the block helpers reach them — and
+ * deliberately not in the builder, because the builder's whole order is the
+ * hour and these have none.
+ */
+const anytimeSlots = (byId) => byId['anytime-list'].children.filter((c) => c._class.has('atime'));
+const anytimeRows = (byId) =>
+  anytimeSlots(byId).map((t) => t.children.find((c) => c._class.has('arow'))).filter(Boolean);
+const anytimeTitles = (byId) =>
+  anytimeRows(byId).map((r) => {
+    const text = r.children.find((c) => c._class.has('atext'));
+    return (text.children.find((c) => c._class.has('atitle')) || {}).textContent || '';
+  });
+const tickOf = (row) => row.children.find((c) => c._class.has('atick'));
+const anytimeNote = (row) => {
+  const text = row.children.find((c) => c._class.has('atext'));
+  return (text.children.find((c) => c._class.has('anote')) || {}).textContent || null;
+};
 
 const cancel = (card) => card.onpointercancel({ pointerId: 1 });
 
@@ -2231,8 +2253,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // confirmation is; a Delete in the menu as well would be a second route to
     // the same write, two paces from the hint, reachable by a finger that only
     // meant to open the menu.
-    check('with edit and done, and no delete',
-      acts.children.map((c) => c.textContent).join() === 'Done,Edit',
+    check('with edit, done and anytime, and no delete',
+      acts.children.map((c) => c.textContent).join() === 'Done,Anytime,Edit',
       acts.children.map((c) => c.textContent).join());
 
     const hint = row.children[0].children.find((c) => c._class.has('hint'));
@@ -2811,6 +2833,268 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       const top = await open({ settings: untouched({ wake_minutes: 12 * 60 }) });
       check('at the top, plus is dead', top.byId['wake-def-plus'].disabled === true);
       check('and minus is not', top.byId['wake-def-minus'].disabled === false);
+    }
+  }
+
+  console.log('\nanytime today: committed to the day, not to an hour');
+  {
+    const items = () => [
+      { id: 'e-bins', type: 'task', title: 'Put the bins out', days: 1, mark: null, due: null, size: null, note: 'the green one', last_scheduled: null },
+      { id: 'e-gym', type: 'habit', title: 'Gym', days: 2, mark: null, due: null, size: null, note: null, last_scheduled: null },
+    ];
+    const fresh = (extra = {}) => boot({
+      entries: utcEntries({ plans_in: 'morning', items: items() }), now: '11:00', ...extra,
+    });
+    const rowsIn = (byId) => thingRows(byId);
+    const menuOf = (row) => row.children.find((c) => c._class.has('rowacts'));
+    const press = (row, word) => {
+      const b = menuOf(row).children.find((c) => c.textContent === word);
+      b.onclick({ stopPropagation() {} });
+    };
+
+    {
+      // THE ONE THAT MATTERS MOST. An untimed item is in the day and takes
+      // none of it, so the hours must read exactly as they did before it
+      // arrived. Everything else about this feature is visible; this is the
+      // part that would be wrong quietly.
+      const { ctx, byId, slots } = fresh();
+      await ctx.load();
+
+      ctx.addBlock({ title: 'Deep work', duration: 120 });
+      const before = byId['end-time'].textContent;
+      check('the day ends somewhere to begin with', /:/.test(before), before);
+
+      press(rowsIn(byId)[0], 'Anytime');
+
+      check('THE END TIME DOES NOT MOVE', byId['end-time'].textContent === before,
+        `${before} -> ${byId['end-time'].textContent}`);
+      check('and the timed list is untouched', slots().length === 1, String(slots().length));
+      check('while the item is on screen', anytimeTitles(byId).join() === 'Put the bins out',
+        anytimeTitles(byId).join());
+    }
+
+    {
+      // A DAY OF NOTHING BUT THESE ends at 0:00. The hours really are empty,
+      // and the spacer that stands for an empty day is still shown.
+      const { ctx, byId, slots } = fresh();
+      await ctx.load();
+      press(rowsIn(byId)[0], 'Anytime');
+      press(rowsIn(byId)[1], 'Anytime');
+
+      check('two of them', anytimeTitles(byId).length === 2, anytimeTitles(byId).join());
+      check('the day ends at nothing', byId['end-time'].textContent === '0:00',
+        byId['end-time'].textContent);
+      check('and the day still looks like an empty one',
+        slots().length === 0 && byId.builder.children.some((c) => c._class.has('ghost')),
+        String(byId.builder.children.length));
+    }
+
+    {
+      // MIXED, AND EACH IN ITS OWN PLACE. The untimed one is added between two
+      // blocks on purpose: it must not appear among them, and — the part that
+      // broke the old slotAt — it must not renumber them either.
+      const { ctx, byId, slots, titles, posted } = fresh();
+      await ctx.load();
+
+      ctx.addBlock({ title: 'First', duration: 60 });
+      press(rowsIn(byId)[0], 'Anytime');
+      ctx.addBlock({ title: 'Second', duration: 30 });
+
+      check('the day holds only the timed ones, in order',
+        titles().join() === 'First,Second', titles().join());
+      check('and the section only the untimed one',
+        anytimeTitles(byId).join() === 'Put the bins out', anytimeTitles(byId).join());
+      // AGAINST THE SAME DAY WITHOUT IT, rather than against a time written
+      // here. A literal would have to know that a block added to TODAY starts
+      // at the next half hour and not at the wake time — which is what the
+      // first version of this line got wrong, asserting the answer for a day
+      // that was not the one being built.
+      const plain = fresh();
+      await plain.ctx.load();
+      plain.ctx.addBlock({ title: 'First', duration: 60 });
+      plain.ctx.addBlock({ title: 'Second', duration: 30 });
+
+      check('the end time counts the two blocks and nothing else',
+        byId['end-time'].textContent === plain.byId['end-time'].textContent,
+        `${byId['end-time'].textContent} vs ${plain.byId['end-time'].textContent} without it`);
+      check('the section is showing', !byId['anytime']._class.has('hidden'));
+      check('and its heading names the day on screen',
+        byId['anytime-label'].textContent === 'Anytime today',
+        byId['anytime-label'].textContent);
+
+      // The note came with the thing, and is shown rather than hidden behind a
+      // gesture: a row with no hour has room for it.
+      check('the row carries the note it arrived with',
+        anytimeNote(anytimeRows(byId)[0]) === 'the green one',
+        String(anytimeNote(anytimeRows(byId)[0])));
+
+      // WHAT THE SECTION SENDS. Null together, which is the shape the route
+      // refuses to see half of.
+      await byId['confirm'].onclick();
+      const sentDay = (posted.find((p) => p.url === '/plan') || {}).body || null;
+      check('the confirm sent three blocks', sentDay && sentDay.blocks.length === 3,
+        JSON.stringify(sentDay && sentDay.blocks.map((b) => b.title)));
+      const bins = sentDay.blocks.find((b) => b.title === 'Put the bins out');
+      check('the untimed one with no start and no length',
+        bins.start_minutes === null && bins.duration_minutes === null, JSON.stringify(bins));
+      check('and not yet done', bins.done === false, JSON.stringify(bins));
+      const first = sentDay.blocks.find((b) => b.title === 'First');
+      check('the timed ones with both', Number.isInteger(first.start_minutes) &&
+        Number.isInteger(first.duration_minutes), JSON.stringify(first));
+    }
+
+    {
+      // NOTHING TO SEE WHEN THERE IS NOTHING. A heading over an empty list
+      // would be a section of the day screen that is blank on most days.
+      const { ctx, byId } = fresh();
+      await ctx.load();
+      check('the section is hidden on a day with none', byId['anytime']._class.has('hidden'));
+    }
+
+    {
+      // TICKED OFF, AND STILL THERE. What you got through is worth seeing at
+      // the end of a day.
+      const { ctx, byId, posted } = fresh({
+        plan: {
+          plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+          blocks: [
+            { id: 'u1', title: 'Ring the dentist', entryId: 'e-bins', start_minutes: null,
+              duration_minutes: null, note: null, done: false },
+          ],
+        },
+      });
+      await ctx.load();
+      posted.length = 0;
+
+      const row = anytimeRows(byId)[0];
+      check('it is on the list', Boolean(row));
+      check('and not struck through', !row._class.has('did'), row.className);
+
+      tickOf(row).onclick({ stopPropagation() {} });
+      await wait(0);
+
+      check('ticking marks it', anytimeRows(byId)[0]._class.has('did'),
+        anytimeRows(byId)[0].className);
+      check('the row stays on the list', anytimeTitles(byId).join() === 'Ring the dentist',
+        anytimeTitles(byId).join());
+
+      // WRITTEN AT ONCE. Ticking happens hours after the last Confirm, and a
+      // tick that waited for one would be lost by every person who ticked
+      // three things and closed the app.
+      check('and it is written without waiting for a confirm',
+        posted.length === 1 && posted[0].url === '/plan/block/u1/done',
+        JSON.stringify(posted.map((p) => p.url)));
+      check('saying which way it went', posted[0].body.done === true,
+        JSON.stringify(posted[0].body));
+
+      tickOf(anytimeRows(byId)[0]).onclick({ stopPropagation() {} });
+      await wait(0);
+      check('unticking is the same road back',
+        posted.length === 2 && posted[1].body.done === false,
+        JSON.stringify(posted.map((p) => p.body)));
+      check('and the row is plain again', !anytimeRows(byId)[0]._class.has('did'));
+    }
+
+    {
+      // SWIPE LEFT REMOVES, with the undo the blocks have and not the Things
+      // list's confirmation: this is one day, and taking it off is how you say
+      // it is not happening today.
+      const { ctx, byId } = fresh();
+      await ctx.load();
+      press(rowsIn(byId)[0], 'Anytime');
+      check('it is there', anytimeTitles(byId).length === 1);
+
+      const row = anytimeRows(byId)[0];
+      down(row, 0, 0);
+      move(row, -90, 0);
+      check('the backing says what will happen',
+        anytimeSlots(byId)[0].children[0].textContent === 'Remove',
+        anytimeSlots(byId)[0].children[0].textContent);
+      up(row, -90, 0);
+      await wait(CLOSED);
+
+      check('it goes', anytimeTitles(byId).length === 0, anytimeTitles(byId).join());
+      check('and an undo is offered', byId['undo-host'].children.length === 1);
+
+      byId['undo-host'].children[0].children.find((c) => c.textContent === 'Undo').onclick();
+      check('which puts it back', anytimeTitles(byId).join() === 'Put the bins out',
+        anytimeTitles(byId).join());
+    }
+
+    {
+      // A SHORT SWIPE IS NOTHING, and a swipe is never a tap: the tap promotes,
+      // so a finger that swiped and released must not also give it an hour.
+      const { ctx, byId, slots } = fresh();
+      await ctx.load();
+      press(rowsIn(byId)[0], 'Anytime');
+
+      const row = anytimeRows(byId)[0];
+      down(row, 0, 0);
+      move(row, -30, 0);
+      up(row, -30, 0);
+      check('a half swipe leaves it alone', anytimeTitles(byId).length === 1);
+
+      const again = anytimeRows(byId)[0];
+      down(again, 0, 0);
+      move(again, -90, 0);
+      up(again, -90, 0);
+      again.onclick({});
+      check('and the click after a swipe does not promote it',
+        slots().length === 0, String(slots().length));
+    }
+
+    {
+      // PROMOTED BY A TAP, taking its note with it. One row changing shape
+      // rather than a new one appearing.
+      const { ctx, byId, slots, titles, noteOf } = fresh();
+      await ctx.load();
+      press(rowsIn(byId)[0], 'Anytime');
+
+      anytimeRows(byId)[0].onclick({});
+
+      check('it leaves the section', anytimeTitles(byId).length === 0);
+      check('and joins the day', titles().join() === 'Put the bins out', titles().join());
+      check('the section hides itself again', byId['anytime']._class.has('hidden'));
+      check('it took its note with it',
+        (noteOf(slots()[0]) || {}).textContent === 'the green one',
+        String((noteOf(slots()[0]) || {}).textContent));
+      check('and the day now ends somewhere', byId['end-time'].textContent !== '0:00',
+        byId['end-time'].textContent);
+    }
+
+    {
+      // HELD RATHER THAN TAPPED. The menu carries the same action in words —
+      // a gesture with nothing on screen to suggest it is a feature only the
+      // person who built it knows about.
+      const { ctx, byId, slots } = fresh();
+      await ctx.load();
+
+      const row = rowsIn(byId)[0];
+      down(row, 0, 0);
+      await wait(HELD);
+
+      check('holding a thing puts it in with no hour',
+        anytimeTitles(byId).join() === 'Put the bins out', anytimeTitles(byId).join());
+      check('and not in the day', slots().length === 0, String(slots().length));
+
+      up(row, 0, 0);
+      row.onclick({});
+      check('the release does not also schedule it', slots().length === 0,
+        String(slots().length));
+    }
+
+    {
+      // AND A PLAIN TAP STILL SCHEDULES, which is what the list is mostly for.
+      const { ctx, byId, slots } = fresh();
+      await ctx.load();
+
+      const row = rowsIn(byId)[0];
+      down(row, 0, 0);
+      up(row, 0, 0);
+      row.onclick({});
+
+      check('a tap gives it an hour', slots().length === 1, String(slots().length));
+      check('and puts nothing in the section', anytimeTitles(byId).length === 0);
     }
   }
 
