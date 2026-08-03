@@ -1418,8 +1418,16 @@ console.log('\n19. a sheet is inside its scrim');
   //
   // So the way out is Back and only Back — there is always a day behind it —
   // and nothing decides on your behalf that you should be looking at this.
-  check('the way out of setup says Back',
-    /id="settings-close"[^>]*>‹ Back</.test(body));
+  // The word went and the chevron stayed, which changes nothing about the
+  // rule: what matters is that it points BACK — to the day that is always
+  // behind it — and is never a word for having been sent here.
+  check('the way out of setup is a back chevron',
+    /id="settings-close"[^>]*>‹</.test(body));
+  // AND IT IS STILL NAMED. Stripped to one glyph, this button is punctuation:
+  // a screen reader announces "less-than sign", or nothing. The label is the
+  // only thing left saying what it does.
+  check('and it still says Back to anything that cannot see it',
+    /id="settings-close"[^>]*aria-label="Back"/.test(body), 'aria-label is the whole name now');
   check('and never a word for having been sent there',
     !/Skip for now/.test(body) && !/Skip for now/.test(code));
   check('opening setup takes no argument, so nothing can force it',

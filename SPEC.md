@@ -231,10 +231,19 @@ thing they signed up for. Whoever hands this system to someone can say what the
 dots are for in a sentence, and that is cheaper than a screen which stops
 everyone to solve a problem one person had once.
 
-The way out therefore says **Back**, and only ever Back, because there is always
-a day behind it. `openSettings` takes no argument, which is the structural half
-of the same rule: a parameter saying which kind of visit this is would be a way
-to be sent.
+The way out therefore points **back**, and only ever back, because there is
+always a day behind it — never *Skip*, never *Done*, neither of which is true of
+a screen nobody was sent to. `openSettings` takes no argument, which is the
+structural half of the same rule: a parameter saying which kind of visit this is
+would be a way to be sent.
+
+It is a **chevron alone** now; the word *Back* beside it was doing no work a
+chevron at the top-left of a screen you opened from somewhere else does not
+already do. It carries `aria-label="Back"`, and that is not decoration: stripped
+to one glyph the button is punctuation, and a screen reader announces
+*"less-than sign"* or nothing at all. The label is the entire accessible name,
+so the layout check pins it — losing it turns the only way out into an unnamed
+control.
 
 **Saving tests what it was given and reports what happened.** Every value here
 looks correct when it is wrong — a mistyped chat id is still ten digits, a

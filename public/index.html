@@ -1019,14 +1019,20 @@
       .page-top .label {
         margin: 0;
       }
+      /* A chevron and nothing else. Larger than the word it replaced and with
+         room around it: what was a 40px-wide target became a single character,
+         and a glyph that small is a button you miss. The padding is pulled back
+         on the left so the chevron still sits on the page's own margin rather
+         than indented from it. */
       .back {
         background: none;
         border: 0;
-        padding: 0;
         font-family: inherit;
-        font-size: 13px;
+        font-size: 22px;
+        line-height: 1;
         color: var(--accent);
         cursor: pointer;
+        padding: 4px 12px 6px 0;
       }
       .back:focus {
         outline: none;
@@ -2047,7 +2053,14 @@
     <div class="page hidden" id="settings-scrim">
       <div class="page-inner">
         <div class="page-top">
-          <button type="button" class="back" id="settings-close">‹ Back</button>
+          <!-- The chevron alone. It said "‹ Back", and the word was doing no
+               work a chevron pointing left does not already do at the top of a
+               screen you opened from somewhere else.
+               THE LABEL IS NOT OPTIONAL. Read aloud, this button is now a
+               punctuation mark: a screen reader announces "less-than sign", or
+               nothing at all. aria-label is what keeps it the way out rather
+               than an unnamed control. -->
+          <button type="button" class="back" id="settings-close" aria-label="Back">‹</button>
           <span class="label">Setup</span>
         </div>
 
