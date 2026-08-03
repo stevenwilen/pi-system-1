@@ -626,6 +626,14 @@ console.log('\n7. the warn colour warns; it does not narrate');
       /justify-content: flex-start/.test(rule('.backing.right')));
 
   check('the warning mark carries it', /color: var\(--warn\)/.test(rule('.mark')));
+
+  // AND WEIGHT, which is the one place on this page weight says something
+  // rather than ranking a heading. The marks sit at the meta line's size
+  // because they belong in the margin rather than in the text, and at 12px the
+  // colour alone was doing all the work — bold is what makes three of them read
+  // as louder than one without making them any bigger.
+  check('and it is bold', /font-weight: 700/.test(rule('.mark')), rule('.mark'));
+
   check('an ordinary row does not', !/--warn/.test(rule('.row')));
   check('nor an ordinary meta line', !/--warn/.test(rule('.row .meta')));
   check('nor the block you are in — it is running, not failing',

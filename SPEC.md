@@ -802,6 +802,17 @@ calendar advances. Nothing else moves it.
 **No mark means "nothing to say", never "fine."** A row with no due date, no
 size, or an unrecognised size shows nothing.
 
+**Set as marginal asterisks, bold, in persimmon.** The server still computes
+`!!!`, `!!` or `!` and the count still carries the whole meaning; the page draws
+`✱` that many times, the way a reader marks a page they mean to come back to.
+
+Weight is the one thing on this page it does. Marks sit at the meta line's size —
+12px — because they belong in the margin rather than in the text, and at that
+size the colour alone was doing all the work. Bold is what makes three of them
+read as louder than one without making them bigger. `mockup.html` shows the same
+glyph at the same weight; it was still showing `!!!` in a lighter face, which is
+a second answer to what this should look like and the wrong one.
+
 ### 3.2 The day
 
 #### Today / Tomorrow

@@ -50,7 +50,10 @@
   .row-top{display:flex;align-items:baseline;gap:8px}
   .title{font-size:15px;flex:1;line-height:1.35}
   .meta{font-size:12px;color:var(--muted);margin-top:5px;line-height:1.4}
-  .mark{font-size:14px;color:var(--warn);letter-spacing:1px}
+  /* Bold, and the heavy asterisk rather than exclamation marks: both are
+     what the page renders. A reference that says something else is a second
+     answer to what this should look like, and the wrong one. */
+  .mark{font-size:12px;color:var(--warn);letter-spacing:0.05em;font-weight:700}
 
   /* the hint that a row has more actions. Faint, not muted: it repeats down
      every row, and at muted it draws a second column of emphasis against the
@@ -239,7 +242,7 @@
     <div class="label">Things <span class="act">+ Add</span></div>
 
     <div class="row">
-      <div class="row-top"><div class="title">UF application</div><div class="mark">!!!</div><div class="hint">&middot;&middot;&middot;</div></div>
+      <div class="row-top"><div class="title">UF application</div><div class="mark">✱✱✱</div><div class="hint">&middot;&middot;&middot;</div></div>
       <div class="meta">project &middot; due in 6 days &middot; a few days</div>
     </div>
 
@@ -252,7 +255,7 @@
     </div>
 
     <div class="row">
-      <div class="row-top"><div class="title">Web services business</div><div class="mark">!</div><div class="hint">&middot;&middot;&middot;</div></div>
+      <div class="row-top"><div class="title">Web services business</div><div class="mark">✱</div><div class="hint">&middot;&middot;&middot;</div></div>
       <div class="meta">project &middot; due in 22 days &middot; a few weeks</div>
     </div>
 
