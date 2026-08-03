@@ -296,6 +296,14 @@
       .thing .backing {
         padding: 0;
       }
+      /* AND NO PAPER UNDER IT. A block swipe reveals another slip because a
+         block IS a slip — something has to be underneath one. A Things row is
+         not laid on the page, it is part of the page, so sliding it aside
+         uncovers the page and the word alone. The torn sheet that belongs
+         under a slip read here as a second object appearing from nowhere. */
+      .thing .backing::after {
+        content: none;
+      }
       .thing .backing.left {
         color: var(--warn);
       }
@@ -1218,13 +1226,8 @@
         margin-bottom: 6px;
       }
 
-      /* The slot a row slides inside, the same arrangement the Things list
-         uses and for the same reason: the backing needs something that holds
-         still, and a divider that travelled with the row would make the list
-         look like it was coming apart. */
-      .atime {
-        position: relative;
-      }
+      /* The wrapper the divider hangs on, and what the removal animation
+         collapses. Nothing slides: these rows are pressed, not handled. */
       .atime + .atime {
         border-top: 1px solid var(--line);
       }
@@ -1234,11 +1237,6 @@
         align-items: baseline;
         gap: 10px;
         padding: 11px 0;
-        background: var(--bg);
-        position: relative;
-        touch-action: pan-y;
-        user-select: none;
-        -webkit-user-select: none;
       }
 
       /* The tick. A box rather than a word, because it is pressed far more
@@ -1283,6 +1281,25 @@
       }
       .arow.did .anote {
         color: var(--faint);
+      }
+
+      /* Taking one off the list. A press rather than a swipe, and the whole
+         reason is that these rows are not slips: a gesture that carried a row
+         aside was borrowing the blocks' language for something that does not
+         move. Faint and at the far edge, like the ··· on a Things row, because
+         it repeats down the list and is the rarer of the two things you do
+         here. The padding is the touch target; the glyph is small on purpose. */
+      .ax {
+        flex: none;
+        align-self: center;
+        background: none;
+        border: 0;
+        font-family: inherit;
+        font-size: 15px;
+        line-height: 1;
+        color: var(--faint);
+        padding: 4px 2px 4px 8px;
+        cursor: pointer;
       }
 
       /* WHERE THE TIME WENT. Bars rather than a table: the question is which
@@ -3622,9 +3639,6 @@
         slot.className = 'atime';
         slot.dataset.at = String(i);
 
-        const backing = document.createElement('div');
-        backing.className = 'backing';
-
         const row = document.createElement('div');
         row.className = b.done ? 'arow did' : 'arow';
 
@@ -3661,14 +3675,24 @@
           text.append(note);
         }
 
-        row.append(tick, text);
+        const off = document.createElement('button');
+        off.type = 'button';
+        off.className = 'ax';
+        off.textContent = '×';
+        off.setAttribute('aria-label', `Take ${b.title} off the list`);
+        off.onclick = (e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+          removeBlock(i);
+        };
 
-        // Tapping promotes it into the day. Set before the gesture is attached,
-        // which wraps this behind its own guard so a swipe never lands as a tap.
+        row.append(tick, text, off);
+
+        // Tapping anywhere else promotes it into the day. Both controls stop
+        // the press reaching here, so the only way to land on this is a press
+        // on the row itself.
         row.onclick = () => promote(i);
 
-        slot.append(backing, row);
-        attachAnytime({ row, backing, index: i });
+        slot.append(row);
         return slot;
       }
 
@@ -3744,106 +3768,6 @@
 
         saved = false;
         renderBuilder();
-      }
-
-      /**
-       * Swipe left to remove, with the undo the blocks have.
-       *
-       * NOT THE THINGS LIST'S CONFIRMATION, and the difference is the same one
-       * that separates a block from a thing: this is one day. Taking it off is
-       * how you say it is not happening today, and the next confirm writes
-       * that — there is no history to lose and nothing a tombstone would make
-       * unrecoverable.
-       *
-       * No right swipe. A note arrives with the thing and is shown on the row;
-       * there is nothing here for a second gesture to open.
-       */
-      function attachAnytime({ row, backing, index }) {
-        let swiped = false;
-
-        const tap = row.onclick;
-        row.onclick = (e) => {
-          if (swiped) {
-            swiped = false;
-            return;
-          }
-          if (tap) tap(e);
-        };
-
-        row.onpointerdown = (e) => {
-          if (gesture) return;
-          if (e.button !== undefined && e.button !== 0) return;
-
-          swiped = false;
-          gesture = { id: e.pointerId, mode: 'pending', x0: e.clientX, y0: e.clientY, dx: 0 };
-        };
-
-        row.onpointermove = (e) => {
-          if (!gesture || gesture.id !== e.pointerId) return;
-
-          // Left only. Clamped rather than refused on release: letting the row
-          // follow a finger the whole way right and then doing nothing would be
-          // offering something and taking it back.
-          const raw = e.clientX - gesture.x0;
-          const dx = Math.min(0, raw);
-          const dy = e.clientY - gesture.y0;
-
-          if (gesture.mode === 'pending') {
-            // Decided on the RAW movement. A finger dragging right has moved,
-            // and reading that as stillness would leave the gesture pending and
-            // let the release land as a tap that promotes the row.
-            if (Math.abs(raw) < SLOP && Math.abs(dy) < SLOP) return;
-
-            if (Math.abs(dy) >= Math.abs(raw)) {
-              gesture.mode = 'scroll';
-              return;
-            }
-
-            gesture.mode = 'swipe';
-            swiped = true;
-            if (row.setPointerCapture) row.setPointerCapture(e.pointerId);
-          }
-
-          if (gesture.mode !== 'swipe') return;
-
-          gesture.dx = dx;
-
-          if (!dx) {
-            row.style.transform = '';
-            backing.style.opacity = '0';
-            return;
-          }
-
-          row.style.transform = `translateX(${dx}px)`;
-          backing.className = 'backing left';
-          backing.textContent = 'Remove';
-          backing.style.opacity = String(Math.min(1, Math.abs(dx) / SWIPE_COMMIT));
-        };
-
-        row.onpointerup = (e) => {
-          if (!gesture || gesture.id !== e.pointerId) return;
-
-          const { mode, dx } = gesture;
-          gesture = null;
-
-          if (mode !== 'swipe') return;
-
-          if (dx <= -SWIPE_COMMIT) return removeBlock(index);
-
-          if (!reduceMotion()) row.style.transition = `transform ${SETTLE_MS}ms ease-out`;
-          row.style.transform = '';
-          backing.style.opacity = '0';
-          setTimeout(() => {
-            row.style.transition = '';
-          }, SETTLE_MS);
-        };
-
-        row.onpointercancel = () => {
-          if (!gesture) return;
-          gesture = null;
-          row.style.transform = '';
-          backing.style.opacity = '0';
-        };
       }
 
       /**

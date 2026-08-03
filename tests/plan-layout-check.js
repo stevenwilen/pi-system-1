@@ -251,6 +251,22 @@ console.log('\n3. rows are rows; only builder blocks are cards');
     !/border-top/.test(rule('.row + .row')) && !/border-top/.test(row),
     rule('.row + .row') + row);
 
+  // AND NOTHING CARD-LIKE UNDER ONE EITHER, which is the same rule applied to
+  // the one place a row has anything behind it at all.
+  //
+  // The swipe backing draws a torn sheet of paper. That is right under a block
+  // — a block IS a slip, and something has to be beneath one — and wrong under
+  // a row, which is not laid on the page but part of it. It read as a second
+  // object appearing from nowhere every time a Things row was swiped.
+  //
+  // Pinned because putting it back broke nothing: the page went on working and
+  // only looked wrong, which is the kind of change that comes back.
+  check('no paper is drawn under a row that slides aside',
+    /content: none/.test(rule('.thing .backing::after')),
+    rule('.thing .backing::after') || '(no rule at all)');
+  check('while a block still has some, because a block is a slip',
+    /filter: url\(#deckle/.test(rule('.backing::after')), rule('.backing::after'));
+
   const block = rule('.block');
   // The paper sits on the layer behind the text, so that is where to look for
   // it. See the deckle checks below for why it is not on the slip itself.

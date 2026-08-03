@@ -2996,21 +2996,33 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     }
 
     {
-      // SWIPE LEFT REMOVES, with the undo the blocks have and not the Things
-      // list's confirmation: this is one day, and taking it off is how you say
-      // it is not happening today.
+      // AN × TAKES IT OFF THE LIST, with the undo the blocks have and not the
+      // Things list's confirmation: this is one day, and taking it off is how
+      // you say it is not happening today.
+      //
+      // A PRESS RATHER THAN A SWIPE, and that is the whole of why these rows
+      // carry no backing. A swipe carries a row aside to show what is under
+      // it, which is the blocks' language for an object you handle — and these
+      // do not move, they are pressed.
       const { ctx, byId } = fresh();
       await ctx.load();
       press(rowsIn(byId)[0], 'Anytime');
       check('it is there', anytimeTitles(byId).length === 1);
 
       const row = anytimeRows(byId)[0];
-      down(row, 0, 0);
-      move(row, -90, 0);
-      check('the backing says what will happen',
-        anytimeSlots(byId)[0].children[0].textContent === 'Remove',
-        anytimeSlots(byId)[0].children[0].textContent);
-      up(row, -90, 0);
+      check('the row takes no gestures at all',
+        typeof row.onpointerdown !== 'function', typeof row.onpointerdown);
+      check('and nothing is drawn under it to slide off',
+        anytimeSlots(byId)[0].children.every((c) => !c._class.has('backing')),
+        anytimeSlots(byId)[0].children.map((c) => c.className).join('|'));
+
+      const off = row.children.find((c) => c._class.has('ax'));
+      check('there is an x to press', Boolean(off) && off.textContent === '×',
+        off && off.textContent);
+      check('and it says what it does', /Take Put the bins out off the list/
+        .test(off.getAttribute('aria-label') || ''), off.getAttribute('aria-label'));
+
+      off.onclick({ stopPropagation() {} });
       await wait(CLOSED);
 
       check('it goes', anytimeTitles(byId).length === 0, anytimeTitles(byId).join());
@@ -3022,25 +3034,19 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     }
 
     {
-      // A SHORT SWIPE IS NOTHING, and a swipe is never a tap: the tap promotes,
-      // so a finger that swiped and released must not also give it an hour.
+      // THE × IS NOT THE ROW. Pressing it must not also promote the thing into
+      // the day, which is what the row underneath it does.
       const { ctx, byId, slots } = fresh();
       await ctx.load();
       press(rowsIn(byId)[0], 'Anytime');
 
       const row = anytimeRows(byId)[0];
-      down(row, 0, 0);
-      move(row, -30, 0);
-      up(row, -30, 0);
-      check('a half swipe leaves it alone', anytimeTitles(byId).length === 1);
+      const off = row.children.find((c) => c._class.has('ax'));
+      let reached = false;
+      off.onclick({ stopPropagation() { reached = true; } });
 
-      const again = anytimeRows(byId)[0];
-      down(again, 0, 0);
-      move(again, -90, 0);
-      up(again, -90, 0);
-      again.onclick({});
-      check('and the click after a swipe does not promote it',
-        slots().length === 0, String(slots().length));
+      check('pressing it stops the press reaching the row', reached);
+      check('so nothing was given an hour', slots().length === 0, String(slots().length));
     }
 
     {

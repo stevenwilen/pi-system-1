@@ -617,6 +617,12 @@ finger is heading for, fading in with the distance so the action is readable
 hairline divider hangs on the slot rather than the row, so the list holds still
 while one row slides.
 
+**The backing here is the word alone — no paper under it.** A block swipe
+uncovers another slip, torn like the one that covers it, because a block *is* a
+slip and something has to be underneath one. A Things row is not laid on the
+page, it is part of the page, so what shows when it slides aside is the page.
+The torn sheet read as a second object appearing from nowhere.
+
 The commit distance is the same 72px the blocks use: most of a thumb's travel, so
 neither gesture is reachable by a hand that was doing something else.
 
@@ -1022,11 +1028,20 @@ rather than hidden behind a gesture: a row with no hour has room for it.
   things and closed the app would lose all three — along with the staleness
   those ticks were the only record of. A row built in this session has no id to
   write against, so that one rides along with the next Confirm.
-- **Swipe left removes it, with the undo**, not the Things list's confirmation.
-  This is one day: taking it off is how you say it is not happening today, and
-  there is no history to lose.
+- **A small `×` at the right edge takes it off**, with the undo, and not the
+  Things list's confirmation: this is one day, taking it off is how you say it is
+  not happening today, and there is no history to lose.
+
+  **Pressed, not swiped**, and that is why these rows carry no backing at all.
+  A swipe carries a row aside to show what is under it, which is the blocks'
+  language for an object you handle — and it was borrowed here for something
+  that does not move. The `×` is faint and at the far edge, like the `···` on a
+  Things row, because it repeats down the list and is the rarer of the two
+  things you do here.
 - **Tapping it promotes it** to a timed block at the end of the day, keeping its
   id, its note and its thing. One row changing shape, not a new one appearing.
+  The tick and the `×` both stop the press reaching the row, so the only way to
+  land on this is a press on the row itself.
 
 The heading follows the day on screen — *Anytime tomorrow* while tomorrow is
 showing — and the whole section is hidden when empty, because a heading over an
