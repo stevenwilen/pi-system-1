@@ -274,7 +274,7 @@ async function rowOf(which) {
     }
 
 
-    console.log('\n5. where the time went');
+    console.log('\n5. how often you got to things');
     {
       await H.cleanup();
       await H.ensureProfile(undefined, undefined, 'a');
@@ -282,109 +282,162 @@ async function rowOf(which) {
 
       const stats = async (who) => (await H.as(who)(`${BASE}/stats`)).json();
 
-      // NOTHING PLANNED IS NOT ZERO HOURS. An account that has not started and
-      // a month of empty days are different facts, and the screen says
+      // NOTHING PLANNED IS NOT NOTHING KEPT. An account that has not started
+      // and a month of empty days are different facts, and the screen says
       // something different for each.
       const bare = await stats(A);
       check('an account with no plans reports no days', bare.days === 0, JSON.stringify(bare));
-      check('and no bars to draw', bare.by_kind.length === 0, JSON.stringify(bare.by_kind));
+      check('and no habits to measure', bare.habits.length === 0, JSON.stringify(bare.habits));
       check('while still saying what window it looked at',
         bare.window_days === 30, String(bare.window_days));
+      check('and still counting what the list holds',
+        bare.counts && bare.counts.habits === 0 && bare.counts.finished === 0,
+        JSON.stringify(bare.counts));
 
-      // A day with three blocks: one habit, one project, one typed straight
-      // into the day and belonging to nothing.
       const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' })
         .format(new Date());
+      const back = (n) => {
+        const d = new Date(`${today}T12:00:00Z`);
+        d.setUTCDate(d.getUTCDate() - n);
+        return d.toISOString().slice(0, 10);
+      };
 
       const mk = async (type, title, extra = {}) => {
-        const { data } = await H.db.from('entries')
+        const { data, error } = await H.db.from('entries')
           .insert({ user_id: A.id, type, title, ...extra }).select().single();
+        if (error) throw new Error(title + ': ' + error.message);
         return data;
       };
-      const gym = await mk('habit', 'Gym', { frequency: 'daily' });
-      const study = await mk('project', 'Rewire the study');
 
-      const { data: plan } = await H.db.from('plans')
-        .insert({ user_id: A.id, date: today, wake_time: '08:00:00', status: 'confirmed' })
-        .select().single();
+      // A daily habit, a weekly one, a project and a task. Created far enough
+      // back that the whole window applies to them.
+      const old = new Date(`${back(60)}T12:00:00Z`).toISOString();
+      const reading = await mk('habit', 'Reading', { frequency: 'daily', created_at: old });
+      const call = await mk('habit', 'Call home', { frequency: 'weekly', created_at: old });
+      const study = await mk('project', 'Rewire the study', { created_at: old });
+      const router = await mk('task', 'Return the router', { created_at: old });
 
-      // FIRST, A DAY HOLDING ONLY A BLOCK THAT BELONGS TO NOTHING. This is
-      // the third state: days were planned, but none of the time was given to
-      // anything in the list, so there is no answer to the question the
-      // section asks. It must not read as an empty account, and it must not
-      // read as half an hour of anything.
-      await H.db.from('blocks').insert({
-        user_id: A.id, plan_id: plan.id, title: 'Dentist', entry_id: null,
-        start_time: '14:00:00', duration_minutes: 30, sort_order: 2,
-      });
+      // Three days, and Reading on two of them — twice on one, to prove a busy
+      // day is still one day.
+      const dayIds = [];
+      for (const [i, date] of [today, back(1), back(2)].entries()) {
+        const { data: plan } = await H.db.from('plans')
+          .insert({ user_id: A.id, date, wake_time: '08:00:00', status: 'confirmed' })
+          .select().single();
+        dayIds.push(plan.id);
 
-      const loose = await stats(A);
-      check('a day of nothing-in-particular still counts as a day planned',
-        loose.days === 1, String(loose.days));
-      check('but none of its minutes are counted',
-        loose.minutes === 0, String(loose.minutes));
-      check('and no bar is drawn for it',
-        loose.by_kind.length === 0, JSON.stringify(loose.by_kind));
+        const rows = [];
+        if (i < 2) {
+          rows.push({ title: 'Reading', entry_id: reading.id, start_time: '08:00:00',
+            duration_minutes: 60, sort_order: 0, completed: true });
+        }
+        if (i === 0) {
+          // The same thing twice in one day.
+          rows.push({ title: 'Reading again', entry_id: reading.id, start_time: '19:00:00',
+            duration_minutes: 30, sort_order: 1, completed: true });
+          rows.push({ title: 'Rewire the study', entry_id: study.id, start_time: '10:00:00',
+            duration_minutes: 120, sort_order: 2, completed: true });
+        }
+        if (i === 1) {
+          // An untimed item, TICKED. It counts exactly like a timed block.
+          rows.push({ title: 'Return the router', entry_id: router.id, start_time: null,
+            duration_minutes: null, sort_order: 1, completed: true });
+        }
+        if (i === 2) {
+          // An untimed item, NOT ticked. It must not count for anything.
+          rows.push({ title: 'Call home', entry_id: call.id, start_time: null,
+            duration_minutes: null, sort_order: 0, completed: false });
+        }
 
-      await H.db.from('blocks').insert([
-        { user_id: A.id, plan_id: plan.id, title: 'Gym', entry_id: gym.id,
-          start_time: '08:00:00', duration_minutes: 60, sort_order: 0 },
-        { user_id: A.id, plan_id: plan.id, title: 'Rewire the study', entry_id: study.id,
-          start_time: '09:00:00', duration_minutes: 120, sort_order: 1 },
-      ]);
+        await H.db.from('blocks').insert(
+          rows.map((r) => ({ user_id: A.id, plan_id: plan.id, ...r }))
+        );
+      }
 
       const mine = await stats(A);
-      check('one day planned', mine.days === 1, String(mine.days));
-      // Two, not three. The Dentist block is still sitting in the day.
-      check('two blocks count, the third belonging to nothing',
-        mine.blocks === 2, String(mine.blocks));
-      check('and three hours, not three and a half',
-        mine.minutes === 180, String(mine.minutes));
+      check('three days planned', mine.days === 3, String(mine.days));
 
-      const kind = Object.fromEntries(mine.by_kind.map((k) => [k.kind, k.minutes]));
-      check('the project took the most', kind.project === 120, JSON.stringify(kind));
-      check('the habit next', kind.habit === 60, JSON.stringify(kind));
-      // The half hour typed straight into the day is gone from every figure,
-      // not moved to a share of its own. The question is what the time was
-      // given TO, and that block answers it with nothing.
-      check('and the untagged half hour is nowhere',
-        kind.untagged === undefined, JSON.stringify(kind));
-      check('the parts add up to the whole',
-        mine.by_kind.reduce((n, k) => n + k.minutes, 0) === mine.minutes);
-      check('and nothing empty is drawn',
-        mine.by_kind.every((k) => k.minutes > 0), JSON.stringify(mine.by_kind));
+      const habit = Object.fromEntries(mine.habits.map((h) => [h.title, h]));
 
-      check('the top list is by time, biggest first',
-        mine.top.map((t) => t.title).join(',') === 'Rewire the study,Gym',
+      // KEPT AGAINST DECLARED, which is the whole section. Daily over thirty
+      // days asks for thirty; it was scheduled on two of them.
+      check('a daily habit is measured against every day',
+        habit.Reading.expected === 30, String(habit.Reading.expected));
+      check('AND COUNTED IN DAYS, NOT BLOCKS — twice on one day is one day',
+        habit.Reading.scheduled === 2, String(habit.Reading.scheduled));
+      check('the cadence comes back with it, so the figure can be read',
+        habit.Reading.frequency === 'daily', habit.Reading.frequency);
+
+      // Weekly over thirty days asks for about four. Its only block is untimed
+      // and unticked, so it got to none.
+      check('a weekly habit asks for about four', habit['Call home'].expected === 4,
+        String(habit['Call home'].expected));
+      check('AN UNTICKED UNTIMED ITEM COUNTS FOR NOTHING',
+        habit['Call home'].scheduled === 0, String(habit['Call home'].scheduled));
+
+      // FURTHEST BEHIND FIRST. Call home is 0 of 4, Reading is 2 of 30 — the
+      // ratio decides, not the raw count.
+      check('the one furthest behind its cadence comes first',
+        mine.habits[0].title === 'Call home', mine.habits.map((h) => h.title).join());
+
+      // Everything with no cadence, by days given.
+      const top = Object.fromEntries(mine.top.map((t) => [t.title, t.days]));
+      check('a project shows the days it was given', top['Rewire the study'] === 1,
         JSON.stringify(mine.top));
-      check('and holds nothing that was not tagged',
-        !mine.top.some((t) => t.title === 'Dentist'), JSON.stringify(mine.top));
+      check('AND A TICKED UNTIMED ITEM COUNTS LIKE ANY OTHER BLOCK',
+        top['Return the router'] === 1, JSON.stringify(mine.top));
+      check('habits are not in that list, they have their own',
+        !mine.top.some((t) => t.title === 'Reading'), JSON.stringify(mine.top));
+
+      // The counts are about what the list holds now, not about the window.
+      check('the counts say what is on the list',
+        mine.counts.habits === 2 && mine.counts.projects === 1 && mine.counts.tasks === 1,
+        JSON.stringify(mine.counts));
+
+      const done = await post(A, `/entries/${router.id}/done`, {});
+      check('finishing a task is accepted', done.status === 200, String(done.status));
+      const after = await stats(A);
+      check('and it is counted as finished this month', after.counts.finished === 1,
+        JSON.stringify(after.counts));
+      check('while dropping out of the waiting count', after.counts.tasks === 0,
+        JSON.stringify(after.counts));
+      // The days it was given are still there. A month's record must not
+      // change shape because of what the list happens to hold today.
+      check('but the days it was given still count',
+        after.top.some((t) => t.title === 'Return the router'), JSON.stringify(after.top));
+
+      // A NEW HABIT IS NOT MEASURED AGAINST A MONTH IT WAS NOT ALIVE FOR.
+      // Without this the first thing a new habit does is report a failure
+      // nobody was given the chance to commit.
+      await mk('habit', 'Just started', { frequency: 'daily', created_at: new Date(`${back(2)}T12:00:00Z`).toISOString() });
+      const fresh = await stats(A);
+      const started = fresh.habits.find((h) => h.title === 'Just started');
+      check('a habit three days old is measured against three days',
+        started.expected === 3, `${started.expected} from ${started.days_known} days`);
 
       // A day outside the window is outside the figures.
-      const old = new Date(`${today}T12:00:00Z`);
-      old.setUTCDate(old.getUTCDate() - 60);
       const { data: oldPlan } = await H.db.from('plans')
-        .insert({ user_id: A.id, date: old.toISOString().slice(0, 10),
-          wake_time: '08:00:00', status: 'confirmed' })
+        .insert({ user_id: A.id, date: back(60), wake_time: '08:00:00', status: 'confirmed' })
         .select().single();
       await H.db.from('blocks').insert({
-        user_id: A.id, plan_id: oldPlan.id, title: 'Long ago', entry_id: gym.id,
-        start_time: '08:00:00', duration_minutes: 600, sort_order: 0,
+        user_id: A.id, plan_id: oldPlan.id, title: 'Long ago', entry_id: reading.id,
+        start_time: '08:00:00', duration_minutes: 600, sort_order: 0, completed: true,
       });
 
       const still = await stats(A);
       check('a day two months back is outside the window',
-        still.minutes === 180 && still.days === 1,
-        `${still.minutes} minutes across ${still.days} day(s)`);
+        still.days === 3 && still.habits.find((h) => h.title === 'Reading').scheduled === 2,
+        `${still.days} days`);
 
-      // AND IT IS ONLY EVER YOUR OWN TIME. The route reads with the caller's
-      // client, so this is row level security being asked the question one
-      // more way — but a stats screen totalling somebody else's hours is a
-      // leak that would look like a plausible number rather than an error.
+      // AND IT IS ONLY EVER YOUR OWN. The route reads with the caller's client,
+      // so this is row level security asked one more way — but a stats screen
+      // totalling somebody else's month is a leak that would look like a
+      // plausible number rather than an error.
       const theirs = await stats(B);
-      check('B sees none of it', theirs.days === 0 && theirs.minutes === 0,
+      check('B sees none of it',
+        theirs.days === 0 && theirs.habits.length === 0 && theirs.counts.habits === 0,
         JSON.stringify(theirs));
-      check('and A still sees their own', (await stats(A)).minutes === 180);
+      check('and A still sees their own', (await stats(A)).days === 3);
     }
 
     console.log('\n6. an account with no profile row, which is every new account');

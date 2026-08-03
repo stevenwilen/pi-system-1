@@ -372,33 +372,69 @@ reachable, since every option came out of the browser's own tzdb, but a row
 showing a value the server would not take is a screen disagreeing with the
 database and saying nothing about it.
 
-#### Where your time went
+#### How often you got to things
 
-The last thing on the setup screen, and read-only. Hours scheduled over the
-last thirty days, split by habits, projects and tasks, and the five things
-given the most time.
+The last thing on the setup screen, and read-only. Over the last thirty days:
+what the list holds, how close each habit came to the cadence it declared, and
+the five things given the most days.
 
-**Given to, never spent on.** The system is never told that anything happened.
-It knows a block was scheduled and left in a confirmed day, which is time set
-aside; reporting that as time spent would be a claim no row supports. The words
-on screen say the weaker, true thing.
+**It counted hours until untimed items arrived**, and then stopped describing
+the app. A thing committed to a day without an hour adds nothing to a total made
+of minutes, so the more of your day you kept off the clock, the emptier the
+section looked. What replaced it is the question this system is built around: a
+habit declares a cadence, the Things list orders by how long since something was
+last scheduled, and **nothing ever checked one against the other**. *"You said
+daily and you got to it nine times in thirty days"* is the one thing that list
+cannot say.
+
+**Got to, never did.** The system is never told that anything happened — an
+untimed item ticked off is the single exception. It knows something was
+scheduled and left in a confirmed day. Reporting that as work done would be a
+claim no row supports.
+
+| | |
+|---|---|
+| **The counts** | habits, projects and tasks **on the list now** — plus tasks **finished this month**, which is the only one about the window. The words say which is which |
+| **Habits** | `scheduled / expected`, with a bar. Furthest behind first |
+| **Most days given to** | everything with no cadence, by days scheduled, top five |
+
+**Expected comes from the declared frequency**: daily is every day, *few times a
+week* is three in seven, weekly is one, monthly is one. Three for *few times a
+week* because the phrase covers two to four and the middle is the honest reading
+— taking the low end would flatter every habit carrying it.
+
+**Never measured against a month it was not alive for.** A habit added five days
+ago is measured against five days. Otherwise the first thing a new habit does is
+report a failure nobody was given the chance to commit.
+
+**Days, not blocks.** Scheduling one thing twice on a Tuesday is one Tuesday you
+got to it. Counting it twice would let a single busy day stand in for a cadence
+it says nothing about.
+
+**An untimed item counts exactly when staleness says it does** — `completed`,
+which is true for a timed block because it stayed in the day, and true for an
+untimed one only once it has been ticked (§3.2). The same filter, deliberately:
+two screens disagreeing about whether you got to something would be worse than
+either being wrong.
+
+**Finished tasks are dated by `updated_at`**, which is the nearest thing to a
+completion date the schema has — there is no `done_at`. Right for the ordinary
+case, where a task is finished and never touched again; a task edited afterwards
+would count from the edit. That is the known cost of not having the column, and
+it is smaller than dropping the figure.
+
+**A month's record does not change shape because of what the list holds today.**
+Finished and deleted entries still appear in *days given to*: a task done last
+week was worked on last week.
 
 **Thirty days, not all time.** All time is the honest default at four days of
 history and the wrong one at four hundred, when it becomes a figure that only
 grows and stops describing this month. The window is stated on screen so the
 number is never read as more than it is.
 
-**Nothing planned is not zero hours.** An account that has not started and a
-month of empty days are different facts and get different sentences. A third
-sentence covers days that were planned but held nothing tied to the list.
-
-**Blocks typed straight into a day are not counted at all.** They were shown
-for a while as their own share, `not on a thing`, on the grounds that the parts
-should add up to the planned total. But the question this section answers is
-what you gave your time to, and a block belonging to nothing answers it with
-nothing — so those hours only inflated a figure about the things in the list
-with hours that were not about them. The total is therefore hours **on your
-things**, not hours planned, and the sentence on screen says so.
+**Nothing planned is not nothing kept.** An account that has not started and a
+month of empty days get different sentences — and the counts are shown either
+way, because what the list holds is true regardless.
 
 ### 2.9 A request is whoever its token says, and nothing else
 
@@ -1116,8 +1152,10 @@ an untimed item would fall past the too-early test, past the too-late test, and
 be **sent**, as `NaN:NaN to NaN:NaN`. A guard that fails open into a delivered
 message is the kind worth writing twice.
 
-They are also left out of **Where your time went** (§2.8): that section answers
-where the time went, and an item with no hour took no measured time.
+They are **not** left out of **How often you got to things** (§2.8) — that
+section stopped counting hours partly because of them. A ticked untimed item
+counts there exactly as a timed block does, which is the whole reason the
+section was rewritten.
 
 #### A block is worked by gesture
 

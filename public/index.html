@@ -1331,8 +1331,9 @@
         cursor: pointer;
       }
 
-      /* WHERE THE TIME WENT. Bars rather than a table: the question is which
-         of these is bigger, and a bar answers that without being read. */
+      /* HOW OFTEN YOU GOT TO THINGS. Bars rather than a table: the question
+         is how close to the cadence you came, and a part-filled bar answers
+         that without being read. */
       .stats {
         margin: 30px 0 34px;
       }
@@ -1347,12 +1348,18 @@
         font-size: 12px;
         color: var(--muted);
       }
+      /* Wider than it was, because it holds a title now rather than the word
+         "habits". Truncated rather than wrapped: a two-line row would break the
+         line the bars are read down. */
       .statrow .who {
-        width: 84px;
+        width: 108px;
         flex: none;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .statrow .much {
-        width: 46px;
+        width: 40px;
         flex: none;
         text-align: right;
         color: var(--text);
@@ -1370,6 +1377,25 @@
         height: 100%;
         background: var(--text);
       }
+      /* The counts. What the list holds, on one line, in the plainest form
+         there is: a figure and the word for it. No bars — these are not being
+         compared with each other, they are being read. */
+      .countrow {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 18px;
+        margin-bottom: 14px;
+      }
+      .count {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .count b {
+        font-weight: 500;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+
       .toprow {
         display: flex;
         gap: 10px;
@@ -2153,9 +2179,10 @@
              is never told that — so every figure here is about what was set
              aside, and the words say so. -->
         <div class="stats">
-          <div class="label">Where your time went</div>
+          <div class="label">How often you got to things</div>
           <p class="field-note" id="stat-head">Nothing planned yet.</p>
-          <div id="stat-bars"></div>
+          <div id="stat-counts"></div>
+          <div id="stat-habits"></div>
           <div id="stat-top"></div>
         </div>
 
@@ -5109,14 +5136,18 @@
       }
 
       /**
-       * Where the time went, over the last month.
+       * How often you got to things, over the last month.
        *
-       * "Given to" rather than "spent on" throughout. The system is never told
-       * that anything happened; it knows a block was scheduled and left in a
-       * confirmed day, which is time set aside. Reporting that as time spent
-       * would be a claim no row supports.
+       * "Got to" rather than "did" throughout. The system is never told that
+       * anything happened — an untimed item ticked off is the one exception —
+       * so what it knows is that something was scheduled and left in a day.
+       * Reporting that as work done would be a claim no row supports.
+       *
+       * It counted hours until untimed items arrived, and then stopped
+       * describing the app: a thing committed to a day without an hour adds
+       * nothing to a total made of minutes, so the more of your day you kept
+       * off the clock, the emptier the section looked.
        */
-      const hours = (mins) => (mins / 60).toFixed(1);
 
       async function loadStats() {
         let s;
@@ -5126,77 +5157,140 @@
           return;
         }
 
-        $('stat-bars').replaceChildren();
-        $('stat-top').replaceChildren();
+        for (const id of ['stat-counts', 'stat-habits', 'stat-top']) {
+          $(id).replaceChildren();
+        }
 
-        // NOTHING PLANNED IS NOT ZERO HOURS. One is an account that has not
+        // NOTHING PLANNED IS NOT NOTHING KEPT. One is an account that has not
         // started, the other is a month of empty days, and they read alike if
-        // the same figures are shown for both.
+        // the same figures are shown for both. The counts still go up, because
+        // what the list holds is true either way.
+        drawCounts(s.counts);
+
         if (!s.days) {
           $('stat-head').textContent =
             `Nothing planned in the last ${s.window_days} days.`;
           return;
         }
 
-        // A THIRD STATE. Days were planned, but nothing in them was tied to
-        // anything in the list, so there is no answer to what the time went
-        // to — which is not the same as no days and not the same as no hours.
-        if (!s.minutes) {
-          $('stat-head').textContent =
-            `${s.days} day${s.days === 1 ? '' : 's'} planned in the last ` +
-            `${s.window_days}, but nothing in them was tied to one of your things.`;
-          return;
+        $('stat-head').textContent =
+          `${s.days} day${s.days === 1 ? '' : 's'} planned in the last ` +
+          `${s.window_days}. How often you got to each thing, against how often ` +
+          'you said you would.';
+
+        drawHabits(s.habits);
+        drawTop(s.top);
+      }
+
+      /**
+       * What the list holds, in figures.
+       *
+       * NOT A MONTH'S WORTH, except for the last one. These are counts of what
+       * exists right now — three habits, two projects — and only `finished`
+       * belongs to the window. The words say which is which rather than
+       * leaving four numbers under one heading to be read as one kind of fact.
+       */
+      function drawCounts(counts) {
+        if (!counts) return;
+
+        const line = document.createElement('div');
+        line.className = 'countrow';
+
+        for (const [n, word] of [
+          [counts.habits, 'habit'],
+          [counts.projects, 'project'],
+          [counts.tasks, 'task'],
+        ]) {
+          if (!n) continue;
+          const one = document.createElement('span');
+          one.className = 'count';
+          const big = document.createElement('b');
+          big.textContent = String(n);
+          const label = document.createElement('span');
+          label.textContent = ` ${word}${n === 1 ? '' : 's'}`;
+          one.append(big, label);
+          line.append(one);
         }
 
-        const perDay = s.minutes / s.days / 60;
-        // "On your things", because that is what is counted. Blocks typed
-        // straight into a day are not here, and a bare hours figure would be
-        // read as everything planned.
-        $('stat-head').textContent =
-          `${hours(s.minutes)} hours on your things across ${s.days} ` +
-          `day${s.days === 1 ? '' : 's'}, in the last ${s.window_days}. ` +
-          `About ${perDay.toFixed(1)} a day.`;
+        if (counts.finished) {
+          const one = document.createElement('span');
+          one.className = 'count';
+          const big = document.createElement('b');
+          big.textContent = String(counts.finished);
+          const label = document.createElement('span');
+          // "finished" rather than "done", and the window said out loud: the
+          // three beside it are about now and this one is about the month.
+          label.textContent = ` finished this month`;
+          one.append(big, label);
+          line.append(one);
+        }
 
-        // Bars are drawn against the biggest, not against the total, so the
-        // smallest one is still visible rather than a sliver.
-        const most = Math.max(...s.by_kind.map((k) => k.minutes), 1);
+        if (line.children.length) $('stat-counts').append(line);
+      }
 
-        for (const k of s.by_kind) {
+      /**
+       * Kept against declared, which is the one thing the Things list cannot
+       * say. It knows how long since something was last scheduled; it has never
+       * once compared that to the cadence the habit was given.
+       *
+       * The bar is the ratio and is capped at full. Going over is not a failure
+       * and not worth drawing as one — a bar past its own end reads as a bug.
+       */
+      function drawHabits(habits) {
+        if (!habits || !habits.length) return;
+
+        const head = document.createElement('div');
+        head.className = 'tophead';
+        head.textContent = 'Habits';
+        $('stat-habits').append(head);
+
+        for (const h of habits) {
           const row = document.createElement('div');
           row.className = 'statrow';
 
           const who = document.createElement('span');
           who.className = 'who';
-          who.textContent = `${k.kind}s`;
+          who.textContent = h.title;
 
           const much = document.createElement('span');
           much.className = 'much';
-          much.textContent = `${hours(k.minutes)}h`;
+          much.textContent = `${h.scheduled}/${h.expected}`;
 
           const bar = document.createElement('span');
           bar.className = 'bar';
           const fill = document.createElement('span');
-          fill.style.width = `${Math.round((k.minutes / most) * 100)}%`;
+          const share = Math.min(1, h.scheduled / Math.max(1, h.expected));
+          fill.style.width = `${Math.round(share * 100)}%`;
           bar.append(fill);
 
-          row.append(who, much, bar);
-          $('stat-bars').append(row);
-        }
+          // The cadence it was measured against, said out loud. "9/13" means
+          // nothing without it, and a reader should not have to remember what
+          // they typed into the add form a month ago.
+          row.setAttribute('aria-label',
+            `${h.title}, ${h.frequency}: scheduled on ${h.scheduled} of about ` +
+            `${h.expected} days`);
 
-        if (!s.top.length) return;
+          row.append(who, much, bar);
+          $('stat-habits').append(row);
+        }
+      }
+
+      /** Everything with no cadence to be measured against. */
+      function drawTop(top) {
+        if (!top || !top.length) return;
 
         const head = document.createElement('div');
         head.className = 'tophead';
-        head.textContent = 'Most time given to';
+        head.textContent = 'Most days given to';
         $('stat-top').append(head);
 
-        for (const t of s.top) {
+        for (const t of top) {
           const row = document.createElement('div');
+          row.className = 'toprow';
           const much = document.createElement('b');
-          much.textContent = `${hours(t.minutes)}h`;
+          much.textContent = String(t.days);
           const title = document.createElement('span');
           title.textContent = t.title;
-          row.className = 'toprow';
           row.append(much, title);
           $('stat-top').append(row);
         }
