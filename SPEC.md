@@ -759,15 +759,22 @@ Its **warning mark is held back** too. The mark asks "does this need your
 attention" and being scheduled answers it, so a greyed row still shouting a
 deadline would be arguing with itself.
 
-**Tapping it takes it back out of the day.** The last of its blocks, so a thing
-scheduled twice comes out one tap at a time and the row stays grey until none
-remain. It goes through the ordinary removal, so it is undoable like any other.
+**Tapping it adds another one.** A tap means the same thing on every row, grey
+or not: put this in the day. So a thing can be scheduled twice, which is an
+ordinary way to plan — two sessions of one project in a day is not a mistake to
+be prevented.
 
-**Unless that block has begun**, in which case nothing happens and the row stays
-grey. It is the day that happened, and the server refuses to remove it — see
-3.2. The row does not pretend otherwise.
+It used to take the thing back **out** when the row was grey. That is the rule
+this replaced, and it was wrong twice over: one gesture meant opposite things
+depending on a state you had to read the colour to know, and it made scheduling
+the same thing twice impossible. The greying is information, not a mode.
 
-The `···` menu is unaffected throughout: edit, done and delete all work.
+**Removal belongs to the block.** Swipe it left in the day, where the thing you
+are pointing at is the thing being removed, and it keeps the six-second undo. A
+row could only ever guess which of several blocks you meant — it took the last —
+and a block cannot.
+
+The `···` menu is unaffected throughout: edit, done and anytime all work.
 
 Read off the blocks the builder is holding rather than anything stored, so
 removing its block frees the row on the same render, and so the answer follows

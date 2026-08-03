@@ -2681,35 +2681,8 @@
       const inShownPlan = (entryId) =>
         Boolean(entryId) && blocks.some((b) => b.entryId === entryId);
 
-      /** The last block this thing has in the day, or -1. */
-      const lastBlockFor = (entryId) => {
-        for (let i = blocks.length - 1; i >= 0; i--) {
-          if (blocks[i].entryId === entryId) return i;
-        }
-        return -1;
-      };
-
       /** Has this block started? The one definition, used everywhere. */
       const blockBegun = (b) => onToday() && hasBegun(b, nowMinutes());
-
-      /**
-       * Take a thing back out of the day.
-       *
-       * The last of its blocks, so a thing scheduled twice loses one tap at a
-       * time and stays greyed until none are left.
-       *
-       * Whatever the clock says. A block that had begun used to be exempt,
-       * because the server refused to remove one that had been delivered; it
-       * no longer does, and the row would otherwise be the last place still
-       * enforcing a rule nothing behind it holds.
-       *
-       * It goes through removeBlock, so it is undoable like any other removal.
-       */
-      function unschedule(entryId) {
-        const at = lastBlockFor(entryId);
-        if (at === -1) return;
-        removeBlock(at);
-      }
 
       function renderThings() {
         const box = $('things');
@@ -3214,9 +3187,18 @@
             acts.classList.add('hidden');
             return;
           }
-          // Already in the day, so a tap takes it back out rather than putting
-          // it in twice. The menu above is unaffected either way.
-          if (locked) return unschedule(item.id);
+          // A TAP ALWAYS ADDS ONE, greyed or not.
+          //
+          // It used to take the thing back OUT of the day when the row was
+          // already grey. That made one gesture mean opposite things depending
+          // on a state you had to read the colour to know — and it made
+          // scheduling the same thing twice impossible, though two sessions of
+          // one project in a day is an ordinary way to plan.
+          //
+          // Removal belongs to the block now, where what you are pointing at
+          // is the thing being removed, and it keeps its undo. The grey still
+          // says "this is already in the day"; it no longer changes what
+          // pressing the row does.
           addBlock({ title: item.title, entryId: item.id });
         };
 

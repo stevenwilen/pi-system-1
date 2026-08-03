@@ -1614,13 +1614,13 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('with its mark back', Boolean(markOf(rowFor('UF application'))));
   }
 
-  console.log('\ntapping a greyed thing takes it back out of the day');
+  console.log('\ntapping a greyed thing adds another, it does not take it out');
   {
     const things = [
-      { id: 'e-spanish', type: 'habit', title: 'Spanish', days: 3, mark: null, due: null, size: null, last_scheduled: null },
-      { id: 'e-free', type: 'task', title: 'Return the router', days: 1, mark: null, due: null, size: null, last_scheduled: null },
+      { id: 'e-spanish', type: 'habit', title: 'Spanish', days: 3, mark: null, due: null, size: null, note: null, last_scheduled: null },
+      { id: 'e-free', type: 'task', title: 'Return the router', days: 1, mark: null, due: null, size: null, note: null, last_scheduled: null },
     ];
-    const { ctx, byId, slots, titles } = boot({
+    const { ctx, byId, titles } = boot({
       plan: twoDays(), entries: utcEntries({ items: things }), now: '10:45',
     });
     await ctx.load();
@@ -1634,35 +1634,39 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('tomorrow holds one block', titles().join() === 'Spanish', titles().join());
     check('and its row is greyed', rowFor('Spanish')._class.has('locked'));
 
+    // THE CHANGE. One gesture, one meaning. It used to take the thing back OUT
+    // when the row was grey, so the same press did opposite things depending
+    // on a state you had to read the colour to know — and scheduling one thing
+    // twice was impossible, though two sessions of a project in a day is an
+    // ordinary way to plan.
     rowFor('Spanish').onclick();
-    await wait(CLOSED);
-    check('tapping it removes the block', titles().join() === '', `"${titles().join()}"`);
-    check('and the row comes back to normal', !rowFor('Spanish')._class.has('locked'));
-    check('undoably, like any other removal', byId['undo-host'].children.length === 1);
+    check('tapping it adds a second', titles().join() === 'Spanish,Spanish',
+      titles().join());
+    check('the row stays greyed', rowFor('Spanish')._class.has('locked'));
+    check('and nothing was removed to do it', byId['undo-host'].children.length === 0);
 
-    // Put it back and add it twice, to check one tap takes one block.
-    byId['undo-host'].children[0].children.find((c) => c.tagName === 'button').onclick();
-    check('undo restores it', titles().join() === 'Spanish', titles().join());
-    check('and greys the row again', rowFor('Spanish')._class.has('locked'));
+    rowFor('Spanish').onclick();
+    check('and again, as many as you like',
+      titles().join() === 'Spanish,Spanish,Spanish', titles().join());
 
-    // One tap in, one tap out. It never adds a second block for the same
-    // thing, because after the first tap the row is greyed and a tap on a
-    // greyed row means take it out.
+    // A free row behaves the same way. There is one branch now, not two.
     rowFor('Return the router').onclick();
     check('a tap on a free row puts it in',
-      titles().join() === 'Spanish,Return the router', titles().join());
+      titles().join() === 'Spanish,Spanish,Spanish,Return the router', titles().join());
     rowFor('Return the router').onclick();
-    await wait(CLOSED);
-    check('and the next tap takes it straight back out',
-      titles().join() === 'Spanish', titles().join());
+    check('and the next one adds another of it too',
+      titles().join() === 'Spanish,Spanish,Spanish,Return the router,Return the router',
+      titles().join());
   }
 
-  console.log('\ntwice in one day comes out one tap at a time');
+  console.log('\nremoval belongs to the block, not to the row');
   {
+    // What the row used to do is done where the thing being removed is the
+    // thing you are pointing at — and it keeps the undo it always had.
     const things = [
-      { id: 'e-uf', type: 'project', title: 'UF application', days: 6, mark: null, due: null, size: null, last_scheduled: null },
+      { id: 'e-uf', type: 'project', title: 'UF application', days: 6, mark: null, due: null, size: null, note: null, last_scheduled: null },
     ];
-    const { ctx, byId, titles } = boot({
+    const { ctx, byId, slots, titles, cardOf, backingOf } = boot({
       entries: utcEntries({ items: things }),
       now: '10:45',
       plan: {
@@ -1677,63 +1681,37 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       },
     });
     await ctx.load();
-
-    // The plan under test is tomorrow's, and the page opens on today.
     await byId['pick-tomorrow'].onclick();
 
-    const rowFor = (t) => thingRows(byId)
-      .find((r) => r.text().includes(t));
+    const rowFor = (t) => thingRows(byId).find((r) => r.text().includes(t));
 
     check('three blocks, two of them the same thing',
       titles().join() === 'UF application,Email,UF application', titles().join());
     check('the row is greyed', rowFor('UF application')._class.has('locked'));
 
-    rowFor('UF application').onclick();
+    // Swipe the last one away.
+    const card = cardOf(slots()[2]);
+    down(card, 0, 0);
+    move(card, -90, 0);
+    up(card, -90, 0);
     await wait(CLOSED);
-    check('one tap takes the last of them',
-      titles().join() === 'UF application,Email', titles().join());
+
+    check('the swipe takes that block', titles().join() === 'UF application,Email',
+      titles().join());
+    check('undoably, like any other removal', byId['undo-host'].children.length === 1);
     check('and the row stays greyed while one remains',
       rowFor('UF application')._class.has('locked'));
 
-    rowFor('UF application').onclick();
+    // The other one, and the row frees up: locked is read off the blocks on
+    // screen, so it follows them without being told.
+    const first = cardOf(slots()[0]);
+    down(first, 0, 0);
+    move(first, -90, 0);
+    up(first, -90, 0);
     await wait(CLOSED);
-    check('the next tap takes the other', titles().join() === 'Email', titles().join());
+
+    check('the last of them goes too', titles().join() === 'Email', titles().join());
     check('and now the row is free', !rowFor('UF application')._class.has('locked'));
-  }
-
-  console.log('\na thing comes out of the day whatever the clock says');
-  {
-    const things = [
-      { id: 'e-read', type: 'habit', title: 'Reading', days: 3, mark: null, due: null, size: null, last_scheduled: null },
-      { id: 'e-uf', type: 'project', title: 'UF application', days: 6, mark: null, due: null, size: null, last_scheduled: null },
-    ];
-    // Reading ran 08:00–09:00 and is over; UF application starts at 11:00 and
-    // has not begun. It is 10:45.
-    const { ctx, byId, titles } = boot({
-      plan: twoDays(), entries: utcEntries({ plans_in: 'morning', items: things }), now: '10:45',
-    });
-    await ctx.load();
-
-    const rowFor = (t) => thingRows(byId)
-      .find((r) => r.text().includes(t));
-
-    check('both rows are greyed', rowFor('Reading')._class.has('locked') &&
-      rowFor('UF application')._class.has('locked'));
-
-    // Reading is over. It used to be exempt, because the server refused to
-    // remove a block whose message had gone out; it no longer does, so the row
-    // no longer pretends otherwise.
-    rowFor('Reading').onclick();
-    await wait(CLOSED);
-    check('the one that is over comes out too', titles().join() === 'Gym,UF application',
-      titles().join());
-    check('and its row frees up', !rowFor('Reading')._class.has('locked'));
-    check('with an undo, like any other removal', byId['undo-host'].children.length > 0);
-
-    rowFor('UF application').onclick();
-    await wait(CLOSED);
-    check('and so does the one still to come', titles().join() === 'Gym', titles().join());
-    check('its row frees up as well', !rowFor('UF application')._class.has('locked'));
   }
 
   console.log('\na note is hidden once its block is over');

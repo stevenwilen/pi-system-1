@@ -1260,18 +1260,17 @@ console.log('\n17. today and tomorrow');
   check('there is no badge left', !/inplan/.test(code) && !/inplan/.test(css));
   check('nor the words it carried', !/today's\} plan|tomorrow's\} plan/.test(code));
 
-  check('a tap on a greyed row takes it back out', /if \(locked\) return unschedule/.test(code));
-  check('the last of its blocks, so twice in a day comes out one at a time',
-    /const lastBlockFor = /.test(code));
-  // The exception is gone with the server rule that justified it. A block that
-  // had begun used to be exempt because the server refused to remove a
-  // delivered one; it no longer does, and the row would otherwise be the last
-  // place enforcing a rule nothing behind it holds.
-  check('and one that has begun goes too', /at === -1\) return;/.test(code));
-  check('nothing checks the clock on the way out',
-    !/blockBegun\(blocks\[at\]\)/.test(code));
-  check('it goes through the ordinary removal, so it is undoable',
-    /removeBlock\(at\)/.test(code));
+  // A TAP ALWAYS ADDS ONE, greyed or not, so the same thing can be scheduled
+  // twice in a day — two sessions of one project is an ordinary way to plan.
+  //
+  // It used to take the thing back OUT when the row was grey, which made one
+  // gesture mean opposite things depending on a state you had to read the
+  // colour to know. Removal belongs to the block now, where what you are
+  // pointing at is the thing being removed.
+  check('a tap on a greyed row adds another', !/if \(locked\) return/.test(code));
+  check('there is one branch, not two', /addBlock\(\{ title: item\.title, entryId: item\.id \}\);/.test(code));
+  check('and nothing is left that takes a thing back out of the day',
+    !/unschedule/.test(code) && !/lastBlockFor/.test(code));
 
   check('read off the blocks on screen, so removing one unlocks it',
     /blocks\.some\(\(b\) => b\.entryId === entryId\)/.test(code));
