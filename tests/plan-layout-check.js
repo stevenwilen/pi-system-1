@@ -283,6 +283,16 @@ console.log('\n3. rows are rows; only builder blocks are cards');
   }
   check('and they hang from the top of the row, not its middle or its baseline',
     /align-items: flex-start/.test(rule('.arow')), rule('.arow'));
+
+  // NO RULE BETWEEN THEM, unlike the Things list above. That looks like an
+  // inconsistency and is the opposite: Things is a long list you scan down,
+  // where a hairline is what stops two rows reading as one. This is three or
+  // four things under a heading inside an already-divided day, and ruling them
+  // made a short list look like a table. Space separates, the way it does
+  // everywhere else here — and "make it match Things" is exactly the tidy-up
+  // that would put them back.
+  check('nothing is ruled between the anytime rows',
+    !/border/.test(rule('.atime + .atime')), rule('.atime + .atime') || '(no rule, which is the point)');
   check('so nothing on the row is centred against the whole of it',
     !/align-self: center/.test(rule('.atick') + rule('.ax')));
   check('while a block still has some, because a block is a slip',

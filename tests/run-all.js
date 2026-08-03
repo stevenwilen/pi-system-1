@@ -188,7 +188,18 @@ const run = (name, secs) =>
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${name.padEnd(28)} ${String(r.secs).padStart(3)}s  exit=${r.code}`);
     if (!ok) {
       const lines = r.out.split('\n').filter((l) => l.trim());
-      console.log(lines.slice(-25).map((l) => '      | ' + l).join('\n'));
+
+      // THE FAILING LINES FIRST, then the tail. It was the tail alone, and
+      // three separate intermittent failures were reported as twenty-five
+      // consecutive PASSes — because a suite that fails early and then carries
+      // on ends on its successes, and the last twenty-five lines are precisely
+      // where the answer is not. Each time the only way to find out what broke
+      // was to run the suite again, by which point it had stopped breaking.
+      const failed = lines.filter((l) => /\bFAIL\b|harness error|Error:/.test(l));
+      const tail = lines.slice(-12);
+      const shown = [...failed, ...(failed.length ? ['      ...'] : []), ...tail];
+
+      console.log(shown.map((l) => '      | ' + l).join('\n'));
     }
   }
 

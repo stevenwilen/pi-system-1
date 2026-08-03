@@ -1230,12 +1230,17 @@
         margin-bottom: 6px;
       }
 
-      /* The wrapper the divider hangs on, and what the removal animation
-         collapses. Nothing slides: these rows are pressed, not handled. */
-      .atime + .atime {
-        border-top: 1px solid var(--line);
-      }
+      /* `.atime` is the wrapper each row sits in. It carries no style of its
+         own: it exists so `slotAt` can find a row by the index it draws, and so
+         the removal animation has something to collapse.
 
+         IT HELD A HAIRLINE BETWEEN ROWS AND NO LONGER DOES. The Things list is
+         ruled because it is a long list you scan down, where a line is what
+         stops two rows reading as one. This is three or four things under a
+         heading, inside a day that is already divided from what surrounds it —
+         and the rules were dividing what did not need dividing, which made a
+         short list look like a table. Space does the separating, which is what
+         it does everywhere else on this screen. */
       .arow {
         display: flex;
         /* Top, not baseline and not centre. A row with a note under its title

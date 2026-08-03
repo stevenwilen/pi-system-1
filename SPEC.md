@@ -1018,6 +1018,18 @@ block, as before.
 Each row is a title, the note it arrived with, and a tick. The note is shown
 rather than hidden behind a gesture: a row with no hour has room for it.
 
+**No hairlines between them**, unlike Things. That reads as an inconsistency and
+is the opposite of one: Things is a long list you scan down, where a rule is what
+stops two rows reading as one. This is three or four items under a heading inside
+a day already divided from what surrounds it, and ruling them made a short list
+look like a table. Space separates, as it does everywhere else here (§7).
+
+The tick, the title and the `×` share one line box and hang from the top of the
+row, so their centres land on the same line whatever sits underneath — a note, a
+longer title, nothing. Top rather than centre matters: a row with a note is
+taller than its title, and centring would measure the controls against the whole
+of it.
+
 - **Ticked off leaves it visible, struck through.** What you got through is
   worth seeing at the end of a day.
 - **The tick is written at once**, not at the next Confirm. Ticking happens all
