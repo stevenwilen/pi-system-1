@@ -2979,8 +2979,15 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       const b = menuOf(thingRows(byId)[at]).children.find((c) => c.textContent === word);
       b.onclick({ stopPropagation() {} });
     };
-    const heading = (byId) =>
-      byId.things.children.find((c) => c._class && c._class.has('pinhead'));
+    // The mark beside a name, which is where a pin says what it is now. It
+    // used to be a heading over a group; one list with a mark on the row beats
+    // splitting a short list into two shorter ones.
+    const pinMark = (byId, at) => {
+      const title = thingRows(byId)[at].children[0].children[0];
+      return title.children.find((c) => c._class && c._class.has('pinmark')) || null;
+    };
+    const marked = (byId) => thingRows(byId)
+      .map((r, i) => (pinMark(byId, i) ? 1 : 0)).join('');
 
     {
       // NOTHING PINNED, NOTHING SAID. A standing label over an empty group is
@@ -2990,7 +2997,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
       check('the list is in its usual order', names(byId) === 'UF application,Reading,Gym',
         names(byId));
-      check('and there is no heading over it', !heading(byId));
+      check('and no row carries a pin', marked(byId) === '000', marked(byId));
       check('the menu offers a pin', Boolean(menuOf(thingRows(byId)[1])
         .children.find((c) => c.textContent === 'Pin')));
     }
@@ -3009,9 +3016,16 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
         names(byId));
       check('ABOVE SOMETHING OVERDUE, which is the whole decision',
         names(byId).indexOf('Gym') < names(byId).indexOf('UF application'));
-      check('and a heading appears to say why it is there', Boolean(heading(byId)));
-      check('which reads Pinned', heading(byId).textContent === 'Pinned',
-        heading(byId).textContent);
+      // ONE LIST, and the row says why it is where it is. A heading and a gap
+      // would split three things into two groups of one and two.
+      check('the row that moved carries a pin', Boolean(pinMark(byId, 0)));
+      check('and it is the only one that does', marked(byId) === '100', marked(byId));
+      check('the mark sits beside the name, not out with the others',
+        thingRows(byId)[0].children[0].children[0]._class.has('title'),
+        thingRows(byId)[0].children[0].children[0].className);
+      check('and it is named for anything that cannot see it',
+        pinMark(byId, 0).getAttribute('aria-label') === 'pinned',
+        pinMark(byId, 0).getAttribute('aria-label'));
 
       // Written at once. There is no Confirm over this list, and a pin that
       // lived only in the page would be lost by the reload meant to restore it.
@@ -3024,16 +3038,18 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     }
 
     {
-      // AND THE GROUP IS SEPARATED BY SPACE, not by a rule: this list already
-      // has a hairline between every row, so one more would not read as a break.
+      // NOTHING SPLITS THE LIST. It is one list with a mark in it, which is the
+      // whole of the difference from the group this replaced.
       const { ctx, byId } = fresh();
       await ctx.load();
       press(byId, 2, 'Pin');
 
-      const slots = thingSlots(byId);
-      check('the first unpinned row carries the gap',
-        slots.some((t) => t._class.has('afterpins')),
-        slots.map((t) => t.className).join('|'));
+      const html = require('fs').readFileSync(ROOT + '/public/index.html', 'utf8');
+      check('there is no heading over the pinned ones', !/pinhead/.test(html));
+      check('nor a gap after the last of them', !/afterpins/.test(html));
+      check('every row is still a plain row',
+        thingSlots(byId).every((t) => t.className === 'thing'),
+        thingSlots(byId).map((t) => t.className).join('|'));
     }
 
     {
@@ -3052,7 +3068,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
       check('it drops back into the order', names(byId) === 'UF application,Reading,Gym',
         names(byId));
-      check('the heading goes with the last pin', !heading(byId));
+      check('and the mark goes with it', marked(byId) === '000', marked(byId));
       check('and that is written too',
         posted.length === 1 && posted[0].body.pinned === false,
         JSON.stringify(posted.map((p) => p.body)));
@@ -3085,25 +3101,32 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       await wait(0);
       check('and goes back when the write is refused',
         names(byId) === 'UF application,Reading,Gym', names(byId));
-      check('with no heading left behind', !heading(byId));
+      check('with no mark left behind', marked(byId) === '000', marked(byId));
     }
 
     {
       // WHAT THE SERVER SENDS IS WHAT IS DRAWN. A pin that arrives already set
       // needs no press to be at the top.
-      // By id, not by position: the fixture is ordered the way the server
-      // orders it, and an index into that is a second thing to keep in step.
-      // It also lands the pin on a row that is NOT already first, which is the
-      // half worth checking — the page groups by the flag rather than trusting
-      // the order it was handed.
+      // AS THE SERVER WOULD SEND IT: pinned first, then the usual two halves.
+      // The page does not re-sort what it is handed — it holds no second
+      // opinion about this order, which is the point of sortThings existing
+      // only for the moment a pin changes it here — so a fixture with a pinned
+      // row anywhere but the front is a delivery that cannot happen.
       const already = items();
-      already.find((t) => t.id === 'e-read').pinned = true;
-      const b = boot({ entries: utcEntries({ plans_in: 'morning', items: already }), now: '11:00' });
+      const read = already.find((t) => t.id === 'e-read');
+      read.pinned = true;
+      const b = boot({
+        entries: utcEntries({
+          plans_in: 'morning',
+          items: [read, ...already.filter((t) => t !== read)],
+        }),
+        now: '11:00',
+      });
       await b.ctx.load();
 
       check('a thing that arrives pinned is already at the top',
         names(b.byId).startsWith('Reading'), names(b.byId));
-      check('and the heading is there on the first render', Boolean(heading(b.byId)));
+      check('and it is marked on the first render', Boolean(pinMark(b.byId, 0)));
     }
   }
 

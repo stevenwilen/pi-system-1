@@ -264,14 +264,25 @@
         position: relative;
       }
 
-      /* The heading over the pinned group, and the gap that ends it. Space
-         separates them rather than a rule, because this list already has a
-         hairline between every row and one more would not read as a break. */
-      .pinhead {
-        margin: 2px 0 6px;
-      }
-      .afterpins {
-        margin-top: 20px;
+      /* A pin, drawn rather than typed. A pushpin character would fall back
+         to whatever font on the device happens to carry it — which is exactly
+         how the deadline asterisks ended up bold on a laptop and thin on the
+         phone. A shape made of a border-radius renders identically everywhere
+         and has no font to be missing from.
+
+         Muted, like the note dot: this says a row has been held at the top,
+         which is a state rather than a warning or something to press. */
+      .pinmark {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        margin-left: 7px;
+        vertical-align: middle;
+        background: var(--muted);
+        /* Three round corners and one square: a teardrop, turned to point
+           down-left the way a pin sits in a map. */
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
       }
 
       .thing + .thing {
@@ -2800,35 +2811,11 @@
           return;
         }
 
-        // PINNED FIRST, AND SAID SO. The server already sends them in front,
-        // so this could have been one flat list — and then nothing on screen
-        // would explain why a habit sits above something overdue. A heading
-        // over them, and a gap after the last one, is what makes the order
-        // legible instead of merely correct.
-        //
-        // The heading appears only when something is pinned. A standing label
-        // over an empty group is a section of the list that says nothing on
-        // almost every day.
-        const pinned = things.filter((t) => t.pinned);
-        const rest = things.filter((t) => !t.pinned);
-
-        if (pinned.length) {
-          const head = document.createElement('div');
-          head.className = 'label pinhead';
-          head.textContent = 'Pinned';
-          box.append(head);
-        }
-
-        for (const item of pinned) box.append(thingSlot(item));
-
-        for (const [i, item] of rest.entries()) {
-          const slot = thingSlot(item);
-          // The break between the two, made of space rather than a rule: the
-          // list already has a hairline between every row, so one more would
-          // be invisible as a divider.
-          if (pinned.length && i === 0) slot.classList.add('afterpins');
-          box.append(slot);
-        }
+        // ONE LIST. Pinned things are still first — the server sends them that
+        // way — but they are not a section of their own: a heading and a gap
+        // split a short list into two shorter ones, and what a pin needs to say
+        // is said on the row itself, beside the name.
+        for (const item of things) box.append(thingSlot(item));
       }
 
       /**
@@ -3262,6 +3249,18 @@
         const title = document.createElement('div');
         title.className = 'title';
         title.textContent = item.title;
+
+        // Beside the name rather than out at the edge with the other marks.
+        // Those answer "does this need attention"; this one says why the row is
+        // where it is, which is a fact about the name it follows.
+        if (item.pinned) {
+          const pin = document.createElement('span');
+          pin.className = 'pinmark';
+          pin.setAttribute('role', 'img');
+          pin.setAttribute('aria-label', 'pinned');
+          title.append(pin);
+        }
+
         top.append(title);
 
         // THAT there is a note, never what it says. The list must not get

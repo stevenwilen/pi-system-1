@@ -569,11 +569,22 @@ no standing to compute. A pin blends nothing. It is a fact the person stated,
 and §2.1 is that nothing is inferred which can be declared: the arithmetic
 *guesses* at what needs attention, and a pin is someone saying it outright.
 
-Inside the pinned group the arithmetic is unchanged, so pins are ordered among
-themselves exactly as everything else is. The group carries a **Pinned** heading
-and a gap after its last row — without them nothing on screen would explain why
-a habit sits above something overdue, and the order would be correct but
-illegible. The heading appears only when something is pinned.
+Pins are ordered among themselves by the same arithmetic as everything else, so
+the top of the list is not a second list with its own rules.
+
+**One list, with a mark on the row.** A pinned thing carries a small teardrop
+beside its name — not out at the right edge with the deadline asterisks, which
+answer *does this need attention*; this one says why the row is where it is,
+which is a fact about the name it follows.
+
+It is **drawn in CSS, not typed**. A pushpin character would fall back to
+whatever font on the device happens to carry it, which is exactly how the
+deadline asterisks came out bold on a laptop and thin on the phone (§3.1.1). A
+shape made of a border-radius has no font to be missing from. Muted, like the
+note dot: a state, not a warning and not something to press.
+
+It was a **Pinned** heading with a gap after it for one revision. That splits a
+short list into two shorter ones, and what a pin needs to say fits on the row.
 
 `entries.priority` is the column: `1` or null, set by `POST /entries/:id/pin`.
 It was *"a way of ordering this list by hand"*, retired when the order became
