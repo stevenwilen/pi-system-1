@@ -1221,6 +1221,17 @@
          they do not. They are the Things list's shape, in the day's section. */
       .anytime {
         margin: 22px 0 4px;
+
+        /* ONE LINE BOX, SHARED BY ALL THREE THINGS ON A ROW. The tick, the
+           title and the × are each exactly this tall and each aligned to the
+           top of the row, so their centres land on the same line whatever
+           follows underneath — a note, two lines of title, nothing.
+
+           It was `align-items: baseline` with the two controls centred, which
+           is not alignment so much as a coincidence: the row's height came
+           from whichever child happened to be tallest, so centring moved
+           against the title the moment the × grew by four pixels. */
+        --aline: 20px;
       }
       .anytime .label {
         margin-bottom: 6px;
@@ -1234,7 +1245,10 @@
 
       .arow {
         display: flex;
-        align-items: baseline;
+        /* Top, not baseline and not centre. A row with a note under its title
+           is taller than the title, and both other alignments would measure
+           the controls against the whole of it. */
+        align-items: flex-start;
         gap: 10px;
         padding: 11px 0;
       }
@@ -1243,8 +1257,8 @@
          often than it is read, and it is the only control on the row. */
       .atick {
         flex: none;
-        width: 17px;
-        height: 17px;
+        width: var(--aline);
+        height: var(--aline);
         padding: 0;
         border: 1px solid var(--faint);
         background: none;
@@ -1253,7 +1267,6 @@
         line-height: 1;
         color: var(--text);
         cursor: pointer;
-        align-self: center;
       }
       .arow.did .atick {
         border-color: var(--text);
@@ -1265,7 +1278,7 @@
       }
       .atitle {
         font-size: 15px;
-        line-height: 1.35;
+        line-height: var(--aline);
       }
       /* STRUCK THROUGH AND STILL THERE. What you got through is worth seeing at
          the end of a day, so a tick does not remove the row — it marks it. */
@@ -1296,15 +1309,18 @@
          is what moves the glyph in without shrinking it. */
       .ax {
         flex: none;
-        align-self: center;
+        height: var(--aline);
+        /* The glyph centred in the line box rather than pushed down it by
+           padding. Vertical padding is what broke the alignment: it grew the
+           row and took the centred controls with it. */
+        line-height: var(--aline);
+        padding: 0 6px 0 10px;
+        margin-right: 6px;
         background: none;
         border: 0;
         font-family: inherit;
         font-size: 15px;
-        line-height: 1;
         color: var(--faint);
-        padding: 6px 6px 6px 10px;
-        margin-right: 6px;
         cursor: pointer;
       }
 

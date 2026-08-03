@@ -264,6 +264,27 @@ console.log('\n3. rows are rows; only builder blocks are cards');
   check('no paper is drawn under a row that slides aside',
     /content: none/.test(rule('.thing .backing::after')),
     rule('.thing .backing::after') || '(no rule at all)');
+
+  // AN ANYTIME ROW IS THREE THINGS ON ONE LINE, and they are measured from one
+  // number so they cannot drift apart.
+  //
+  // It was `align-items: baseline` with the tick and the × both centred, which
+  // is not alignment so much as a coincidence that happened to hold: the row's
+  // height came from whichever child was tallest, so centring moved the tick
+  // against the title the moment the × gained four pixels of padding. Nothing
+  // failed — it only looked wrong, which is the category this file exists for.
+  for (const [what, selector] of [
+    ['the tick', '.atick'],
+    ['the title', '.atitle'],
+    ['the ×', '.ax'],
+  ]) {
+    check(`${what} is measured from the shared line box`,
+      /var\(--aline\)/.test(rule(selector)), rule(selector) || '(no rule at all)');
+  }
+  check('and they hang from the top of the row, not its middle or its baseline',
+    /align-items: flex-start/.test(rule('.arow')), rule('.arow'));
+  check('so nothing on the row is centred against the whole of it',
+    !/align-self: center/.test(rule('.atick') + rule('.ax')));
   check('while a block still has some, because a block is a slip',
     /filter: url\(#deckle/.test(rule('.backing::after')), rule('.backing::after'));
 
