@@ -63,10 +63,10 @@ function validate({ type, title, frequency, due, size }) {
   // nothing to say, and with a due date and no size the row cannot be marked
   // at all — which would look on screen exactly like a comfortable deadline.
   if (hasDue && !SIZES.includes(size)) {
-    return `something with a due date needs a size: ${SIZES.join(', ')}`;
+    return `something with a due date needs a length: ${SIZES.join(', ')}`;
   }
   if (!hasDue && orNull(size)) {
-    return 'a size only means something against a due date. Set a date, or leave the size off.';
+    return 'a length only means something against a due date. Set a date, or leave the length off.';
   }
 
   return null;

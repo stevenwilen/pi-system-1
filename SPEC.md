@@ -568,7 +568,7 @@ something was scheduled. Two orders and one plain rule about which wins can be
 read off the screen; a score cannot.
 
 Within the marks the order uses **slack** — days until due, less the days the
-size stands for — rather than the mark. `!!!` covers everything from
+length stands for — rather than the mark. `!!!` covers everything from
 just-out-of-room to a month overdue, and those are not the same day. `slack` is
 computed in `warning.js` and the mark is derived from it, so the badge and the
 position can never disagree. It is not sent to the client: the screen shows the
@@ -749,7 +749,7 @@ The dot is muted rather than either ink. Something waiting is not something
 wrong, so not persimmon; there is nothing to press on it, so not indigo.
 
 The note reaches an entry through `POST /entries/:id/note` and **no other
-route**. `/update` re-validates the whole row — title, due date, and the size
+route**. `/update` re-validates the whole row — title, due date, and the length
 that has to accompany it — and a note has no rules to break beyond its ceiling;
 sending it through there would mean a note could be refused for something on the
 far side of the row. `note` is in `UPDATABLE` and deliberately not in
@@ -766,7 +766,7 @@ move show without a reload — the block gains its line, the row loses its dot.
 it, saving to `POST /entries/:id/update` instead of `POST /entries`.
 
 One sheet, not two. The fields and the rules between them are identical either
-way, and two copies of the form would be two places for the date-and-size rule
+way, and two copies of the form would be two places for the date-and-length rule
 to drift apart.
 
 **The type cannot be changed on an edit.** Changing it would mean deciding what
@@ -783,16 +783,23 @@ Five fields, and no others:
 | title | — | yes |
 | frequency | habits | yes: daily, few times a week, weekly, monthly |
 | due date | projects and tasks | no |
-| size | projects and tasks | **only when a due date is set** |
+| length | projects and tasks | **only when a due date is set**. The column is `size` |
 
-The size buckets are `a day`, `a few days`, `a week`, `a few weeks`, `months`.
+The buckets are `a day`, `a few days`, `a week`, `a few weeks`, `months`.
 
-The date and the size travel together, in both directions. A due date with no
-size cannot produce a warning mark, and on screen that looks exactly like a
-comfortable deadline. A size with no date has nothing to be measured against.
-Clearing the date clears the size with it.
+**The field is labelled Length; the column is still `size`.** *Size* reads as
+how big a thing is, and what the field asks is how long it will take — which is
+the only reading the warning mark has ever used: days needed against days left.
+Every bucket is a span of time, so the old label was arguing with its own
+options. The column keeps its name because renaming one is churn nobody can see,
+and this codebase has never renamed or dropped a column.
 
-There is no why, no note about where something stands, and no free-text size.
+The date and the length travel together, in both directions. A due date with no
+length cannot produce a warning mark, and on screen that looks exactly like a
+comfortable deadline. A length with no date has nothing to be measured against.
+Clearing the date clears the length with it.
+
+There is no why, no note about where something stands, and no free-text length.
 
 #### Already in the day
 
@@ -830,7 +837,7 @@ the switch: a thing in tomorrow is not greyed while you are looking at today.
 Arithmetic, and only arithmetic (`warning.js`).
 
 ```
-size → days needed
+length → days needed
   a day = 1    a few days = 3    a week = 6    a few weeks = 15    months = 40
 
 slack = days_until_due − days_needed
@@ -848,11 +855,11 @@ correct: overdue is the most urgent thing the scale can express.
 not told when work happens — the only thing it knows is that a block was
 scheduled and left in the day, which is not the same as progress. A mark that
 moved on that evidence would be inventing a completion percentage nobody
-reported. It changes when the person changes the date or the size, and when the
+reported. It changes when the person changes the date or the length, and when the
 calendar advances. Nothing else moves it.
 
 **No mark means "nothing to say", never "fine."** A row with no due date, no
-size, or an unrecognised size shows nothing.
+length, or an unrecognised length shows nothing.
 
 **Set as marginal asterisks, bold, in persimmon.** The server still computes
 `!!!`, `!!` or `!` and the count still carries the whole meaning; the page draws
@@ -1671,7 +1678,7 @@ npm test       # every suite, sequentially
 | `user.js` | which user this process serves |
 | `clock.js` | dates and clock times as numbers, in the person's own timezone |
 | `staleness.js` | entry → the most recent plan date it still has a block on |
-| `warning.js` | the mark: size against time left, and nothing else |
+| `warning.js` | the mark: length against time left, and nothing else |
 | `messages.js` | what Telegram sends for a block: the header and the note, read off the row |
 | `scheduler.js` | the 15-minute tick: block delivery and the evening nudge |
 | `telegram.js` | the send |
