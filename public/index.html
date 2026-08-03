@@ -342,12 +342,21 @@
         color: var(--warn);
         letter-spacing: 0.05em;
         padding-top: 2px;
-        /* Bold, and it is the one place on this page weight says something
-           rather than ranking a heading. The marks sit at the meta line's size
-           because they belong in the margin rather than in the text, and at
-           12px the colour alone was doing all the work — bold is what makes
-           three of them read as louder than one without making them bigger. */
-        font-weight: 700;
+        /* Heavier, and NOT with font-weight, which does nothing here on a
+           phone.
+           ✱ is U+2731, in the Dingbats block, and no font in --face contains
+           it: every platform falls back for this one character, and the fonts
+           it falls back to — Apple Symbols on iOS, Segoe UI Symbol on Windows
+           — ship a single weight. Asking for 700 therefore depends entirely on
+           whether the browser will FAKE one. Chrome does; iOS Safari does not.
+           So it came out bold on a laptop and thin on the phone, which is the
+           screen it is actually read on.
+           A stroke is painted on the glyph's own outline and needs no bold
+           face to exist, so both render the same. font-weight is gone rather
+           than kept alongside it: left in, the laptop would get a synthetic
+           bold AND the stroke, and be heavier than the phone — the same
+           mismatch, mirrored. */
+        -webkit-text-stroke: 0.4px var(--warn);
       }
 
       /* Already in the day on screen. Greying is the whole signal: it said

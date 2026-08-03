@@ -806,12 +806,27 @@ size, or an unrecognised size shows nothing.
 `!!!`, `!!` or `!` and the count still carries the whole meaning; the page draws
 `✱` that many times, the way a reader marks a page they mean to come back to.
 
-Weight is the one thing on this page it does. Marks sit at the meta line's size —
-12px — because they belong in the margin rather than in the text, and at that
-size the colour alone was doing all the work. Bold is what makes three of them
-read as louder than one without making them bigger. `mockup.html` shows the same
-glyph at the same weight; it was still showing `!!!` in a lighter face, which is
-a second answer to what this should look like and the wrong one.
+Marks sit at the meta line's size — 12px — because they belong in the margin
+rather than in the text, and at that size the colour alone was doing all the
+work. Weight is what makes three of them read as louder than one without making
+them bigger.
+
+**It is a stroke, not a `font-weight`, and that is not a stylistic choice.**
+`✱` is U+2731, in the Dingbats block, and **no font in `--face` contains it** —
+every platform falls back for this one character, and the fonts it falls back to
+(Apple Symbols, Segoe UI Symbol) ship a single weight. `font-weight: 700`
+therefore asks the browser to *synthesise* a bold that does not exist. Chrome
+does; **iOS Safari does not**. So it rendered bold on a laptop and thin on the
+phone, which is the screen this is actually read on.
+
+`-webkit-text-stroke` is painted on the glyph's own outline and needs no bold
+face to exist, so both render alike. The `font-weight` is *removed* rather than
+kept beside it: left in, the laptop would get a synthetic bold **and** the
+stroke and end up heavier than the phone — the same mismatch, mirrored.
+
+`mockup.html` carries the same glyph and the same stroke. It was still showing
+`!!!` in a lighter face, two changes behind — a second answer to what this should
+look like, and the wrong one.
 
 ### 3.2 The day
 

@@ -642,7 +642,17 @@ console.log('\n7. the warn colour warns; it does not narrate');
   // because they belong in the margin rather than in the text, and at 12px the
   // colour alone was doing all the work — bold is what makes three of them read
   // as louder than one without making them any bigger.
-  check('and it is bold', /font-weight: 700/.test(rule('.mark')), rule('.mark'));
+  // STROKED, NOT WEIGHTED, and the difference is the whole of it. ✱ is
+  // U+2731 and no font in --face has it, so every platform falls back for this
+  // one character to something shipping a single weight. font-weight: 700 then
+  // depends on the browser faking a bold that does not exist — Chrome does, iOS
+  // Safari does not — so it read bold on a laptop and thin on the phone it is
+  // actually used on. A stroke is painted on the glyph's own outline and needs
+  // no bold face to exist.
+  check('and it is thickened by a stroke, which needs no bold face',
+    /-webkit-text-stroke: 0.4px/.test(rule('.mark')), rule('.mark'));
+  check('and not by a weight that half the platforms will ignore',
+    !/font-weight/.test(rule('.mark')), rule('.mark'));
 
   check('an ordinary row does not', !/--warn/.test(rule('.row')));
   check('nor an ordinary meta line', !/--warn/.test(rule('.row .meta')));
