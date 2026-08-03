@@ -2457,7 +2457,54 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       const ask = askOf(byId);
       const words = ask.children.find((c) => c._class.has('askacts'))
         .children.map((c) => c.textContent).join();
-      check('the way out comes first', words === 'Cancel,Delete', words);
+      // Beta is a task, so all three: the way out, the answer that is often the
+      // true one, and the one that cannot be taken back — in that order.
+      check('the way out comes first and the irreversible one last',
+        words === 'Cancel,Done,Delete', words);
+    }
+
+    {
+      // DONE FROM THE QUESTION, which is what a swipe on a task usually means.
+      // It takes the row off the list the same way the menu's Done does, undo
+      // and all — deleting it instead would record that it should not have
+      // existed, which is the opposite claim about the same work.
+      const { ctx, byId, posted } = fresh();
+      await ctx.load();
+      posted.length = 0;
+
+      swipe(byId, 1, -80);
+      pressAsk(byId, 'Done');
+
+      check('the row goes', namesIn(byId) === 'Alpha,Gamma', namesIn(byId));
+      // Guarded, because the way this goes wrong is that there is no bar at
+      // all: wire Done to the delete path and it writes at once with nothing
+      // offered back. Unguarded that reads as a crash, which ends the run and
+      // takes every case after it down rather than reporting one red line.
+      const bar = undoBar(byId);
+      check('and it is Done that is offered back, not Deleted',
+        Boolean(bar) && bar.text().includes('Done'), bar && bar.text());
+      check('nothing written while the offer stands', posted.length === 0,
+        JSON.stringify(posted.map((p) => p.url)));
+
+      await wait(UNDO_LAPSED);
+      check('then it posts to done, not delete',
+        posted.length === 1 && posted[0].url === '/entries/e-b/done',
+        JSON.stringify(posted.map((p) => p.url)));
+      check('and no question is left on screen', askOf(byId) === null);
+    }
+
+    {
+      // NOT ON A HABIT. The server refuses to finish one in a single go, so a
+      // button for it would be offering a refusal.
+      const { ctx, byId } = fresh();
+      await ctx.load();
+
+      swipe(byId, 2, -80);
+      const words = askOf(byId).children.find((c) => c._class.has('askacts'))
+        .children.map((c) => c.textContent).join();
+      check('a habit is offered the two answers it has', words === 'Cancel,Delete', words);
+      check('and the question still names it',
+        askOf(byId).text().includes('Delete Gamma?'), askOf(byId).text());
     }
   }
 

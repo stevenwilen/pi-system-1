@@ -335,8 +335,26 @@ async function cleanup() {
     // Delete rather than OK and Cancel.
     check('and it asks in the page, not at the browser',
       !/confirm\(`Delete/.test(html) && /className = 'row asking'/.test(html));
-    check('the way out comes first, the destructive one last',
-      /acts\.append\(cancel, del\);/.test(html));
+    // Cancel first, Delete last, and Done between them on a task. The order is
+    // the rule: the way out is where a finger arrives after a leftward swipe,
+    // and the one that cannot be taken back is furthest from it.
+    check('the way out comes first', /acts\.append\(cancel\);/.test(html));
+    check('and the destructive one last, after whatever sits between',
+      /acts\.append\(did\);[\s\S]{0,400}acts\.append\(del\);/.test(html));
+
+    // THE THIRD ANSWER, and often the true one: swiping a task away is usually
+    // a way of saying "I did this". Done and deleted mean opposite things here
+    // and both take the row off the list, so the difference is invisible at the
+    // moment you choose and permanent afterwards.
+    check('a task can be finished from the question, not only deleted',
+      /did\.textContent = 'Done';/.test(html));
+    check('and it goes through the same Done as the menu',
+      /askOn = null;\s*finish\(item\);/.test(html));
+    // Tasks only. A habit recurring is the point of a habit and a project is
+    // not finished by one session — the server refuses both, so a button there
+    // would be offering a refusal.
+    check('offered on a task and nothing else',
+      /if \(item\.type === 'task'\) \{[\s\S]{0,400}did\.textContent = 'Done';/.test(html));
 
     const remove = (html.match(/function remove\(item\) \{[\s\S]*?\n      \}/) || [''])[0];
     check('it offers no undo, because the question was the window',

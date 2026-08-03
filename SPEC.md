@@ -638,6 +638,22 @@ this system asks first, and the asymmetry is the point:
   that `update_entry` refuses to revive — so there is no undo that could put the
   *same* row back an hour later. The doubt has to be raised before the write.
 
+**On a task there is a third answer: Done** — `Cancel · Done · Delete`. Swiping
+a task away is usually a way of saying *I did this*, and Delete is the wrong word
+for that. Done and deleted mean opposite things (§2.3) — one is work that
+happened, the other a row that should not have existed — and **both take it off
+the list**, so the difference is invisible at the moment you choose and permanent
+afterwards. Offering it here is what makes getting it right cost nothing.
+
+Done from the question behaves exactly as Done in the menu does, undo and all.
+That the two buttons beside each other behave differently is the existing rule
+rather than an inconsistency: Delete cannot be taken back, so it asks first;
+Done can, so it uses the six seconds instead.
+
+**Tasks only.** A habit recurring is the point of a habit and a project is not
+finished by one session — the server refuses both, so the button would be
+offering a refusal. A habit or a project still gets `Cancel · Delete`.
+
 Cancel comes first and Delete is last and in the warn colour, for the reason the
 menu ordered it that way: the destructive one does not sit where the finger
 arrives by default, and after a leftward swipe what the finger lands on is the

@@ -1289,6 +1289,11 @@
          move. Faint and at the far edge, like the ··· on a Things row, because
          it repeats down the list and is the rarer of the two things you do
          here. The padding is the touch target; the glyph is small on purpose. */
+      /* INSET FROM THE MARGIN, not flush against it. Sat hard on the page edge
+         it read as detached from the row it belongs to — the ··· on a Things
+         row gets away with that because three dots read as an edge affordance,
+         and a single × does not. The padding is the touch target and the margin
+         is what moves the glyph in without shrinking it. */
       .ax {
         flex: none;
         align-self: center;
@@ -1298,7 +1303,8 @@
         font-size: 15px;
         line-height: 1;
         color: var(--faint);
-        padding: 4px 2px 4px 8px;
+        padding: 6px 6px 6px 10px;
+        margin-right: 6px;
         cursor: pointer;
       }
 
@@ -2813,7 +2819,34 @@
           remove(item);
         };
 
-        acts.append(cancel, del);
+        acts.append(cancel);
+
+        // THE THIRD ANSWER, and often the true one. Swiping a task away is
+        // frequently a way of saying "I did this", and Delete is the wrong word
+        // for that: done and deleted mean opposite things here — one is work
+        // that happened, the other a row that should not have existed (§2.3) —
+        // and both take it off the list, so the difference is invisible at the
+        // moment you choose and permanent afterwards. Offering it here is what
+        // makes the difference cost nothing to get right.
+        //
+        // Tasks only, for the reason the menu gives: a habit recurring is the
+        // point of a habit, and a project is not finished by one session. The
+        // server refuses either, so a button would be offering a refusal.
+        if (item.type === 'task') {
+          const did = document.createElement('button');
+          did.type = 'button';
+          did.textContent = 'Done';
+          did.onclick = (e) => {
+            if (e && e.stopPropagation) e.stopPropagation();
+            askOn = null;
+            finish(item);
+          };
+          acts.append(did);
+        }
+
+        // Delete last and alone in the warn colour, wherever the row sits in
+        // the list. It is the only one of the three that cannot be taken back.
+        acts.append(del);
         row.append(q, acts);
         return row;
       }
