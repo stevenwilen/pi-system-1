@@ -416,11 +416,11 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // mark that says a row HAS a note is deliberately not on this list — it is
   // muted, because there is nothing to press on it.
   //
-  // `.tzpick:focus` is the seventh, and the same one again: the timezone
-  // picker with the caret in it. The clock beside it, which is the part that
-  // says whether the zone is right, is a plain field note in no colour at all.
+  // `.tzpick:focus` was a seventh and went with the panel it sat in. The
+  // timezone picker is an invisible select laid over its whole row now, so
+  // there is no field for a caret to be in and nothing to give a colour to.
   const acts =
-    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.back|\.thingnote:focus|\.tzpick:focus/;
+    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.back|\.thingnote:focus/;
   // The divider: the knot and the line it fastens. Both are indigo now, where
   // the dark build tinted the line with a separate near-blue that belonged to
   // nothing — one fewer colour on the page, and the two halves of one object
@@ -872,6 +872,24 @@ console.log('\n12. the add form asks for exactly the five fields');
 
 console.log('\n13. a row says it has more actions, rather than hiding them');
 {
+  // THE TIMEZONE ROW IS ITS OWN CONTROL, and the way that works is a select
+  // laid over the whole row and made transparent. Pressing anywhere on the row
+  // is therefore pressing the select, and what opens is the phone's own wheel.
+  //
+  // OPACITY, NOT visibility OR display. Both of those take an element out of
+  // the hit test as well as out of sight, which would leave a row that looks
+  // exactly as pressable as it does now and does nothing at all — a change
+  // that breaks the only control on the row while breaking no test, which is
+  // what this file is for.
+  const picker = rule('.tzpick');
+  check('the timezone picker covers its whole row',
+    /position: absolute/.test(picker) && /inset: 0/.test(picker), picker);
+  check('and is transparent rather than hidden, so it can still be pressed',
+    /opacity: 0/.test(picker) && !/visibility: hidden/.test(picker) && !/display: none/.test(picker),
+    picker);
+  check('the row it covers is what positions it',
+    /position: relative/.test(rule('.tzrow')), rule('.tzrow'));
+
   const hint = rule('.hint');
   check('there is a hint', hint.length > 0);
   check('it is faint, so it does not compete with the title',

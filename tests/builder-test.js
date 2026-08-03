@@ -2682,472 +2682,134 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     }
   }
 
-  console.log('\nthe timezone offers itself, because nothing else can check it');
+  console.log('\nthe timezone is one row, and the row is the control');
   {
-    // What GET /settings answers for an account that has never said.
-    const untouched = (extra = {}) => ({
+    // What GET /settings answers.
+    const settingsFor = (zone) => ({
       telegram: { set: true, hint: '…3785' },
       calendar: { set: true, hint: 'x/…/basic.ics' },
-      timezone: 'UTC',
+      timezone: zone,
       wake_minutes: 7 * 60,
       wake_min: 4 * 60,
       wake_max: 12 * 60,
       wake_step: 30,
       today: '2026-07-27',
-      ...extra,
+      bot: '@pisystem1_bot',
     });
 
     const open = async (opts) => {
       const b = boot(opts);
       await b.ctx.load();
       b.byId['settings-open'].onclick();
-      // loadSettings is a fetch, so the panel is filled a turn later.
+      // loadSettings is a fetch, so the row is filled a turn later.
       await wait(0);
       return b;
     };
 
     {
-      // THE CASE THIS EXISTS FOR. A new account is on UTC because the column
-      // defaults to it — not because anybody chose it — and every block message
-      // and the evening nudge fire off that. The device knows better and is the
-      // only thing on the screen that does.
+      // THE VALUE IS ON THE ROW, not behind it. It was a panel — a stepper for
+      // the hour a day starts, a dropdown, a live clock and two paragraphs —
+      // and that is a lot of screen for something set once and then only ever
+      // read.
       const { byId, posted } = await open({
-        settings: untouched(), deviceZone: 'America/New_York',
+        settings: settingsFor('America/New_York'), deviceZone: 'America/New_York',
       });
 
-      check('the offer is showing', !byId['tz-offer']._class.has('hidden'));
-      check('and it names the zone this device is in',
-        byId['tz-suggest'].textContent === 'Use America/New_York?',
-        byId['tz-suggest'].textContent);
-      check('nothing was written by looking', posted.length === 0,
+      check('the row says what it is set to',
+        byId['when-state'].textContent === 'America/New_York', byId['when-state'].textContent);
+      check('and nothing was written by looking', posted.length === 0,
         JSON.stringify(posted.map((p) => p.url)));
 
-      // THE VALUE, PLAINLY, on the closed row — both halves of it.
-      check('the row says what is stored', byId['when-state'].textContent === 'UTC · 7:00 AM',
-        byId['when-state'].textContent);
-      check('and does not read as settled', !byId['when-state']._class.has('on'),
-        byId['when-state'].className);
-
-      // The check a person can actually make. A name is a name; the clock is
-      // the thing to hold against the watch on their wrist.
-      check('the clock in that zone is shown', /^It is .* there now\.$/.test(byId['tz-now'].textContent),
-        byId['tz-now'].textContent);
-
-      byId['tz-suggest'].onclick();
-      await wait(0);
-
-      check('one tap writes it',
-        posted.length === 1 && posted[0].url === '/settings/timezone',
-        JSON.stringify(posted.map((p) => p.url)));
-      check('with the device zone in it',
-        posted[0].body.timezone === 'America/New_York', JSON.stringify(posted[0].body));
-    }
-
-    {
-      // AND IT DOES NOT NAG. An account already on the device's zone has
-      // nothing to be offered, and a button that sets what is already set
-      // teaches people the screen does not mean anything.
-      const { byId } = await open({
-        settings: untouched({ timezone: 'America/New_York' }),
-        deviceZone: 'America/New_York',
-      });
-
-      check('no offer when the two agree', byId['tz-offer']._class.has('hidden'));
-      check('and the row reads as settled', byId['when-state']._class.has('on'),
-        byId['when-state'].className);
-      check('still showing the value', byId['when-state'].textContent === 'America/New_York · 7:00 AM',
-        byId['when-state'].textContent);
-    }
-
-    {
-      // A DEVICE THAT WILL NOT SAY. Nothing to compare against, so nothing is
-      // offered — rather than an offer to use undefined.
-      //
-      // `null` and not `undefined`: a default parameter fires on undefined, so
-      // asking for no zone that way hands back the default one and the case
-      // asserts the opposite of what it is named for. It did exactly that on
-      // the first run.
-      const { byId } = await open({ settings: untouched(), deviceZone: null });
-
-      check('a device with no zone is not offered as one',
-        byId['tz-offer']._class.has('hidden'), byId['tz-suggest'].textContent);
-      check('and the stored value is still shown',
-        byId['when-state'].textContent === 'UTC · 7:00 AM', byId['when-state'].textContent);
-    }
-
-    {
-      // THE LIST, for anyone whose device is not where they are. Built from
-      // the browser's own tzdb rather than shipped, and holding the stored
-      // value whether or not that list has it — UTC is not on it, so a select
-      // built from the list alone would open on somewhere in Africa for every
-      // account that had never set one.
-      const { byId, posted } = await open({ settings: untouched() });
-      const pick = byId['tz-pick'].children[0];
-
-      check('there is a picker', Boolean(pick) && pick.tagName === 'select', pick && pick.tagName);
-      check('open on what is stored', pick.value === 'UTC', pick.value);
-      check('and holding the whole list', pick.children.length > 100,
-        String(pick.children.length));
+      // The select is the row: pressing anywhere on it is pressing the select,
+      // so what opens is the phone's own wheel.
+      const pick = byId['tz-pick'];
+      check('the picker is a select', pick.tagName === 'select', pick.tagName);
+      check('open on what is stored', pick.value === 'America/New_York', pick.value);
+      check('holding the whole list', pick.children.length > 100, String(pick.children.length));
       check('with real zone names in it',
         pick.children.some((o) => o.value === 'Europe/Berlin'));
+    }
 
+    {
+      // CHOOSING ONE WRITES IT, and there is nothing else to press.
+      const { byId, posted } = await open({ settings: settingsFor('America/New_York') });
+      posted.length = 0;
+
+      const pick = byId['tz-pick'];
       pick.value = 'Europe/Berlin';
       pick.onchange();
       await wait(0);
 
-      check('choosing one writes it',
-        posted.length === 1 && posted[0].body.timezone === 'Europe/Berlin',
-        JSON.stringify(posted.map((p) => p.body)));
+      check('it goes to the timezone route',
+        posted.length === 1 && posted[0].url === '/settings/timezone',
+        JSON.stringify(posted.map((p) => p.url)));
+      check('carrying what was chosen', posted[0].body.timezone === 'Europe/Berlin',
+        JSON.stringify(posted[0].body));
+      check('and the row says so at once',
+        byId['when-state'].textContent === 'Europe/Berlin', byId['when-state'].textContent);
     }
 
     {
-      // REFUSED, AND THE SCREEN GOES BACK TO WHAT IS STORED. A picker left
+      // A STORED ZONE THE LIST DOES NOT HOLD still opens on itself. UTC is the
+      // case: it is a real answer and is not in supportedValuesOf, so a select
+      // built from that list alone would open on whatever sorts first and show
+      // a zone nobody had chosen.
+      const { byId } = await open({ settings: settingsFor('UTC') });
+      check('the row still reads UTC', byId['when-state'].textContent === 'UTC',
+        byId['when-state'].textContent);
+      check('and the picker opens on it', byId['tz-pick'].value === 'UTC',
+        byId['tz-pick'].value);
+      check('with it present as an option',
+        byId['tz-pick'].children.some((o) => o.value === 'UTC'));
+    }
+
+    {
+      // THE DEVICE'S OWN ZONE IS ALWAYS IN THE LIST, whatever the runtime knows.
+      // The one-tap offer that used to be built on it is gone with the panel,
+      // so this is what is left of it — and it is the floor under a browser
+      // with no supportedValuesOf, which would otherwise leave a picker holding
+      // one option: a dead control wearing the clothes of a live one.
+      const { byId } = await open({
+        settings: settingsFor('UTC'), deviceZone: 'Pacific/Auckland',
+      });
+      check('the device zone can be picked',
+        byId['tz-pick'].children.some((o) => o.value === 'Pacific/Auckland'));
+    }
+
+    {
+      // REFUSED, AND THE ROW GOES BACK TO WHAT IS STORED. Barely reachable —
+      // every option came out of the browser's own tzdb — but a row left
       // showing a value the server would not take is a screen disagreeing with
       // the database and saying nothing about it.
       const { byId } = await open({
-        settings: untouched(),
-        planReply: null,
+        settings: settingsFor('America/New_York'),
         timezoneReply: { error: 'not a timezone: Mars/Olympus.' },
       });
 
-      const pick = byId['tz-pick'].children[0];
+      const pick = byId['tz-pick'];
       pick.value = 'Europe/Berlin';
       pick.onchange();
       await wait(0);
 
-      check('the refusal is shown', /Mars\/Olympus/.test(byId['when-said'].textContent),
-        byId['when-said'].textContent);
-      check('and it reads as a failure', byId['when-said']._class.has('bad'),
-        byId['when-said'].className);
-      check('the picker is back on the stored value',
-        byId['tz-pick'].children[0].value === 'UTC', byId['tz-pick'].children[0].value);
-      check('and the row still says UTC', byId['when-state'].textContent === 'UTC · 7:00 AM',
-        byId['when-state'].textContent);
+      check('the row is back on the stored zone',
+        byId['when-state'].textContent === 'America/New_York', byId['when-state'].textContent);
+      check('and so is the picker', byId['tz-pick'].value === 'America/New_York',
+        byId['tz-pick'].value);
     }
 
     {
-      // THE WAKE STEPPER, which writes once the pressing stops. Four taps
-      // carrying four absolute values can arrive in any order, and the one that
-      // lands last is not necessarily the one the person stopped on.
-      const { byId, posted } = await open({ settings: untouched() });
-
-      byId['wake-def-plus'].onclick();
-      byId['wake-def-plus'].onclick();
-      byId['wake-def-plus'].onclick();
-
-      check('the screen moves at once', byId['wake-def-time'].textContent === '8:30 AM',
-        byId['wake-def-time'].textContent);
-      check('and the row with it', byId['when-state'].textContent === 'UTC · 8:30 AM',
-        byId['when-state'].textContent);
-      check('but nothing has been written yet', posted.length === 0,
-        JSON.stringify(posted.map((p) => p.url)));
-
-      await wait(700);
-
-      check('one request, after the pressing stops',
-        posted.length === 1 && posted[0].url === '/settings/wake',
-        JSON.stringify(posted.map((p) => p.url)));
-      check('carrying where it landed, not where it passed through',
-        posted[0].body.minutes === 8 * 60 + 30, JSON.stringify(posted[0].body));
-    }
-
-    {
-      // AND THE PAUSE NEVER SWALLOWS ONE. Leaving the screen within half a
-      // second of the last press would otherwise look exactly like a setting
-      // that did not save.
-      const { byId, posted } = await open({ settings: untouched() });
-
-      byId['wake-def-plus'].onclick();
-      check('still holding it', posted.length === 0);
-
-      byId['settings-close'].onclick();
-      await wait(0);
-
-      check('closing the screen writes it',
-        posted.length === 1 && posted[0].url === '/settings/wake',
-        JSON.stringify(posted.map((p) => p.url)));
-      check('with the value it was holding', posted[0].body.minutes === 7 * 60 + 30,
-        JSON.stringify(posted[0].body));
-    }
-
-    {
-      // THE ENDS OF THE WINDOW, which come down from the server. The stepper
-      // must not offer a press the route would refuse.
-      const { byId } = await open({ settings: untouched({ wake_minutes: 4 * 60 }) });
-      check('at the bottom, minus is dead', byId['wake-def-minus'].disabled === true);
-      check('and plus is not', byId['wake-def-plus'].disabled === false);
-
-      const top = await open({ settings: untouched({ wake_minutes: 12 * 60 }) });
-      check('at the top, plus is dead', top.byId['wake-def-plus'].disabled === true);
-      check('and minus is not', top.byId['wake-def-minus'].disabled === false);
-    }
-  }
-
-  console.log('\nanytime today: committed to the day, not to an hour');
-  {
-    const items = () => [
-      { id: 'e-bins', type: 'task', title: 'Put the bins out', days: 1, mark: null, due: null, size: null, note: 'the green one', last_scheduled: null },
-      { id: 'e-gym', type: 'habit', title: 'Gym', days: 2, mark: null, due: null, size: null, note: null, last_scheduled: null },
-    ];
-    const fresh = (extra = {}) => boot({
-      entries: utcEntries({ plans_in: 'morning', items: items() }), now: '11:00', ...extra,
-    });
-    const rowsIn = (byId) => thingRows(byId);
-    const menuOf = (row) => row.children.find((c) => c._class.has('rowacts'));
-    const press = (row, word) => {
-      const b = menuOf(row).children.find((c) => c.textContent === word);
-      b.onclick({ stopPropagation() {} });
-    };
-
-    {
-      // THE ONE THAT MATTERS MOST. An untimed item is in the day and takes
-      // none of it, so the hours must read exactly as they did before it
-      // arrived. Everything else about this feature is visible; this is the
-      // part that would be wrong quietly.
-      const { ctx, byId, slots } = fresh();
-      await ctx.load();
-
-      ctx.addBlock({ title: 'Deep work', duration: 120 });
-      const before = byId['end-time'].textContent;
-      check('the day ends somewhere to begin with', /:/.test(before), before);
-
-      press(rowsIn(byId)[0], 'Anytime');
-
-      check('THE END TIME DOES NOT MOVE', byId['end-time'].textContent === before,
-        `${before} -> ${byId['end-time'].textContent}`);
-      check('and the timed list is untouched', slots().length === 1, String(slots().length));
-      check('while the item is on screen', anytimeTitles(byId).join() === 'Put the bins out',
-        anytimeTitles(byId).join());
-    }
-
-    {
-      // A DAY OF NOTHING BUT THESE ends at 0:00. The hours really are empty,
-      // and the spacer that stands for an empty day is still shown.
-      const { ctx, byId, slots } = fresh();
-      await ctx.load();
-      press(rowsIn(byId)[0], 'Anytime');
-      press(rowsIn(byId)[1], 'Anytime');
-
-      check('two of them', anytimeTitles(byId).length === 2, anytimeTitles(byId).join());
-      check('the day ends at nothing', byId['end-time'].textContent === '0:00',
-        byId['end-time'].textContent);
-      check('and the day still looks like an empty one',
-        slots().length === 0 && byId.builder.children.some((c) => c._class.has('ghost')),
-        String(byId.builder.children.length));
-    }
-
-    {
-      // MIXED, AND EACH IN ITS OWN PLACE. The untimed one is added between two
-      // blocks on purpose: it must not appear among them, and — the part that
-      // broke the old slotAt — it must not renumber them either.
-      const { ctx, byId, slots, titles, posted } = fresh();
-      await ctx.load();
-
-      ctx.addBlock({ title: 'First', duration: 60 });
-      press(rowsIn(byId)[0], 'Anytime');
-      ctx.addBlock({ title: 'Second', duration: 30 });
-
-      check('the day holds only the timed ones, in order',
-        titles().join() === 'First,Second', titles().join());
-      check('and the section only the untimed one',
-        anytimeTitles(byId).join() === 'Put the bins out', anytimeTitles(byId).join());
-      // AGAINST THE SAME DAY WITHOUT IT, rather than against a time written
-      // here. A literal would have to know that a block added to TODAY starts
-      // at the next half hour and not at the wake time — which is what the
-      // first version of this line got wrong, asserting the answer for a day
-      // that was not the one being built.
-      const plain = fresh();
-      await plain.ctx.load();
-      plain.ctx.addBlock({ title: 'First', duration: 60 });
-      plain.ctx.addBlock({ title: 'Second', duration: 30 });
-
-      check('the end time counts the two blocks and nothing else',
-        byId['end-time'].textContent === plain.byId['end-time'].textContent,
-        `${byId['end-time'].textContent} vs ${plain.byId['end-time'].textContent} without it`);
-      check('the section is showing', !byId['anytime']._class.has('hidden'));
-      check('and its heading names the day on screen',
-        byId['anytime-label'].textContent === 'Anytime today',
-        byId['anytime-label'].textContent);
-
-      // The note came with the thing, and is shown rather than hidden behind a
-      // gesture: a row with no hour has room for it.
-      check('the row carries the note it arrived with',
-        anytimeNote(anytimeRows(byId)[0]) === 'the green one',
-        String(anytimeNote(anytimeRows(byId)[0])));
-
-      // WHAT THE SECTION SENDS. Null together, which is the shape the route
-      // refuses to see half of.
-      await byId['confirm'].onclick();
-      const sentDay = (posted.find((p) => p.url === '/plan') || {}).body || null;
-      check('the confirm sent three blocks', sentDay && sentDay.blocks.length === 3,
-        JSON.stringify(sentDay && sentDay.blocks.map((b) => b.title)));
-      const bins = sentDay.blocks.find((b) => b.title === 'Put the bins out');
-      check('the untimed one with no start and no length',
-        bins.start_minutes === null && bins.duration_minutes === null, JSON.stringify(bins));
-      check('and not yet done', bins.done === false, JSON.stringify(bins));
-      const first = sentDay.blocks.find((b) => b.title === 'First');
-      check('the timed ones with both', Number.isInteger(first.start_minutes) &&
-        Number.isInteger(first.duration_minutes), JSON.stringify(first));
-    }
-
-    {
-      // NOTHING TO SEE WHEN THERE IS NOTHING. A heading over an empty list
-      // would be a section of the day screen that is blank on most days.
-      const { ctx, byId } = fresh();
-      await ctx.load();
-      check('the section is hidden on a day with none', byId['anytime']._class.has('hidden'));
-    }
-
-    {
-      // TICKED OFF, AND STILL THERE. What you got through is worth seeing at
-      // the end of a day.
-      const { ctx, byId, posted } = fresh({
-        plan: {
-          plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
-          blocks: [
-            { id: 'u1', title: 'Ring the dentist', entryId: 'e-bins', start_minutes: null,
-              duration_minutes: null, note: null, done: false },
-          ],
-        },
-      });
-      await ctx.load();
-      posted.length = 0;
-
-      const row = anytimeRows(byId)[0];
-      check('it is on the list', Boolean(row));
-      check('and not struck through', !row._class.has('did'), row.className);
-
-      tickOf(row).onclick({ stopPropagation() {} });
-      await wait(0);
-
-      check('ticking marks it', anytimeRows(byId)[0]._class.has('did'),
-        anytimeRows(byId)[0].className);
-      check('the row stays on the list', anytimeTitles(byId).join() === 'Ring the dentist',
-        anytimeTitles(byId).join());
-
-      // WRITTEN AT ONCE. Ticking happens hours after the last Confirm, and a
-      // tick that waited for one would be lost by every person who ticked
-      // three things and closed the app.
-      check('and it is written without waiting for a confirm',
-        posted.length === 1 && posted[0].url === '/plan/block/u1/done',
-        JSON.stringify(posted.map((p) => p.url)));
-      check('saying which way it went', posted[0].body.done === true,
-        JSON.stringify(posted[0].body));
-
-      tickOf(anytimeRows(byId)[0]).onclick({ stopPropagation() {} });
-      await wait(0);
-      check('unticking is the same road back',
-        posted.length === 2 && posted[1].body.done === false,
-        JSON.stringify(posted.map((p) => p.body)));
-      check('and the row is plain again', !anytimeRows(byId)[0]._class.has('did'));
-    }
-
-    {
-      // AN × TAKES IT OFF THE LIST, with the undo the blocks have and not the
-      // Things list's confirmation: this is one day, and taking it off is how
-      // you say it is not happening today.
-      //
-      // A PRESS RATHER THAN A SWIPE, and that is the whole of why these rows
-      // carry no backing. A swipe carries a row aside to show what is under
-      // it, which is the blocks' language for an object you handle — and these
-      // do not move, they are pressed.
-      const { ctx, byId } = fresh();
-      await ctx.load();
-      press(rowsIn(byId)[0], 'Anytime');
-      check('it is there', anytimeTitles(byId).length === 1);
-
-      const row = anytimeRows(byId)[0];
-      check('the row takes no gestures at all',
-        typeof row.onpointerdown !== 'function', typeof row.onpointerdown);
-      check('and nothing is drawn under it to slide off',
-        anytimeSlots(byId)[0].children.every((c) => !c._class.has('backing')),
-        anytimeSlots(byId)[0].children.map((c) => c.className).join('|'));
-
-      const off = row.children.find((c) => c._class.has('ax'));
-      check('there is an x to press', Boolean(off) && off.textContent === '×',
-        off && off.textContent);
-      check('and it says what it does', /Take Put the bins out off the list/
-        .test(off.getAttribute('aria-label') || ''), off.getAttribute('aria-label'));
-
-      off.onclick({ stopPropagation() {} });
-      await wait(CLOSED);
-
-      check('it goes', anytimeTitles(byId).length === 0, anytimeTitles(byId).join());
-      check('and an undo is offered', byId['undo-host'].children.length === 1);
-
-      byId['undo-host'].children[0].children.find((c) => c.textContent === 'Undo').onclick();
-      check('which puts it back', anytimeTitles(byId).join() === 'Put the bins out',
-        anytimeTitles(byId).join());
-    }
-
-    {
-      // THE × IS NOT THE ROW. Pressing it must not also promote the thing into
-      // the day, which is what the row underneath it does.
-      const { ctx, byId, slots } = fresh();
-      await ctx.load();
-      press(rowsIn(byId)[0], 'Anytime');
-
-      const row = anytimeRows(byId)[0];
-      const off = row.children.find((c) => c._class.has('ax'));
-      let reached = false;
-      off.onclick({ stopPropagation() { reached = true; } });
-
-      check('pressing it stops the press reaching the row', reached);
-      check('so nothing was given an hour', slots().length === 0, String(slots().length));
-    }
-
-    {
-      // PROMOTED BY A TAP, taking its note with it. One row changing shape
-      // rather than a new one appearing.
-      const { ctx, byId, slots, titles, noteOf } = fresh();
-      await ctx.load();
-      press(rowsIn(byId)[0], 'Anytime');
-
-      anytimeRows(byId)[0].onclick({});
-
-      check('it leaves the section', anytimeTitles(byId).length === 0);
-      check('and joins the day', titles().join() === 'Put the bins out', titles().join());
-      check('the section hides itself again', byId['anytime']._class.has('hidden'));
-      check('it took its note with it',
-        (noteOf(slots()[0]) || {}).textContent === 'the green one',
-        String((noteOf(slots()[0]) || {}).textContent));
-      check('and the day now ends somewhere', byId['end-time'].textContent !== '0:00',
-        byId['end-time'].textContent);
-    }
-
-    {
-      // HELD RATHER THAN TAPPED. The menu carries the same action in words —
-      // a gesture with nothing on screen to suggest it is a feature only the
-      // person who built it knows about.
-      const { ctx, byId, slots } = fresh();
-      await ctx.load();
-
-      const row = rowsIn(byId)[0];
-      down(row, 0, 0);
-      await wait(HELD);
-
-      check('holding a thing puts it in with no hour',
-        anytimeTitles(byId).join() === 'Put the bins out', anytimeTitles(byId).join());
-      check('and not in the day', slots().length === 0, String(slots().length));
-
-      up(row, 0, 0);
-      row.onclick({});
-      check('the release does not also schedule it', slots().length === 0,
-        String(slots().length));
-    }
-
-    {
-      // AND A PLAIN TAP STILL SCHEDULES, which is what the list is mostly for.
-      const { ctx, byId, slots } = fresh();
-      await ctx.load();
-
-      const row = rowsIn(byId)[0];
-      down(row, 0, 0);
-      up(row, 0, 0);
-      row.onclick({});
-
-      check('a tap gives it an hour', slots().length === 1, String(slots().length));
-      check('and puts nothing in the section', anytimeTitles(byId).length === 0);
+      // WHAT WENT WITH THE PANEL. Named one by one, because each was a control
+      // that wrote something and a check that only counts them would pass
+      // against a half-removed screen.
+      const html = require('fs').readFileSync(ROOT + '/public/index.html', 'utf8');
+      check('no stepper for the hour a day starts', !/wake-def-minus/.test(html));
+      check('nor a live clock beside the zone', !/tz-now/.test(html));
+      check('nor a one-tap offer', !/tz-suggest/.test(html));
+      check('nor a panel for them to sit in', !/when-detail/.test(html));
+      check('the row is a label, so the select opens from anywhere on it',
+        /<label class="srow tzrow" id="when-row">/.test(html));
+      check('and it is named for the one thing it now does',
+        /<span class="srow-name">Timezone<\/span>/.test(html));
     }
   }
 
