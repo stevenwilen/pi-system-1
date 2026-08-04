@@ -403,6 +403,66 @@ const get = async (path) => {
     for (const id of made) await H.db.from('entries').delete().eq('user_id', U).eq('id', id);
   }
 
+  console.log('\nsaved for later leaves the list without leaving the data');
+  {
+    // SET DOWN ON PURPOSE, which is the whole difference from Delete. The row
+    // keeps everything it has and stops competing for attention — and the risk
+    // of that is that leaving the list is indistinguishable from being
+    // forgotten, which is what the Wednesday message exists to answer.
+    const at = (list, title) => list.findIndex((i) => i.title === title);
+
+    const made = [];
+    const res = await post('/entries', {
+      type: 'project', title: 'zz set me down', due: day(20), size: 'a week',
+    });
+    const id = res.body.entry.id;
+    made.push(id);
+
+    const before = (await get('/entries')).body;
+    check('it starts in the list', at(before.items, 'zz set me down') !== -1,
+      String(before.items.length));
+    check('and nothing is saved yet',
+      !(before.saved || []).some((i) => i.title === 'zz set me down'),
+      JSON.stringify((before.saved || []).map((i) => i.title)));
+    check('the list says it is not set down',
+      before.items[at(before.items, 'zz set me down')].later === false);
+
+    const put = await post(`/entries/${id}/later`, { later: true });
+    check('setting it down is accepted', put.status === 200, JSON.stringify(put.body));
+    check('and it says so', put.body.later === true, JSON.stringify(put.body));
+
+    const after = (await get('/entries')).body;
+    check('IT LEAVES THE LIST', at(after.items, 'zz set me down') === -1,
+      JSON.stringify(after.items.map((i) => i.title)));
+    check('and turns up under saved', at(after.saved, 'zz set me down') !== -1,
+      JSON.stringify(after.saved.map((i) => i.title)));
+
+    // NOT DELETED, and that is the point of the column rather than a tombstone:
+    // everything the row carried is still on it.
+    const kept = after.saved[at(after.saved, 'zz set me down')];
+    check('it keeps its deadline', kept.due === day(20), String(kept.due));
+    check('and its length', kept.size === 'a week', String(kept.size));
+    check('and whatever mark it had',
+      kept.mark === before.items[at(before.items, 'zz set me down')].mark,
+      `${kept.mark} was ${before.items[at(before.items, 'zz set me down')].mark}`);
+
+    const back = await post(`/entries/${id}/later`, { later: false });
+    check('picking it back up is accepted', back.status === 200 && back.body.later === false,
+      JSON.stringify(back.body));
+
+    const now = (await get('/entries')).body;
+    check('and it returns to the list', at(now.items, 'zz set me down') !== -1,
+      JSON.stringify(now.items.map((i) => i.title)));
+    check('with nothing left under saved',
+      !now.saved.some((i) => i.title === 'zz set me down'),
+      JSON.stringify(now.saved.map((i) => i.title)));
+
+    const junk = await post(`/entries/${id}/later`, { later: 'yes' });
+    check('later must be true or false', junk.status === 400, JSON.stringify(junk.body));
+
+    for (const x of made) await H.db.from('entries').delete().eq('user_id', U).eq('id', x);
+  }
+
   console.log('\nthe endpoints that were removed really are gone');
   {
     for (const path of ['/plan-intent/setup-prompt', '/summarize']) {

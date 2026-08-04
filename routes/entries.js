@@ -40,7 +40,7 @@ router.get('/entries', async (req, res) => {
 
     const { data: rows, error } = await db
       .from('entries')
-      .select('id, type, title, frequency, due, size, note, priority, created_at')
+      .select('id, type, title, frequency, due, size, note, priority, paused_at, created_at')
       .eq('user_id', userId)
       .eq('status', 'active')
       .in('type', TYPES);
@@ -83,6 +83,10 @@ router.get('/entries', async (req, res) => {
         note: r.note || null,
         // Held at the top of the list by hand. See the order below.
         pinned: Boolean(r.priority),
+        // Set down on purpose. These come back under `saved` rather than in
+        // the list, and the difference from deleted is the whole point of the
+        // column: still cared about, just not now.
+        later: Boolean(r.paused_at),
         // Null when this has never been scheduled, which is what lets the
         // screen say "since added" instead of claiming a scheduling that
         // never happened.
@@ -145,7 +149,16 @@ router.get('/entries', async (req, res) => {
       // copy of this one waiting to be forgotten.
       nudge_hour: Number.isInteger(profile && profile.nudge_hour) ? profile.nudge_hour : 20,
       // Sorted with slack, sent without it.
-      items: items.sort(order).map(({ slack, ...item }) => item),
+      // SET DOWN ON PURPOSE, AND OUT OF THE WAY. A saved thing keeps its row
+      // and everything on it; it simply stops competing for attention with the
+      // things you are actually working through. That is the difference between
+      // this and deleting it, and it is why the staleness clock on a saved
+      // thing does not matter — nothing is ranking it.
+      //
+      // Two lists out of one sort, so the order inside `saved` is the same
+      // order it would have had, rather than a second opinion.
+      items: items.filter((i) => !i.later).sort(order).map(({ slack, ...item }) => item),
+      saved: items.filter((i) => i.later).sort(order).map(({ slack, ...item }) => item),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -245,6 +258,35 @@ router.post('/entries/:id/note', async (req, res) => {
   const row = await update_entry(db, userId, req.params.id, { note });
   if (row.error) return res.status(400).json({ error: row.error });
   res.json({ id: row.id, note: row.note || null });
+});
+
+/**
+ * Set down on purpose, or picked back up.
+ *
+ * `paused_at` is the column, and it is the third retired one to come back
+ * after `completed` and `priority`. It was described exactly this way before
+ * it was retired — "a paused entry is still active and still cared about; it
+ * drops out of the stale list until unpaused" — so this is the same feature
+ * returning under a name that says what it is.
+ *
+ * A TIMESTAMP RATHER THAN A FLAG, because the column already is one and
+ * because "since when" is worth having: a thing set down in March and a thing
+ * set down on Tuesday are not in the same state, even if nothing reads that
+ * yet.
+ */
+router.post('/entries/:id/later', async (req, res) => {
+  const { db, userId } = req.auth;
+  const later = (req.body || {}).later;
+
+  if (typeof later !== 'boolean') {
+    return res.status(400).json({ error: 'later must be true or false' });
+  }
+
+  const row = await update_entry(db, userId, req.params.id, {
+    paused_at: later ? new Date().toISOString() : null,
+  });
+  if (row.error) return res.status(400).json({ error: row.error });
+  res.json({ id: row.id, later: Boolean(row.paused_at) });
 });
 
 /**

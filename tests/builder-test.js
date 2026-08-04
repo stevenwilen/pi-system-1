@@ -2256,7 +2256,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // the same write, two paces from the hint, reachable by a finger that only
     // meant to open the menu.
     check('with everything that has no gesture, and no delete',
-      acts.children.map((c) => c.textContent).join() === 'Done,Anytime,Pin,Edit',
+      acts.children.map((c) => c.textContent).join() === 'Done,Anytime,Pin,Later,Edit',
       acts.children.map((c) => c.textContent).join());
 
     const hint = row.children[0].children.find((c) => c._class.has('hint'));

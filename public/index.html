@@ -264,6 +264,15 @@
         position: relative;
       }
 
+      /* The saved list, under the one you read down. Space separates it, the
+         way space separates everything else here. */
+      .saved {
+        margin-top: 26px;
+      }
+      .saved .label {
+        margin-bottom: 6px;
+      }
+
       /* A pin, drawn rather than typed. A pushpin character would fall back
          to whatever font on the device happens to carry it — which is exactly
          how the deadline asterisks ended up bold on a laptop and thin on the
@@ -2060,6 +2069,19 @@
           <button type="button" class="act" id="add-open">+ Add</button>
         </div>
         <div id="things"></div>
+
+        <!-- SET DOWN ON PURPOSE. Things saved for later leave the list above so
+             they stop competing with what you are working through — and the
+             whole risk of that is that leaving the list is indistinguishable
+             from being forgotten. So they are still here, under their own
+             heading, and a message on Wednesday goes looking for them.
+
+             Hidden when empty: a heading over nothing is a section of the
+             screen that says nothing on most days. -->
+        <div class="saved hidden" id="saved">
+          <div class="label" id="saved-label">Saved for later</div>
+          <div id="saved-list"></div>
+        </div>
       </section>
 
     <!-- THE WAY TO MAKE THIS PAGE FETCH ITSELF AGAIN, and it needs one: an
@@ -2582,6 +2604,7 @@
       // --- state --------------------------------------------------------------
 
       let things = [];
+      let setAside = [];
       let blocks = []; // { id, title, entryId, duration, note, sent, start }
       let wake = 8 * 60;
       let saved = false;
@@ -2672,6 +2695,10 @@
         }
 
         things = data.items || [];
+        // Its own list, sent apart rather than filtered here: the server does
+        // the sorting, and a screen that split one list into two would be a
+        // second opinion about which things are set down.
+        setAside = data.saved || [];
 
         if (!today) {
           today = data.today;
@@ -2797,6 +2824,70 @@
         // split a short list into two shorter ones, and what a pin needs to say
         // is said on the row itself, beside the name.
         for (const item of things) box.append(thingSlot(item));
+
+        renderSaved();
+      }
+
+      /**
+       * What was set down on purpose.
+       *
+       * The same rows, drawn the same way, so everything they can do they can
+       * still do — edit, delete, schedule. The difference is where they are:
+       * out of the list you read down, and under a heading that says they were
+       * put there rather than lost.
+       */
+      function renderSaved() {
+        const box = $('saved-list');
+        box.replaceChildren();
+
+        $('saved').classList.toggle('hidden', !setAside.length);
+        if (!setAside.length) return;
+
+        for (const item of setAside) box.append(thingSlot(item));
+      }
+
+      /**
+       * Set it down, or pick it back up.
+       *
+       * Written at once, like the note and the pin. There is no Confirm over
+       * this list, and the row moves between two lists on the press — so a
+       * change that lived only in the page would be undone by the reload that
+       * was meant to preserve it.
+       */
+      async function setLater(item, later) {
+        const from = later ? things : setAside;
+        const to = later ? setAside : things;
+
+        const at = from.findIndex((t) => t.id === item.id);
+        if (at === -1) return;
+
+        from.splice(at, 1);
+        item.later = later;
+        to.push(item);
+        sortThings();
+        renderThings();
+
+        let body;
+        try {
+          body = await (await api(`/entries/${item.id}/later`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ later }),
+          })).json();
+        } catch {
+          body = { error: 'offline' };
+        }
+
+        // Back where it was. A row in the wrong list is a state the database
+        // does not share, and it would look deliberate until the next load.
+        if (body.error) {
+          const back = to.findIndex((t) => t.id === item.id);
+          if (back !== -1) to.splice(back, 1);
+          item.later = !later;
+          from.push(item);
+          sortThings();
+          renderThings();
+        }
       }
 
       /**
@@ -2849,7 +2940,9 @@
        */
       function sortThings() {
         const rank = (t) => (t.mark ? t.mark.length : 0);
-        things.sort((a, b) =>
+        // Both lists, by the same rule. The saved one is ordered too — it is
+        // the same rows under a different heading, not a pile.
+        for (const list of [things, setAside]) list.sort((a, b) =>
           (a.pinned ? 0 : 1) - (b.pinned ? 0 : 1) ||
           (a.mark ? 0 : 1) - (b.mark ? 0 : 1) ||
           (a.mark ? rank(b) - rank(a) : b.days - a.days) ||
@@ -3346,6 +3439,20 @@
           setPinned(item, !item.pinned);
         };
         acts.append(hold);
+
+        // OUT OF THE WAY, ON PURPOSE. The difference from Delete is the whole
+        // reason this exists: the row keeps everything it has and stops
+        // competing for attention, and a message on Wednesday makes sure it is
+        // set down rather than forgotten.
+        const later = document.createElement('button');
+        later.type = 'button';
+        later.textContent = item.later ? 'Bring back' : 'Later';
+        later.onclick = (e) => {
+          e.stopPropagation();
+          acts.classList.add('hidden');
+          setLater(item, !item.later);
+        };
+        acts.append(later);
 
         acts.append(edit);
         row.append(acts);

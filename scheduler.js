@@ -446,6 +446,81 @@ async function sendNudge(profile, now, { force = false } = {}) {
   }
 }
 
+// --- the weekly look at what was set down --------------------------------
+//
+// Things saved for later leave the list on purpose, and the whole risk of that
+// is that leaving the list is indistinguishable from being forgotten. This is
+// the one thing that goes looking for them.
+//
+// WEDNESDAY AT FIVE. Mid-week and late afternoon: far enough into the week that
+// what you meant to do has met what actually happened, and early enough in the
+// evening to still act on it.
+const LATER_DAY = 'Wed';
+const LATER_HOUR = 17;
+
+// SILENT WHEN THERE IS NOTHING SET DOWN, and that is the difference between a
+// reminder and a digest. A message that arrives every Wednesday whatever the
+// state of the list teaches you to stop reading it, and the week it finally
+// matters is the week it goes unread.
+async function sendSavedForLater(profile, now, { force = false } = {}) {
+  if (!force && now.weekday !== LATER_DAY) return;
+  if (!force && !inWindow(minutesOf(now.hour, now.minute), minutesOf(LATER_HOUR, 0))) return;
+
+  if (!force && (await alreadySent(profile.user_id, 'later', now.date))) return;
+
+  const { data: saved, error } = await supabase
+    .from('entries')
+    .select('title, type, paused_at')
+    .eq('user_id', profile.user_id)
+    .eq('status', 'active')
+    .not('paused_at', 'is', null)
+    .order('paused_at');
+
+  // Unreadable is not the same as empty. Saying nothing is the safe wrong
+  // answer, because the alternative is telling someone their list is clear
+  // when it is only unreachable.
+  if (error) throw new Error(`could not read what is saved: ${error.message}`);
+
+  if (!saved || !saved.length) {
+    // NOT CLAIMED. Nothing was sent and nothing is owed, so there is no slot to
+    // take — and taking one would only mean a person who sets something down at
+    // ten past five waits a week to hear about it.
+    return;
+  }
+
+  // The lock immediately before the send, for the reason the nudge gives: the
+  // read above is an early-out, not a guard, and a second container mid-deploy
+  // sits inside the window between them.
+  if (!force && !(await claimSlot(profile.user_id, 'later', now.date))) return;
+
+  const text = savedText(saved);
+  const sent = await deliver(profile.user_id, text);
+
+  if (sent.sent) {
+    console.log(`[LATER] sent ${saved.length} saved thing(s)`);
+  } else if (sent.skipped) {
+    // The slot stays taken. There is nothing to retry for an account with no
+    // chat linked, and releasing it would mean asking again every tick.
+    console.log('[LATER] no telegram linked, nothing to send');
+  } else {
+    if (!force) await releaseSlot(profile.user_id, 'later', now.date);
+    console.error(`[LATER] ${JSON.stringify(sent)}`);
+  }
+}
+
+/**
+ * The message. Titles and nothing else.
+ *
+ * No dates, no counts of how long each has sat there, no encouragement. This
+ * is a list read out, and everything else would be the system having an
+ * opinion about a decision that was deliberate.
+ */
+function savedText(saved) {
+  const lines = saved.map((e) => `• ${e.title}`).join('\n');
+  const many = saved.length === 1 ? 'one thing' : `${saved.length} things`;
+  return `You have ${many} saved for later:\n\n${lines}`;
+}
+
 async function tick() {
   let profiles;
   try {
@@ -477,6 +552,12 @@ async function tick() {
     } catch (err) {
       console.error(`[NUDGE] ${profile.user_id}: ${err.message}`);
     }
+
+    try {
+      await sendSavedForLater(profile, now);
+    } catch (err) {
+      console.error(`[LATER] ${profile.user_id}: ${err.message}`);
+    }
   }
 }
 
@@ -493,6 +574,10 @@ module.exports = {
   hhmm, //        so a test can spell the time the same way the message does
   sendNudge, //   the evening nudge, for one user at one moment
   NUDGE_TEXT, //  the whole message, for a test that checks the wording
+  sendSavedForLater, // the Wednesday look at what was set down
+  savedText, //   its wording, so a test reads the real thing
+  LATER_DAY, //   and when it goes, so a test cannot drift from the job
+  LATER_HOUR,
 };
 
 // ---------------------------------------------------------------------------
@@ -513,6 +598,7 @@ module.exports = {
 const JOBS = {
   blocks: deliverDue,
   nudge: sendNudge,
+  later: sendSavedForLater,
 };
 
 async function runOnce(name) {

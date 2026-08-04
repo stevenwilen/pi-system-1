@@ -607,8 +607,8 @@ short list into two shorter ones, and what a pin needs to say fits on the row.
 It was *"a way of ordering this list by hand"*, retired when the order became
 arithmetic and — like every column here — never dropped. Every row still held
 null, so there was no stale value to collide with and **no migration to run**.
-The third column to come back this way, after `completed` for untimed items and
-`paused_at` waiting for saved-for-later.
+The second column to come back this way, after `completed` for untimed items;
+`paused_at` was the third, for saved-for-later (§4.3).
 
 Anything carrying a mark sits above everything without one, ordered by the least
 room left — so an overdue thing beats a thing due Friday, and both beat a habit
@@ -1698,6 +1698,38 @@ days-since alone would name something every single night, including the nights
 when nothing was actually neglected — and a nudge that always fires is a digest,
 which this is deliberately not.
 
+### 4.3 Saved for later, on Wednesdays
+
+A thing can be **set down on purpose**: it leaves the Things list, keeps
+everything it has, and stops competing for attention. `POST /entries/:id/later`
+writes `entries.paused_at` — a timestamp, not a flag, because the column already
+is one and because a thing set down in March and a thing set down on Tuesday are
+not in the same state. `GET /entries` sends the two lists apart, `items` and
+`saved`, both under the same sort.
+
+The argument against this used to be that *something set down on purpose looks
+the same as something neglected*. That is exactly right, and it is what the
+message answers rather than a reason not to have the list.
+
+**Wednesday at 17:00, local, and never over an empty list.** Mid-week and late
+afternoon: far enough in that what you meant to do has met what actually
+happened, early enough to still act on it. The condition is the feature — a
+message that arrives every Wednesday whatever the state of the list teaches you
+to stop reading it, and the week it finally matters is the week it goes unread.
+
+Titles and nothing else. No dates, no count of how long each has sat there, no
+encouragement: it is a list read out, and anything more would be the system
+having an opinion about a decision that was deliberate.
+
+An empty list **claims no slot in `sent_log`**. Silence that took the day would
+mean someone who sets something down at ten past five waits a week to hear about
+it. The claim goes in immediately before the send, for the reason the nudge
+gives: the read is an early-out, not a guard.
+
+Stats skips saved habits (`.is('paused_at', null)`). A habit put down on purpose
+is not overdue, and reporting it as such would argue with a decision that was
+just made.
+
 ---
 
 ## 5. Non-goals
@@ -1708,8 +1740,7 @@ which this is deliberately not.
 - No finance. That lane existed and was removed whole.
 - No coldness verdicts, no cold flags, no temperature bars.
 - No setup interview. Things are added one at a time through the form.
-- No pause. Something set down on purpose looks the same as something neglected,
-  which was the argument for pausing; it is not worth a column and a filter.
+- No auto-archive. Nothing leaves the list because it has sat there a while.
 
 ---
 

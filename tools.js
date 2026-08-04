@@ -40,7 +40,12 @@ const CREATABLE = ['type', 'title', 'frequency', 'due', 'size'];
 // pure arithmetic, and never dropped — every row still holds null, so there is
 // no stale value to collide with and no migration to run. See routes/entries.js
 // for why a pin is a declaration rather than the ranking that was retired.
-const UPDATABLE = [...CREATABLE, 'status', 'note', 'priority'];
+//
+// `paused_at` is saved-for-later, and the third of these to come back. It was
+// "set down on purpose, not neglected" — a thing still cared about that drops
+// out of the list until you want it again — and it was retired without ever
+// being dropped. Same story, same column, same name.
+const UPDATABLE = [...CREATABLE, 'status', 'note', 'priority', 'paused_at'];
 
 function pick(fields, allowed) {
   const out = {};

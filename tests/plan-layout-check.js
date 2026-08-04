@@ -1063,7 +1063,7 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
   check('and toRow, which the sheet writes through, has no note in it',
     !/note/.test((shape.match(/function toRow[\s\S]*?\n\}/) || [''])[0]));
   check('it is updatable but never creatable: nothing writes one at birth',
-    /UPDATABLE = \[\.\.\.CREATABLE, 'status', 'note', 'priority'\]/.test(toolsSrc) &&
+    /UPDATABLE = \[\.\.\.CREATABLE, 'status', 'note', 'priority', 'paused_at'\]/.test(toolsSrc) &&
     !/CREATABLE = \[[^\]]*'note'/.test(toolsSrc));
 
   // The move itself, in the confirm. Read from the route rather than restated,

@@ -70,7 +70,12 @@ router.get('/stats', async (req, res) => {
       .select('id, type, title, frequency, status, created_at')
       .eq('user_id', userId)
       .eq('status', 'active')
-      .eq('type', 'habit');
+      .eq('type', 'habit')
+      // A HABIT SET DOWN ON PURPOSE IS NOT ONE YOU ARE BEHIND ON. Saved for
+      // later means still cared about and not now, so reporting it as weeks
+      // past its cadence would be the screen arguing with a decision the
+      // person made deliberately.
+      .is('paused_at', null);
 
     if (entryErr) throw new Error(entryErr.message);
 
