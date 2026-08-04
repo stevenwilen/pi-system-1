@@ -1106,11 +1106,19 @@ a missing timezone row, both diagnosed as a stale page.
 would miss the point — the thing that goes stale is the app itself, and only a
 reload replaces it.
 
-72px is the same distance a swipe commits at: one number for *a deliberate drag*
-reads as one decision rather than two. The travel is damped, so the page slows as
-it goes and plainly reaches the end of its own rope, which is what says let go.
-The dot turns **with the finger** and only starts spinning once the reload is
-under way — the moment it stops being under your control.
+**56px of the finger’s travel**, not of the page’s. Those are very different
+numbers, because the pull is damped so the page visibly reaches the end of its
+own rope: moving the page 72px takes 119px of drag, nearly a third of a screen.
+Measured that way it was a gesture you had to fight, and the damping — which is
+about how the page should look — had become the thing standing in the way of the
+threshold. 56 rather than the swipes’ 72 because a vertical drag from the top is
+more work than a flick across a row, and because nothing here is destructive: a
+stray pull costs a reload.
+
+The page moves by the damped distance and **the dot fills by the real one**, so
+it is a gauge for the threshold rather than for the movement — full at exactly
+the moment letting go means something. It only starts spinning once the reload
+is under way, which is when it stops being under your control.
 
 Refused unless the day screen is at rest at the very top: not mid-scroll, not
 over the gate or either sheet, and never while a block or row is being handled,

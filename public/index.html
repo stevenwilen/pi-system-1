@@ -4814,9 +4814,18 @@
       // data would be quicker and would miss the point: the thing that goes
       // stale is the app itself, and only a reload replaces that.
 
-      // Far enough to mean it, and the same distance a swipe commits at. One
-      // number for "a deliberate drag" reads as one decision rather than two.
-      const PULL_COMMIT = 72;
+      // How far the FINGER travels to mean it — not how far the page moves.
+      //
+      // It was 72 measured against the DAMPED distance, and those are very
+      // different numbers: moving the page 72px takes 119px of drag, nearly a
+      // third of a phone screen. The damping is about how the page should look
+      // while it is pulled, and it had quietly become the thing you were
+      // fighting to reach the threshold at all.
+      //
+      // 56 rather than the swipes' 72, because a vertical drag from the top of
+      // a screen is more work than a flick across a row — and because nothing
+      // here is destructive: the worst a stray pull costs is a reload.
+      const PULL_COMMIT = 56;
 
       // Where the page stops following the finger. Past this it is plainly at
       // the end of its travel, which is what tells you to let go.
@@ -4857,16 +4866,26 @@
       /** How far the page has actually moved, which is not how far the finger has. */
       const damped = (travel) => PULL_MAX * (1 - Math.exp(-travel / PULL_MAX));
 
-      function drawPull(shift) {
+      /**
+       * The page moves by the damped distance; the dot fills by the real one.
+       *
+       * THOSE ARE DIFFERENT NUMBERS AND BOTH ARE RIGHT. The page slows as it
+       * goes, because that is what says it is reaching the end of its rope.
+       * The dot is a gauge for the threshold, so it has to be measured against
+       * the same travel the release is measured against — otherwise it reads as
+       * full while letting go would still do nothing.
+       */
+      function drawPull(shift, progress) {
         const day = $('day');
         if (day) day.style.transform = shift ? `translateY(${shift}px)` : '';
 
         const dot = $('pull');
         if (!dot) return;
-        dot.style.opacity = String(Math.min(1, shift / PULL_COMMIT));
-        // Turns with the finger rather than under its own steam, so the
-        // movement is yours until the moment it is not.
-        dot.style.transform = `rotate(${Math.round(shift * 3)}deg)`;
+        const near = Math.min(1, progress);
+        dot.style.opacity = String(near);
+        // A full turn by the time it will fire, so the dot completes at exactly
+        // the moment letting go means something.
+        dot.style.transform = `rotate(${Math.round(near * 360)}deg)`;
       }
 
       function endPull(reset = true) {
@@ -4921,8 +4940,9 @@
         // and the two fight. See the listener registration below.
         if (e.cancelable) e.preventDefault();
 
-        pulling.travel = damped(travel);
-        drawPull(pulling.travel);
+        // Raw for the decision, damped for the drawing.
+        pulling.travel = travel;
+        drawPull(damped(travel), travel / PULL_COMMIT);
       }
 
       function releasedPull() {

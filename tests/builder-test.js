@@ -2863,6 +2863,31 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     }
 
     {
+      // THE THRESHOLD IS THE FINGER'S TRAVEL, NOT THE PAGE'S.
+      //
+      // 60px of drag moves the page about 46px, because the pull is damped so
+      // that it visibly reaches the end of its rope. Measured against the page
+      // — which is how this was written first — 60px of drag did nothing, and
+      // reaching the threshold at all took 119px, nearly a third of a screen.
+      // This case is exactly the gap between the two rules: it commits on one
+      // and not the other.
+      const { byId, fire, reloads } = await boot0();
+
+      fire('touchstart', touch(0));
+      fire('touchmove', touch(60));
+
+      check('the dot is full at the moment it will fire',
+        Number(byId['pull'].style.opacity) === 1, byId['pull'].style.opacity);
+      check('while the page has moved rather less than that',
+        parseFloat((byId['day'].style.transform || '').replace(/[^0-9.]/g, '')) < 56,
+        byId['day'].style.transform);
+
+      fire('touchend', {});
+      check('and sixty pixels of drag is enough', reloads.length === 1,
+        String(reloads.length));
+    }
+
+    {
       // SHORT OF IT PUTS EVERYTHING BACK. The commit distance is most of a
       // thumb's travel on purpose: a reload throws away anything unconfirmed.
       const { byId, fire, reloads } = await boot0();
