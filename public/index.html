@@ -272,31 +272,33 @@
 
          Muted, like the note dot: this says a row has been held at the top,
          which is a state rather than a warning or something to press. */
-      /* AN ACTUAL PIN, drawn as a shape rather than typed as a character.
-         A pushpin glyph would fall back to whatever font on the device happens
-         to carry it — which is how the deadline asterisks came out bold on a
-         laptop and thin on the phone. An svg has no font to be missing from.
+      /* A PUSHPIN IN OUTLINE, TILTED. Drawn as an svg rather than typed as a
+         character: a pushpin glyph would fall back to whatever font the device
+         carries it in, which is how the deadline asterisks came out bold on a
+         laptop and thin on the phone.
+
+         STROKED, NOT FILLED, and that is most of why it is quiet. A solid
+         shape at this size is a blob carrying as much ink as the note dot
+         beside it; a 2px stroke in a 24 viewBox renders under a pixel wide.
+         The turn is inside the svg, so the element stays square and nothing
+         needs rotating in CSS.
 
          A MASK RATHER THAN A BACKGROUND IMAGE, so the colour stays in CSS:
-         background-color is what shows through, so this follows --muted the
-         way every other mark on the page does instead of baking a hex into the
-         url and quietly drifting the next time the palette moves.
-
-         It was a teardrop made of a border-radius, which read as a map marker
-         and, filled, as a blob. */
+         background-color is what shows through, so this follows the palette
+         instead of baking a hex into the url and drifting the next time it
+         moves. Faint rather than muted — it marks a row rather than asking
+         anything of you, and it sits inside a title it must not compete with. */
       .pinmark {
         display: inline-block;
-        width: 8px;
-        height: 11px;
-        margin-left: 7px;
+        width: 12px;
+        height: 12px;
+        margin-left: 5px;
         vertical-align: middle;
-        /* Up a shade. Middle alignment centres it on the x-height, and a tall
-           narrow shape sits low against a capital. */
         position: relative;
-        top: -1.5px;
-        background-color: var(--muted);
-        -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2012%2016'%3E%3Cpath%20d%3D'M4%201h4v1.6H7l.8%205H4.2L5%202.6H4z'%2F%3E%3Cpath%20d%3D'M5.45%207.6h1.1L6%2015z'%2F%3E%3C%2Fsvg%3E");
-        mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2012%2016'%3E%3Cpath%20d%3D'M4%201h4v1.6H7l.8%205H4.2L5%202.6H4z'%2F%3E%3Cpath%20d%3D'M5.45%207.6h1.1L6%2015z'%2F%3E%3C%2Fsvg%3E");
+        top: -1px;
+        background-color: var(--faint);
+        -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'24'%20height%3D'24'%20viewBox%3D'0%200%2024%2024'%20fill%3D'none'%20stroke%3D'black'%20stroke-width%3D'2'%20stroke-linecap%3D'round'%20stroke-linejoin%3D'round'%3E%3Cg%20transform%3D'rotate(45%2012%2012)'%3E%3Cpath%20d%3D'M9%204h6M10.5%204%209%2013h6l-1.5-9M12%2013v7'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+        mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'24'%20height%3D'24'%20viewBox%3D'0%200%2024%2024'%20fill%3D'none'%20stroke%3D'black'%20stroke-width%3D'2'%20stroke-linecap%3D'round'%20stroke-linejoin%3D'round'%3E%3Cg%20transform%3D'rotate(45%2012%2012)'%3E%3Cpath%20d%3D'M9%204h6M10.5%204%209%2013h6l-1.5-9M12%2013v7'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
         -webkit-mask-repeat: no-repeat;
         mask-repeat: no-repeat;
         -webkit-mask-position: center;
@@ -866,38 +868,6 @@
         border: 2.6px solid var(--text);
         border-right-color: transparent;
         opacity: 0.82;
-        animation: spin 1100ms cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite;
-      }
-
-      /* --- pulled down to reload ------------------------------------------ */
-      /* Behind the page and revealed by it: the day slides down over this, so
-         the dot comes out from under the top edge rather than being drawn on
-         top of the day. Fixed, because what moves is the page uncovering it. */
-      #pull {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 64px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0;
-        pointer-events: none;
-      }
-      /* The boot cover's dot at two thirds the size, and NOT spinning: it turns
-         with the pull instead, so the movement belongs to the finger. It spins
-         only once the reload is under way, which is the moment it stops being
-         under your control. */
-      #pull span {
-        width: 18px;
-        height: 18px;
-        border-radius: 50%;
-        border: 2.4px solid var(--text);
-        border-right-color: transparent;
-        opacity: 0.82;
-      }
-      #pull.going span {
         animation: spin 1100ms cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite;
       }
 
@@ -1471,6 +1441,25 @@
 
 
       /* Below the whole page, and deliberately hard to hit by accident. */
+      /* Modelled on Sign out, and for the same reason: a rare utility at the
+         foot of a screen, underlined so it reads as something to press and
+         muted so it never competes with the day above it. Not blue — blue is
+         for the controls that change the day, and this changes nothing. */
+      .refresh {
+        margin: 34px 0 4px;
+        text-align: center;
+      }
+      .refresh button {
+        background: none;
+        border: 0;
+        font-family: inherit;
+        font-size: 12px;
+        color: var(--muted);
+        text-decoration: underline;
+        cursor: pointer;
+        padding: 6px 10px;
+      }
+
       .signout {
         display: flex;
         align-items: center;
@@ -1994,16 +1983,6 @@
       </form>
     </div>
 
-    <!-- PULLED DOWN FROM THE TOP TO RELOAD. An installed app has no address
-         bar and no browser pull-to-refresh, so until now there was no way at
-         all to make this page fetch itself again — which is exactly how a
-         phone ends up running a build from a fortnight ago and showing a
-         screen that no longer exists.
-
-         The dot is the one the boot cover uses, because it is the same
-         statement: something is on its way. -->
-    <div id="pull" aria-hidden="true"><span></span></div>
-
     <main id="day">
       <!-- 1. THE DAY -------------------------------------------------------- -->
       <!--
@@ -2080,6 +2059,23 @@
         </div>
         <div id="things"></div>
       </section>
+
+    <!-- THE WAY TO MAKE THIS PAGE FETCH ITSELF AGAIN, and it needs one: an
+         installed app has no address bar and no browser pull-to-refresh, so
+         without this there is no way from inside it to pick up a new build.
+         That is how a phone ends up running a fortnight-old version and
+         showing a screen that no longer exists, which happened twice.
+
+         A LINK RATHER THAN A GESTURE. It was a pull from the top, and a
+         gesture is the wrong shape for this: invisible until somebody tells
+         you it is there, and competing for the same finger as the scroll it
+         starts inside. This is rarely wanted and always findable.
+
+         At the very bottom, quiet, because reaching for it means something has
+         already gone wrong. -->
+    <div class="refresh">
+      <button type="button" id="refresh">Refresh</button>
+    </div>
 
     </main>
 
@@ -4816,177 +4812,12 @@
         };
       }
 
-      // --- pull the top of the page down to reload it --------------------------
-      //
-      // WHY THIS EXISTS AT ALL, and it is not decoration. An installed app has
-      // no address bar and no browser pull-to-refresh — `overscroll-behavior-y:
-      // none` on the body turned off what little there was — so there was no
-      // way from inside the app to make the page fetch itself again. That is
-      // exactly how a phone ends up running a build from a fortnight ago and
-      // showing a screen that no longer exists, which has happened twice.
-      //
-      // It reloads the PAGE rather than re-reading the day. Re-fetching the
-      // data would be quicker and would miss the point: the thing that goes
-      // stale is the app itself, and only a reload replaces that.
-
-      // How far the FINGER travels to mean it — not how far the page moves.
-      //
-      // It was 72 measured against the DAMPED distance, and those are very
-      // different numbers: moving the page 72px takes 119px of drag, nearly a
-      // third of a phone screen. The damping is about how the page should look
-      // while it is pulled, and it had quietly become the thing you were
-      // fighting to reach the threshold at all.
-      //
-      // 56 rather than the swipes' 72, because a vertical drag from the top of
-      // a screen is more work than a flick across a row — and because nothing
-      // here is destructive: the worst a stray pull costs is a reload.
-      const PULL_COMMIT = 56;
-
-      // Where the page stops following the finger. Past this it is plainly at
-      // the end of its travel, which is what tells you to let go.
-      const PULL_MAX = 108;
-
-      let pulling = null;
-
-      /**
-       * Is a pull allowed to start here?
-       *
-       * Every clause is a way of saying "the day screen, at rest, at the very
-       * top". A pull that began over a sheet would drag the day around behind
-       * it, and one that began mid-gesture would fight the block being carried.
-       */
-      function canPull() {
-        if (gesture) return false;
-        if ((typeof window !== 'undefined' ? window.scrollY : 0) > 0) return false;
-
-        // THE CLASS EACH ONE ACTUALLY USES, which is not the same class. The
-        // sheets and the gate are dismissed with `hidden`; the boot cover is
-        // dismissed with `done` and then display:none. Checking every one of
-        // them for `hidden` made this always false — the pull never started at
-        // all, in the browser exactly as in the suite, and it took a test to
-        // see because a gesture that does nothing looks like a gesture nobody
-        // has tried yet.
-        for (const [id, gone] of [
-          ['gate', 'hidden'],
-          ['settings-scrim', 'hidden'],
-          ['add-scrim', 'hidden'],
-          ['booting', 'done'],
-        ]) {
-          const el = $(id);
-          if (el && el.classList && !el.classList.contains(gone)) return false;
-        }
-        return true;
-      }
-
-      /** How far the page has actually moved, which is not how far the finger has. */
-      const damped = (travel) => PULL_MAX * (1 - Math.exp(-travel / PULL_MAX));
-
-      /**
-       * The page moves by the damped distance; the dot fills by the real one.
-       *
-       * THOSE ARE DIFFERENT NUMBERS AND BOTH ARE RIGHT. The page slows as it
-       * goes, because that is what says it is reaching the end of its rope.
-       * The dot is a gauge for the threshold, so it has to be measured against
-       * the same travel the release is measured against — otherwise it reads as
-       * full while letting go would still do nothing.
-       */
-      function drawPull(shift, progress) {
-        const day = $('day');
-        if (day) day.style.transform = shift ? `translateY(${shift}px)` : '';
-
-        const dot = $('pull');
-        if (!dot) return;
-        const near = Math.min(1, progress);
-        dot.style.opacity = String(near);
-        // A full turn by the time it will fire, so the dot completes at exactly
-        // the moment letting go means something.
-        dot.style.transform = `rotate(${Math.round(near * 360)}deg)`;
-      }
-
-      function endPull(reset = true) {
-        pulling = null;
-        if (!reset) return;
-
-        const day = $('day');
-        if (day) {
-          if (!reduceMotion()) day.style.transition = `transform ${SETTLE_MS}ms ease-out`;
-          day.style.transform = '';
-          setTimeout(() => {
-            day.style.transition = '';
-          }, SETTLE_MS);
-        }
-        const dot = $('pull');
-        if (dot) {
-          dot.style.opacity = '0';
-          dot.style.transform = '';
-        }
-      }
-
-      function startedPull(e) {
-        if (!canPull()) return;
-        const t = e.touches && e.touches[0];
-        if (!t) return;
-        pulling = { y0: t.clientY, travel: 0, live: false };
-      }
-
-      function movedPull(e) {
-        if (!pulling) return;
-        const t = e.touches && e.touches[0];
-        if (!t) return;
-
-        const travel = t.clientY - pulling.y0;
-
-        // Upward, or the page has scrolled out from under it. Either way this
-        // is a scroll and not a pull, and it stops being ours.
-        if (travel <= 0 || (typeof window !== 'undefined' && window.scrollY > 0)) {
-          if (pulling.live) endPull();
-          else pulling = null;
-          return;
-        }
-
-        // Past the slop it becomes a pull, and only then is the scroll taken.
-        // Deciding earlier would swallow the first few pixels of every
-        // downward scroll that starts at the top of the page.
-        if (!pulling.live && travel < SLOP) return;
-        pulling.live = true;
-
-        // NON-PASSIVE, and this is what makes the whole thing work: without
-        // preventing the default the browser scrolls the page under the pull
-        // and the two fight. See the listener registration below.
-        if (e.cancelable) e.preventDefault();
-
-        // Raw for the decision, damped for the drawing.
-        pulling.travel = travel;
-        drawPull(damped(travel), travel / PULL_COMMIT);
-      }
-
-      function releasedPull() {
-        if (!pulling) return;
-
-        const far = pulling.travel >= PULL_COMMIT;
-        if (!far) return endPull();
-
-        // Held where it is, spinning, until the page goes. Snapping back and
-        // then reloading reads as the pull having been ignored.
-        pulling = null;
-        const dot = $('pull');
-        if (dot) {
-          dot.classList.add('going');
-          dot.style.opacity = '1';
-        }
-        if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(10);
+      // The page, not the day. Re-reading the data would be quicker and would
+      // miss the point: what goes stale is the app itself, and only a reload
+      // replaces that.
+      $('refresh').onclick = () => {
         if (typeof location !== 'undefined' && location.reload) location.reload();
-      }
-
-      // Registered here rather than on an element because the gesture starts on
-      // whatever happens to be at the top of the day, and non-passive because a
-      // passive listener cannot preventDefault — the one thing this needs.
-      if (typeof document.addEventListener === 'function') {
-        document.addEventListener('touchstart', startedPull, { passive: true });
-        document.addEventListener('touchmove', movedPull, { passive: false });
-        document.addEventListener('touchend', releasedPull, { passive: true });
-        document.addEventListener('touchcancel', () => endPull(), { passive: true });
-      }
+      };
 
       $('add-block').onclick = () => {
         const title = prompt('What is this block?');

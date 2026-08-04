@@ -581,14 +581,20 @@ on the device happens to carry it, which is exactly how the deadline asterisks
 came out bold on a laptop and thin on the phone (§3.1.1). An inline svg has no
 font to be missing from.
 
+**Stroked and tilted, not filled**, and that is most of why it is quiet: a solid
+shape at this size is a blob carrying as much ink as the note dot beside it,
+while a 2px stroke in a 24 viewBox renders under a pixel wide. The turn is
+inside the svg, so the element stays square and nothing needs rotating in CSS.
+
 It is applied as a **mask, not a background image**, so the colour stays in CSS:
-what shows through is `background-color`, so the mark follows `--muted` like
-every other mark here instead of baking a hex into the url and drifting the next
-time the palette moves.
+what shows through is `background-color`, so the mark follows the palette
+instead of baking a hex into the url and drifting the next time it moves. Set in
+`--faint` rather than `--muted` — it marks a row rather than asking anything of
+you, and it sits inside a title it must not compete with.
 
 It was a teardrop made of a border-radius for two revisions — filled, which read
-as a blob with the same ink as the note dot beside it, then hollow, which was
-lighter but still a map marker rather than a pin.
+as a blob, then hollow, which was lighter but still a map marker rather than a
+pin.
 
 It was a **Pinned** heading with a gap after it for one revision. That splits a
 short list into two shorter ones, and what a pin needs to say fits on the row.
@@ -1095,50 +1101,36 @@ is the one decision this system had been quietly taking.
 Reading a day is therefore repeatable and claims nothing. There is no placement
 endpoint and no `placed:` rows.
 
-#### Pull the top down to reload
+#### Refresh, at the foot of the page
 
-Drag the day down from the very top and let go past 72px, and the page reloads.
+A quiet underlined **Refresh** below the day. It reloads the page.
 
 **It exists because an installed app has no other way to.** No address bar, no
-browser pull-to-refresh — `overscroll-behavior-y: none` turned off what little
-there was — so nothing inside the app could make it fetch itself again. That is
-exactly how a phone ends up running a build from a fortnight ago and showing a
-screen that no longer exists, which happened twice: a missing stats section and
-a missing timezone row, both diagnosed as a stale page.
+browser pull-to-refresh — the body carries `overscroll-behavior-y: none` — so
+nothing inside the app could make it fetch itself again. That is exactly how a
+phone ends up running a build from a fortnight ago and showing a screen that no
+longer exists, which happened twice: a missing stats section and a missing
+timezone row, both diagnosed as a stale page.
 
 **It reloads the page, not the day.** Re-reading the data would be quicker and
-would miss the point — the thing that goes stale is the app itself, and only a
-reload replaces it.
+would miss the point — what goes stale is the app itself, and only a reload
+replaces it.
 
-**56px of the finger’s travel**, not of the page’s. Those are very different
-numbers, because the pull is damped so the page visibly reaches the end of its
-own rope: moving the page 72px takes 119px of drag, nearly a third of a screen.
-Measured that way it was a gesture you had to fight, and the damping — which is
-about how the page should look — had become the thing standing in the way of the
-threshold. 56 rather than the swipes’ 72 because a vertical drag from the top is
-more work than a flick across a row, and because nothing here is destructive: a
-stray pull costs a reload.
+**It was a pull from the top**, and a gesture is the wrong shape for this. It is
+invisible until somebody tells you it is there, and it competes for the same
+finger as the scroll it begins inside — the threshold had to be retuned once for
+exactly that reason, because it was measured against the damped travel and took
+119px of drag to reach. A link is findable and costs nothing to ignore.
 
-The page moves by the damped distance and **the dot fills by the real one**, so
-it is a gauge for the threshold rather than for the movement — full at exactly
-the moment letting go means something. It only starts spinning once the reload
-is under way, which is when it stops being under your control.
+At the very bottom and deliberately quiet: reaching for it means something has
+already gone wrong. Muted and underlined like **Sign out**, which is the same
+kind of thing — a rare utility at the foot of a screen. Not blue: blue is for
+the controls that change the day, and this changes nothing.
 
-Refused unless the day screen is at rest at the very top: not mid-scroll, not
-over the gate or either sheet, and never while a block or row is being handled,
-which would be two gestures fighting over one finger.
-
-The `touchmove` listener is **non-passive**, because preventing the default
-scroll is the entire mechanism — without it the browser scrolls the page under
-the pull and the two fight. It is also the second such listener on the document
-(the reorder installs one while a block is carried), which broke a test that
-counted them all; that test now measures only what a hold installs.
-
-Its first version never ran at all. `canPull` checked four elements for the
-class `hidden`, and the boot cover is dismissed with `done` — so the guard was
-always false and the gesture was dead in the browser as much as in the suite. A
-gesture that does nothing looks exactly like one nobody has tried yet, which is
-why it is pinned by name.
+What went with the gesture is named in the suite piece by piece — threshold,
+damping, handlers, indicator — because a half-removed gesture leaves listeners
+on the document that quietly take touches from the page. A case asserts the
+document holds **no standing touch listener** at rest.
 
 #### The builder
 
