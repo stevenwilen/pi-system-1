@@ -571,20 +571,24 @@ and §2.1 is that nothing is inferred which can be declared: the arithmetic
 Pins are ordered among themselves by the same arithmetic as everything else, so
 the top of the list is not a second list with its own rules.
 
-**One list, with a mark on the row.** A pinned thing carries a small teardrop
+**One list, with a mark on the row.** A pinned thing carries a small pushpin
 beside its name — not out at the right edge with the deadline asterisks, which
 answer *does this need attention*; this one says why the row is where it is,
 which is a fact about the name it follows.
 
-It is **drawn in CSS, not typed**. A pushpin character would fall back to
-whatever font on the device happens to carry it, which is exactly how the
-deadline asterisks came out bold on a laptop and thin on the phone (§3.1.1). A
-shape made of a border-radius has no font to be missing from.
+It is **drawn, not typed**. A pushpin character would fall back to whatever font
+on the device happens to carry it, which is exactly how the deadline asterisks
+came out bold on a laptop and thin on the phone (§3.1.1). An inline svg has no
+font to be missing from.
 
-**Hollow, not filled.** Solid at this size it was a blob — the same ink as the
-note dot beside it, reading as weight rather than as a shape. An outline is a
-third of that, and the hole is what gives the teardrop a direction. Muted either
-way: a state, not a warning and not something to press.
+It is applied as a **mask, not a background image**, so the colour stays in CSS:
+what shows through is `background-color`, so the mark follows `--muted` like
+every other mark here instead of baking a hex into the url and drifting the next
+time the palette moves.
+
+It was a teardrop made of a border-radius for two revisions — filled, which read
+as a blob with the same ink as the note dot beside it, then hollow, which was
+lighter but still a map marker rather than a pin.
 
 It was a **Pinned** heading with a gap after it for one revision. That splits a
 short list into two shorter ones, and what a pin needs to say fits on the row.

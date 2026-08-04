@@ -272,22 +272,37 @@
 
          Muted, like the note dot: this says a row has been held at the top,
          which is a state rather than a warning or something to press. */
+      /* AN ACTUAL PIN, drawn as a shape rather than typed as a character.
+         A pushpin glyph would fall back to whatever font on the device happens
+         to carry it — which is how the deadline asterisks came out bold on a
+         laptop and thin on the phone. An svg has no font to be missing from.
+
+         A MASK RATHER THAN A BACKGROUND IMAGE, so the colour stays in CSS:
+         background-color is what shows through, so this follows --muted the
+         way every other mark on the page does instead of baking a hex into the
+         url and quietly drifting the next time the palette moves.
+
+         It was a teardrop made of a border-radius, which read as a map marker
+         and, filled, as a blob. */
       .pinmark {
         display: inline-block;
         width: 8px;
-        height: 8px;
+        height: 11px;
         margin-left: 7px;
         vertical-align: middle;
-        /* HOLLOW, NOT FILLED. Solid at this size it was a blob — the same ink
-           as the note dot beside it, and reading as weight rather than as a
-           shape. An outline is a third of that, and the teardrop is legible
-           because the hole is what gives it a direction. */
-        background: none;
-        border: 1.2px solid var(--muted);
-        /* Three round corners and one square: a teardrop, turned to point
-           down-left the way a pin sits in a map. */
-        border-radius: 50% 50% 50% 0;
-        transform: rotate(-45deg);
+        /* Up a shade. Middle alignment centres it on the x-height, and a tall
+           narrow shape sits low against a capital. */
+        position: relative;
+        top: -1.5px;
+        background-color: var(--muted);
+        -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2012%2016'%3E%3Cpath%20d%3D'M4%201h4v1.6H7l.8%205H4.2L5%202.6H4z'%2F%3E%3Cpath%20d%3D'M5.45%207.6h1.1L6%2015z'%2F%3E%3C%2Fsvg%3E");
+        mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2012%2016'%3E%3Cpath%20d%3D'M4%201h4v1.6H7l.8%205H4.2L5%202.6H4z'%2F%3E%3Cpath%20d%3D'M5.45%207.6h1.1L6%2015z'%2F%3E%3C%2Fsvg%3E");
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
       }
 
       .thing + .thing {
