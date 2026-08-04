@@ -579,8 +579,12 @@ which is a fact about the name it follows.
 It is **drawn in CSS, not typed**. A pushpin character would fall back to
 whatever font on the device happens to carry it, which is exactly how the
 deadline asterisks came out bold on a laptop and thin on the phone (§3.1.1). A
-shape made of a border-radius has no font to be missing from. Muted, like the
-note dot: a state, not a warning and not something to press.
+shape made of a border-radius has no font to be missing from.
+
+**Hollow, not filled.** Solid at this size it was a blob — the same ink as the
+note dot beside it, reading as weight rather than as a shape. An outline is a
+third of that, and the hole is what gives the teardrop a direction. Muted either
+way: a state, not a warning and not something to press.
 
 It was a **Pinned** heading with a gap after it for one revision. That splits a
 short list into two shorter ones, and what a pin needs to say fits on the row.
