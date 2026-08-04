@@ -1091,9 +1091,15 @@ Exactly as it was: Starts visible, nothing past, no divider.
 
 #### The calendar aside
 
-Everything on the feed for that date. Each event is one row: its time, its
-title, and a muted `+` at the edge. Timed first in clock order, then the all-day
-entries, which show no time.
+Everything on the feed for that date. Each event is one row: its time, then its
+title, and nothing else. Timed first in clock order, then the all-day entries,
+which show no time.
+
+**The whole row is the target, which in practice means the title** — it takes
+whatever the fixed-width time column leaves. It carried a muted `+` at the edge
+for one revision. A mark on every row to describe a gesture is a toll paid on
+every reading of the list to explain something once, and this aside is read far
+more often than it is pressed.
 
 **Pressing a row makes a block.** That is the person deciding, which is the
 whole distinction from what this replaced: there were two feeds meaning

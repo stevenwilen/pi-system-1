@@ -3226,8 +3226,13 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       row.children[0].textContent);
     check('then the title', row.children[1].textContent === 'Dentist',
       row.children[1].textContent);
-    check('and a + at the end', row.children[2].textContent === '+',
-      row.children[2].textContent);
+    // AND NOTHING ELSE. It carried a muted + at the edge, and a mark on every
+    // row to describe a gesture is a toll paid on every reading of the list to
+    // explain something once. The aside is read far more often than pressed.
+    check('and nothing after it', row.children.length === 2,
+      row.children.map((c) => c.textContent).join('|'));
+    check('no + anywhere in the aside', !calRows().some((r) => r.text().includes('+')),
+      calRows().map((r) => r.text()).join(' / '));
     check('an all-day entry shows no time', calRows()[2].children[0].textContent === '',
       JSON.stringify(calRows()[2].children[0].textContent));
     check('but is still a row you can press', typeof calRows()[2].onclick === 'function');
@@ -3240,6 +3245,14 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
     calRows()[0].onclick();
     check('pressing one puts it in the day', titles().join() === 'Dentist', titles().join());
+
+    // THE TITLE IS THE TARGET, and with the + gone it is most of the row. It
+    // has no handler of its own — the press belongs to the row and the title
+    // is inside it — so a tap that lands on the word is a tap on the row.
+    const words = calRows()[1].children[1];
+    check('the title carries no handler of its own', !words.onclick);
+    check('and it is the part of the row that stretches',
+      words._class.has('ctitle'), [...words._class].join(' '));
 
     // ITS OWN LENGTH. The one thing about a calendar event the day can hold
     // exactly, and the alternative is three taps on the chip to say what the
@@ -3275,7 +3288,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       ![...row._class].some((c) => /lock|grey|gray|done|used|taken/i.test(c)),
       [...row._class].join(' '));
     check('and it still reads the same', row.children[1].textContent === 'Dentist');
-    check('the + is still there to press', row.children[2].textContent === '+');
+    check('and is still a row you can press', typeof row.onclick === 'function');
 
     // Pressing twice makes two, the same as the list does.
     calRows()[0].onclick();

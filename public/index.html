@@ -577,14 +577,6 @@
         flex: 1;
         min-width: 0;
       }
-      /* Out at the edge, and quiet enough to ignore. It says the row can be
-         pressed; it is not asking to be. */
-      .cadd {
-        flex: none;
-        color: var(--cal-rule);
-        font-size: 15px;
-        line-height: 1;
-      }
       /* THE ONLY FEEDBACK ON THE ROW ITSELF, and it lasts as long as the touch.
          The row never greys and never locks — what a press produces is a block
          in the day below, which is the thing worth looking at. */
@@ -3710,15 +3702,15 @@
         what.className = 'ctitle';
         what.textContent = e.title;
 
-        // The half of this that can be seen. A row that silently became
-        // pressable would be a feature only the person who built it knows
-        // about, which is the mistake the ··· was added to correct.
-        const add = document.createElement('span');
-        add.className = 'cadd';
-        add.textContent = '+';
-        add.setAttribute('aria-hidden', 'true');
-
-        row.append(when, what, add);
+        // NOTHING ELSE ON THE ROW. It carried a muted + at the edge to say it
+        // could be pressed, and a mark on every row to describe a gesture is a
+        // toll paid on every reading of the list to explain something once.
+        // The aside is read far more often than it is pressed.
+        //
+        // What is left to find it by: the whole row dims under a finger, and
+        // the label below says what pressing it does for anyone not looking at
+        // the screen at all.
+        row.append(when, what);
         row.setAttribute('aria-label', `Put ${e.title} in the day`);
 
         row.onclick = () => {

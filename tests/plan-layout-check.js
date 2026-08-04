@@ -831,7 +831,18 @@ console.log('\n8. the calendar aside is a left rule, not a card');
   check('the only press feedback lasts as long as the touch',
     /\.calrow:active\s*\{[^}]*opacity/.test(css));
 
-  check('the + is quieter than the text', /color: var\(--cal-rule\)/.test(rule('.cadd')));
+  // NO INDICATOR AT ALL. It carried a muted + at the edge, and a mark on every
+  // row to describe a gesture is a toll paid on every reading of the list to
+  // explain something once.
+  check('no + affordance is styled', !/\.cadd/.test(css));
+  check('nor any other mark at the row\'s edge',
+    !/\.calrow\s*(::after|::before)/.test(css));
+  check('so the row is a time and a title',
+    /\.ctime/.test(css) && /\.ctitle/.test(css) && !/\.cadd/.test(css));
+
+  // THE TITLE IS THE TARGET, and with the + gone it is most of the row: it
+  // stretches to fill whatever the time column leaves.
+  check('the title takes the rest of the row', /flex: 1/.test(rule('.ctitle')), rule('.ctitle'));
   check('and the times line up in a column of one width',
     /width: 68px/.test(rule('.ctime')), rule('.ctime'));
 
@@ -1524,7 +1535,7 @@ console.log('\n17. the mockup still describes the page');
     ['the undo bar', 'undo'],
     ['the calendar aside', 'cal'],
     ['a pressable event', 'calrow'],
-    ['its + affordance', 'cadd'],
+    ['its title, which is what you tap', 'ctitle'],
     ['block cards', 'block'],
     ['the add sheet', 'sheet'],
     ['the day switch', 'dayswitch'],
