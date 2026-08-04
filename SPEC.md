@@ -571,10 +571,14 @@ and §2.1 is that nothing is inferred which can be declared: the arithmetic
 Pins are ordered among themselves by the same arithmetic as everything else, so
 the top of the list is not a second list with its own rules.
 
-**One list, with a mark on the row.** A pinned thing carries a small pushpin
-beside its name — not out at the right edge with the deadline asterisks, which
-answer *does this need attention*; this one says why the row is where it is,
-which is a fact about the name it follows.
+**One list, with a mark on the row.** A pinned thing carries a small pushpin out
+at the right edge, immediately before the deadline asterisks, so the two read as
+one cluster of marks about the row.
+
+It sat inside the title for a revision, on the reasoning that a pin is a fact
+about the name. In practice it read as part of the name, and it moved along the
+line as titles changed length — everything after the name is a mark about the
+row, and the pin is one of those.
 
 It is **drawn, not typed**. A pushpin character would fall back to whatever font
 on the device happens to carry it, which is exactly how the deadline asterisks

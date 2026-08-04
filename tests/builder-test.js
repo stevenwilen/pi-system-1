@@ -2881,12 +2881,13 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       const b = menuOf(thingRows(byId)[at]).children.find((c) => c.textContent === word);
       b.onclick({ stopPropagation() {} });
     };
-    // The mark beside a name, which is where a pin says what it is now. It
-    // used to be a heading over a group; one list with a mark on the row beats
-    // splitting a short list into two shorter ones.
+    // The mark on a row, which is out at the edge with the deadline asterisks
+    // — not inside the title. Beside the name it read as part of the name, and
+    // moved as titles changed length; everything after the name is a mark
+    // ABOUT the row, and the pin is one of those.
     const pinMark = (byId, at) => {
-      const title = thingRows(byId)[at].children[0].children[0];
-      return title.children.find((c) => c._class && c._class.has('pinmark')) || null;
+      const top = thingRows(byId)[at].children[0];
+      return top.children.find((c) => c._class && c._class.has('pinmark')) || null;
     };
     const marked = (byId) => thingRows(byId)
       .map((r, i) => (pinMark(byId, i) ? 1 : 0)).join('');
@@ -2922,9 +2923,20 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       // would split three things into two groups of one and two.
       check('the row that moved carries a pin', Boolean(pinMark(byId, 0)));
       check('and it is the only one that does', marked(byId) === '100', marked(byId));
-      check('the mark sits beside the name, not out with the others',
-        thingRows(byId)[0].children[0].children[0]._class.has('title'),
-        thingRows(byId)[0].children[0].children[0].className);
+      // OUT WITH THE OTHER MARKS, and immediately before the asterisks so the
+      // two read as one cluster rather than as two ideas at the same edge.
+      const top = thingRows(byId)[0].children[0];
+      const order = top.children.map((c) => c.className).join(' ');
+      check('the mark is not inside the title', !top.children[0].children.length,
+        JSON.stringify(order));
+      // The names of the row's top line, in order. On a row with a deadline
+      // the pin must be the thing immediately before the asterisks, so the two
+      // read as one cluster rather than two ideas sharing an edge.
+      const withDeadline = thingRows(byId)[1].children[0].children.map((c) => c.className);
+      check('it sits out at the edge, after the title',
+        order.indexOf('pinmark') > order.indexOf('title'), order);
+      check('and the row that has a deadline still shows its asterisks',
+        withDeadline.join(' ') === 'title mark hint', withDeadline.join(' '));
       check('and it is named for anything that cannot see it',
         pinMark(byId, 0).getAttribute('aria-label') === 'pinned',
         pinMark(byId, 0).getAttribute('aria-label'));

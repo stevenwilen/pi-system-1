@@ -289,13 +289,15 @@
          moves. Faint rather than muted — it marks a row rather than asking
          anything of you, and it sits inside a title it must not compete with. */
       .pinmark {
-        display: inline-block;
+        /* A flex child of the row's top line now, beside the asterisks. The
+           8px gap on that row does the spacing, so there is no margin here —
+           and vertical-align has nothing to do in a flex row, so the alignment
+           is align-self instead: centred on the line rather than dropped onto
+           its baseline, which is where a shape with no letters in it belongs. */
+        flex: none;
+        align-self: center;
         width: 12px;
         height: 12px;
-        margin-left: 5px;
-        vertical-align: middle;
-        position: relative;
-        top: -1px;
         background-color: var(--faint);
         -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'24'%20height%3D'24'%20viewBox%3D'0%200%2024%2024'%20fill%3D'none'%20stroke%3D'black'%20stroke-width%3D'2'%20stroke-linecap%3D'round'%20stroke-linejoin%3D'round'%3E%3Cg%20transform%3D'rotate(45%2012%2012)'%3E%3Cpath%20d%3D'M9%204h6M10.5%204%209%2013h6l-1.5-9M12%2013v7'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
         mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'24'%20height%3D'24'%20viewBox%3D'0%200%2024%2024'%20fill%3D'none'%20stroke%3D'black'%20stroke-width%3D'2'%20stroke-linecap%3D'round'%20stroke-linejoin%3D'round'%3E%3Cg%20transform%3D'rotate(45%2012%2012)'%3E%3Cpath%20d%3D'M9%204h6M10.5%204%209%2013h6l-1.5-9M12%2013v7'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
@@ -3229,17 +3231,6 @@
         title.className = 'title';
         title.textContent = item.title;
 
-        // Beside the name rather than out at the edge with the other marks.
-        // Those answer "does this need attention"; this one says why the row is
-        // where it is, which is a fact about the name it follows.
-        if (item.pinned) {
-          const pin = document.createElement('span');
-          pin.className = 'pinmark';
-          pin.setAttribute('role', 'img');
-          pin.setAttribute('aria-label', 'pinned');
-          title.append(pin);
-        }
-
         top.append(title);
 
         // THAT there is a note, never what it says. The list must not get
@@ -3257,6 +3248,20 @@
           has.setAttribute('role', 'img');
           has.setAttribute('aria-label', 'has a note');
           top.append(has);
+        }
+
+        // Out at the edge with the asterisks rather than inside the title.
+        // Everything after the name is a mark ABOUT the row, and the pin is one
+        // of those — beside the name it read as part of it, and pushed the
+        // marks around as titles changed length.
+        //
+        // Immediately before the deadline marks, so the two sit as one cluster.
+        if (item.pinned) {
+          const pin = document.createElement('span');
+          pin.className = 'pinmark';
+          pin.setAttribute('role', 'img');
+          pin.setAttribute('aria-label', 'pinned');
+          top.append(pin);
         }
 
         // '!!!', '!!' or '!'. Computed on the server and arithmetic all the
