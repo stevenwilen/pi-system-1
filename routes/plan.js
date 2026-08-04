@@ -1,10 +1,14 @@
 // Building a day: what is already on the calendar, and the plan built beside it.
 //
-// The calendar is reference material and nothing more. It is read, shown, and
-// forgotten: nothing on it is placed into the day, nothing is pinned, and
-// nothing about it is stored. The person reads what is already happening and
-// decides what to do about it, which is the one decision this system does not
-// make for them.
+// The calendar is read, shown, and forgotten. Nothing on it is placed into the
+// day BY ITSELF, nothing is pinned, and nothing about it is stored. The person
+// reads what is already happening and decides what to do about it, which is the
+// one decision this system does not make for them.
+//
+// A row can be pressed to make a block, and that is the decision being made
+// rather than taken. The version this replaces fed all-day events into the day
+// on its own, and they had to be argued back out; a row that does nothing until
+// it is pressed cannot put anything anywhere.
 //
 // All arithmetic. No model call anywhere behind these routes.
 
@@ -20,15 +24,46 @@ const { NOTE_MAX } = require('../entry-shape');
 
 const router = express.Router();
 
+// The grid every block lands on. Half an hour, the same step the builder
+// steps by and the same one validatePlan below insists on.
+const STEP = 30;
+
+/**
+ * A calendar event's length, as a block.
+ *
+ * ROUNDED UP, never down. A 45-minute meeting becomes an hour rather than half
+ * of one: the day is a stack of durations, so a block that under-states its own
+ * length makes every time below it wrong in the optimistic direction — which is
+ * the direction that has you arriving late.
+ *
+ * CLIPPED TO THIS DAY. An event can run past midnight, and `eventsOn` returns
+ * anything overlapping the date, so the raw length of a three-day conference is
+ * measured in days. A block that long is not a day gone wrong, it is a day that
+ * cannot be laid out at all.
+ */
+function blockLength(startIso, endIso, startMinutes) {
+  const raw = Math.round((Date.parse(endIso) - Date.parse(startIso)) / 60000);
+  if (!Number.isFinite(raw) || raw <= 0) return STEP;
+
+  // Both on the grid before they meet. The clip is a number of minutes left in
+  // the day, which is not a multiple of anything — taking the smaller of the
+  // two without flooring it first is how a 20-minute event at 11:40pm becomes
+  // a block of 20 minutes that the confirm then refuses.
+  const room = Math.floor((1440 - startMinutes) / STEP) * STEP;
+  return Math.max(STEP, Math.min(Math.ceil(raw / STEP) * STEP, room));
+}
+
 /**
  * What is on the calendar for one date.
  *
  * ONE calendar, read as reference. There were two, meaning things to know and
- * things to do, and the second fed events into the day as blocks. Both the
- * second feed and the automatic placing are gone: this is a list of what is
- * already happening, shown beside the day so a person can build around it.
+ * things to do, and the second fed events into the day as blocks by itself.
+ * Both the second feed and the automatic placing are gone: this is a list of
+ * what is already happening, shown beside the day so a person can build around
+ * it — and press into it, one row at a time, when that is what they want.
  *
- * A timed event carries its time; an all-day entry carries none.
+ * A timed event carries its time and its length; an all-day entry carries
+ * neither.
  */
 router.get('/calendar/:date', async (req, res) => {
   const { db, userId } = req.auth;
@@ -50,12 +85,21 @@ router.get('/calendar/:date', async (req, res) => {
   // the answer instead of leaving an empty list to speak for itself.
   const { events, failed, configured } = await readCalendar(db, userId, date);
 
-  const items = events.map((e) => ({
-    title: e.title,
-    // Null for an all-day entry, which claims no hour. The screen shows the
-    // title alone rather than inventing a time for it.
-    start_minutes: e.all_day ? null : minutesOfDay(e.start, timeZone),
-  }));
+  const items = events.map((e) => {
+    const start = e.all_day ? null : minutesOfDay(e.start, timeZone);
+    return {
+      title: e.title,
+      // Null for an all-day entry, which claims no hour. The screen shows the
+      // title alone rather than inventing a time for it.
+      start_minutes: start,
+      // How long it runs, for the tap that turns it into a block. Sent because
+      // it is the one thing about a calendar event this day model can hold
+      // exactly: an hour is an hour wherever the block ends up sitting. The
+      // start is not — blocks stack from the wake time and have no fixed
+      // hours — so the time above is shown and never used as a start.
+      duration_minutes: e.all_day ? null : blockLength(e.start, e.end, start),
+    };
+  });
 
   // Timed first, in order, then the all-day entries. Something happening at a
   // particular hour is the more useful thing to read first when the question
@@ -219,9 +263,10 @@ function validatePlan(date, blocks, wakeMinutes) {
     if (!Number.isInteger(duration) || duration < 30) {
       return `${b.title}: duration must be at least 30 minutes`;
     }
-    // Every block is built in the builder now — nothing arrives from a
-    // calendar at whatever length the calendar said — so every block lands on
-    // the step.
+    // Every block lands on the step. A calendar event can be pressed into the
+    // day and brings its own length, but that length is put on the grid before
+    // it is ever sent — see blockLength above. Nothing arrives here at whatever
+    // length the calendar happened to say.
     if (duration % 30 !== 0) {
       return `${b.title}: duration must be a multiple of 30 minutes`;
     }

@@ -1091,19 +1091,43 @@ Exactly as it was: Starts visible, nothing past, no divider.
 
 #### The calendar aside
 
-Everything on **both** feeds for that date, read-only. Timed events show their
-time; all-day entries show the title alone. Timed first in clock order, then the
-rest.
+Everything on the feed for that date. Each event is one row: its time, its
+title, and a muted `+` at the edge. Timed first in clock order, then the all-day
+entries, which show no time.
 
-**Nothing is auto-placed, nothing is pinned, nothing is stored.** There were two
-feeds meaning different things — one things to know, the other things to do —
-and the second fed all-day events into the day as blocks that had to be argued
-with if you did not want them. Both the second feed and the placing are gone.
-What to do about what is already on the calendar is the person's decision, and it
-is the one decision this system had been quietly taking.
+**Pressing a row makes a block.** That is the person deciding, which is the
+whole distinction from what this replaced: there were two feeds meaning
+different things — one things to know, the other things to do — and the second
+fed all-day events into the day *by itself*, as blocks that had to be argued
+with if you did not want them. A row that does nothing until it is pressed
+cannot put anything anywhere.
 
-Reading a day is therefore repeatable and claims nothing. There is no placement
-endpoint and no `placed:` rows.
+So the rule survives in the form that mattered: **nothing is auto-placed,
+nothing is pinned, nothing is stored.** Reading a day is repeatable and claims
+nothing. There is no placement endpoint and no `placed:` rows.
+
+**The row never greys.** A Things row goes grey because the list is claiming to
+say where a thing stands, and being in the day answers that. A calendar event is
+a fact about the day that stays true whatever the day is built out of — a
+meeting you have planned around is still a meeting at two o'clock. There is no
+locked state and nothing to undo here: pressing twice makes two blocks, the same
+as the list, and removing one is done where it now lives. The only feedback on
+the row is a dim that lasts as long as the touch; the block appearing below is
+the rest of it.
+
+**It brings its length and not its time.** `duration_minutes` comes down with
+each event — rounded **up** to the half hour, because a block that under-states
+itself makes every time below it wrong in the direction that has you arriving
+late, and clipped to what is left of the day from its own start, because
+anything overlapping the date comes back and a three-day conference is not a
+block. An all-day entry gets `null` and starts at one step like anything else.
+
+The **time is shown and never used as a start**. Blocks stack from the wake time
+and the day has no fixed hours, so a pressed event lands at the end and is
+dragged into place like any other block. Sending it to its own hour would need
+gaps the day does not have. The length is the one thing about a calendar event
+this model can hold exactly — an hour is an hour wherever the block sits — and
+carrying it saves three taps on the chip to say what the calendar already said.
 
 #### Refresh, at the foot of the page
 

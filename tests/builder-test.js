@@ -161,7 +161,7 @@ function atClock(hhmm) {
 
 /** Builds a fresh script instance with its own DOM. */
 function boot({
-  calendar = [], plan = null, failed = [], reduced = false,
+  calendar = [], plan = null, failed = false, reduced = false, configured = true,
   entries = null, now = null, failEntries = false,
   // What GET /settings answers. Configured by default, so no case falls into
   // the first-run screen without asking for it — the cases about that ask.
@@ -372,7 +372,7 @@ function boot({
           if (url === '/config') return { url: 'https://stub.supabase.co', anon_key: 'anon-key' };
           if (url === '/settings') return settings;
           if (url === '/entries' && failEntries) throw new Error('offline');
-          if (url.startsWith('/calendar')) return { items: calendar, failed };
+          if (url.startsWith('/calendar')) return { items: calendar, failed, configured };
           if (url.startsWith('/plan/')) return planFor(url);
           if (url === '/settings/timezone') {
             return timezoneReply || { timezone: 'Europe/Berlin', today: '2026-07-27' };
@@ -426,6 +426,12 @@ function boot({
   };
   const titles = () => slots().map(titleOf);
 
+  // The aside's event rows. Its sentences — "Nothing on it." and the failures —
+  // are <p>, deliberately, and are not in here.
+  const calRows = () => byId['cal-list'].children.filter((c) => c._class.has('calrow'));
+  const calSays = () => byId['cal-list'].children
+    .filter((c) => !c._class.has('calrow')).map((c) => c.textContent).join(' ');
+
   // EVERY touchmove listener on the document, with nothing excused.
   //
   // It briefly skipped whatever was already registered when the script
@@ -437,7 +443,7 @@ function boot({
   const touchmoves = () => listeners.filter((l) => l.type === 'touchmove');
 
   return {
-    ctx, byId, slots, cardOf, backingOf, rowOf, chipOf, noteOf, editorOf,
+    ctx, byId, slots, cardOf, backingOf, rowOf, chipOf, noteOf, editorOf, calRows, calSays,
     titleOf, titles, listeners, touchmoves, win, posted, confirmed, asked, stored,
     reloads,
     // Every document listener of a kind, in order, so a case can drive the
@@ -3200,6 +3206,110 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('and so is the list', byId['things'].children.length === 0,
       String(byId['things'].children.length));
   }
+
+  console.log('\nthe calendar aside puts things in the day, and never greys');
+{
+  const CAL = [
+    { title: 'Dentist', start_minutes: 14 * 60, duration_minutes: 60 },
+    { title: 'Standup', start_minutes: 9 * 60 + 30, duration_minutes: 30 },
+    { title: 'Bin day', start_minutes: null, duration_minutes: null },
+  ];
+
+  {
+    const { calRows, calSays, ctx } = boot({ calendar: CAL });
+    await ctx.load();
+    check('every event is a row', calRows().length === 3, `${calRows().length}`);
+    check('and the aside says nothing else', calSays() === '', calSays());
+
+    const row = calRows()[0];
+    check('the time starts the row', row.children[0].textContent === '2:00 PM',
+      row.children[0].textContent);
+    check('then the title', row.children[1].textContent === 'Dentist',
+      row.children[1].textContent);
+    check('and a + at the end', row.children[2].textContent === '+',
+      row.children[2].textContent);
+    check('an all-day entry shows no time', calRows()[2].children[0].textContent === '',
+      JSON.stringify(calRows()[2].children[0].textContent));
+    check('but is still a row you can press', typeof calRows()[2].onclick === 'function');
+  }
+
+  {
+    const { calRows, titles, slots, chipOf, ctx } = boot({ calendar: CAL });
+    await ctx.load();
+    check('nothing is in the day to start', titles().length === 0, `${titles().length}`);
+
+    calRows()[0].onclick();
+    check('pressing one puts it in the day', titles().join() === 'Dentist', titles().join());
+
+    // ITS OWN LENGTH. The one thing about a calendar event the day can hold
+    // exactly, and the alternative is three taps on the chip to say what the
+    // calendar already said.
+    check('at the length the calendar said', chipOf(slots()[0]).textContent === '1h',
+      chipOf(slots()[0]).textContent);
+
+    calRows()[2].onclick();
+    check('an all-day entry comes in at one step',
+      chipOf(slots()[1]).textContent === '30m', chipOf(slots()[1]).textContent);
+  }
+
+  {
+    // NEVER GREYED, which is the difference from a Things row. A meeting you
+    // have built the day around is still a meeting at two o'clock.
+    const { calRows, titles, ctx } = boot({ calendar: CAL });
+    await ctx.load();
+    calRows()[0].onclick();
+
+    // DRAWN AGAIN AFTER THE PRESS, which is the only way this case can fail.
+    // The aside renders once on a day change and nothing about adding a block
+    // re-runs it, so reading the row as it was left would assert a class that
+    // could not have appeared — a check that passes because nothing happened.
+    // Re-rendering is what a greying rule would have to survive.
+    await ctx.loadCalendar('2026-07-28');
+
+    const row = calRows()[0];
+    check('the aside redraws to the same three rows', calRows().length === 3,
+      `${calRows().length}`);
+    check('the row it came from is not locked', !row._class.has('locked'),
+      [...row._class].join(' '));
+    check('nor greyed by any other name',
+      ![...row._class].some((c) => /lock|grey|gray|done|used|taken/i.test(c)),
+      [...row._class].join(' '));
+    check('and it still reads the same', row.children[1].textContent === 'Dentist');
+    check('the + is still there to press', row.children[2].textContent === '+');
+
+    // Pressing twice makes two, the same as the list does.
+    calRows()[0].onclick();
+    check('so pressing it again adds another', titles().join() === 'Dentist,Dentist',
+      titles().join());
+  }
+
+  {
+    // THREE WAYS TO HAVE NOTHING TO SHOW, still three sentences, and none of
+    // them a row anybody can press.
+    const quiet = boot({ calendar: [] });
+    await quiet.ctx.load();
+    check('a quiet day says so', quiet.calSays() === 'Nothing on it.', quiet.calSays());
+    check('with no rows', quiet.calRows().length === 0);
+
+    const none = boot({ calendar: [], configured: false });
+    await none.ctx.load();
+    check('never set up says something else',
+      none.calSays().includes('No calendar yet'), none.calSays());
+
+    const broken = boot({ calendar: [], failed: true });
+    await broken.ctx.load();
+    check('and a feed that could not be read says that',
+      broken.calSays() === 'Could not reach your calendar.', broken.calSays());
+    check('which is not the same sentence as a quiet day',
+      broken.calSays() !== quiet.calSays());
+
+    const half = boot({ calendar: CAL, failed: true });
+    await half.ctx.load();
+    check('a half-read feed still shows what it got', half.calRows().length === 3);
+    check('and says it may not be all of it',
+      half.calSays().includes('may not be all of it'), half.calSays());
+  }
+}
 
   console.log(bad === 0 ? '\nBuilder clean' : `\n${bad} FAILURE(S)`);
   process.exit(bad === 0 ? 0 : 1);

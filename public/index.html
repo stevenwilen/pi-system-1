@@ -547,6 +547,51 @@
         color: var(--warn);
       }
 
+      /* An event, which can be pressed into the day. Still a line of text under
+         a rule — no card, no border, no fill — because what changes is what it
+         does, not what it is. */
+      .calrow {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        width: 100%;
+        padding: 4px 0;
+        background: none;
+        border: 0;
+        text-align: left;
+        font: inherit;
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--cal-text);
+        cursor: pointer;
+      }
+      /* A COLUMN, not a comma. The times used to run inline after the title and
+         now start the row, so a glance down the edge reads the shape of the day
+         — which only works if they are all the same width. */
+      .ctime {
+        flex: none;
+        width: 68px;
+        font-variant-numeric: tabular-nums;
+      }
+      .ctitle {
+        flex: 1;
+        min-width: 0;
+      }
+      /* Out at the edge, and quiet enough to ignore. It says the row can be
+         pressed; it is not asking to be. */
+      .cadd {
+        flex: none;
+        color: var(--cal-rule);
+        font-size: 15px;
+        line-height: 1;
+      }
+      /* THE ONLY FEEDBACK ON THE ROW ITSELF, and it lasts as long as the touch.
+         The row never greys and never locks — what a press produces is a block
+         in the day below, which is the thing worth looking at. */
+      .calrow:active {
+        opacity: 0.55;
+      }
+
       /* --- inline control, not a card ------------------------------------- */
 
       .inline {
@@ -3580,9 +3625,15 @@
       /**
        * The calendar aside.
        *
-       * Read, shown, forgotten. Nothing here is placed into the day and
-       * nothing about it is stored: it is what is already true about tomorrow,
+       * Read, shown, forgotten. Nothing here is STORED, and nothing places
+       * itself: what is on the calendar is what is already true about the day,
        * and what to do about it is the person's decision to make.
+       *
+       * PRESSING ONE MAKES A BLOCK, which is that decision being made rather
+       * than taken. The version this replaces fed all-day events into the day
+       * by itself, and the difference is the whole point: a row that does
+       * nothing until it is pressed cannot put anything in the day that has to
+       * be argued back out of it.
        */
       async function loadCalendar(date) {
         let data;
@@ -3592,37 +3643,97 @@
           return;
         }
 
-        const lines = (data.items || []).map((e) =>
-          e.start_minutes === null ? e.title : `${e.title}, ${clock(e.start_minutes)}`
-        );
-
+        const items = data.items || [];
         const box = $('cal-list');
         box.replaceChildren();
+
+        for (const e of items) box.append(calRow(e));
 
         // THREE WAYS TO HAVE NOTHING TO SHOW, and they are three sentences.
         // The list is empty in all of them, so the list cannot be what says
         // which — a calendar that has been broken for a week reads exactly
         // like a free week, and a person who never set one up reads like both.
-        if (lines.length) {
-          box.textContent = lines.join('\n');
-        } else if (data.failed) {
-          box.textContent = '';
-        } else if (data.configured === false) {
-          box.textContent = 'No calendar yet. Add one in setup.';
-        } else {
-          box.textContent = 'Nothing on it.';
+        if (!items.length && !data.failed) {
+          box.append(calSays(
+            data.configured === false ? 'No calendar yet. Add one in setup.' : 'Nothing on it.'
+          ));
         }
 
         // Said out loud, and in the warn colour, whether or not anything else
         // came back: half a calendar is still a calendar you cannot trust.
         if (data.failed) {
-          const warn = document.createElement('span');
-          warn.className = 'failed';
-          warn.textContent = lines.length
-            ? '\nCould not reach your calendar — this may not be all of it.'
-            : 'Could not reach your calendar.';
+          const warn = calSays(
+            items.length
+              ? 'Could not reach your calendar — this may not be all of it.'
+              : 'Could not reach your calendar.'
+          );
+          warn.classList.add('failed');
           box.append(warn);
         }
+      }
+
+      /** A sentence in the aside rather than an event: nothing to press. */
+      function calSays(text) {
+        const p = document.createElement('p');
+        p.textContent = text;
+        return p;
+      }
+
+      /**
+       * One thing on the calendar, and a way to put it in the day.
+       *
+       * NEVER GREYED, however many times it has been pressed. A Things row goes
+       * grey because it is a thing you keep and the list is claiming to say
+       * where it stands; this is a fact about the day that stays true whatever
+       * the day is built out of. Greying it would mean the calendar had been
+       * dealt with, and a meeting you have scheduled around is still a meeting
+       * at two o'clock.
+       *
+       * So there is no locked state to read and nothing to undo here — pressing
+       * twice makes two blocks, the same as the list, and removing one is done
+       * where it now lives.
+       */
+      function calRow(e) {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'calrow';
+
+        // THE TIME IS SHOWN AND NOT USED. Blocks stack from the wake time, so
+        // the day has no fixed hours to put this at — the block lands at the
+        // end and is dragged into place like any other. Sending the block to
+        // its own hour would need gaps the day does not have.
+        const when = document.createElement('span');
+        when.className = 'ctime';
+        when.textContent = e.start_minutes === null ? '' : clock(e.start_minutes);
+
+        const what = document.createElement('span');
+        what.className = 'ctitle';
+        what.textContent = e.title;
+
+        // The half of this that can be seen. A row that silently became
+        // pressable would be a feature only the person who built it knows
+        // about, which is the mistake the ··· was added to correct.
+        const add = document.createElement('span');
+        add.className = 'cadd';
+        add.textContent = '+';
+        add.setAttribute('aria-hidden', 'true');
+
+        row.append(when, what, add);
+        row.setAttribute('aria-label', `Put ${e.title} in the day`);
+
+        row.onclick = () => {
+          // Its own length, where it has one. The one thing about a calendar
+          // event this day can hold exactly — an hour is an hour wherever the
+          // block sits — and the alternative is three taps on the chip to say
+          // what the calendar already said. An all-day entry has no length
+          // that means anything, so it starts at a step like everything else.
+          addBlock({
+            title: e.title,
+            duration: e.duration_minutes || STEP,
+          });
+        };
+
+        return row;
       }
 
       /** A day already confirmed, so it survives a page load. */

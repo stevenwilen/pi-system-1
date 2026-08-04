@@ -75,6 +75,23 @@ const eventsOn = (date) => [
     `DTEND:${bare(date)}T160000Z`, 'SUMMARY:A timed thing', 'END:VEVENT'].join('\r\n'),
   ['BEGIN:VEVENT', `UID:endpoint-allday-${bare(date)}`, `DTSTART;VALUE=DATE:${bare(date)}`,
     `DTEND;VALUE=DATE:${bare(dayAfter(date))}`, 'SUMMARY:An all-day thing', 'END:VEVENT'].join('\r\n'),
+  // OFF THE GRID, because the length is what a press turns into a block and
+  // the day is built in half hours. Forty-five minutes is the ordinary meeting
+  // this has to have an answer for.
+  ['BEGIN:VEVENT', `UID:endpoint-odd-${bare(date)}`, `DTSTART:${bare(date)}T091000Z`,
+    `DTEND:${bare(date)}T095500Z`, 'SUMMARY:An odd length', 'END:VEVENT'].join('\r\n'),
+  // PAST MIDNIGHT AND THEN SOME. Anything overlapping the date comes back, so
+  // the raw length of this is measured in days — and a block that long is not
+  // a day gone wrong, it is a day that cannot be laid out at all.
+  //
+  // TEN PAST, not on the hour, and that is the whole reason for the odd minute.
+  // What is left of the day from an odd start is not a multiple of anything, so
+  // clipping to it without putting it on the grid first produces a length the
+  // confirm refuses. On the hour both roads lead to the same number and the
+  // rule is invisible.
+  ['BEGIN:VEVENT', `UID:endpoint-long-${bare(date)}`, `DTSTART:${bare(date)}T201000Z`,
+    `DTEND:${bare(dayAfter(dayAfter(date)))}T200000Z`,
+    'SUMMARY:A thing that runs long', 'END:VEVENT'].join('\r\n'),
 ];
 
 let feedServer;
@@ -127,8 +144,9 @@ let feedServer;
   // off the environment.
   const titles = (data.items || []).map((e) => e.title).sort();
   check('and the list is not empty, which every check below assumes',
-    titles.length === 2, titles.join(', '));
-  check('both events came back', titles.join(', ') === 'A timed thing, An all-day thing',
+    titles.length === 4, titles.join(', '));
+  check('every event came back',
+    titles.join(', ') === 'A thing that runs long, A timed thing, An all-day thing, An odd length',
     titles.join(', '));
 
   const shaped = (data.items || []).every(
@@ -158,10 +176,54 @@ let feedServer;
     console.log(`      ${when}  ${e.title}`);
   }
 
+  console.log('\nhow long each one runs, for the press that makes it a block');
+  {
+    // READ, NOT INVENTED, which is the distinction the group below is about.
+    // This is what the calendar says the event's length is — the one thing
+    // about it this day model can hold exactly, since an hour is an hour
+    // wherever the block ends up sitting. The start is not: blocks stack from
+    // the wake time, so the hour is shown and never used.
+    const by = (t) => (data.items || []).find((e) => e.title === t) || {};
+
+    check('an hour is an hour', by('A timed thing').duration_minutes === 60,
+      `${by('A timed thing').duration_minutes}`);
+
+    // UP, NEVER DOWN. A block that under-states its own length makes every
+    // time below it wrong in the optimistic direction, which is the direction
+    // that has you arriving late.
+    check('forty-five minutes rounds up to the hour',
+      by('An odd length').duration_minutes === 60, `${by('An odd length').duration_minutes}`);
+
+    // An all-day entry claims no hour, so it has no length that means anything
+    // as a block. The screen starts it at one step like anything else.
+    check('an all-day entry has no length at all',
+      by('An all-day thing').duration_minutes === null,
+      `${by('An all-day thing').duration_minutes}`);
+
+    // Clipped, and the property rather than the number: where the clip lands
+    // depends on the account's timezone, and an expectation written as minutes
+    // would be a test that passes in one zone and fails in another.
+    const long = by('A thing that runs long');
+    check('one running past midnight is clipped to what is left of the day',
+      long.duration_minutes === Math.floor((1440 - long.start_minutes) / 30) * 30,
+      `${long.start_minutes} + ${long.duration_minutes}`);
+    check('so it cannot run off the end of the day',
+      long.start_minutes + long.duration_minutes <= 1440,
+      `${long.start_minutes + long.duration_minutes}`);
+
+    // Every one of them, on the grid the confirm insists on. A length off the
+    // step is refused by POST /plan, so an event that produced one would be a
+    // row that cannot be pressed without breaking the day it lands in.
+    const timedItems = (data.items || []).filter((e) => e.start_minutes !== null);
+    check('every length is a multiple of thirty minutes',
+      timedItems.every((e) => e.duration_minutes % 30 === 0),
+      timedItems.map((e) => e.duration_minutes).join(', '));
+    check('and none is shorter than one step',
+      timedItems.every((e) => e.duration_minutes >= 30));
+  }
+
   console.log('\nnothing is claimed, placed or stored');
   {
-    check('no duration is invented for anything',
-      (data.items || []).every((e) => e.duration_minutes === undefined));
     check('nothing is reported as pinned',
       (data.items || []).every((e) => e.pinned === undefined));
     check('and nothing is offered for placement', data.to_place === undefined);
@@ -199,7 +261,9 @@ let feedServer;
   check('a different day also answers', Array.isArray(later.items),
     `${(later.items || []).length} item(s)`);
   check('with that day\'s events, not the first day\'s',
-    laterTitles.join(', ') === 'A timed thing, An all-day thing', laterTitles.join(', '));
+    laterTitles.join(', ') ===
+      'A thing that runs long, A timed thing, An all-day thing, An odd length',
+    laterTitles.join(', '));
 
   console.log(bad === 0 ? '\nCalendar endpoint clean' : `\n${bad} FAILURE(S)`);
   // Exiting the instant the child is killed tears down a libuv handle that is

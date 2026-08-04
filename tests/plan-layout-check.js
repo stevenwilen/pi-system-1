@@ -811,6 +811,30 @@ console.log('\n8. the calendar aside is a left rule, not a card');
   check('its heading is neutral warm grey', /color: var\(--cal-head\)/.test(rule('.cal h4')));
   check('and its body too', /color: var\(--cal-text\)/.test(rule('.cal p')));
 
+  // PRESSABLE NOW, and still not a card. What changed is what a row does, not
+  // what it is: a line of text under a rule, with the affordance out at the
+  // edge where it can be ignored.
+  const row = rule('.calrow');
+  check('an event row is a button with nothing drawn on it',
+    /background: none/.test(row) && /border: 0/.test(row), row);
+  check('and no fill of its own', !/background(-color)?:\s*(#|var\(|rgb)/.test(row), row);
+  check('it says it can be pressed', /cursor: pointer/.test(row), row);
+  check('and it inherits the aside\'s colour', /color: var\(--cal-text\)/.test(row), row);
+  check('not the accent: pressing it is not the day\'s main move',
+    !/--accent/.test(row), row);
+
+  // NEVER GREYED, however many times it is pressed. A Things row goes grey
+  // because the list is claiming to say where a thing stands; a meeting you
+  // have built the day around is still a meeting at two o'clock.
+  check('there is no greyed state for an event row', !/\.calrow\.locked|\.calrow:disabled/.test(css));
+  check('nor an opacity it settles at', !/^\s*opacity/m.test(row), row);
+  check('the only press feedback lasts as long as the touch',
+    /\.calrow:active\s*\{[^}]*opacity/.test(css));
+
+  check('the + is quieter than the text', /color: var\(--cal-rule\)/.test(rule('.cadd')));
+  check('and the times line up in a column of one width',
+    /width: 68px/.test(rule('.ctime')), rule('.ctime'));
+
   const root = rule(':root');
   check('which is a warm grey, not a blue', /--cal-head:\s*#5f5a52/i.test(root));
   check('and not persimmon either', !/--cal-head:\s*#b8492a/i.test(root));
@@ -824,6 +848,7 @@ console.log('\n9. tabular figures on every time');
     ['a block duration', '.dur'],
     ['the day end', '.ends b'],
     ['the calendar aside', '.cal p'],
+    ['an event time', '.ctime'],
   ]) {
     check(`${what} is tabular`, /font-variant-numeric: tabular-nums/.test(rule(selector)));
   }
@@ -1498,6 +1523,8 @@ console.log('\n17. the mockup still describes the page');
     ['the dimmed others', 'dimmed'],
     ['the undo bar', 'undo'],
     ['the calendar aside', 'cal'],
+    ['a pressable event', 'calrow'],
+    ['its + affordance', 'cadd'],
     ['block cards', 'block'],
     ['the add sheet', 'sheet'],
     ['the day switch', 'dayswitch'],
