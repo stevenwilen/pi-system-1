@@ -30,9 +30,60 @@ const html = fs.readFileSync(ROOT + '/public/index.html', 'utf8');
 //
 // And several checks assert that a removed thing is not mentioned, while the
 // comments explain at length what was removed and why.
-const css = html
-  .slice(html.indexOf('<style>'), html.indexOf('</style>'))
-  .replace(/\/\*[\s\S]*?\*\//g, '');
+const rawCss = html.slice(html.indexOf('<style>') + '<style>'.length, html.indexOf('</style>'));
+
+const css = rawCss.replace(/\/\*[\s\S]*?\*\//g, '');
+
+/**
+ * Does the stylesheet parse at all?
+ *
+ * THIS FILE STRIPS COMMENTS, so it is structurally blind to damage done to
+ * one. Closing a comment early leaves prose sitting loose between rules and a
+ * second `*​/` after it; the regex above pairs the markers the wrong way,
+ * removes a different span than the browser would, and every check downstream
+ * goes on reading a stylesheet that looks fine. The browser does not: it drops
+ * rules until it can recover, and the page comes back half-styled.
+ *
+ * That shipped. The whole day rendered as plain text under a heading with
+ * letter-spacing — enough CSS to look deliberate, not enough to be the app.
+ *
+ * So this walks the real text before anything is stripped, and it runs first.
+ */
+function cssDamage(text) {
+  let inComment = false;
+  let depth = 0;
+  let line = 1;
+
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '\n') line++;
+
+    if (inComment) {
+      if (text[i] === '*' && text[i + 1] === '/') {
+        inComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (text[i] === '/' && text[i + 1] === '*') {
+      inComment = true;
+      i++;
+      continue;
+    }
+    // A comment that was closed twice, or prose that was never opened.
+    if (text[i] === '*' && text[i + 1] === '/') return `line ${line}: a */ outside a comment`;
+
+    if (text[i] === '{') depth++;
+    if (text[i] === '}') {
+      depth--;
+      if (depth < 0) return `line ${line}: a } with nothing open`;
+    }
+  }
+
+  if (inComment) return 'a comment is never closed';
+  if (depth !== 0) return `${depth} rule(s) left open`;
+  return null;
+}
 
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 
@@ -112,7 +163,16 @@ const want = {
   '--warn': '#b8492a',
 };
 
-console.log('1. the palette is exactly the one specified');
+console.log('0. the stylesheet parses');
+{
+  // FIRST, because every other check in this file reads the stylesheet through
+  // a comment-stripping regex and would go on passing against one the browser
+  // throws half of away. See cssDamage.
+  const damage = cssDamage(rawCss);
+  check('nothing is broken open or left open', damage === null, damage || '');
+}
+
+console.log('\n1. the palette is exactly the one specified');
 {
   const root = rule(':root');
   for (const [name, value] of Object.entries(want)) {
