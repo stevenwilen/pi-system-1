@@ -1005,6 +1005,35 @@ console.log('\n13. a row says it has more actions, rather than hiding them');
   check('the type cannot be changed on an edit', /b\.disabled = editingId !== null/.test(code));
 }
 
+console.log('\n13a. the saved list sits back from the one you read down');
+{
+  // TWO LISTS THAT LOOKED ALIKE. Space was the whole separation, and a row set
+  // down on purpose reading like a row you still owe is the one way this
+  // section can do harm.
+  const saved = rule('.saved');
+  check('there is a saved section', saved.length > 0);
+  check('it is separated by space', /margin-top: \d+px/.test(saved), saved);
+
+  const dim = /opacity: (0?\.\d+)/.exec(saved);
+  check('and it is dimmer than the list above it', Boolean(dim), saved);
+  check('far enough back to read as a different list',
+    dim && Number(dim[1]) <= 0.75, dim && dim[1]);
+  check('but not so far that it reads as unavailable',
+    dim && Number(dim[1]) >= 0.45, dim && dim[1]);
+
+  // THE MAIN LIST IS THE FULL-STRENGTH ONE. Dimming is only a comparison, and
+  // it says nothing at all if both sides move.
+  check('the list it is compared against is not dimmed itself',
+    !/opacity/.test(rule('#things')) && !/opacity/.test(rule('.thing')),
+    rule('.thing'));
+
+  // NOTHING HERE IS UNAVAILABLE. Dimming is the whole effect: every row still
+  // swipes, opens and schedules, so there must be no rule that takes one out of
+  // the hit test or stops it being pressed.
+  check('and nothing in it is switched off',
+    !/pointer-events:\s*none/.test(saved) && !/user-select:\s*none/.test(saved), saved);
+}
+
 console.log('\n14. a block is worked by gesture, and the gestures are arbitrated');
 {
   // No `···` on a block. The card itself is the target now.
@@ -1546,6 +1575,7 @@ console.log('\n17. the mockup still describes the page');
     ['the calendar aside', 'cal'],
     ['a pressable event', 'calrow'],
     ['its title, which is what you tap', 'ctitle'],
+    ['the saved list', 'saved'],
     ['block cards', 'block'],
     ['the add sheet', 'sheet'],
     ['the day switch', 'dayswitch'],

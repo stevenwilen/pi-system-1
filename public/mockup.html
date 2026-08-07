@@ -64,6 +64,10 @@
   .rowacts{display:flex;gap:18px;margin-top:9px;font-size:12px;color:var(--muted)}
   .rowacts .danger{color:var(--warn)}
 
+  /* set down on purpose: the same rows, sitting back from the list above */
+  .saved{margin-top:26px;opacity:.6}
+  .saved .label{margin-bottom:6px}
+
   /* calendar: a quiet aside, not a card */
   .cal{border-left:2px solid var(--cal-rule);padding:8px 0 8px 13px;margin-bottom:22px}
   .cal h4{font-size:12px;color:var(--cal-head);font-weight:500}
@@ -277,6 +281,24 @@
     <div class="row">
       <div class="row-top"><div class="title">Reading</div><div class="hint">&middot;&middot;&middot;</div></div>
       <div class="meta">habit &middot; 11 days since scheduled</div>
+    </div>
+
+    <!-- SET DOWN ON PURPOSE, and dimmed so it is plainly the quieter of the
+         two lists before a word of either is read. Space alone left them
+         looking alike, and a row you set down reading like a row you still owe
+         is the one way this section can do harm.
+
+         Not disabled: every row here still swipes, opens and schedules. -->
+    <div class="saved">
+      <div class="label">Saved for later</div>
+      <div class="row">
+        <div class="row-top"><div class="title">Learn guitar</div><div class="hint">&middot;&middot;&middot;</div></div>
+        <div class="meta">project &middot; 26 days since added</div>
+      </div>
+      <div class="row">
+        <div class="row-top"><div class="title">Fix the bike</div><div class="hint">&middot;&middot;&middot;</div></div>
+        <div class="meta">task &middot; 12 days since added</div>
+      </div>
     </div>
   </div>
 

@@ -1768,6 +1768,15 @@ The argument against this used to be that *something set down on purpose looks
 the same as something neglected*. That is exactly right, and it is what the
 message answers rather than a reason not to have the list.
 
+**The section is dimmed to `opacity: 0.6`.** Space alone left two lists that
+looked alike, and a row you set down on purpose reading like a row you still owe
+is the one way this section can do harm. Opacity on the whole section rather than
+a paler colour per part: the rows are made of half a dozen colours — title, meta,
+marks, the pin — and dimming them one at a time would be six values kept in step
+with six others. Far enough back to be a different list, not so far that it reads
+as disabled: nothing here is unavailable, and every row still swipes, opens and
+schedules.
+
 **Wednesday at 17:00, local, and never over an empty list.** Mid-week and late
 afternoon: far enough in that what you meant to do has met what actually
 happened, early enough to still act on it. The condition is the feature — a
