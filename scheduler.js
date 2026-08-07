@@ -521,6 +521,118 @@ function savedText(saved) {
   return `You have ${many} saved for later:\n\n${lines}`;
 }
 
+// --- what had no hour ------------------------------------------------------
+//
+// An anytime item has no time BY DESIGN, so a reminder about one has to invent
+// a moment. The one the day already provides is the end of it: the work you
+// gave hours to is finished, and what is left is what you deliberately did not
+// give an hour to.
+//
+// That reads as "here is your day, and here is what had no place in it", and
+// the moment comes out of the person's own plan rather than a constant chosen
+// here. On a day ending at three it arrives at three; on a day of meetings
+// until seven it waits until seven, rather than landing mid-meeting and being
+// forgotten — which is what any fixed hour would do to one of those two days.
+//
+// TWO GUARDRAILS, because a plan can be any shape. Never before LOOSE_FLOOR: a
+// day that ends at noon still has an afternoon in it, and a reminder at noon
+// spends it. Never after the nudge hour: past that the day is gone, and this
+// has to arrive before "plan tomorrow" rather than after it. On a day with no
+// timed blocks at all the floor is the whole rule.
+const LOOSE_FLOOR = 16;
+
+/** The minute the day's timed work ends. Zero for a day with none. */
+function dayEnds(blocks) {
+  let end = 0;
+  for (const b of blocks) {
+    if (b.start_time === null || b.start_time === undefined) continue;
+    end = Math.max(end, toMinutes(b.start_time) + Number(b.duration_minutes || 0));
+  }
+  return end;
+}
+
+// SILENT WHEN NOTHING IS LEFT, the same rule the Wednesday message follows and
+// for the same reason: one that arrives whatever the state of the list teaches
+// you to stop reading it, and the day it matters is the day it goes unread.
+//
+// ONCE. One message is a reminder and a second is nagging, which this system
+// does not do.
+async function sendAnytime(profile, now, { force = false } = {}) {
+  const { data: plan, error: planErr } = await supabase
+    .from('plans')
+    .select('id')
+    .eq('user_id', profile.user_id)
+    .eq('date', now.date)
+    .eq('status', 'confirmed')
+    .maybeSingle();
+
+  if (planErr) throw new Error(`could not read plan: ${planErr.message}`);
+
+  // A day built and never agreed to. Delivery holds the same line, and a
+  // reminder about a pending plan would be the system deciding.
+  if (!plan) return;
+
+  const { data: blocks, error } = await supabase
+    .from('blocks')
+    .select('title, start_time, duration_minutes, completed, sort_order')
+    .eq('user_id', profile.user_id)
+    .eq('plan_id', plan.id)
+    .order('sort_order');
+
+  // Unreadable is not empty. Saying nothing is the safe wrong answer; the
+  // alternative is telling someone their day is clear when it is unreachable.
+  if (error) throw new Error(`could not read the day: ${error.message}`);
+
+  const nudge = Number.isInteger(profile.nudge_hour) ? profile.nudge_hour : NUDGE_HOUR;
+  const at = Math.min(
+    Math.max(dayEnds(blocks || []), minutesOf(LOOSE_FLOOR, 0)),
+    minutesOf(nudge, 0)
+  );
+
+  if (!force && !inWindow(minutesOf(now.hour, now.minute), at)) return;
+  if (!force && (await alreadySent(profile.user_id, 'loose', now.date))) return;
+
+  const loose = (blocks || []).filter(
+    (b) => (b.start_time === null || b.start_time === undefined) && !b.completed
+  );
+
+  // NOT CLAIMED when there is nothing to say. Nothing was sent and nothing is
+  // owed — and taking the slot would mean a person who adds one at ten past
+  // hears nothing at all.
+  if (!loose.length) return;
+
+  // The lock immediately before the send, for the reason the nudge gives: the
+  // reads above are an early-out rather than a guard, and a second container
+  // mid-deploy sits inside the window between them.
+  if (!force && !(await claimSlot(profile.user_id, 'loose', now.date))) return;
+
+  const sent = await deliver(profile.user_id, looseText(loose));
+
+  if (sent.sent) {
+    console.log(`[LOOSE] sent ${loose.length} thing(s) with no hour`);
+  } else if (sent.skipped) {
+    // The slot stays taken. Nothing to retry for an account with no chat, and
+    // releasing it would mean asking again every tick for the rest of the day.
+    console.log('[LOOSE] no telegram linked, nothing to send');
+  } else {
+    if (!force) await releaseSlot(profile.user_id, 'loose', now.date);
+    console.error(`[LOOSE] ${JSON.stringify(sent)}`);
+  }
+}
+
+/**
+ * The message. Titles and nothing else, like the Wednesday one.
+ *
+ * No hours — they have none, which is the point — and no encouragement. A list
+ * read out. "Left today" rather than "still not done": the first is a fact
+ * about the day and the second is an opinion about the person.
+ */
+function looseText(loose) {
+  const lines = loose.map((b) => `• ${b.title}`).join('\n');
+  const many = loose.length === 1 ? 'one thing' : `${loose.length} things`;
+  return `You have ${many} left today:\n\n${lines}`;
+}
+
 async function tick() {
   let profiles;
   try {
@@ -558,6 +670,12 @@ async function tick() {
     } catch (err) {
       console.error(`[LATER] ${profile.user_id}: ${err.message}`);
     }
+
+    try {
+      await sendAnytime(profile, now);
+    } catch (err) {
+      console.error(`[LOOSE] ${profile.user_id}: ${err.message}`);
+    }
   }
 }
 
@@ -574,6 +692,9 @@ module.exports = {
   hhmm, //        so a test can spell the time the same way the message does
   sendNudge, //   the evening nudge, for one user at one moment
   NUDGE_TEXT, //  the whole message, for a test that checks the wording
+  sendAnytime, //  the sweep of what had no hour, at the end of the day
+  looseText, //   its wording, so a test reads the real thing
+  LOOSE_FLOOR, // and the floor under it
   sendSavedForLater, // the Wednesday look at what was set down
   savedText, //   its wording, so a test reads the real thing
   LATER_DAY, //   and when it goes, so a test cannot drift from the job
@@ -599,6 +720,7 @@ const JOBS = {
   blocks: deliverDue,
   nudge: sendNudge,
   later: sendSavedForLater,
+  loose: sendAnytime,
 };
 
 async function runOnce(name) {

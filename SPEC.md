@@ -628,7 +628,7 @@ It was *"a way of ordering this list by hand"*, retired when the order became
 arithmetic and — like every column here — never dropped. Every row still held
 null, so there was no stale value to collide with and **no migration to run**.
 The second column to come back this way, after `completed` for untimed items;
-`paused_at` was the third, for saved-for-later (§4.3).
+`paused_at` was the third, for saved-for-later (§4.4).
 
 Anything carrying a mark sits above everything without one, ordered by the least
 room left — so an overdue thing beats a thing due Friday, and both beat a habit
@@ -1875,7 +1875,45 @@ days-since alone would name something every single night, including the nights
 when nothing was actually neglected — and a nudge that always fires is a digest,
 which this is deliberately not.
 
-### 4.3 Saved for later, on Wednesdays
+### 4.3 What had no hour, at the end of the day
+
+An anytime item has **no time by design**, so a reminder about one has to invent
+a moment. The one the day already provides is the end of it: the work you gave
+hours to is finished, and what is left is what you deliberately did not give an
+hour to.
+
+**It fires when the last timed block of the day ends** — a moment that comes out
+of the person's own plan rather than a constant chosen here. On a day ending at
+three it arrives at three; on a day of meetings until seven it waits until seven,
+rather than landing mid-meeting and being forgotten. Any fixed hour is wrong for
+one of those two days.
+
+**Two guardrails, because a plan can be any shape.** Never before `LOOSE_FLOOR`
+(16:00): a day ending at noon still has an afternoon in it, and a reminder at
+noon spends it. Never after the person's `nudge_hour` (20:00 default): past that
+the day is gone, and this has to arrive *before* "plan tomorrow" rather than
+after it. On a day with no timed blocks at all the floor is the whole rule.
+
+**Silent when nothing is left**, and it claims no `sent_log` slot when it says
+nothing — so something added at ten past still reaches you. **Once**: one message
+is a reminder and a second is nagging. **Confirmed plans only**, the same line
+delivery holds — a day built and never agreed to is not something to be messaged
+about.
+
+Titles and nothing else, one message rather than one per item. No hours in it:
+they have none, which is the point. *"Left today"* rather than *"still not
+done"* — the first is a fact about the day and the second is an opinion about the
+person.
+
+**This does not soften the rule that untimed blocks never deliver.** They are
+still absent from the block queue (`.not('start_time','is',null)`), still guarded
+against inside `deliverDue`, and still never carry a `message_sent_at`. An
+untimed item never fires *at an hour*; this is a sweep of the whole day, once,
+which is a different thing. The suite says so out loud, because the next person
+to read "untimed items don't deliver" will otherwise find a message that appears
+to contradict it.
+
+### 4.4 Saved for later, on Wednesdays
 
 A thing can be **set down on purpose**: it leaves the Things list, keeps
 everything it has, and stops competing for attention. `POST /entries/:id/later`
