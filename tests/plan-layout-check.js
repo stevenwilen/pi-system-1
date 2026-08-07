@@ -1241,6 +1241,30 @@ console.log('\n16. the shape of the day');
   check('a Starts control', /id="wake-time"/.test(body));
   check('with steppers', /id="wake-minus"/.test(body) && /id="wake-plus"/.test(body));
   check('a + Block control', /id="add-block"/.test(body));
+
+  // TWO WAYS IN, one with an hour and one without, sitting together so the
+  // choice is legible.
+  check('and a + Anytime beside it', /id="add-anytime"/.test(body));
+  check('they are one pair', /class="adds"/.test(body));
+  check('separated by space rather than a rule',
+    /gap: \d+px/.test(rule('.adds')) && !/border/.test(rule('.adds')), rule('.adds'));
+
+  // ABOVE THE SECTION IT FILLS, and this is the one that cannot be checked by
+  // driving the page: the suite reaches controls by id wherever they sit, so a
+  // button nested inside the Anytime section would answer a press in every case
+  // and be unreachable on a real screen. The section is hidden until something
+  // is in it, and a way in you cannot use until you have already used it is not
+  // a way in.
+  check('the way in sits above the section it fills',
+    body.indexOf('id="add-anytime"') < body.indexOf('id="anytime"'),
+    `${body.indexOf('id="add-anytime"')} vs ${body.indexOf('id="anytime"')}`);
+  check('which is hidden until it holds something',
+    /class="anytime hidden" id="anytime"/.test(body));
+
+  // NOTHING ON THE THINGS LIST BEHIND IT. The whole point of the control: a
+  // reminder is not something you are carrying, so it never becomes an entry.
+  check('a one-off is added with no entry',
+    /\$\('add-anytime'\)\.onclick[\s\S]{0,400}addAnytime\(\{ title: title\.trim\(\) \}\)/.test(code));
   check('a running day end', /id="end-time"/.test(body));
   check('and one Confirm', (body.match(/id="confirm"/g) || []).length === 1);
 

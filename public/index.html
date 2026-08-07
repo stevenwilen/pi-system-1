@@ -1666,6 +1666,12 @@
 
       /* Indigo, because it acts. Letterspaced small caps rather than a chip:
          the words are the control. */
+      /* The two ways in, side by side. A gap rather than a rule between them:
+         they are alternatives, not a control with two halves. */
+      .adds {
+        display: flex;
+        gap: 22px;
+      }
       .addblock {
         font-size: 10px;
         letter-spacing: 0.24em;
@@ -2092,7 +2098,22 @@
 
         <div id="builder"></div>
 
-        <button type="button" class="addblock" id="add-block">+ Block</button>
+        <!-- TWO WAYS INTO THE DAY, and the pair is the point: one with an hour
+             and one without. They sit together so the choice is legible, and
+             above the Anytime section rather than inside it because that
+             section is hidden until something is in it — a button you cannot
+             reach until you have already used it is not a way in.
+
+             A ONE-OFF NEVER TOUCHES THE THINGS LIST. Everything on the Anytime
+             list used to have come from there, so a reminder — walk the dog,
+             put the bins out — had to be filed as a permanent thing you are
+             carrying, scheduled onto the day, ticked, and then finished on the
+             list as well. Four steps and two lists for something that belongs
+             to neither: Things is what you are carrying, and this is not. -->
+        <div class="adds">
+          <button type="button" class="addblock" id="add-block">+ Block</button>
+          <button type="button" class="addblock" id="add-anytime">+ Anytime</button>
+        </div>
 
         <!-- ANYTIME TODAY. Things committed to the day and not to an hour —
              ring the dentist, put the bins out. Below the day because they are
@@ -5196,6 +5217,26 @@
       $('add-block').onclick = () => {
         const title = prompt('What is this block?');
         if (title && title.trim()) addBlock({ title: title.trim(), duration: STEP });
+      };
+
+      /**
+       * A one-off, straight onto the day.
+       *
+       * NO ENTRY BEHIND IT, which is the whole feature. `addAnytime` has always
+       * taken a null entry and never had a caller that used one: every anytime
+       * item came off a Things row, so a reminder had to be filed as a
+       * permanent thing before it could be put on a day and ticked off — and
+       * then finished on the list separately, because ticking an anytime item
+       * answers "did this happen" rather than "is this over". Those are the
+       * same event for walking the dog and different ones for reading.
+       *
+       * It lives on the day and goes with it. That is what a one-off is: if it
+       * needs to survive the night it is something you are carrying, and the
+       * Things list is where that goes.
+       */
+      $('add-anytime').onclick = () => {
+        const title = prompt('What needs doing?');
+        if (title && title.trim()) addAnytime({ title: title.trim() });
       };
 
       function renderConfirm() {

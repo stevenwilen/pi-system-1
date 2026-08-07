@@ -585,6 +585,17 @@ const DATE = '2031-03-09';
     check('it kept its note', loose.note === 'before five', String(loose.note));
     check('and it is not done', loose.done === false, String(loose.done));
 
+    // NOTHING ON THE THINGS LIST BEHIND IT, which is what `+ Anytime` relies
+    // on: a one-off is typed straight onto the day and never becomes an entry.
+    // The rows above are posted with no entryId at all, so this was already
+    // true and simply never said out loud — and it is now the whole point of a
+    // control, which makes it worth a line that fails if it stops being so.
+    check('and nothing on the list behind it', loose.entryId === null,
+      JSON.stringify(loose.entryId));
+    check('which the day survives being read back',
+      back.blocks.filter((b) => b.entryId === null).length === 2,
+      JSON.stringify(back.blocks.map((b) => b.entryId)));
+
     check('the timed one is unchanged', timed.start_minutes === 540 && timed.duration_minutes === 60,
       JSON.stringify(timed));
     check('and reads as done, because it stayed in the day', timed.done === true,

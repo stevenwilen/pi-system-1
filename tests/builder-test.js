@@ -278,6 +278,8 @@ function boot({
   // Every request that carried a body, so a case can read what the page sent
   // rather than infer it from what the page shows.
   const posted = [];
+  const prompts = [];
+  let promptAnswer = 'Typed block';
 
   // Every request the page made, and what it claimed to be. Separate from
   // `posted` because that one only sees writes, and the header matters on
@@ -371,7 +373,13 @@ function boot({
       confirmed.push(q);
       return true;
     },
-    prompt: () => 'Typed block',
+    // Recorded and answerable, the same way confirm is. Two things ask now —
+    // a block with an hour and a one-off without — and a case has to be able
+    // to say which was asked and what came back.
+    prompt: (q) => {
+      prompts.push(q);
+      return promptAnswer;
+    },
     window: win,
     fetch: async (url, opts) => {
       // Every POST, with or without a body: Done and Delete carry none, and a
@@ -478,6 +486,10 @@ function boot({
   return {
     ctx, byId, slots, cardOf, backingOf, rowOf, chipOf, noteOf, editorOf, calRows, calSays,
     titleOf, titles, listeners, touchmoves, win, posted, confirmed, asked, stored,
+    prompts,
+    answerPrompt: (v) => {
+      promptAnswer = v;
+    },
     reloads,
     // Every document listener of a kind, in order, so a case can drive the
     // page-level gestures the way the browser would.
@@ -3505,6 +3517,78 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // NOT THE GATE. This person is signed in; the cover lifting early must not
     // turn into being shown the door.
     check('the gate stays down', byId['gate']._class.has('hidden'));
+  }
+
+  console.log('\na one-off goes straight onto the day and never onto the list');
+  {
+    // WHAT THIS IS FOR. Everything on the Anytime list used to have come off a
+    // Things row, so a reminder — walk the dog, put the bins out — had to be
+    // filed as a permanent thing you are carrying, scheduled onto the day,
+    // ticked, and then finished on the list separately, because ticking an
+    // anytime item answers "did this happen" and not "is this over". Four steps
+    // and two lists for something that belongs to neither.
+    const { ctx, byId, slots, titles, posted, prompts, answerPrompt } = boot();
+    await ctx.load();
+
+    // REACHABLE ON AN EMPTY DAY. The Anytime section is hidden until something
+    // is in it, so a button inside it could never add the first one.
+    check('the anytime section starts hidden', byId['anytime']._class.has('hidden'));
+    check('but the way in is there anyway', typeof byId['add-anytime'].onclick === 'function');
+
+    const endedAt = byId['end-time'].textContent;
+    answerPrompt('Walk the dog');
+    byId['add-anytime'].onclick();
+
+    check('it asks what needs doing', prompts[prompts.length - 1] === 'What needs doing?',
+      String(prompts[prompts.length - 1]));
+    check('and the section opens', !byId['anytime']._class.has('hidden'));
+    check('with the one-off on it',
+      anytimeTitles(byId).join() === 'Walk the dog', anytimeTitles(byId).join());
+
+    // NOT IN THE DAY'S HOURS. It has no start and no length, so the day ends
+    // where the timed blocks say it does.
+    check('it is not a block in the day', titles().length === 0, titles().join());
+    check('so it does not move when the day ends',
+      byId['end-time'].textContent === endedAt,
+      `${endedAt} -> ${byId['end-time'].textContent}`);
+
+    // AND NOT ON THE THINGS LIST, which is the whole of it.
+    const things = () => byId['things'].children.map((c) => c.text()).join(' ');
+    check('nothing was added to the things list', !things().includes('Walk the dog'),
+      things());
+
+    // TICKING IS THE END OF IT. There is no entry to go back and close, which
+    // is the step this whole thing removes.
+    check('it starts unticked', !anytimeRows(byId)[0]._class.has('did'));
+    tickOf(anytimeRows(byId)[0]).onclick();
+    check('and ticking marks it done', anytimeRows(byId)[0]._class.has('did'),
+      [...anytimeRows(byId)[0]._class].join(' '));
+
+    // What the confirm sends: a block with no hour, no length, and nothing
+    // behind it.
+    posted.length = 0;
+    await byId['confirm'].onclick();
+    const body = posted.find((p) => p.url === '/plan').body;
+    const sent = body.blocks.find((b) => b.title === 'Walk the dog');
+    check('it is confirmed as part of the day', Boolean(sent), JSON.stringify(body.blocks));
+    check('with no hour', sent.start_minutes === null, JSON.stringify(sent));
+    check('and no length', sent.duration_minutes === null, JSON.stringify(sent));
+    check('and nothing on the list behind it',
+      sent.entryId === null || sent.entryId === undefined, JSON.stringify(sent));
+  }
+
+  console.log('\nan empty answer adds nothing');
+  {
+    const { ctx, byId, answerPrompt } = boot();
+    await ctx.load();
+
+    for (const answer of [null, '', '   ']) {
+      answerPrompt(answer);
+      byId['add-anytime'].onclick();
+    }
+    check('a cancelled prompt leaves the day alone',
+      anytimeTitles(byId).length === 0, anytimeTitles(byId).join());
+    check('and the section stays hidden', byId['anytime']._class.has('hidden'));
   }
 
   console.log('\nthe calendar aside puts things in the day, and never greys');

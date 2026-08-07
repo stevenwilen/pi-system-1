@@ -1229,11 +1229,42 @@ what `blocks` already does, kept in step by hand.
 does not advance its cursor past them, so nothing below shifts and the end time
 is the timed blocks alone.
 
-Adding one: **long-press** a row in Things, or **Anytime** in its `···` menu. The
-menu carries it in words because a gesture with nothing on screen to suggest it
-is a feature only the person who built it knows about — the mistake the `···`
-was added to correct in the first place. A plain tap still schedules a timed
-block, as before.
+Adding one from the list: **long-press** a row in Things, or **Anytime** in its
+`···` menu. The menu carries it in words because a gesture with nothing on screen
+to suggest it is a feature only the person who built it knows about — the mistake
+the `···` was added to correct in the first place. A plain tap still schedules a
+timed block, as before.
+
+**Or `+ Anytime`, which never touches the list at all.** Type a line, it goes
+onto the day, tick it, done. The block carries **no `entry_id`**, exactly as
+`+ Block` has always done for a timed one.
+
+This is for the one-off — walk the dog, put the bins out, reply to that email.
+Everything on this list used to have come off a Things row, so a reminder had to
+be filed as a permanent thing you are carrying, scheduled onto the day, ticked,
+and then finished on the list *separately* — because ticking an anytime item
+answers *"did this happen"* and not *"is this over"*. Those are the same event for
+walking the dog and different ones for reading. Four steps and two lists for
+something that belongs to neither: Things is the standing inventory of what you
+are carrying, and a reminder is not that.
+
+**It lives on the day and goes with it.** An untouched one-off does not follow
+you to tomorrow. That is what a one-off is — if it needs to survive the night it
+is something you are carrying, and the list is where that goes.
+
+The two ways in sit **together, above the section**, as `+ Block` / `+ Anytime`.
+Together because the choice between them is the whole content of the pair: with
+an hour, or without. Above because the section is hidden until it holds
+something, and a way in you cannot reach until you have already used it is not a
+way in. That one is pinned by reading the markup rather than by driving the page
+— the suite reaches a control by id wherever it sits, so a button nested inside
+the hidden section would answer every press in every test and be unreachable on a
+real screen.
+
+No fourth entry type was added for this. The distinction between a thing done in
+one sitting and a thing revisited is one the list already has words for — `task`
+and `project` — and a `reminder` type would have made `task` vaguer by contrast
+rather than clearer, for something that turns out not to need an entry at all.
 
 Each row is a title, the note it arrived with, and a tick. The note is shown
 rather than hidden behind a gesture: a row with no hour has room for it.
