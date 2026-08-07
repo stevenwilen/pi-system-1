@@ -5028,10 +5028,21 @@
       }
 
       // The page, not the day. Re-reading the data would be quicker and would
-      // miss the point: what goes stale is the app itself, and only a reload
-      // replaces that.
+      // miss the point: what goes stale is the app itself, and only fetching
+      // the page again replaces that.
+      //
+      // A NAVIGATION RATHER THAN A RELOAD, and the difference is not stylistic.
+      // `location.reload()` resumes the page that is already there, and an
+      // installed app reloaded that way can come back suspended — nothing
+      // painted and every fetch held until the screen is touched, which is
+      // exactly the blank screen this link was reported for. `replace` is an
+      // ordinary navigation to the same address: a fresh document, and no back
+      // entry, because going "back" to the page you just refreshed is not a
+      // destination.
       $('refresh').onclick = () => {
-        if (typeof location !== 'undefined' && location.reload) location.reload();
+        if (typeof location === 'undefined') return;
+        if (location.replace) location.replace(location.href);
+        else if (location.reload) location.reload();
       };
 
       $('add-block').onclick = () => {
@@ -5933,7 +5944,62 @@
         }
       }
 
-      start().finally(uncover);
+      /**
+       * How long the cover is allowed to hide the app.
+       *
+       * A boot takes a few hundred milliseconds. This is not a deadline for the
+       * network, it is a deadline for the COVER — long enough that nobody on a
+       * slow connection ever sees it lift onto a half-drawn page, short enough
+       * that a boot which is never going to finish stops looking like one that
+       * is about to.
+       */
+      const BOOT_PATIENCE = 2500;
+
+      /**
+       * The cover comes off when the boot settles, or when it has had long
+       * enough — whichever happens first.
+       *
+       * `finally` was the whole of this, and it covers a load that FAILS: the
+       * comment on uncover already says a cover that never lifts is the worse
+       * screen, because it claims something is still coming. What it did not
+       * cover is a load that never settles at all, which is not exotic on a
+       * phone — an app woken by a reload can have its network held until the
+       * next interaction, and until then every fetch simply hangs. The cover
+       * stayed up for as long as that lasted, which is a blank screen that
+       * comes back when you touch it.
+       *
+       * NOTHING IS CANCELLED. The boot keeps running and the day arrives when
+       * it arrives, drawing over whatever is on screen. This only stops the
+       * cover being the thing that waits.
+       */
+      function begin() {
+        let settled = false;
+
+        start().finally(() => {
+          settled = true;
+          uncover();
+        });
+
+        setTimeout(() => {
+          if (settled) return;
+
+          // Which screen this person should be looking at, decided the same way
+          // start() decides it. `session` is read from storage synchronously,
+          // so this is not a guess — and lifting the cover onto the planner for
+          // somebody who is not signed in would be showing them a stranger's
+          // empty day.
+          //
+          // The day says it is still waiting, in the same mark the day switch
+          // uses. An app frame with an empty day under it would look finished
+          // and wrong; this looks like what it is.
+          if (session) showWaiting();
+          else showGate();
+
+          uncover();
+        }, BOOT_PATIENCE);
+      }
+
+      begin();
     </script>
   </body>
 </html>

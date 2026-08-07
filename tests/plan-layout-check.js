@@ -693,9 +693,19 @@ console.log('\n7a. the wait before the first day is on screen');
   // way — a page stuck under it because nobody was signed in would be the same
   // failure as one stuck because a fetch died.
   check('it lifts when the opening settles, not only when it succeeds',
-    /start\(\)\.finally\(uncover\)/.test(code));
+    /start\(\)\.finally\(\(\) => \{\s*settled = true;\s*uncover\(\);/.test(code), 'start().finally');
   check('and leaves the layout rather than sitting invisible over it',
     /style\.display = 'none'/.test(code));
+
+  // AND ON A DEADLINE OF ITS OWN. Settling covers a load that fails; it does
+  // not cover one that never settles, which is a blank screen that comes back
+  // when you touch it — a real report, not a hypothetical.
+  check('and after a bound, whatever the load is doing',
+    /BOOT_PATIENCE\s*=\s*\d+/.test(code) && /\}, BOOT_PATIENCE\)/.test(code));
+  check('which is a deadline for the cover, not for the network',
+    /if \(settled\) return;/.test(code));
+  check('what shows under it says what it is, rather than an empty day',
+    /if \(session\) showWaiting\(\);\s*else showGate\(\);/.test(code));
 
   // Motion is the default, stillness is the setting — not a lesser version. A
   // quarter arc held still reads as something half-drawn, so it closes into

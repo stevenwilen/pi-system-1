@@ -526,6 +526,26 @@ because it claims something is still coming. It then leaves the layout rather
 than fading to invisible and staying: a fixed, full-screen element over the app
 is inert only while it keeps `pointer-events: none`.
 
+**And it lifts after `BOOT_PATIENCE` (2.5s) whatever the load is doing**, which
+is the same argument carried one step further. Settling covers a load that fails;
+it does not cover one that never settles at all, and that is not exotic on a
+phone — an app woken by a refresh can have its network held until the next
+interaction, and until then every fetch simply hangs. The cover stayed up for as
+long as that lasted, which is a blank screen that comes back when you touch it.
+That was a real report, not a hypothetical.
+
+Nothing is cancelled when the deadline passes: the boot keeps running and the day
+draws over whatever is on screen when it arrives. And what shows underneath says
+what it is — **the day carries the waiting mark** rather than reading as an empty
+day, or **the gate** if this person is not signed in, decided from the session
+the same way `start()` decides it. Lifting onto a finished-looking empty app
+would trade one wrong screen for another.
+
+The deadline is a deadline for the **cover**, not for the network: long enough
+that nobody on a slow connection watches it lift onto a half-drawn page, short
+enough that a boot which is never going to finish stops looking like one that is
+about to.
+
 **The same mark appears in the day section when the switch is fetching**, and it
 is declared once for both — two copies of a turning arc would drift the first
 time either was adjusted. Tapping Tomorrow left today's blocks on screen,
@@ -1146,9 +1166,16 @@ phone ends up running a build from a fortnight ago and showing a screen that no
 longer exists, which happened twice: a missing stats section and a missing
 timezone row, both diagnosed as a stale page.
 
-**It reloads the page, not the day.** Re-reading the data would be quicker and
-would miss the point — what goes stale is the app itself, and only a reload
-replaces it.
+**It fetches the page, not the day.** Re-reading the data would be quicker and
+would miss the point — what goes stale is the app itself, and only fetching the
+page again replaces it.
+
+**By navigating, not by reloading in place.** `location.replace(location.href)`,
+not `location.reload()`. It was the reload for several revisions and came back
+blank on a phone until the screen was touched: an installed app resumed in place
+can come back suspended, with nothing painted and every fetch held. Replacing the
+address is an ordinary navigation to a fresh document, and leaves no back entry —
+going "back" to the page you just refreshed is not a destination.
 
 **It was a pull from the top**, and a gesture is the wrong shape for this. It is
 invisible until somebody tells you it is there, and it competes for the same

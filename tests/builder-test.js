@@ -104,12 +104,16 @@ const html = fs.readFileSync(ROOT + '/public/index.html', 'utf8');
 // afternoon to find, because the symptom was an empty builder three suites
 // away from the change.
 //
-// Anything from `start(` to the end of that line, and a throw if there was
-// nothing there to remove. It was `load(` until the page grew a gate in front
-// of it; the guard below is what said so, on the first run after the change.
+// The one line that starts the page, and a throw if there was nothing there to
+// remove. It was `load(`, then `start()`, and is now `begin()` — the page wraps
+// the boot and its patience timer together, and stripping only the `start()`
+// inside it left the rest of the function body orphaned. The guard below said
+// so on the first run after the change, which is the whole reason it exists.
+//
+// A case that wants the real boot calls `ctx.begin()` itself.
 const rawScript = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const SCRIPT = rawScript
-  .replace(/^\s*start\(\)[^\n]*$/m, '')
+  .replace(/^\s*begin\(\);\s*$/m, '')
   .replace(/^\s*loadReview\(\);\s*$/m, '');
 
 if (SCRIPT === rawScript) {
@@ -162,6 +166,9 @@ function atClock(hhmm) {
 /** Builds a fresh script instance with its own DOM. */
 function boot({
   calendar = [], plan = null, failed = false, reduced = false, configured = true,
+  // A url whose request never settles, so a case can hold the boot open the way
+  // a phone with its network held does.
+  hangOn = null,
   entries = null, now = null, failEntries = false,
   // What GET /settings answers. Configured by default, so no case falls into
   // the first-run screen without asking for it — the cases about that ask.
@@ -324,7 +331,15 @@ function boot({
 
   const sandbox = {
     console, setTimeout, clearTimeout, Intl: localIntl, Math, JSON,
-    location: { reload: () => reloads.push(true) },
+    location: {
+      href: 'https://app.example/',
+      // BOTH, so a case can say which one the page reached for. The page
+      // navigates rather than reloading — an installed app reloaded in place
+      // can come back suspended — and a stub with only reload() would let that
+      // silently become a no-op.
+      replace: (url) => reloads.push({ how: 'replace', url }),
+      reload: () => reloads.push({ how: 'reload' }),
+    },
     navigator: { vibrate: () => {} },
     Date: clock,
     String, Number, Boolean, Array, Object,
@@ -362,6 +377,8 @@ function boot({
         url,
         auth: (opts && opts.headers && opts.headers.Authorization) || null,
       });
+
+      if (hangOn && url.startsWith(hangOn)) return new Promise(() => {});
 
       return {
         ok: true,
@@ -2838,13 +2855,22 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('nothing has reloaded on its own', reloads.length === 0, String(reloads.length));
 
     byId['refresh'].onclick();
-    check('pressing it reloads the page', reloads.length === 1, String(reloads.length));
+    check('pressing it fetches the page again', reloads.length === 1, String(reloads.length));
+
+    // A NAVIGATION, NOT A RELOAD IN PLACE. An installed app reloaded in place
+    // can come back suspended: nothing painted and every fetch held until the
+    // screen is touched, which is the blank screen this link was reported for.
+    // Replacing the address is an ordinary navigation to a fresh document.
+    check('by navigating rather than resuming the page it is on',
+      reloads[0].how === 'replace', JSON.stringify(reloads[0]));
+    check('to where it already is', reloads[0].url === 'https://app.example/',
+      String(reloads[0].url));
 
     // The page rather than the day: what goes stale is the app itself, and
     // re-reading the data would not replace it.
     const html = require('fs').readFileSync(ROOT + '/public/index.html', 'utf8');
-    check('and it is the page it reloads, not the day',
-      /\$\('refresh'\)\.onclick[\s\S]{0,200}location\.reload\(\)/.test(html));
+    check('and it is the page it fetches, not the day',
+      /\$\('refresh'\)\.onclick[\s\S]{0,400}location\.replace\(location\.href\)/.test(html));
 
     // THE GESTURE IS GONE, named piece by piece: a half-removed gesture leaves
     // listeners on the document that quietly take touches from the page.
@@ -3205,6 +3231,56 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       String(byId['builder'].children.length));
     check('and so is the list', byId['things'].children.length === 0,
       String(byId['things'].children.length));
+  }
+
+  console.log('\nthe cover comes off even when nothing answers');
+  {
+    // THE REPORTED BUG, in the only form this suite can hold: press Refresh and
+    // the page comes back blank until you touch the screen.
+    //
+    // The cover is what is blank. It is a full-screen fill over the app, and it
+    // used to come off in `start().finally(uncover)` — so it stayed up for
+    // exactly as long as the slowest fetch of the boot took, with no bound on
+    // that at all. A request that never settles is not an exotic state on a
+    // phone: an app woken by a reload can have its network held until the next
+    // interaction, which is why the screen came back when it was touched.
+    //
+    // Nothing here is about iOS. A cover that hides the app until the network
+    // agrees to answer is wrong on any device; the phone is only where it was
+    // noticed.
+    const { ctx, byId } = boot({ hangOn: '/entries' });
+
+    // Read off the page rather than written down here. A `const` inside the
+    // script is not a property of the vm's global, so it cannot be reached the
+    // way a function can — and a number copied into this file would be a test
+    // that keeps waiting 2.5 seconds long after the page stopped.
+    const patience = Number(/BOOT_PATIENCE = (\d+)/.exec(html)[1]);
+    check('the page says how long it will hide behind the cover',
+      Number.isFinite(patience) && patience > 0 && patience < 10000, String(patience));
+
+    ctx.begin();
+    // Past the cover's own deadline. The boot itself never finishes here — that
+    // is the case — so waiting on it would be waiting for ever.
+    await new Promise((r) => setTimeout(r, patience + 300));
+
+    check('the cover is off', byId['booting']._class.has('done'),
+      [...byId['booting']._class].join(' '));
+    check('and out of the way, not merely see-through',
+      byId['booting'].style.display === 'none', byId['booting'].style.display);
+
+    // AND WHAT SHOWS SAYS WHAT IT IS. Lifting the cover onto an app frame with
+    // an empty day under it would look finished and wrong; the day carries the
+    // same waiting mark the day switch uses, which is the honest screen for
+    // something that has not arrived.
+    const waiting = byId['builder'].children.filter((c) => c._class.has('waiting'));
+    check('and the day says it is still coming', waiting.length === 1,
+      `${byId['builder'].children.length} in the builder`);
+    check('rather than reading as an empty day',
+      byId['builder'].children.every((c) => !c._class.has('slot')));
+
+    // NOT THE GATE. This person is signed in; the cover lifting early must not
+    // turn into being shown the door.
+    check('the gate stays down', byId['gate']._class.has('hidden'));
   }
 
   console.log('\nthe calendar aside puts things in the day, and never greys');
