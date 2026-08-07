@@ -430,7 +430,9 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // timezone picker is an invisible select laid over its whole row now, so
   // there is no field for a caret to be in and nothing to give a colour to.
   const acts =
-    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.back|\.thingnote:focus/;
+    // `.addfield:focus` is the same idiom as the two fields already here: the
+    // rule under a caret goes blue to say which line is being typed on.
+    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.back|\.thingnote:focus|\.addfield:focus/;
   // The divider: the knot and the line it fastens. Both are indigo now, where
   // the dark build tinted the line with a separate near-blue that belonged to
   // nothing — one fewer colour on the page, and the two halves of one object
@@ -973,6 +975,34 @@ console.log('\n13. a row says it has more actions, rather than hiding them');
   check('the row it covers is what positions it',
     /position: relative/.test(rule('.tzrow')), rule('.tzrow'));
 
+  // REACHABLE WITHOUT BEING BIGGER. A finger is about 9mm and several of these
+  // marks are 13 to 20px tall — sized to be read, which is right: the ··· must
+  // not compete with the title beside it. So the target grows and the mark does
+  // not, in a pseudo-element that takes part in no layout.
+  //
+  // Checked as a pair. A hit area on something that is not positioned lands
+  // against the nearest positioned ancestor instead — which is a whole row, or
+  // the page — and that failure is invisible until a tap opens the wrong thing.
+  for (const small of ['.hint', '.atick', '.ax', '.step']) {
+    check(`${small} carries a hit area`, /inset: -\d+px/.test(rule(`${small}::after`)),
+      rule(`${small}::after`));
+    check(`and is positioned, so it lands on itself`,
+      /position: relative/.test(rule(small)) ||
+        new RegExp(`\\${small}[,\\s][^{]*\\{[^}]*position: relative`).test(css),
+      small);
+  }
+  check('and none of them draws anything',
+    !/\.hint::after[^}]*background:|\.atick::after[^}]*background:/.test(css));
+
+  // A held element and a phone that raises its own menu over the hold. Both
+  // suppressions, on both things that are held: neither substitutes for the
+  // other, and the failure is a drag dying under a menu nobody asked for.
+  for (const held of ['.block', '.row']) {
+    check(`${held} refuses the callout`, /-webkit-touch-callout: none/.test(rule(held)),
+      rule(held).slice(0, 60));
+    check(`and text selection under the hold`, /-webkit-user-select: none/.test(rule(held)));
+  }
+
   const hint = rule('.hint');
   check('there is a hint', hint.length > 0);
   check('it is faint, so it does not compete with the title',
@@ -1264,7 +1294,19 @@ console.log('\n16. the shape of the day');
   // NOTHING ON THE THINGS LIST BEHIND IT. The whole point of the control: a
   // reminder is not something you are carrying, so it never becomes an entry.
   check('a one-off is added with no entry',
-    /\$\('add-anytime'\)\.onclick[\s\S]{0,400}addAnytime\(\{ title: title\.trim\(\) \}\)/.test(code));
+    /if \(adding === 'anytime'\) addAnytime\(\{ title \}\);/.test(code));
+
+  // TYPED IN THE PAGE, NOT OVER IT. Both controls asked through the browser's
+  // own prompt: a system dialog that covers the app and has to be dismissed
+  // before anything can be seen again, one per block, on a day built several at
+  // a time.
+  check('nothing asks through the browser any more', !/\bprompt\(/.test(code));
+  check('there is a field in the page instead', /id="add-field"/.test(body));
+  check('which is a rule rather than a box',
+    /border-bottom: 1px solid/.test(rule('.addfield')) &&
+      /border: 0/.test(rule('.addfield')), rule('.addfield'));
+  check('and takes the selection the blocks refuse',
+    /user-select: text/.test(rule('.addfield')));
   check('a running day end', /id="end-time"/.test(body));
   check('and one Confirm', (body.match(/id="confirm"/g) || []).length === 1);
 

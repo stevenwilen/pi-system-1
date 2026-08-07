@@ -350,6 +350,10 @@
         touch-action: pan-y;
         user-select: none;
         -webkit-user-select: none;
+        /* These rows are held too — a long press puts a thing in the day
+           without an hour — so they need the same guard the blocks do against
+           a phone raising its own menu over the gesture. */
+        -webkit-touch-callout: none;
       }
 
       /* The word under a row, at the edge the finger is heading for.
@@ -453,6 +457,7 @@
          the list, so at muted it would draw a second vertical line of
          emphasis down the page and compete with the titles. */
       .hint {
+        position: relative;
         font-size: 13px;
         color: var(--faint);
         background: none;
@@ -461,6 +466,55 @@
         line-height: 1;
         padding: 0 2px;
         cursor: pointer;
+      }
+
+      /* --- reachable, without being any bigger ----------------------------- */
+      /*
+         A finger is about 9mm across and several of these marks are 13 to 20px
+         tall. They were sized to be read, which is right — the ··· must not
+         compete with the title it sits beside, and the tick is a mark rather
+         than a button. Sizing them to be HIT would have meant drawing them
+         larger than they should be read.
+
+         So the target grows and the mark does not. An absolutely positioned
+         pseudo-element takes part in no layout: nothing moves, nothing reflows,
+         nothing is drawn, and the press lands from a finger's width away.
+
+         Asymmetric on the ··· deliberately. It sits at the right edge of a row
+         whose own tap schedules the thing, so the area reaches up, down and out
+         to the edge — where there is nothing else — and barely to the left,
+         where the title is. A tap meant for the row must still reach the row.
+      */
+         `position: relative` sits on each control's own rule rather than in a
+         group here. A grouped selector written down the page ends with a line
+         reading `.step {`, which is exactly what a stylesheet lookup by name
+         finds first — so the group would answer for the rule it is not. The
+         layout check said so on the first run.
+      */
+      /* One rule each, rather than one list. Four near-copies read worse than a
+         group and are looked up unambiguously by name, and this is a stylesheet
+         a checker reads as text. */
+      .atick::after {
+        content: '';
+        position: absolute;
+        inset: -12px;
+      }
+      .ax::after {
+        content: '';
+        position: absolute;
+        inset: -12px;
+      }
+      .step::after {
+        content: '';
+        position: absolute;
+        inset: -12px;
+      }
+      /* Asymmetric: out to the edge where there is nothing, and barely to the
+         left, where the title is and where a tap means the row. */
+      .hint::after {
+        content: '';
+        position: absolute;
+        inset: -13px -10px -13px -6px;
       }
 
       /* Revealed by the hint. Hidden at rest, so the list reads as a list
@@ -570,7 +624,12 @@
         align-items: baseline;
         gap: 8px;
         width: 100%;
-        padding: 4px 0;
+        /* A row you press, so it is a row you can hit: 13px of text at 1.6
+           leaves 21px, and seven above and below carries it to 35. Not the 44
+           a guideline asks for — that would nearly double the height of an
+           aside that is read far more often than it is pressed — but far from
+           the 29 it was. */
+        padding: 7px 0;
         background: none;
         border: 0;
         text-align: left;
@@ -619,6 +678,7 @@
       }
       /* Blue, because pressing it changes the day. */
       .step {
+        position: relative;
         color: var(--accent);
         font-size: 18px;
         line-height: 1;
@@ -739,6 +799,13 @@
         touch-action: pan-y;
         user-select: none;
         -webkit-user-select: none;
+        /* THE HOLD IS 400ms, which is also roughly when a phone decides a long
+           press was meant for it: iOS raises the callout — copy, look up, share
+           — over a held element, and it arrives at the exact moment the block
+           is being picked up. `user-select: none` above suppresses most of it
+           and this closes the rest. Neither is a substitute for the other, and
+           the failure is a drag that dies under a menu nobody asked for. */
+        -webkit-touch-callout: none;
       }
 
       /* The sheet the slip is written on. Everything the deckle touches lives
@@ -1387,6 +1454,7 @@
       /* The tick. A box rather than a word, because it is pressed far more
          often than it is read, and it is the only control on the row. */
       .atick {
+        position: relative;
         flex: none;
         width: var(--aline);
         height: var(--aline);
@@ -1439,6 +1507,7 @@
          and a single × does not. The padding is the touch target and the margin
          is what moves the glyph in without shrinking it. */
       .ax {
+        position: relative;
         flex: none;
         height: var(--aline);
         /* The glyph centred in the line box rather than pushed down it by
@@ -1671,6 +1740,33 @@
       .adds {
         display: flex;
         gap: 22px;
+      }
+
+      /* The name, typed where the control was. A rule under it and nothing
+         else: the same line the add form's fields use, because it is the same
+         act. No border box, no fill — this sits inside a day made of paper and
+         a boxed field would be the one thing on the screen pretending to be
+         software. */
+      .addfield {
+        width: 100%;
+        margin-top: 12px;
+        padding: 4px 0;
+        background: none;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        border-radius: 0;
+        font-family: inherit;
+        font-size: 15px;
+        color: var(--text);
+        /* Typing is not a gesture: this one takes the callout and the selection
+           the blocks above it refuse. */
+        touch-action: auto;
+        user-select: text;
+        -webkit-user-select: text;
+      }
+      .addfield:focus {
+        outline: none;
+        border-bottom-color: var(--accent);
       }
       .addblock {
         font-size: 10px;
@@ -2110,10 +2206,21 @@
              carrying, scheduled onto the day, ticked, and then finished on the
              list as well. Four steps and two lists for something that belongs
              to neither: Things is what you are carrying, and this is not. -->
-        <div class="adds">
+        <div class="adds" id="adds">
           <button type="button" class="addblock" id="add-block">+ Block</button>
           <button type="button" class="addblock" id="add-anytime">+ Anytime</button>
         </div>
+
+        <!-- WHERE THE NAME IS TYPED, in the page rather than over it. This was
+             the browser's own prompt() for both controls: a system dialog that
+             covers the app, arrives with no warning, and has to be dismissed
+             before anything can be seen again — and one of those per block, for
+             a day you build several at a time.
+
+             Enter keeps it open. Building a day is a handful of these in a row,
+             and closing after each one would put the cost back. -->
+        <input class="addfield hidden" id="add-field" type="text"
+               autocomplete="off" autocapitalize="sentences" enterkeyhint="done">
 
         <!-- ANYTIME TODAY. Things committed to the day and not to an hour —
              ring the dentist, put the bins out. Below the day because they are
@@ -2152,7 +2259,7 @@
              Hidden when empty: a heading over nothing is a section of the
              screen that says nothing on most days. -->
         <div class="saved hidden" id="saved">
-          <div class="label" id="saved-label">Saved for later</div>
+          <div class="label">Saved for later</div>
           <div id="saved-list"></div>
         </div>
       </section>
@@ -5214,29 +5321,90 @@
         else if (location.reload) location.reload();
       };
 
-      $('add-block').onclick = () => {
-        const title = prompt('What is this block?');
-        if (title && title.trim()) addBlock({ title: title.trim(), duration: STEP });
-      };
+      // --- adding to the day by name ------------------------------------------
+      //
+      // Both controls asked through the browser's own prompt(): a system dialog
+      // that covers the app, arrives with no warning, and has to be dismissed
+      // before anything can be seen again. One of those per block, on a day you
+      // build several at a time.
+      //
+      // Which of the two is being added. Null when nothing is being typed.
+      let adding = null;
 
       /**
-       * A one-off, straight onto the day.
+       * A one-off, or a block with an hour.
        *
-       * NO ENTRY BEHIND IT, which is the whole feature. `addAnytime` has always
-       * taken a null entry and never had a caller that used one: every anytime
-       * item came off a Things row, so a reminder had to be filed as a
-       * permanent thing before it could be put on a day and ticked off — and
-       * then finished on the list separately, because ticking an anytime item
-       * answers "did this happen" rather than "is this over". Those are the
-       * same event for walking the dog and different ones for reading.
-       *
-       * It lives on the day and goes with it. That is what a one-off is: if it
-       * needs to survive the night it is something you are carrying, and the
-       * Things list is where that goes.
+       * The difference between them is one line here and the whole point of the
+       * pair. A one-off carries NO ENTRY: `addAnytime` has always taken a null
+       * entry and never had a caller that used one, because every anytime item
+       * came off a Things row — so a reminder had to be filed as a permanent
+       * thing before it could be put on a day and ticked off, and then finished
+       * on the list separately, because ticking an anytime item answers "did
+       * this happen" rather than "is this over". Those are the same event for
+       * walking the dog and different ones for reading.
        */
-      $('add-anytime').onclick = () => {
-        const title = prompt('What needs doing?');
-        if (title && title.trim()) addAnytime({ title: title.trim() });
+      function openAdd(kind) {
+        adding = kind;
+
+        const field = $('add-field');
+        field.value = '';
+        field.setAttribute(
+          'placeholder',
+          kind === 'anytime' ? 'What needs doing?' : 'What is this block?'
+        );
+        field.setAttribute(
+          'aria-label',
+          kind === 'anytime' ? 'Something to do today, with no hour' : 'A block of the day'
+        );
+
+        $('adds').classList.add('hidden');
+        field.classList.remove('hidden');
+        // After the class comes off, or there is nothing focusable yet.
+        setTimeout(() => field.focus(), 0);
+      }
+
+      function closeAdd() {
+        adding = null;
+        $('add-field').classList.add('hidden');
+        $('adds').classList.remove('hidden');
+      }
+
+      /** Whatever is typed, added. Nothing is added for nothing typed. */
+      function commitAdd() {
+        const field = $('add-field');
+        const title = field.value.trim();
+        if (!title) return;
+
+        if (adding === 'anytime') addAnytime({ title });
+        else addBlock({ title, duration: STEP });
+
+        // Emptied and left open. A day is built a handful of these at a time,
+        // and closing after each one puts back the cost this replaced.
+        field.value = '';
+      }
+
+      $('add-block').onclick = () => openAdd('block');
+      $('add-anytime').onclick = () => openAdd('anytime');
+
+      $('add-field').onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          // Or the form this is not part of submits and the page reloads.
+          if (e.preventDefault) e.preventDefault();
+          commitAdd();
+          return;
+        }
+        // No key for this on a phone, which is why leaving the field closes it
+        // too. On a keyboard it is the one people reach for.
+        if (e.key === 'Escape') closeAdd();
+      };
+
+      // LEAVING SAVES IT, the same rule a note on a block follows: the text is
+      // either there or it is not, and there is nothing to decide. Tapping away
+      // from something you typed and watching it vanish is the version of this
+      // that loses work.
+      $('add-field').onblur = () => {
+        commitAdd();
+        closeAdd();
       };
 
       function renderConfirm() {

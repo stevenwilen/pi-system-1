@@ -1116,7 +1116,9 @@ title, and nothing else. Timed first in clock order, then the all-day entries,
 which show no time.
 
 **The whole row is the target, which in practice means the title** — it takes
-whatever the fixed-width time column leaves. It carried a muted `+` at the edge
+whatever the fixed-width time column leaves, and 7px above and below carries it
+to 35px tall. Not the 44 a guideline asks for: that would nearly double the
+height of an aside read far more often than it is pressed. It was 29. It carried a muted `+` at the edge
 for one revision. A mark on every row to describe a gesture is a toll paid on
 every reading of the list to explain something once, and this aside is read far
 more often than it is pressed.
@@ -1251,6 +1253,22 @@ are carrying, and a reminder is not that.
 **It lives on the day and goes with it.** An untouched one-off does not follow
 you to tomorrow. That is what a one-off is — if it needs to survive the night it
 is something you are carrying, and the list is where that goes.
+
+**The name is typed in the page, not over it.** Both controls asked through the
+browser's own `prompt()` — a system dialog that covers the app, arrives with no
+warning, and has to be dismissed before anything can be seen again, one of those
+per block on a day you build several at a time. Pressing either control replaces
+it with a single line: a rule under a caret, the same shape the add form's fields
+use, because it is the same act. No box and no fill; a boxed field would be the
+one thing on this screen pretending to be software.
+
+The placeholder says which of the two it will make, which is the only difference
+between them. **Enter adds it and leaves the field open** — a day is built a
+handful at a time, and closing after each entry puts back the cost this
+replaced. **Leaving the field saves what is in it**, the rule a note on a block
+already follows: tapping away from something you typed and watching it vanish is
+the version that loses work. An empty line adds nothing and leaves the field
+open; Escape closes it, on the keyboards that have one.
 
 The two ways in sit **together, above the section**, as `+ Block` / `+ Anytime`.
 Together because the choice between them is the whole content of the pair: with
@@ -1572,6 +1590,38 @@ horizontal movement over, so **a scroll can never become a swipe** regardless of
 what the script does. Movement past the threshold cancels the hold timer, and a
 gesture that commits swallows the click that follows it — otherwise a swipe
 begun on the chip would also lengthen the block on its way out.
+
+**The phone must not raise its own menu over the hold.** A 400ms press is also
+roughly when iOS decides a long press was meant for it and offers copy / look up
+/ share — arriving at the exact moment the block is being picked up. Both
+`-webkit-user-select: none` and `-webkit-touch-callout: none` sit on everything
+that is held: the block card and the Things row, which is held to put a thing in
+the day without an hour. Neither substitutes for the other, and the failure is a
+drag dying under a menu nobody asked for.
+
+#### Reachable without being bigger
+
+A finger is about 9mm across. The `···`, the anytime tick, its `×` and the wake
+steppers are between 13px and 20px, and they are that size for a reason — the
+`···` must not compete with the title it sits beside, and the tick is a mark
+rather than a button. Sizing them to be *hit* would mean drawing them larger than
+they should be *read*.
+
+So the target grows and the mark does not: an absolutely positioned `::after`
+with a negative inset, which takes part in no layout, draws nothing, and extends
+the press about a finger's width in every direction.
+
+The `···` is **asymmetric** — up, down and out to the right edge, where there is
+nothing, and barely to the left, where the title is and where a tap means "put
+this in the day". A tap meant for the row still has to reach the row.
+
+Each control carries its own `position: relative`, and the checker verifies the
+pair. A hit area on something unpositioned lands against the nearest positioned
+ancestor — a whole row, or the page — and that failure is invisible until a tap
+opens the wrong thing. These were written as one grouped selector first; a group
+listed down the page ends on a line reading `.step {`, which is what a lookup by
+name finds first, so the group answered for a rule it was not. The layout check
+caught it on the first run, which is why the rules are one-per-control now.
 
 #### A carried block takes the page back
 

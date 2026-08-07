@@ -74,7 +74,7 @@
   .cal p{font-size:13px;color:var(--cal-text);margin-top:6px;line-height:1.6;
          font-variant-numeric:tabular-nums}
   /* an event: pressable, and still a line of text under a rule */
-  .calrow{display:flex;align-items:baseline;gap:8px;width:100%;padding:4px 0;
+  .calrow{display:flex;align-items:baseline;gap:8px;width:100%;padding:7px 0;
           background:none;border:0;text-align:left;font:inherit;font-size:13px;
           line-height:1.6;color:var(--cal-text);cursor:pointer}
   .ctime{flex:none;width:68px;font-variant-numeric:tabular-nums}
@@ -104,6 +104,9 @@
   .addblock{font-size:12px;color:var(--faint);padding-top:8px}
   /* two ways into the day: one with an hour, one without */
   .adds{display:flex;gap:22px}
+  /* the name, typed where the control was: a rule, not a box */
+  .addfield{width:100%;margin-top:12px;padding:4px 0;background:none;border:0;
+            border-bottom:1px solid var(--line);font-size:15px;color:var(--text)}
 
   /* a block mid-swipe: the card rides the finger and uncovers a backing that
      says what letting go will do */
@@ -346,7 +349,7 @@
       <div class="dur">2h</div>
     </div>
 
-    <div class="adds"><div class="addblock">+ Block</div><div class="addblock">+ Anytime</div></div>
+    <div class="addfield">What needs doing?</div>
 
     <div class="ends"><span>Day ends</span><b>1:00 PM</b></div>
 

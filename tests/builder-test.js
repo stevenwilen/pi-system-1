@@ -278,8 +278,6 @@ function boot({
   // Every request that carried a body, so a case can read what the page sent
   // rather than infer it from what the page shows.
   const posted = [];
-  const prompts = [];
-  let promptAnswer = 'Typed block';
 
   // Every request the page made, and what it claimed to be. Separate from
   // `posted` because that one only sees writes, and the header matters on
@@ -373,13 +371,7 @@ function boot({
       confirmed.push(q);
       return true;
     },
-    // Recorded and answerable, the same way confirm is. Two things ask now —
-    // a block with an hour and a one-off without — and a case has to be able
-    // to say which was asked and what came back.
-    prompt: (q) => {
-      prompts.push(q);
-      return promptAnswer;
-    },
+
     window: win,
     fetch: async (url, opts) => {
       // Every POST, with or without a body: Done and Delete carry none, and a
@@ -486,9 +478,11 @@ function boot({
   return {
     ctx, byId, slots, cardOf, backingOf, rowOf, chipOf, noteOf, editorOf, calRows, calSays,
     titleOf, titles, listeners, touchmoves, win, posted, confirmed, asked, stored,
-    prompts,
-    answerPrompt: (v) => {
-      promptAnswer = v;
+    // Type a name into the open add field and press Enter, which is the whole
+    // of adding something by hand now.
+    typeAdd: (title) => {
+      byId['add-field'].value = title;
+      byId['add-field'].onkeydown({ key: 'Enter' });
     },
     reloads,
     // Every document listener of a kind, in order, so a case can drive the
@@ -3527,7 +3521,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // ticked, and then finished on the list separately, because ticking an
     // anytime item answers "did this happen" and not "is this over". Four steps
     // and two lists for something that belongs to neither.
-    const { ctx, byId, slots, titles, posted, prompts, answerPrompt } = boot();
+    const { ctx, byId, slots, titles, posted, typeAdd } = boot();
     await ctx.load();
 
     // REACHABLE ON AN EMPTY DAY. The Anytime section is hidden until something
@@ -3536,12 +3530,19 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('but the way in is there anyway', typeof byId['add-anytime'].onclick === 'function');
 
     const endedAt = byId['end-time'].textContent;
-    answerPrompt('Walk the dog');
     byId['add-anytime'].onclick();
 
-    check('it asks what needs doing', prompts[prompts.length - 1] === 'What needs doing?',
-      String(prompts[prompts.length - 1]));
-    check('and the section opens', !byId['anytime']._class.has('hidden'));
+    // IN THE PAGE, NOT OVER IT. This was the browser's own prompt() — a system
+    // dialog covering the app, one per block, on a day you build several at a
+    // time.
+    check('the field opens where the controls were',
+      !byId['add-field']._class.has('hidden') && byId['adds']._class.has('hidden'));
+    check('and says what it will make',
+      byId['add-field'].getAttribute('placeholder') === 'What needs doing?',
+      String(byId['add-field'].getAttribute('placeholder')));
+
+    typeAdd('Walk the dog');
+    check('the section opens', !byId['anytime']._class.has('hidden'));
     check('with the one-off on it',
       anytimeTitles(byId).join() === 'Walk the dog', anytimeTitles(byId).join());
 
@@ -3577,18 +3578,51 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       sent.entryId === null || sent.entryId === undefined, JSON.stringify(sent));
   }
 
-  console.log('\nan empty answer adds nothing');
+  console.log('\nthe add field: nothing typed adds nothing, and it stays open');
   {
-    const { ctx, byId, answerPrompt } = boot();
+    const { ctx, byId, typeAdd, slots } = boot();
     await ctx.load();
 
-    for (const answer of [null, '', '   ']) {
-      answerPrompt(answer);
-      byId['add-anytime'].onclick();
-    }
-    check('a cancelled prompt leaves the day alone',
-      anytimeTitles(byId).length === 0, anytimeTitles(byId).join());
+    byId['add-anytime'].onclick();
+    for (const nothing of ['', '   ']) typeAdd(nothing);
+    check('an empty line adds nothing', anytimeTitles(byId).length === 0,
+      anytimeTitles(byId).join());
     check('and the section stays hidden', byId['anytime']._class.has('hidden'));
+    check('but the field is still open to type in',
+      !byId['add-field']._class.has('hidden'));
+
+    // OPEN AFTER EACH ONE. A day is built a handful at a time, and closing
+    // after every entry is the cost the browser's prompt used to charge.
+    typeAdd('One');
+    check('the field stays open after adding', !byId['add-field']._class.has('hidden'));
+    check('and empties itself', byId['add-field'].value === '',
+      JSON.stringify(byId['add-field'].value));
+    typeAdd('Two');
+    typeAdd('Three');
+    check('so three go in without reopening anything',
+      anytimeTitles(byId).join() === 'One,Two,Three', anytimeTitles(byId).join());
+
+    // LEAVING SAVES IT, the rule a note on a block already follows. Tapping
+    // away from something you typed and watching it vanish loses work.
+    byId['add-field'].value = 'Typed and left';
+    byId['add-field'].onblur();
+    check('leaving the field keeps what was in it',
+      anytimeTitles(byId).join() === 'One,Two,Three,Typed and left',
+      anytimeTitles(byId).join());
+    check('and closes it back to the controls',
+      byId['add-field']._class.has('hidden') && !byId['adds']._class.has('hidden'));
+
+    // THE OTHER CONTROL MAKES A BLOCK, which is the whole difference between
+    // the pair, and it is one line apart in the page.
+    byId['add-block'].onclick();
+    check('the block field says what it will make',
+      byId['add-field'].getAttribute('placeholder') === 'What is this block?',
+      String(byId['add-field'].getAttribute('placeholder')));
+    typeAdd('An hour of something');
+    check('and it lands in the day rather than under it',
+      slots().length === 1, `${slots().length}`);
+    check('with the anytime list untouched', anytimeTitles(byId).length === 4,
+      anytimeTitles(byId).join());
   }
 
   console.log('\nthe calendar aside puts things in the day, and never greys');
