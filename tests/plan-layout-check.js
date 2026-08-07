@@ -1226,7 +1226,14 @@ console.log('\n15. reduced motion keeps the function and drops the movement');
   check('no growing when it is set', /reduceMotion\(\) \? '' : ' scale\(1\.03\)'/.test(code));
   check('no transitions', /on && !still \? `transform/.test(code));
   check('the drop commits straight away', /if \(reduceMotion\(\)\) return settle\(\);/.test(code));
-  check('but the reorder still happens', /blocks\.splice\(to, 0, moved\)/.test(code));
+  // The move itself, in the settle both paths run. It was a pair of splices on
+  // `blocks` straight from the drag's own indexes, which is the bug that made a
+  // drag move a block other than the one being carried on any day with an
+  // anytime item in it: the rows on screen and the places in that array are not
+  // the same list. `moveTimed` is the one conversion between them.
+  check('but the reorder still happens', /moveTimed\(from, to\);/.test(code));
+  check('and it goes through the one thing that knows rows from places',
+    /function moveTimed\(/.test(code) && !/blocks\.splice\(to, 0, moved\)/.test(code));
 }
 
 console.log('\n16. the shape of the day');

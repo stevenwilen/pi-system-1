@@ -73,12 +73,28 @@ class El {
   getAttribute(k) { return this._attrs[k]; }
   focus() {} scrollIntoView() {} setPointerCapture() {} releasePointerCapture() {}
   addEventListener() {} removeEventListener() {}
-  // A real height AND a real position, because the reorder maths divides by
-  // the first and now measures the second. 40 high with the stylesheet's 12px
-  // gap puts one row every 52px, so a drag of 52 is exactly one place.
+  // A real height AND a real position, because the reorder maths measures both.
+  // 40 high with the stylesheet's 12px gap puts one row every 52px, so a drag
+  // of 52 is exactly one place.
+  //
+  // AND ROWS ARE NOT ALL THE SAME HEIGHT. A block carrying a note is a line
+  // taller, which the flat `at * 52` could not express — so every case ran on a
+  // uniform ladder and the maths could assume one pitch for the whole day
+  // without any case minding. A row's top is the sum of what is above it.
+  get _selfHeight() {
+    // A note line, the way the stylesheet gives it one: 12px text at 1.45 with
+    // a 9px margin above it. The exact number does not matter; that it is not
+    // zero is the whole point.
+    return 40 + (this._find('note').length ? 26 : 0);
+  }
   getBoundingClientRect() {
-    const at = this._parent ? this._parent.children.indexOf(this) : 0;
-    return { top: at * 52, height: 40 };
+    const kin = this._parent ? this._parent.children : [this];
+    let top = 0;
+    for (const c of kin) {
+      if (c === this) break;
+      top += c._selfHeight + 12;
+    }
+    return { top, height: this._selfHeight };
   }
   querySelector(s) { return this._find(s)[0] || new El(); }
   querySelectorAll(s) { return this._find(s); }
@@ -501,6 +517,7 @@ const anytimeTitles = (byId) =>
     const text = r.children.find((c) => c._class.has('atext'));
     return (text.children.find((c) => c._class.has('atitle')) || {}).textContent || '';
   });
+const anytimeAt = (byId) => anytimeSlots(byId).map((s) => s.dataset.at).join();
 const tickOf = (row) => row.children.find((c) => c._class.has('atick'));
 const anytimeNote = (row) => {
   const text = row.children.find((c) => c._class.has('atext'));
@@ -1041,6 +1058,213 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     await wait(SETTLED);
     check('so it lands where it looked like it would',
       slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'B A C',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
+  }
+
+  console.log('\ndragging a day that also holds anytime items');
+  {
+    // THE REPORTED BUG: a drag moves a block other than the one being carried.
+    //
+    // The builder draws only the TIMED blocks — an anytime item has no hour, so
+    // it is drawn in its own section below — while every index the drag works
+    // in is an index into `blocks`, which holds both, interleaved in the order
+    // they were added. One anytime item anywhere above the finger and the two
+    // run one apart, and the further down the day, the further out.
+    //
+    // This is the same class of mistake as the divider once caused, and the
+    // comment on `siblings` says so: filtering the builder's children to slots
+    // fixed the divider, and it does not fix this, because here it is `blocks`
+    // that has the extra entries rather than the builder.
+    const { ctx, slots, cardOf, byId } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addAnytime({ title: 'Loose' });
+    ctx.addBlock({ title: 'B' });
+    ctx.addBlock({ title: 'C' });
+
+    const onScreen = () => slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ');
+    check('the day draws its three timed blocks', onScreen() === 'A B C', onScreen());
+    check('and the anytime item is not one of them', !onScreen().includes('Loose'), onScreen());
+
+    // Carry the FIRST timed block down one place. Nothing about the anytime
+    // item should enter into it.
+    const card = cardOf(slots()[0]);
+    down(card, 100, 100);
+    await wait(HELD);
+    move(card, 100, 100 + SLOT);
+
+    // What steps aside while the finger is still down. The row being dropped
+    // onto moves up; nothing else moves at all.
+    check('the row it is heading for steps out of the way',
+      slots()[1].style.transform === `translateY(-${SLOT}px)`, slots()[1].style.transform);
+    check('and the row below that stays put',
+      !slots()[2].style.transform, slots()[2].style.transform);
+
+    up(card, 100, 100 + SLOT);
+    await wait(SETTLED);
+
+    check('the block that was carried is the block that moved',
+      onScreen() === 'B A C', onScreen());
+    // It is drawn in its own section, so it is never in `titles()`. The point
+    // is that a drag in the day above it did not disturb it: the array it
+    // shares with the timed blocks used to be spliced under it.
+    check('and the anytime item is still in its own list',
+      anytimeTitles(byId).join() === 'Loose', anytimeTitles(byId).join());
+  }
+
+  console.log('\nwherever the anytime items sit, the drag does not feel them');
+  {
+    // The error the old code made was the count of anytime items ABOVE the
+    // finger, so it grew the further down the day you were and vanished at the
+    // top. Every arrangement here would have behaved differently; all of them
+    // have to behave the same now.
+    const day = async (build) => {
+      const { ctx, slots, cardOf, byId } = boot();
+      await ctx.load();
+      build(ctx);
+      return { ctx, slots, cardOf, byId };
+    };
+
+    const drag = async ({ slots, cardOf }, row, rows) => {
+      const card = cardOf(slots()[row]);
+      down(card, 100, 100);
+      await wait(HELD);
+      move(card, 100, 100 + rows * SLOT);
+      up(card, 100, 100 + rows * SLOT);
+      await wait(SETTLED);
+    };
+    const order = (slots) => slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ');
+
+    {
+      // Loose ones first, so every row is offset.
+      const d = await day((ctx) => {
+        ctx.addAnytime({ title: 'L1' });
+        ctx.addAnytime({ title: 'L2' });
+        ctx.addBlock({ title: 'A' });
+        ctx.addBlock({ title: 'B' });
+        ctx.addBlock({ title: 'C' });
+      });
+      await drag(d, 2, -2); // carry C to the top
+      check('two loose items above the day: the carried block still lands',
+        order(d.slots) === 'C A B', order(d.slots));
+      const was = 'L1,L2';
+      check('and both loose items are untouched',
+        anytimeTitles(d.byId).join() === was, anytimeTitles(d.byId).join());
+      // THE PLACES THEY HOLD IN THE ARRAY, not just the order they read in.
+      // Splicing `blocks` under them shuffles them without changing either
+      // title, so reading the titles alone is a check the old code passes.
+      check('and hold the same places in the array',
+        anytimeAt(d.byId) === '0,1', anytimeAt(d.byId));
+    }
+
+    {
+      // One in the middle and one at the end.
+      const d = await day((ctx) => {
+        ctx.addBlock({ title: 'A' });
+        ctx.addBlock({ title: 'B' });
+        ctx.addAnytime({ title: 'L1' });
+        ctx.addBlock({ title: 'C' });
+        ctx.addAnytime({ title: 'L2' });
+      });
+      await drag(d, 0, 2); // A to the bottom
+      check('interleaved: the carried block still lands',
+        order(d.slots) === 'B C A', order(d.slots));
+      check('and the loose items keep their own order',
+        anytimeTitles(d.byId).join() === 'L1,L2', anytimeTitles(d.byId).join());
+      check('and the places they held in the array',
+        anytimeAt(d.byId) === '2,4', anytimeAt(d.byId));
+    }
+
+    {
+      // PAST THE END. The clamp used to be `blocks.length`, which counts the
+      // loose ones — so a block could be carried to a row that does not exist
+      // and the day quietly rearranged itself around the miss.
+      const d = await day((ctx) => {
+        ctx.addBlock({ title: 'A' });
+        ctx.addBlock({ title: 'B' });
+        ctx.addAnytime({ title: 'L1' });
+        ctx.addAnytime({ title: 'L2' });
+        ctx.addAnytime({ title: 'L3' });
+      });
+      await drag(d, 0, 4); // four rows down, in a day two rows long
+      check('carried past the last row, it stops at the last row',
+        order(d.slots) === 'B A', order(d.slots));
+      check('with the loose items still loose',
+        anytimeTitles(d.byId).join() === 'L1,L2,L3', anytimeTitles(d.byId).join());
+      check('exactly where they were',
+        anytimeAt(d.byId) === '2,3,4', anytimeAt(d.byId));
+    }
+
+    {
+      // And the plain day still behaves, which is what says none of the above
+      // was bought by breaking the ordinary case.
+      const d = await day((ctx) => {
+        ctx.addBlock({ title: 'A' });
+        ctx.addBlock({ title: 'B' });
+        ctx.addBlock({ title: 'C' });
+      });
+      await drag(d, 2, -1);
+      check('a day with nothing loose in it is unchanged by all this',
+        order(d.slots) === 'A C B', order(d.slots));
+    }
+  }
+
+  console.log('\nrows are not all the same height, and the drag has to measure');
+  {
+    // A block carrying a note is a line taller than one without. The drag used
+    // to measure ONE pitch, off whichever neighbour the carried block happened
+    // to have, and then count places by dividing the travel by it — so on a day
+    // with notes in it every row below a tall one sat somewhere the arithmetic
+    // did not think it was, and a drag landed a place out.
+    //
+    // What the finger is over is a question about positions. It is answered by
+    // reading them now.
+    const { ctx, slots, cardOf } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+    ctx.addBlock({ title: 'B' });
+    ctx.addBlock({ title: 'C' });
+    ctx.addBlock({ title: 'D' });
+    // B gets a note, so everything below B sits 26px lower than a flat ladder.
+    ctx.saveNote(1, 'ring first');
+
+    const order = () => slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ');
+    check('the day is as built', order() === 'A B C D', order());
+
+    const tops = slots().map((s) => s.getBoundingClientRect().top);
+    check('and the rows really are unevenly spaced',
+      tops[2] - tops[1] !== tops[1] - tops[0], tops.join(' '));
+
+    // Carry A down past the tall row, to C — and NOT as far as D.
+    //
+    // The travel is 131px. A uniform pitch of 52 makes that "three places
+    // down", which is D; the rows say A's middle has only just passed C's. The
+    // last row is deliberately not the target, because a target past the end
+    // gets clamped back and the clamp would hide the miscount.
+    const rowMid = (r) => tops[r] + slots()[r].getBoundingClientRect().height / 2;
+    const travel = rowMid(2) - rowMid(0) + 1;
+
+    const card = cardOf(slots()[0]);
+    down(card, 100, 100);
+    await wait(HELD);
+    move(card, 100, 100 + travel);
+    up(card, 100, 100 + travel);
+
+    // THE RIDE, before the render replaces everything. It travels to where the
+    // block will actually be — the row it landed on, less its own height, since
+    // going down it comes to rest flush with the bottom of the row it passed.
+    // Counting places and multiplying by one pitch gives 104 here, and the
+    // block would visibly slide to the wrong place and then jump.
+    check('and rides to where it will actually sit',
+      card.style.transform === 'translateY(130px)', card.style.transform);
+
+    await wait(SETTLED);
+
+    check('it lands in the row its middle has reached, not the one a flat ladder counts',
+      order() === 'B C A D', order());
+    check('and the note stayed with the block that had it',
+      (slots().find((s) => s.text().includes('ring first')) || { text: () => '' })
+        .text().includes('B'),
       slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
   }
 

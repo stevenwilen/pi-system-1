@@ -1456,17 +1456,56 @@ question which one is in your hand. Drag vertically and the others part to show
 the gap it will drop into. Release settles it into place over 180ms rather than
 snapping.
 
-**The gap opens against the slots, not against the builder's children.** The
-divider is a child of the builder too, and the empty-day spacer is another,
-while the drag indexes into `blocks`. Reading every child made the two disagree
-by one from the divider down — the gap opened in the wrong place, the divider
-was shifted instead of a block, and blocks were pushed onto each other, so the
-list appeared to collapse together and then landed correctly. Only the animation
-was reading the wrong index.
+**The drag counts in rows of the day, and converts once.** There are two ways to
+say where a block is and they are not the same one. `blocks` holds the whole day,
+timed and untimed, in the order things were added — and that is the index
+everything acting on a block uses: remove, note, duration, the tick on an anytime
+row. The **builder** draws only the timed ones; an anytime item has no hour, so
+it is drawn in its own section and takes no row.
 
-**The pitch between blocks is measured, not assumed.** It used to be the slot's
+The drag is the one thing that lives in both, and it used one number for both. On
+any day holding an anytime item the two ran apart by the count of loose items
+above the finger — so the rows that stepped aside were the wrong ones, and **the
+block that moved was not the one being carried**. Dragging the top block down one
+place did nothing visible at all and quietly shuffled an anytime item instead.
+
+Three functions are the whole conversion: `rowOfBlock` going in, `firstFreeRow`
+for the floor, and `moveTimed` coming out. `moveTimed` lifts the timed blocks out,
+reorders them among themselves, and puts them back into the same slots of the
+array — so the untimed ones keep their exact places, which are their order in the
+anytime list and their `sort_order` on the way to the server. A reorder of the day
+above them is not a statement about them.
+
+This is the same class of mistake the **divider** once caused, from the other
+direction: the divider is a child of the builder too, and the empty-day spacer is
+another, so reading every child made the two disagree by one from the divider
+down. Filtering the builder's children to slots fixed that one and could not fix
+this one, because here it is `blocks` that carries the extra entries.
+
+**Where the block has got to is measured, not counted.** It used to divide the
+travel by one pitch and round. A pitch is only true of a ladder with every rung
+the same height, and the day is not one: **a block carrying a note is a line
+taller than one without**, so every row below it sits somewhere the division did
+not think it was and the drag landed a place out — further out the further down
+the day. The whole layout is read once at pick-up, and the row a block has
+reached is the row whose middle its own middle has reached. Reaching counts, not
+passing: on an even ladder a drag of exactly one row lands exactly on the next
+row's middle, which is the commonest drag there is.
+
+The settle rides the same measurement. `(to - from) × pitch` is a distance on an
+even ladder; what actually happens is that the rows in between close over the
+space this block leaves and it takes the space they open, so the distance is the
+sum of what is in between. Going down it comes to rest flush with the bottom of
+the row it passed; going up, at that row's top.
+
+The **rows that step aside** all shift by one number, and that is correct however
+uneven they are: they are all closing over the same hole, which is the carried
+block's own height and the gap under it.
+
+The pitch was measured rather than assumed once before — it had been the slot's
 height plus a hardcoded gap, and when the theme changed that gap the constant
-stayed behind — three pixels of drift per position carried.
+stayed behind. Measuring one pitch was the right fix for that and the wrong
+answer to this.
 
 **It cannot be carried above the divider.** The drop target's floor is the far
 side of the last block that has begun, so a block still to come cannot be

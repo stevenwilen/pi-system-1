@@ -4262,11 +4262,19 @@
         return next > MAX_DURATION ? STEP : next;
       }
 
-      /** Where a block dragged `dy` from `from` would land. */
       /**
-       * Where a block dragged `dy` from `from` would land.
+       * Which row a carried block has reached.
        *
-       * `floor` is the first index a carried block may occupy. On today that is
+       * MEASURED, NOT COUNTED. This was `targetIndex`: divide the travel by one
+       * pitch and round. That is only true of a ladder with every rung the same
+       * height, and the day is not one — a block carrying a note is a line
+       * taller than one without, so every row below it sits somewhere the
+       * division did not think it was, and a drag landed a place out. The
+       * further down the day, the further out. That function is gone rather
+       * than left beside this one: two answers to the same question, one of
+       * them wrong, is how the wrong one gets called again.
+       *
+       * `floor` is the first row a carried block may occupy. On today that is
        * the far side of the divider: a block that has not begun cannot be
        * dropped into the part of the day that already happened.
        *
@@ -4277,25 +4285,125 @@
        * 3:00 PM and the past block beneath it kept 8:00 AM. The day rendered
        * backwards, and the divider went looking for an edge that was no longer
        * there.
+       *
+       * The rung is where the block's own middle has got to. That question has
+       * one answer whatever the rows are made of, and it is the same answer the
+       * eye gives: you are over the row you are over.
+       *
+       * `rows` is the layout as it stood when the block was picked up. It has to
+       * be the original layout — the rows on screen have been shifted aside to
+       * show the gap, and reading those would be reading this function's own
+       * output back.
        */
-      function targetIndex(from, dy, step, count, floor = 0) {
-        const moved = Math.round(dy / step);
-        return Math.max(floor, Math.min(count - 1, from + moved));
+      function rowUnder(rows, from, carried, floor = 0) {
+        if (!rows.length || !rows[from]) return from;
+
+        const mid = rows[from].top + carried + rows[from].height / 2;
+        let to = from;
+
+        // Downward, the LAST row whose middle has been reached. Not the first:
+        // reaching one middle does not stop you reaching the next.
+        //
+        // REACHED, not passed. On an even ladder, carrying a block down by
+        // exactly one row puts its middle exactly on the next row's middle —
+        // the commonest drag there is — and a strict comparison answers "still
+        // where you started" to a block sitting squarely in the place below.
+        for (let r = from + 1; r < rows.length; r++) {
+          if (mid >= rows[r].top + rows[r].height / 2) to = r;
+        }
+        // Upward, the highest one.
+        for (let r = from - 1; r >= 0; r--) {
+          if (mid <= rows[r].top + rows[r].height / 2) to = r;
+        }
+
+        return Math.max(floor, Math.min(rows.length - 1, to));
       }
 
       /**
-       * The first index a block may be carried to: past the last begun one.
+       * How far a carried block travels to sit in the row it was dropped on.
+       *
+       * Also measured, and for the same reason: `(to - from) * step` is the
+       * distance on a ladder of equal rungs. What actually happens is that the
+       * rows between here and there close up over the space this block leaves,
+       * and this block takes the space they open — so the distance is the sum of
+       * what is in between, which the tops already hold.
+       *
+       * Going DOWN it lands flush with the bottom of the row it passed; going UP
+       * it lands at that row's top. That asymmetry is not a special case, it is
+       * what "before" and "after" mean in a list.
+       */
+      function landing(rows, from, to) {
+        if (!rows[from] || !rows[to]) return 0;
+        return to > from
+          ? rows[to].top + rows[to].height - rows[from].height - rows[from].top
+          : rows[to].top - rows[from].top;
+      }
+
+      // --- two ways to say where a block is, and they are not the same one ----
+      //
+      // `blocks` holds the whole day, timed and untimed, in the order things
+      // were added — and that is the index everything acting on a block uses:
+      // remove, note, duration, the tick on an anytime row.
+      //
+      // The BUILDER draws only the timed ones. An anytime item has no hour, so
+      // it is drawn in its own section below and takes no row. So the row a
+      // finger is over is a position in a shorter list, and one anytime item
+      // anywhere above it puts the two numbers one apart.
+      //
+      // The drag is the one thing that lives in both: it reads rows off the
+      // screen and writes places into `blocks`. It used to do that by using one
+      // number for both, which is a bug that only appears on a day that has an
+      // anytime item in it — the rows that stepped aside were the wrong ones,
+      // and the block that moved was not the one being carried. These three are
+      // the whole of the conversion, so there is one place to be right.
+
+      /** Which row of the day a block draws in. Untimed blocks draw in none. */
+      function rowOfBlock(i) {
+        if (!blocks[i] || untimed(blocks[i])) return -1;
+        let row = 0;
+        for (let k = 0; k < i; k++) if (!untimed(blocks[k])) row++;
+        return row;
+      }
+
+      /**
+       * The first row a block may be carried to: past the last begun one.
        *
        * Read by scanning rather than by assuming the begun blocks are the first
        * ones. They are, in every day the app builds — but this is the guard for
        * an order being wrong, so it cannot lean on the order being right.
        */
-      function firstFree() {
+      function firstFreeRow() {
+        const timed = timedBlocks();
         let at = 0;
-        for (let i = 0; i < blocks.length; i++) {
-          if (blockBegun(blocks[i])) at = i + 1;
+        for (let r = 0; r < timed.length; r++) {
+          if (blockBegun(timed[r])) at = r + 1;
         }
         return at;
+      }
+
+      /**
+       * Move a block from one row of the day to another.
+       *
+       * THE UNTIMED ONES DO NOT MOVE, and that is the whole of why this is not a
+       * splice on `blocks`. Their places in the array are their order in the
+       * anytime list and their sort_order on the way to the server; a reorder of
+       * the day above them is not a statement about them at all. So the timed
+       * blocks are lifted out, reordered among themselves, and put back into the
+       * same slots of the array they came out of.
+       */
+      function moveTimed(from, to) {
+        if (from === to) return;
+
+        const at = [];
+        for (let i = 0; i < blocks.length; i++) if (!untimed(blocks[i])) at.push(i);
+        if (from < 0 || to < 0 || from >= at.length || to >= at.length) return;
+
+        const seq = at.map((i) => blocks[i]);
+        const [moved] = seq.splice(from, 1);
+        seq.splice(to, 0, moved);
+        at.forEach((i, r) => {
+          blocks[i] = seq[r];
+        });
       }
 
       function cycleDuration(i) {
@@ -4805,26 +4913,44 @@
             ? slot.getBoundingClientRect()
             : { height: 64 };
 
-          gesture.mode = 'reorder';
-          gesture.from = index;
-          gesture.to = index;
+          // THE ROW, not the place in `blocks`. Everything below this line — the
+          // pitch measured off the next row, the rows that step aside, where the
+          // finger says it is going — is counted in rows on the screen, and it
+          // is converted back exactly once, on release. See rowOfBlock.
+          const row = rowOfBlock(index);
+          if (row === -1) return;
 
-          // How far apart two blocks sit, MEASURED rather than assumed.
+          gesture.mode = 'reorder';
+          gesture.from = row;
+          gesture.to = row;
+
+          // THE WHOLE LAYOUT, read once, here.
           //
-          // This used to be the slot's height plus a hardcoded 9 — the gap
-          // between slots at the time it was written. The washi theme moved
-          // that gap to 12 and the constant stayed, so every position a block
-          // was carried drifted three pixels from where it would land.
+          // Every question the drag asks after this — which row am I over, how
+          // far do I travel to land — is a question about where the rows are,
+          // and this is the last moment they are where the person saw them.
+          // From the next move onward they are shifted aside to show the gap.
           //
-          // Measuring off the next slot cannot go stale. The fallback only
-          // runs for a day of one block, where there is nothing to reorder.
-          const rows = siblings();
-          const next = rows[index + 1] || rows[index - 1];
-          const pitch =
-            next && next.getBoundingClientRect
-              ? Math.abs(next.getBoundingClientRect().top - rect.top)
-              : 0;
-          gesture.step = pitch || (rect.height || 64) + 12;
+          // It used to take a single pitch instead: the slot's height plus a
+          // hardcoded 9, then the distance to the next slot. Both are a ladder
+          // with equal rungs, and a block carrying a note is a line taller than
+          // one without.
+          gesture.rows = siblings().map((el) => {
+            const r = el.getBoundingClientRect
+              ? el.getBoundingClientRect()
+              : { top: 0, height: 64 };
+            return { top: r.top, height: r.height || 64 };
+          });
+
+          // What the rows in between shift by: the space this block vacates,
+          // which is its own height and the gap under it. One number, and it is
+          // correct however uneven the rest are — they are all closing over the
+          // same hole.
+          const g =
+            gesture.rows.length > 1
+              ? gesture.rows[1].top - gesture.rows[0].top - gesture.rows[0].height
+              : 12;
+          gesture.step = (rect.height || 64) + (g > 0 ? g : 12);
           // Where the page stood when this began, so a drag stays under the
           // finger even if something scrolls the page out from under it.
           gesture.scroll0 = pageY();
@@ -4871,7 +4997,9 @@
             x0: e.clientX,
             y0: e.clientY,
             dx: 0,
-            index,
+            // No `index` here on purpose. It was carried and never read, and an
+            // index on the gesture that is not the one the drag counts in is
+            // the exact confusion this was all just untangled from.
             card,
             slot,
             backing,
@@ -4961,9 +5089,10 @@
             card.style.transform =
               `translateY(${carried}px)` + (reduceMotion() ? '' : ' scale(1.03)');
 
-            const to = targetIndex(
-              gesture.from, carried, gesture.step, blocks.length, firstFree()
-            );
+            // Rows, all the way through, and read off the layout rather than
+            // counted out of a pitch. `firstFreeRow` is the floor: a block
+            // cannot be carried up into a part of the day that has happened.
+            const to = rowUnder(gesture.rows, gesture.from, carried, firstFreeRow());
             if (to !== gesture.to) {
               gesture.to = to;
               part(gesture.from, to, gesture.step);
@@ -4975,7 +5104,7 @@
           if (!gesture || gesture.id !== e.pointerId) return;
           clearTimeout(gesture.hold);
 
-          const { mode, dx, from, to, step } = gesture;
+          const { mode, dx, from, to, rows } = gesture;
           gesture = null;
 
           // A tap. Only the chip does anything with one, and it does it on
@@ -5008,8 +5137,10 @@
             const settle = () => {
               lift(false);
               if (from !== to) {
-                const [moved] = blocks.splice(from, 1);
-                blocks.splice(to, 0, moved);
+                // THE ONE CONVERSION. `from` and `to` are rows of the day; this
+                // is where they become places in `blocks`, and the untimed
+                // items keep the places they had.
+                moveTimed(from, to);
                 saved = false;
               }
               // A full re-render, which is also what clears every inline
@@ -5019,9 +5150,11 @@
 
             if (reduceMotion()) return settle();
 
-            // Ride to the slot it is landing in rather than snapping there.
+            // Ride to the slot it is landing in rather than snapping there —
+            // to where it will actually be, measured off the rows, not a count
+            // of places times one pitch.
             card.style.transition = `transform ${SETTLE_MS}ms ease-out`;
-            card.style.transform = `translateY(${(to - from) * step}px)`;
+            card.style.transform = `translateY(${landing(rows, from, to)}px)`;
             setTimeout(settle, SETTLE_MS);
           }
         };
