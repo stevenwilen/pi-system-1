@@ -6,7 +6,23 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
     />
-    <meta name="theme-color" content="#F5F1E8" />
+    <meta name="theme-color" content="#1E4FD8" />
+    <!-- TWO FACES, SPLIT BY JOB. Every figure is IBM Plex Mono with tabular
+         numerals, so times and durations fall into real columns down the page;
+         every name is Inter. Nothing crosses over.
+
+         FETCHED, which this page has refused to do before now and for a good
+         reason: a round trip on a cold load of an app whose whole point is
+         being open before you have finished reaching for it. `display=swap`
+         is what makes it survivable — the system stack below renders first and
+         the page never blocks on this — and both are named in every stack so a
+         failed fetch degrades to something close rather than to nothing. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
     <title>Schedule</title>
 
     <link rel="manifest" href="/manifest.json" />
@@ -21,7 +37,6 @@
 
     <style>
       /* WASHI. Paper, ink, restraint.
-         Reference: public/washi.html.
 
          The rules the whole page is built on. The first four are unchanged
          from the dark build — the theme is a surface, and the structure it
@@ -53,56 +68,54 @@
          weight 400. Paper is the look; legible is the requirement, and where
          they disagreed the requirement won. */
       :root {
-        /* NEUTRAL AND LIGHT. The page was cream, the cards were a shade into
-           the fibre, and the whole thing read as paper on purpose. It is a
-           planner you open several times a day to answer 'what now' — and the
-           answer has to be the loudest thing on the screen, which it is not
-           when the screen is being something.
-
-           So: no colour that is not doing work. A near-white page, three greys
-           that differ enough to rank, one blue for what can be pressed, one red
-           for what is running out. Everything else is the content. */
+        /* A LEDGER: white ground, one blue, figures in a mono face.
+           Nothing here is a colour that is not doing work. */
         --bg: #ffffff;
-        /* Rows sit on the page rather than above it. This is for the surfaces
-           that genuinely are a layer — the sheet, the settings rows — not for
-           blocks, which are rows now. */
-        --surface: #f4f4f5;
-        --line: #e4e4e7;
-        /* A second, heavier rule for the divisions that matter: the edge of the
-           past, a section from the next. One weight for everything made the
-           screen read as evenly divided when it is not. */
-        --rule: #d4d4d8;
+        /* The ground under the row you are in. */
+        --tint: #f4f7fc;
+        --surface: #f4f7fc;
 
-        --text: #18181b;
-        /* 4.8:1 on white. */
-        --muted: #71717a;
-        /* 3.4:1 — marks and hints only, never a body size. */
-        --faint: #8e8e98;
+        --text: #0f1620;
+        --muted: #5c6b7f;
+        /* #97a3b4 in the reference, which is 2.6:1 on white — under the 3:1 a
+           mark is asked to carry, and this one carries the times on finished
+           rows and the whole status column at 9px. Two steps darker clears it
+           at 3.1:1 and is not a colour anybody can tell from the original
+           without the two side by side. */
+        --faint: #8794a7;
+        /* A fourth grey, lighter than faint: the index column and everything
+           about a row that is over. It carries no words at a body size. */
+        --ghost: #c3ccd8;
 
-        /* The one thing that can be pressed. 5.2:1 on white. */
-        --accent: #2563eb;
-        /* Running out of room. 4.8:1, and it appears on nothing but the
-           deadline marks and the removing side of a swipe. */
+        /* THREE RULE WEIGHTS, EACH MEANING SOMETHING. A hairline separates two
+           rows of the same kind; the mid rule marks the row you are in; a
+           1.5px solid ends a section. */
+        --line: #e6ebf1;
+        --rule: #cfd8e3;
+        --heavy: #0f1620;
+
+        --accent: #1e4fd8;
+        --accent-soft: #7b9bee;
         --warn: #dc2626;
 
-        /* Something that has happened, or is happening. */
-        --spent: #fafafa;
+        --spent: #ffffff;
 
-        /* The calendar aside. Reference material: neither actionable nor
-           wrong, so it takes neither blue nor red. */
-        --cal-rule: #e4e4e7;
-        --cal-head: #71717a;
-        --cal-text: #3f3f46;
+        --cal-rule: #e6ebf1;
+        --cal-head: #97a3b4;
+        --cal-text: #5c6b7f;
 
-        --gap: 28px;
+        --gap: 22px;
 
-        /* WHATEVER THIS PHONE ALREADY USES. The theme wanted a face and fetched
-           one; a tool wants the face the rest of the device is set in, because
-           the fastest thing to read is the thing you have been reading all day.
-           It also costs no round trip and cannot flash the wrong font. */
-        --face: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+        /* TWO FACES, SPLIT BY JOB. Every figure is mono with tabular numerals
+           so times and durations fall into real columns; every name is Inter.
+           Nothing crosses over. Both stacks end in what the device already
+           has, so a failed fetch degrades rather than breaks. */
+        --face: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
           'Helvetica Neue', Arial, sans-serif;
+        --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas,
+          monospace;
       }
+
       * {
         box-sizing: border-box;
         margin: 0;
@@ -126,7 +139,62 @@
       main {
         max-width: 480px;
         margin: 0 auto;
-        padding: 28px 20px calc(40px + env(safe-area-inset-bottom));
+        padding: 18px 0 calc(40px + env(safe-area-inset-bottom));
+      }
+      /* Everything that is not a ruled row carries the page's own margin. The
+         rows do not: their padding is theirs, so their rules reach the edge. */
+      .dayswitch,
+      .cal,
+      .inline,
+      .ends,
+      .label,
+      .adds,
+      .addfield,
+      .stats,
+      .refresh,
+      .signout,
+      #things,
+      #saved,
+      #undo-host,
+      .now {
+        padding-left: 18px;
+        padding-right: 18px;
+      }
+
+      /* The small mono capitals that head a column. Set in the same face as
+         every figure on the page, so a heading and the numbers under it belong
+         to one another. */
+      .cap8 {
+        font-family: var(--mono);
+        font-size: 8.5px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--faint);
+        font-weight: 500;
+      }
+
+      /* THE COLUMN HEADS, under the one rule on the page that is neither a
+         hairline between rows nor the end of a section: it is the top of the
+         table, and it is the heaviest thing on the screen after the ink. */
+      .colhead {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 18px 6px;
+        border-bottom: 1.5px solid var(--heavy);
+      }
+      .colhead .c-i {
+        width: 20px;
+        flex: none;
+      }
+      .colhead .c-n {
+        flex: 1;
+        min-width: 0;
+      }
+      .colhead .c-s {
+        width: 58px;
+        flex: none;
+        text-align: right;
       }
 
       .hidden {
@@ -145,11 +213,12 @@
          it fainter, which is the trade this theme keeps having to make.
          Weight 400, not 300 — at this size and tracking, 300 disappears. */
       .label {
-        font-size: 9.5px;
-        letter-spacing: 0.26em;
+        font-family: var(--mono);
+        font-size: 8.5px;
+        letter-spacing: 0.2em;
         text-transform: uppercase;
-        color: var(--muted);
-        font-weight: 400;
+        color: var(--faint);
+        font-weight: 500;
         margin-bottom: 16px;
         display: flex;
         justify-content: space-between;
@@ -372,26 +441,22 @@
          mean to come back to. Same three levels, same arithmetic behind them —
          the glyph is set in the client, so nothing about what the server
          computes had to move. */
+      /* THE SERVER'S OWN MARK, SET BOLD. It computes '!!!', '!!' or '!' from
+         the days the size needs against the days that are left, and the screen
+         showed ✱ for each of them.
+         The swap is also what lets weight work again. ✱ is U+2731, in the
+         Dingbats block, and no font in the stack carries it — every platform
+         fell back for that one character to a single-weight symbol font, so
+         asking for 700 depended on the browser faking one: Chrome does, iOS
+         Safari does not, and it came out bold on a laptop and thin on the
+         phone. An exclamation mark is in every font at every weight, so 700 is
+         simply 700 and the stroke hack is gone with the glyph that needed it. */
       .mark {
-        font-size: 12px;
+        font-size: 13px;
+        font-weight: 700;
         color: var(--warn);
-        letter-spacing: 0.05em;
-        padding-top: 2px;
-        /* Heavier, and NOT with font-weight, which does nothing here on a
-           phone.
-           ✱ is U+2731, in the Dingbats block, and no font in --face contains
-           it: every platform falls back for this one character, and the fonts
-           it falls back to — Apple Symbols on iOS, Segoe UI Symbol on Windows
-           — ship a single weight. Asking for 700 therefore depends entirely on
-           whether the browser will FAKE one. Chrome does; iOS Safari does not.
-           So it came out bold on a laptop and thin on the phone, which is the
-           screen it is actually read on.
-           A stroke is painted on the glyph's own outline and needs no bold
-           face to exist, so both render the same. font-weight is gone rather
-           than kept alongside it: left in, the laptop would get a synthetic
-           bold AND the stroke, and be heavier than the phone — the same
-           mismatch, mirrored. */
-        -webkit-text-stroke: 0.4px var(--warn);
+        letter-spacing: 0.02em;
+        padding-top: 1px;
       }
 
       /* Already in the day on screen. Greying is the whole signal: it said
@@ -457,11 +522,6 @@
          group and are looked up unambiguously by name, and this is a stylesheet
          a checker reads as text. */
       .atick::after {
-        content: '';
-        position: absolute;
-        inset: -12px;
-      }
-      .ax::after {
         content: '';
         position: absolute;
         inset: -12px;
@@ -666,42 +726,27 @@
          its duration to lengthen it, swipe it away or swipe a buffer in after
          it, hold it to pick it up and move it. */
 
-      /* A row of the day, and the surface it slides off to reveal.
-
-         IT WAS A SLIP OF PAPER. The card had a torn edge drawn by a turbulence
-         filter, a shadow, and a fibre texture behind the whole page — a look
-         chosen when this was a notebook. It is a planner you open several times
-         a day to answer "what now", and the answer has to be the loudest thing
-         on the screen, which it is not when the screen is being something.
-
-         So a block is a row: no card, no fill, no shadow, and a hairline
-         between one and the next. What it costs is the sense of a thing you can
-         pick up; what it buys is a day you can read down in one movement. The
-         hairline is the whole of the separation, which is why nothing else
-         here draws an edge.
-
-         Clipped, now that nothing is displaced past its own bounds. */
+      /* A ROW OF THE LEDGER: an index, a name over its hours, and a status.
+         The rules run the full width of the page and the padding is on the row,
+         so nothing is inset from the edge — which is what makes a table read as
+         one rather than as a list of cards with lines between them. */
       .slot {
         position: relative;
         overflow: hidden;
       }
-      .slot + .slot .block {
-        border-top: 1px solid var(--line);
-      }
-
-      /* Under a row when it slides aside. A flat surface and the word, at the
-         edge the finger is heading for. */
       .backing {
         position: absolute;
         inset: 0;
         display: flex;
         align-items: center;
-        padding: 0 16px;
-        font-size: 13px;
-        font-weight: 500;
+        padding: 0 18px;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
         opacity: 0;
         color: var(--muted);
-        background: var(--surface);
+        background: var(--tint);
       }
       .backing.left {
         justify-content: flex-end;
@@ -713,54 +758,64 @@
       .block {
         position: relative;
         background: var(--bg);
-        padding: 11px 2px 12px;
+        min-height: 62px;
+        padding: 12px 18px;
         display: flex;
         flex-direction: column;
         align-items: stretch;
-        /* Vertical pans belong to the page, horizontal ones are ours. This one
-           line is what lets a swipe and a scroll live on the same element
-           without arbitrating between them in script. */
+        justify-content: center;
+        border-bottom: 1px solid var(--line);
         touch-action: pan-y;
         user-select: none;
         -webkit-user-select: none;
-        /* THE HOLD IS 400ms, which is also roughly when a phone decides a long
-           press was meant for it: iOS raises the callout — copy, look up, share
-           — over a held element, and it arrives at the exact moment the block
-           is being picked up. `user-select: none` above suppresses most of it
-           and this closes the rest. Neither is a substitute for the other, and
-           the failure is a drag that dies under a menu nobody asked for. */
         -webkit-touch-callout: none;
       }
 
-      /* The block's own line: what it is, and how long. A note, when there is
-         one, sits under this rather than beside it. */
       .brow {
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      /* THE INDEX COLUMN, which is the whole difference between a table and a
+         list. Mono and tabular so 09 and 10 are the same width. */
+      .idx {
+        width: 20px;
+        flex: none;
+        padding-top: 2px;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.04em;
+        color: var(--ghost);
+      }
+      .brow > div:not(.idx):not(.st):not(.dur) {
+        flex: 1;
+        min-width: 0;
       }
       .block .t {
-        font-size: 15px;
-        line-height: 1.4;
+        font-size: 14.5px;
+        font-weight: 400;
+        line-height: 1.35;
       }
-      /* UNDER THE TITLE, AND THE WHOLE SPAN. It was a single start time in a
-         fixed column down the left for one revision — the hours stacked, and a
-         glance down the edge was the shape of the day.
-
-         What that cost is the length of things. A block is a piece of the day
-         with a size, and reading "8:00 AM" tells you when it opens without
-         telling you what it takes; the chip on the right says 30m, but then the
-         row is stating its length twice and its end not at all. The span says
-         both at once, which is what a block is.
-
-         Tabular, so the hours still line up down the page even though they are
-         no longer in a column of their own. */
       .block .time {
-        font-size: 12px;
-        color: var(--muted);
-        margin-top: 4px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--faint);
         font-variant-numeric: tabular-nums;
+        letter-spacing: 0.01em;
+        margin-top: 4px;
+      }
+      /* THE STATUS COLUMN. Over, happening, or still to come — one column, read
+         straight down. */
+      .st {
+        width: 58px;
+        flex: none;
+        padding-top: 2px;
+        text-align: right;
+        font-family: var(--mono);
+        font-size: 9px;
+        letter-spacing: 0.14em;
+        color: var(--faint);
       }
 
       /* What they said they were doing. Small and muted, so a glance down the
@@ -801,54 +856,46 @@
         border-bottom-color: var(--muted);
       }
 
-      /* A block that has already happened. Nothing is drawn to say so and
-         nothing is taken away: it is the same row, greyed. An outline or a fill
-         would make the past the most decorated part of a screen that is about
-         what is next. */
-      .block.past .t,
-      .block.past .time {
+      /* OVER. Everything about the row steps back a shade; nothing is drawn
+         differently and nothing is taken away. */
+      .block.past .t {
         color: var(--faint);
       }
-      .slot.past-slot .block {
-        background: var(--spent);
+      .block.past .time,
+      .block.past .st {
+        color: var(--ghost);
       }
 
-      /* The block you are in. Muted rather than faint: it is the one row on the
-         page that is happening, and faint is the register of one that is over.
-
-         Named .running, not .act: .act is already the "+ Add" affordance in a
-         section label, and an unscoped .act here bled onto it. */
-      .running {
-        flex: none;
-        font-size: 12px;
-        font-weight: 500;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--accent);
-        white-space: nowrap;
-      }
-
-      /* The block you are in, marked at its edge.
-
-         A cord of three twisted strands used to be laid down it — indigo,
-         persimmon and the paper's own tan, tied onto what matters today and cut
-         off afterwards. A bar in the accent says the same thing, in the colour
-         that already means "this one", and does not need three gradients and a
-         twist to do it.
-
-         Nothing in the markup changes: a row becoming live is still a class. */
+      /* THE ROW YOU ARE IN, marked four ways and with no badge: a bar in the
+         gutter, a tinted ground, a heavier name, and its index in blue. Four
+         quiet marks read as one state; one loud mark reads as an alarm. */
       .block.live {
-        padding-left: 12px;
+        background: var(--tint);
+        border-bottom-color: var(--rule);
       }
       .block.live::before {
         content: '';
         position: absolute;
         left: 0;
-        top: 0;
-        bottom: 0;
-        width: 3px;
+        top: -1px;
+        bottom: -1px;
+        width: 2px;
         background: var(--accent);
         pointer-events: none;
+      }
+      .block.live .t {
+        font-weight: 600;
+      }
+      .block.live .time,
+      .block.live .st {
+        color: var(--accent);
+        font-weight: 500;
+      }
+      .block.live .idx {
+        color: var(--accent-soft);
+      }
+      .running {
+        white-space: nowrap;
       }
 
       /* The wait before the first day is on screen.
@@ -1313,6 +1360,8 @@
          is a thing that sits at a time, and the whole point of these is that
          they do not. They are the Things list's shape, in the day's section. */
       .anytime {
+        border-top: 1.5px solid var(--heavy);
+        padding-top: 0;
         margin: 22px 0 4px;
 
         /* ONE LINE BOX, SHARED BY ALL THREE THINGS ON A ROW. The tick, the
@@ -1342,30 +1391,50 @@
          short list look like a table. Space does the separating, which is what
          it does everywhere else on this screen. */
       .arow {
+        position: relative;
         display: flex;
-        /* Top, not baseline and not centre. A row with a note under its title
-           is taller than the title, and both other alignments would measure
-           the controls against the whole of it. */
-        align-items: flex-start;
-        gap: 10px;
-        padding: 11px 0;
+        align-items: center;
+        gap: 12px;
+        min-height: 62px;
+        padding: 12px 18px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--line);
+        touch-action: pan-y;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
       }
 
       /* The tick. A box rather than a word, because it is pressed far more
          often than it is read, and it is the only control on the row. */
       .atick {
         position: relative;
+        width: 15px;
+        height: 15px;
         flex: none;
-        width: var(--aline);
-        height: var(--aline);
         padding: 0;
-        border: 1px solid var(--faint);
         background: none;
+        border: 1.25px solid var(--ghost);
+        border-radius: 3px;
         font-family: inherit;
-        font-size: 12px;
-        line-height: 1;
-        color: var(--text);
         cursor: pointer;
+      }
+      .arow.did .atick {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      /* The tick itself, drawn rather than typed: two strokes, so it needs no
+         glyph and no font to carry one. */
+      .arow.did .atick::before {
+        content: '';
+        position: absolute;
+        left: 4px;
+        top: 1px;
+        width: 4px;
+        height: 8px;
+        border: solid #fff;
+        border-width: 0 1.5px 1.5px 0;
+        transform: rotate(45deg);
       }
       .arow.did .atick {
         border-color: var(--text);
@@ -1376,8 +1445,11 @@
         min-width: 0;
       }
       .atitle {
-        font-size: 15px;
-        line-height: var(--aline);
+        font-size: 14px;
+        line-height: 1.35;
+      }
+      .arow.did .atitle {
+        color: var(--faint);
       }
       /* STRUCK THROUGH AND STILL THERE. What you got through is worth seeing at
          the end of a day, so a tick does not remove the row — it marks it. */
@@ -1401,28 +1473,6 @@
          move. Faint and at the far edge, like the ··· on a Things row, because
          it repeats down the list and is the rarer of the two things you do
          here. The padding is the touch target; the glyph is small on purpose. */
-      /* INSET FROM THE MARGIN, not flush against it. Sat hard on the page edge
-         it read as detached from the row it belongs to — the ··· on a Things
-         row gets away with that because three dots read as an edge affordance,
-         and a single × does not. The padding is the touch target and the margin
-         is what moves the glyph in without shrinking it. */
-      .ax {
-        position: relative;
-        flex: none;
-        height: var(--aline);
-        /* The glyph centred in the line box rather than pushed down it by
-           padding. Vertical padding is what broke the alignment: it grew the
-           row and took the centred controls with it. */
-        line-height: var(--aline);
-        padding: 0 6px 0 10px;
-        margin-right: 6px;
-        background: none;
-        border: 0;
-        font-family: inherit;
-        font-size: 15px;
-        color: var(--faint);
-        cursor: pointer;
-      }
 
       /* HOW OFTEN YOU GOT TO THINGS. Bars rather than a table: the question
          is how close to the cadence you came, and a part-filled bar answers
@@ -1681,8 +1731,9 @@
       }
 
       .ends {
-        border-top: 1px solid var(--rule);
-        padding-top: 12px;
+        border-top: 1.5px solid var(--heavy);
+        padding-top: 15px;
+        margin-top: 20px;
         display: flex;
         justify-content: space-between;
         align-items: baseline;
@@ -1988,6 +2039,15 @@
         </div>
 
         <div style="height: 14px"></div>
+
+        <!-- THE COLUMN HEADS. What makes this a table rather than a list: an
+             index, a name, and a status, under a rule heavier than the ones
+             between rows. Hidden with the day it heads when there is no day. -->
+        <div class="colhead" id="colhead">
+          <div class="c-i cap8">#</div>
+          <div class="c-n cap8">Block</div>
+          <div class="c-s cap8">Status</div>
+        </div>
 
         <div id="builder"></div>
 
@@ -3343,11 +3403,10 @@
         if (!locked && item.mark) {
           const mark = document.createElement('div');
           mark.className = 'mark';
-          // Set as marginal asterisks rather than exclamation marks. Display
-          // only: the server still computes '!!!', '!!' or '!' from the days
-          // the size needs against the days that are left, and the count still
-          // carries the whole meaning. One glyph swapped for another.
-          mark.textContent = '✱'.repeat(item.mark.length);
+          // Exactly what the server computed. It was rendered as ✱ for a
+          // while — a glyph no font in the stack carries, which is why it
+          // could not be made bold on the one screen it is read on.
+          mark.textContent = item.mark;
           top.append(mark);
         }
 
@@ -3981,13 +4040,21 @@
         slot.className = 'atime';
         slot.dataset.at = String(i);
 
+        // THE SAME GESTURES A BLOCK HAS, from the same code. It carried an ×
+        // instead: a second way to remove a thing, in a different place, with
+        // no undo behind it — while every other row on the screen removes by
+        // swiping left and takes a note by swiping right. A row that has no
+        // hour is still a row of the day, and there is no reason for it to be
+        // worked differently from one that has.
+        const backing = document.createElement('div');
+        backing.className = 'backing';
+
         const row = document.createElement('div');
         row.className = b.done ? 'arow did' : 'arow';
 
         const tick = document.createElement('button');
         tick.type = 'button';
         tick.className = 'atick';
-        tick.textContent = b.done ? '✓' : '';
         tick.setAttribute('aria-pressed', String(Boolean(b.done)));
         tick.setAttribute('aria-label',
           b.done ? `${b.title}, done. Press to undo.` : `Mark ${b.title} done`);
@@ -4017,24 +4084,36 @@
           text.append(note);
         }
 
-        const off = document.createElement('button');
-        off.type = 'button';
-        off.className = 'ax';
-        off.textContent = '×';
-        off.setAttribute('aria-label', `Take ${b.title} off the list`);
-        off.onclick = (e) => {
-          if (e && e.stopPropagation) e.stopPropagation();
-          removeBlock(i);
+        row.append(tick, text);
+
+        // THE SAME EDITOR A BLOCK GETS. Swiping right calls the same openNote,
+        // and without this it set the state and drew nothing: the gesture
+        // worked, the note was never writable, and the only sign was that
+        // nothing happened.
+        if (i === noting) row.append(noteEditor(b, i));
+
+        // Tapping anywhere else promotes it into the day. The tick stops the
+        // press reaching here, so the only way to land on this is a press on
+        // the row itself.
+        //
+        // Guarded against a swipe that has just committed, the same way the
+        // duration chip is: without it, letting go of a swipe fires a click on
+        // whatever was under the finger and the row would be promoted on its
+        // way out of the day.
+        row.onclick = () => {
+          if (swallowClick) {
+            swallowClick = false;
+            return;
+          }
+          promote(i);
         };
 
-        row.append(tick, text, off);
+        slot.append(backing, row);
 
-        // Tapping anywhere else promotes it into the day. Both controls stop
-        // the press reaching here, so the only way to land on this is a press
-        // on the row itself.
-        row.onclick = () => promote(i);
-
-        slot.append(row);
+        // The block's own handler, unchanged. The hold finds no row to carry —
+        // rowOfBlock answers -1 for anything untimed — so a press and hold on
+        // one of these does nothing rather than picking up a neighbour.
+        attach({ slot, card: row, backing, index: i });
         return slot;
       }
 
@@ -4141,8 +4220,12 @@
         time.className = 'time';
         time.textContent = ' ';
 
+        const idx = document.createElement('div');
+        idx.className = 'idx';
+        idx.textContent = ' ';
+
         left.append(t, time);
-        row.append(left);
+        row.append(idx, left);
         ghost.append(row);
         return ghost;
       }
@@ -4653,6 +4736,13 @@
         const row = document.createElement('div');
         row.className = 'brow';
 
+        // THE INDEX. Counted in rows of the day rather than places in `blocks`,
+        // so a day holding anytime items still numbers 01, 02, 03 down the
+        // page — see rowOfBlock. It is what makes this read as a table.
+        const idx = document.createElement('div');
+        idx.className = 'idx';
+        idx.textContent = String(rowOfBlock(i) + 1).padStart(2, '0');
+
         // THE WHOLE SPAN, under the title. A block is a piece of the day with
         // a size: a single start time says when it opens without saying what it
         // takes, and the chip alone would state the length twice and the end
@@ -4676,9 +4766,9 @@
         // instead. The outline card and the faint title are what mark it as
         // done, and they were always doing that work.
         if (past) {
-          row.append(left);
+          row.append(idx, left, doneLabel());
         } else if (begun) {
-          row.append(left, activeLabel());
+          row.append(idx, left, activeLabel(b));
         } else {
           const dur = document.createElement('button');
           dur.type = 'button';
@@ -4697,7 +4787,7 @@
             cycleDuration(i);
           };
 
-          row.append(left, dur);
+          row.append(idx, left, dur);
         }
 
         card.append(row);
@@ -4724,10 +4814,20 @@
        * pill on every block above it, so blue here would be inviting a press
        * that does nothing.
        */
-      function activeLabel() {
+      /* THE STATUS COLUMN. Three states and one column: what is over says DONE,
+         what is happening says NOW and how long it runs, and what is still to
+         come carries the chip that sets its length. One place to read down. */
+      function activeLabel(b) {
         const tag = document.createElement('div');
-        tag.className = 'running';
-        tag.textContent = 'active';
+        tag.className = 'st running';
+        tag.textContent = `NOW · ${span(b.duration).toUpperCase()}`;
+        return tag;
+      }
+
+      function doneLabel() {
+        const tag = document.createElement('div');
+        tag.className = 'st';
+        tag.textContent = 'DONE';
         return tag;
       }
 

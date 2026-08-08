@@ -1735,9 +1735,9 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // longer change; there is no question to put there, because a block that
     // did not happen comes out of the day instead.
     // Its hour and its name, and nothing else: no chip, no label, no question.
-    check('a past block carries nothing beside its title',
-      rowOf(slots()[0]).children.length === 1, String(rowOf(slots()[0]).children.length));
-    check('nor does the second one', rowOf(slots()[1]).children.length === 1,
+    check('a past block carries its three columns and no chip',
+      rowOf(slots()[0]).children.length === 3, String(rowOf(slots()[0]).children.length));
+    check('nor does the second one', rowOf(slots()[1]).children.length === 3,
       String(rowOf(slots()[1]).children.length));
 
     const divider = byId.builder.children.filter((c) => c._class.has('now'));
@@ -1769,8 +1769,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
     check('the past block asks nothing',
       !rowOf(slots()[0]).children.some((c) => c._class.has('askmiss')));
-    check('and carries nothing at all beside its title',
-      rowOf(slots()[0]).children.length === 1,
+    check('and carries its three columns and nothing more',
+      rowOf(slots()[0]).children.length === 3,
       String(rowOf(slots()[0]).children.length));
 
     // Tapping where the question used to be must not do anything either.
@@ -2276,7 +2276,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // It says what it is instead. The slot the chip vacated was reading as a
     // block that had failed to render one.
     const actIn = (s) => rowOf(s).children.find((c) => c._class.has('running'));
-    check('it says it is active', actIn(slots()[1]) && actIn(slots()[1]).textContent === 'active',
+    check('it says it is active', actIn(slots()[1]) && actIn(slots()[1]).textContent === 'NOW · 1H',
       actIn(slots()[1]) && actIn(slots()[1]).textContent);
     check('the one that is over does not', !actIn(slots()[0]));
     check('nor does the one still to come', !actIn(slots()[2]));
@@ -3624,6 +3624,106 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       slots().length === 1, `${slots().length}`);
     check('with the anytime list untouched', anytimeTitles(byId).length === 4,
       anytimeTitles(byId).join());
+  }
+
+  console.log('\nan anytime row is worked like any other row');
+  {
+    // IT HAD AN × INSTEAD: a second way to remove a thing, in a different
+    // place, with no undo behind it — while every other row on the screen
+    // removes by swiping left and takes a note by swiping right. A row with no
+    // hour is still a row of the day.
+    //
+    // Nothing tested that × in this file. It could be deleted and the whole
+    // suite stayed green, which is why these cases exist at all.
+    const rowOfAny = (byId) => anytimeRows(byId)[0];
+
+    {
+      const { ctx, byId } = boot();
+      await ctx.load();
+      ctx.addAnytime({ title: 'Parking pass' });
+
+      const row = rowOfAny(byId);
+      check('there is no × on it', !row.children.some((c) => c._class.has('ax')),
+        row.children.map((c) => [...c._class].join('.')).join(' '));
+      check('nor anywhere in the page', !/class="ax"|'ax'/.test(html));
+      check('but it still has its tick', Boolean(tickOf(row)));
+      check('and it takes the pointer, like a block',
+        typeof row.onpointerdown === 'function');
+      check('with a backing to slide off',
+        anytimeSlots(byId)[0].children.some((c) => c._class.has('backing')));
+    }
+
+    {
+      // LEFT REMOVES. Past the threshold, and it is the same removeBlock the
+      // day above uses — so it keeps the same undo.
+      const { ctx, byId } = boot();
+      await ctx.load();
+      ctx.addAnytime({ title: 'Parking pass' });
+      ctx.addAnytime({ title: 'Reading' });
+
+      const row = rowOfAny(byId);
+      down(row, 200, 40);
+      move(row, 100, 40);
+      up(row, 100, 40);
+      await wait(SETTLED + CLOSED);
+
+      check('swiping one left takes it off the day',
+        anytimeTitles(byId).join() === 'Reading', anytimeTitles(byId).join());
+      const bar = byId['undo-host'].children[0];
+      check('and the undo is offered, the same as a block',
+        Boolean(bar) && bar._class.has('undo'));
+    }
+
+    {
+      // RIGHT OPENS THE NOTE. The same editor a block gets.
+      const { ctx, byId, slots } = boot();
+      await ctx.load();
+      ctx.addAnytime({ title: 'Parking pass' });
+
+      const row = rowOfAny(byId);
+      down(row, 100, 40);
+      move(row, 200, 40);
+      up(row, 200, 40);
+
+      const editor = anytimeRows(byId)[0].children.find((c) => c._class.has('noteedit'));
+      check('swiping one right opens a note on it', Boolean(editor),
+        anytimeRows(byId)[0].children.map((c) => [...c._class].join('.')).join(' '));
+      check('and it did not get promoted into the day on the way',
+        slots().length === 0, );
+    }
+
+    {
+      // A COMMITTED SWIPE DOES NOT PROMOTE. Letting go fires a click on
+      // whatever was under the finger, and a plain tap on one of these puts it
+      // into the day at an hour — so without the guard, removing one would
+      // schedule it on its way out.
+      const { ctx, byId, slots } = boot();
+      await ctx.load();
+      ctx.addAnytime({ title: 'Parking pass' });
+
+      const row = rowOfAny(byId);
+      down(row, 100, 40);
+      move(row, 200, 40);
+      up(row, 200, 40);
+      if (row.onclick) row.onclick();
+
+      check('the click a swipe leaves behind is swallowed',
+        slots().length === 0, );
+    }
+
+    {
+      // AND A PLAIN TAP STILL PROMOTES, which is the thing the guard must not
+      // break.
+      const { ctx, byId, slots } = boot();
+      await ctx.load();
+      ctx.addAnytime({ title: 'Parking pass' });
+
+      rowOfAny(byId).onclick();
+      check('a tap with no swipe before it still puts it in the day',
+        slots().length === 1, `${slots().length}`);
+      check('and it leaves the anytime list', anytimeTitles(byId).length === 0,
+        anytimeTitles(byId).join());
+    }
   }
 
   console.log('\nthe calendar aside puts things in the day, and never greys');

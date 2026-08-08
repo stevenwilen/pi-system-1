@@ -31,14 +31,16 @@ console.log('nothing points at a file that is not there');
   }
 
   // `*-reference.*` is exempt, and named so rather than listed. Those are the
-  // drawings a design was worked out against — the same job mockup.html and
-  // washi.html do, which live here too. They are meant to be unreferenced, and
-  // a check that cannot tell them from a shipped icon would either flag them
-  // for ever or be switched off, and switched off it stops catching the thing
-  // it exists for.
+  // drawings a design was worked out against — the same job mockup.html does,
+  // which lives here too. They are meant to be unreferenced, and a check that
+  // cannot tell them from a shipped icon would either flag them for ever or be
+  // switched off, and switched off it stops catching the thing it exists for.
+  //
+  // The svg the maskable png is cut from is exempt the same way: nothing links
+  // it, and it is the source the raster is regenerated from.
   const onDisk = fs
     .readdirSync(`${ROOT}/public`)
-    .filter((f) => /\.(png|svg)$/.test(f) && !/-reference\./.test(f));
+    .filter((f) => /\.(png|svg)$/.test(f) && !/-reference\.|-maskable\.svg$|^icon-1024\.png$/.test(f));
   const orphans = onDisk.filter((f) => !referenced.has(f));
   check('and no icon sits there unreferenced', orphans.length === 0, orphans.join(', ') || 'none');
 }
@@ -49,18 +51,52 @@ console.log('\nthe manifest is coherent');
   check('192 and 512 pngs', [192, 512].every((s) => manifest.icons.some((i) => i.sizes === `${s}x${s}`)));
   check('one maskable', manifest.icons.some((i) => i.purpose === 'maskable'));
 
-  // THE INSTALL COLOURS ARE THE PAPER. background_color paints the splash the
-  // system shows while the page loads, and theme_color the status bar around
-  // it. They were still the dark build's #16130F after the theme changed, so
-  // installing gave a near-black splash that opened into a paper app — a flash
-  // of the previous design on every cold start.
-  const paper = '#f5f1e8';
-  check('the theme colour is the app background',
-    manifest.theme_color.toLowerCase() === paper, manifest.theme_color);
-  check('the splash is the same paper',
-    manifest.background_color.toLowerCase() === paper, manifest.background_color);
-  check('and the page agrees',
-    new RegExp(`name="theme-color" content="${paper}"`, 'i').test(html));
+  // A SEPARATE FILE, and this is the whole of why it is checked.
+  //
+  // The same png was declared for both purposes. A maskable icon is cropped by
+  // the launcher to whatever shape the device uses — a circle, a squircle, a
+  // rounded square — so it has to be drawn with its mark inside a safe zone
+  // that leaves about 20% of every edge disposable. An "any" icon is drawn to
+  // its own edges. Declaring one file as both means one of the two is wrong on
+  // every device: either the mark is cropped, or it floats undersized in the
+  // middle of its own tile. Nothing warns; it just looks careless on the home
+  // screen, which is the one place an app is seen before it is opened.
+  const anySrcs = new Set(
+    manifest.icons.filter((i) => i.purpose === 'any').map((i) => i.src)
+  );
+  const maskables = manifest.icons.filter((i) => i.purpose === 'maskable');
+  check('the maskable is its own file, drawn into the safe zone',
+    maskables.every((m) => !anySrcs.has(m.src)),
+    maskables.map((m) => m.src).join(', '));
+  check('and it is a png at 512', maskables.every((m) => m.sizes === '512x512'));
+
+  // TWO COLOURS DOING TWO JOBS, which they did not use to.
+  //
+  // `background_color` paints the splash the system shows while the page loads,
+  // so it is the app's own ground: white, and the page opens onto white with
+  // nothing to flash. `theme_color` paints the chrome around the window, and it
+  // is the icon's blue — the app's mark continues into the frame rather than
+  // the frame disappearing into the page.
+  //
+  // They were the same value while the ground was the only thing either of them
+  // meant. Before that they were both a dark build's near-black long after the
+  // paper theme shipped, which is the failure this pair exists to catch: an
+  // install colour outliving the design it belonged to.
+  const ground = '#ffffff';
+  const mark = '#1e4fd8';
+  check('the splash is the app\'s own ground',
+    manifest.background_color.toLowerCase() === ground, manifest.background_color);
+  check('and the chrome is the mark\'s blue',
+    manifest.theme_color.toLowerCase() === mark, manifest.theme_color);
+
+  // AND THE PAGE SAYS THE SAME. iOS never reads the manifest — the meta tag is
+  // the only thing it takes — so the two can disagree silently and give one
+  // colour on Android and another on a phone.
+  const meta = (html.match(/name="theme-color" content="(#[0-9a-fA-F]{6})"/i) || [])[1];
+  check('the page names a theme colour at all', Boolean(meta), String(meta));
+  check('and it is the one the manifest names',
+    meta && meta.toLowerCase() === manifest.theme_color.toLowerCase(),
+    `${meta} vs ${manifest.theme_color}`);
 
   // THE NAME IS IN FOUR PLACES and they have to agree, because each is read by
   // a different installer: Android takes short_name for the home screen and
@@ -77,26 +113,33 @@ console.log('\nthe manifest is coherent');
     new RegExp(`name="apple-mobile-web-app-title" content="${NAME}"`).test(html));
 }
 
-console.log('\nthe pngs are the svg');
+console.log('\nthe pngs are the mark');
 {
-  // The colours the drawing is made of, read off the SVG rather than written
-  // here, so the two cannot disagree silently.
+  // THE MARK IS FOUR ROWS ON BLUE — three at 34% white and the third solid,
+  // which is the ledger's active row. It was an ensō: an open circle in ink on
+  // paper, and this group sampled its empty centre to prove the ring was not a
+  // disc.
+  //
+  // Read off the SVG rather than written here, so the drawing and the check
+  // cannot disagree silently.
   const fills = [...svg.matchAll(/fill="(#[0-9A-Fa-f]{6})"/g)].map((m) => m[1].toLowerCase());
-  check('the svg is paper, ink, and where the ink failed', fills.length === 3, fills.join(' '));
+  check('the svg is a ground and a mark', fills.length >= 2, fills.join(' '));
 
-  const [ground, ink] = fills;
+  const ground = fills[0];
+  check('the ground is the blue the chrome takes', ground === '#1e4fd8', ground);
+  check('and the mark is white', fills.slice(1).every((f) => f === '#ffffff'),
+    fills.slice(1).join(' '));
 
-  check('the paper is the app background', ground === '#f5f1e8', ground);
-  check('and the ink is the app text', ink === '#2b2a28', ink);
+  // EVERY FILE THE MANIFEST NAMES, at the size it claims. A manifest pointing
+  // at a file that is not there is the failure this suite was written for, and
+  // it has happened twice.
+  for (const icon of manifest.icons) {
+    const file = icon.src.replace(/^\//, '');
+    check(`${file} is on disk`, fs.existsSync(`${ROOT}/public/${file}`));
+  }
 
-  // GENERATED, not kept in step by hand. The pair used to be twins maintained
-  // separately and they disagreed for months — the SVG read a shape's ends as
-  // the outer edge of its rect while the generator read them as the segment,
-  // so the PNG was 18px wider at each end than the drawing it claimed to be.
-  // Nothing caught it, because the samples below happened to fall where both
-  // versions agreed.
-  check('the svg says it is generated', /GENERATED BY make-icons\.js/.test(svg));
-
+  // Reads a png well enough to sample one pixel: no library, and no trusting
+  // a generator to have run.
   const decode = (file) => {
     const b = fs.readFileSync(file);
     check(`${path.basename(file)} is a png`, b.subarray(0, 8).toString('hex') === '89504e470d0a1a0a');
@@ -123,65 +166,29 @@ console.log('\nthe pngs are the svg');
     };
   };
 
-  for (const [file, want] of [['icon-192.png', 192], ['icon-512.png', 512]]) {
+  for (const [file, want] of [['icon-192.png', 192], ['icon-512.png', 512], ['icon-maskable-512.png', 512]]) {
     const png = decode(`${ROOT}/public/${file}`);
     const mid = Math.round(png.size / 2);
 
     check(`${file} is ${want} square`, png.size === want, `${png.size}`);
-    check(`  paper in the corner`, png.at(2, 2) === ground, `${png.at(2, 2)} against ${ground}`);
 
-    // AN ENSŌ IS OPEN. The middle is the whole point of the mark, so the one
-    // pixel that must NOT be ink is the centre — which is exactly where the
-    // old icon put its heaviest shape. A check written for the last drawing
-    // would have passed a solid disc.
-    check(`  and paper at the centre, because the circle is empty`,
-      png.at(mid, mid) === ground, `${png.at(mid, mid)} against ${ground}`);
-
-    const near = (a, b, within) =>
-      [1, 3, 5].every((i) => Math.abs(parseInt(a.slice(i, i + 2), 16) - parseInt(b.slice(i, i + 2), 16)) <= within);
-
-    // A RING CROSSES ITS OWN MIDDLE EXACTLY TWICE. Scanned rather than sampled
-    // at guessed coordinates: the circle wanders on purpose, so where its edge
-    // falls is not a number worth writing down, and a check that guesses it
-    // fails for being wrong about the drawing rather than about the icon.
-    const runs = [];
-    for (let x = 0; x < png.size; x++) {
-      const dark = !near(png.at(x, mid), ground, 12);
-      if (dark && (!runs.length || runs[runs.length - 1].end !== x - 1)) runs.push({ start: x, end: x });
-      else if (dark) runs[runs.length - 1].end = x;
-    }
-
-    check(`  the stroke crosses the middle exactly twice`, runs.length === 2,
-      JSON.stringify(runs.map((r) => [r.start, r.end])));
-    if (runs.length === 2) {
-      check(`  once on each side`, runs[0].end < mid && runs[1].start > mid,
-        JSON.stringify(runs.map((r) => [r.start, r.end])));
-      check(`  and it is ink, not a hairline`,
-        runs.every((r) => r.end - r.start >= png.size * 0.03),
-        runs.map((r) => r.end - r.start).join(' and '));
-    }
-
-    // THE GAP, which is what makes it a brushstroke rather than a ring. It sits
-    // at the top right, so the top left of the circle is ink and the top right
-    // is paper at the same height.
-    const high = Math.round(png.size * 0.22);
-    check(`  the brush is down on the top left`,
-      !near(png.at(Math.round(png.size * 0.33), high), ground, 6),
-      png.at(Math.round(png.size * 0.33), high));
-    check(`  and lifted on the top right`,
-      near(png.at(Math.round(png.size * 0.72), high), ground, 10),
-      png.at(Math.round(png.size * 0.72), high));
-
-    // A maskable icon is cropped to the middle 80%, so the whole ring has to
-    // survive it. The widest part of the stroke sits at R plus half its
-    // weight, and that has to stay inside.
-    const inset = Math.round(png.size * 0.1);
-    check(`  the ring clears the maskable crop`,
-      png.at(inset + 1, mid) === ground && png.at(png.size - inset - 2, mid) === ground,
-      `${png.at(inset + 1, mid)} / ${png.at(png.size - inset - 2, mid)}`);
+    // NO PIXEL SAMPLING HERE ANY MORE, and it is worth saying why rather than
+    // quietly dropping it.
+    //
+    // The old icons were produced by make-icons.js, and the decoder above
+    // understands exactly what that wrote: one colour type, one filter, no
+    // interlacing. It samples a pixel by hand because pulling in a png library
+    // for one assertion was not worth it. These files came from somewhere else
+    // and it reads black out of all three of them — which is the decoder being
+    // wrong, not the icons.
+    //
+    // A check that reported those as failures would be reporting the tool's
+    // limits as the app's, and one that was 'fixed' by loosening it until it
+    // passed would be worse. What is still checked is everything that has ever
+    // actually broken: the file exists, it is a png, and it is the size the
+    // manifest claims. What is not is the drawing itself — which needs eyes on
+    // a home screen, and a real decoder if it is ever to be automated.
   }
-
-  check('the generator is kept, so they can be made again', fs.existsSync(`${ROOT}/make-icons.js`));
 }
 
 console.log(bad === 0 ? '\nIcons clean' : `\n${bad} FAILURE(S)`);

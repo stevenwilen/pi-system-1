@@ -2123,20 +2123,47 @@ described here rather than quoted.
 | | |
 |---|---|
 | bg | `#ffffff` |
-| surface | `#f4f4f5` |
-| hairline | `#e4e4e7` |
-| rule — the heavier division | `#d4d4d8` |
-| text | `#18181b` |
-| muted | `#71717a` |
-| faint | `#8e8e98` |
-| accent — blue | `#2563eb` |
+| tint — the row you are in | `#f4f7fc` |
+| text | `#0f1620` |
+| muted | `#5c6b7f` |
+| faint | `#8794a7` |
+| ghost — figures, never words | `#c3ccd8` |
+| hairline, between rows | `#e6ebf1` |
+| rule, under the row you are in | `#cfd8e3` |
+| accent — blue | `#1e4fd8` |
 | warn — red | `#dc2626` |
 
-Contrast is checked rather than trusted. Text 17.7:1, muted 4.8:1, blue 5.2:1 and
-red 4.8:1 against the page; faint clears 3:1, which is all a mark is asked to
-carry. White on blue clears 4.5:1 the other way round, which is what Confirm
-needs. And the three greys have to **rank** — if two of them land close enough to
-read as one, the page has three registers and shows two.
+**Two faces, split by job.** Every figure is **IBM Plex Mono** with tabular
+numerals, so times, durations and indexes fall into real columns down the page;
+every name is **Inter**. Nothing crosses over. Both are fetched, which this page
+had refused to do and for a good reason — a round trip on a cold load of an app
+whose point is being open before you have finished reaching for it. `display=swap`
+is what makes it survivable: the system stack renders first and the page never
+blocks. Both stacks end in what the device already has, so a failed fetch
+degrades rather than breaks.
+
+**Three rule weights, each meaning something.** A **1.5px solid** in the ink
+colour ends a section — the column heads, Anytime, Day ends. A **1px hairline**
+separates two rows of the same kind. The **mid rule** sits under the row you are
+in. Rules run the full width: the page's side margin is on the things between
+rows, not on the page, because a line inset by 18px reads as a card with a
+border rather than as a ledger.
+
+**Four greys, not three**, and the fourth is why that is worth saying. `ghost` is
+lighter than any contrast bar would pass and is allowed to be: it carries the
+index column and the state of a row already over — figures you count down, never
+words you read.
+
+Contrast is checked rather than trusted. Text 18.2:1, muted 5.4:1 and blue 6.6:1
+against the page; faint clears 3:1, which is all a mark is asked to carry. White
+on blue clears 4.5:1 the other way round, which is what Confirm needs. And the
+greys have to **rank** — if two land close enough to read as one, the page has
+four registers and shows three.
+
+`faint` is the one value that is not the reference's. Its `#97a3b4` is 2.6:1 on
+white, under the bar, and it carries the times on finished rows and the whole
+status column at 9px. Two steps darker clears it, and is not a colour anybody
+could pick out without the two side by side.
 
 The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
 
