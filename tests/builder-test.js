@@ -697,15 +697,15 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
     ctx.addBlock({ title: 'C' });
-    check('laid out in sequence', slots()[2].text().includes('9:00 AM – 9:30 AM'),
+    check('laid out in sequence', slots()[2].text().includes('9:00 AM'),
       slots()[2].text().trim());
 
     chipOf(slots()[0]).onclick(); // A: 30 -> 60
-    check('the one below moved', slots()[1].text().includes('9:00 AM – 9:30 AM'),
+    check('the one below moved', slots()[1].text().includes('9:00 AM'),
       slots()[1].text().trim());
-    check('and the one below that', slots()[2].text().includes('9:30 AM – 10:00 AM'),
+    check('and the one below that', slots()[2].text().includes('9:30 AM'),
       slots()[2].text().trim());
-    check('the one above did not', slots()[0].text().includes('8:00 AM – 9:00 AM'),
+    check('the one above did not', slots()[0].text().includes('8:00 AM'),
       slots()[0].text().trim());
     check('the end time followed live', byId['end-time'].textContent === '10:00 AM',
       byId['end-time'].textContent);
@@ -798,7 +798,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       noteOf(slots()[0]).textContent);
     check('and the editor closed', !editorOf(slots()[0]));
     check('the block is otherwise unchanged',
-      slots()[0].text().includes('8:00 AM – 8:30 AM'), slots()[0].text().trim());
+      slots()[0].text().includes('8:00 AM'), slots()[0].text().trim());
   }
 
   console.log('\nswiping a block that has a note reopens it');
@@ -1041,7 +1041,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // Nothing should scroll while a block is carried. If something does
     // anyway, the block has to stay under the finger rather than drift by
     // however far the page moved.
-    const { ctx, slots, cardOf, win } = boot();
+    const { ctx, slots, cardOf, win , titleOf } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -1063,8 +1063,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     up(card, 100, 100);
     await wait(SETTLED);
     check('so it lands where it looked like it would',
-      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'B A C',
-      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
+      slots().map((s) => titleOf(s)).join(' ') === 'B A C',
+      slots().map((s) => titleOf(s)).join(' '));
   }
 
   console.log('\ndragging a day that also holds anytime items');
@@ -1081,14 +1081,14 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // comment on `siblings` says so: filtering the builder's children to slots
     // fixed the divider, and it does not fix this, because here it is `blocks`
     // that has the extra entries rather than the builder.
-    const { ctx, slots, cardOf, byId } = boot();
+    const { ctx, slots, cardOf, byId , titleOf } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addAnytime({ title: 'Loose' });
     ctx.addBlock({ title: 'B' });
     ctx.addBlock({ title: 'C' });
 
-    const onScreen = () => slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ');
+    const onScreen = () => slots().map((s) => titleOf(s)).join(' ');
     check('the day draws its three timed blocks', onScreen() === 'A B C', onScreen());
     check('and the anytime item is not one of them', !onScreen().includes('Loose'), onScreen());
 
@@ -1125,10 +1125,10 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // top. Every arrangement here would have behaved differently; all of them
     // have to behave the same now.
     const day = async (build) => {
-      const { ctx, slots, cardOf, byId } = boot();
+      const { ctx, slots, cardOf, byId , titleOf } = boot();
       await ctx.load();
       build(ctx);
-      return { ctx, slots, cardOf, byId };
+      return { ctx, slots, cardOf, byId, titleOf };
     };
 
     const drag = async ({ slots, cardOf }, row, rows) => {
@@ -1139,7 +1139,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       up(card, 100, 100 + rows * SLOT);
       await wait(SETTLED);
     };
-    const order = (slots) => slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ');
+    const order = (d) => d.slots().map((s) => d.titleOf(s)).join(' ');
 
     {
       // Loose ones first, so every row is offset.
@@ -1152,7 +1152,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       });
       await drag(d, 2, -2); // carry C to the top
       check('two loose items above the day: the carried block still lands',
-        order(d.slots) === 'C A B', order(d.slots));
+        order(d) === 'C A B', order(d));
       const was = 'L1,L2';
       check('and both loose items are untouched',
         anytimeTitles(d.byId).join() === was, anytimeTitles(d.byId).join());
@@ -1174,7 +1174,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       });
       await drag(d, 0, 2); // A to the bottom
       check('interleaved: the carried block still lands',
-        order(d.slots) === 'B C A', order(d.slots));
+        order(d) === 'B C A', order(d));
       check('and the loose items keep their own order',
         anytimeTitles(d.byId).join() === 'L1,L2', anytimeTitles(d.byId).join());
       check('and the places they held in the array',
@@ -1194,7 +1194,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       });
       await drag(d, 0, 4); // four rows down, in a day two rows long
       check('carried past the last row, it stops at the last row',
-        order(d.slots) === 'B A', order(d.slots));
+        order(d) === 'B A', order(d));
       check('with the loose items still loose',
         anytimeTitles(d.byId).join() === 'L1,L2,L3', anytimeTitles(d.byId).join());
       check('exactly where they were',
@@ -1211,7 +1211,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       });
       await drag(d, 2, -1);
       check('a day with nothing loose in it is unchanged by all this',
-        order(d.slots) === 'A C B', order(d.slots));
+        order(d) === 'A C B', order(d));
     }
   }
 
@@ -1225,7 +1225,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     //
     // What the finger is over is a question about positions. It is answered by
     // reading them now.
-    const { ctx, slots, cardOf } = boot();
+    const { ctx, slots, cardOf , titleOf } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -1234,7 +1234,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // B gets a note, so everything below B sits 26px lower than a flat ladder.
     ctx.saveNote(1, 'ring first');
 
-    const order = () => slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ');
+    const order = () => slots().map((s) => titleOf(s)).join(' ');
     check('the day is as built', order() === 'A B C D', order());
 
     const tops = slots().map((s) => s.getBoundingClientRect().top);
@@ -1271,12 +1271,12 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('and the note stayed with the block that had it',
       (slots().find((s) => s.text().includes('ring first')) || { text: () => '' })
         .text().includes('B'),
-      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
+      slots().map((s) => titleOf(s)).join(' '));
   }
 
   console.log('\nstarting a drag on an already-scrolled page');
   {
-    const { ctx, slots, cardOf, win } = boot();
+    const { ctx, slots, cardOf, win , titleOf } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -1293,8 +1293,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     up(card, 100, 100 + SLOT);
     await wait(SETTLED);
     check('and it still reorders correctly',
-      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'B A C',
-      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
+      slots().map((s) => titleOf(s)).join(' ') === 'B A C',
+      slots().map((s) => titleOf(s)).join(' '));
   }
 
   console.log('\na swipe and a tap never hold the page');
@@ -1316,7 +1316,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
   console.log('\nheld, then dragged to a new place');
   {
-    const { ctx, slots, cardOf, titles } = boot();
+    const { ctx, slots, cardOf, titles , titleOf } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -1337,16 +1337,16 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
     check('it landed last', titles().indexOf('A') > titles().indexOf('C'), titles().join(' '));
     check('the order is B C A',
-      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'B C A',
-      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
+      slots().map((s) => titleOf(s)).join(' ') === 'B C A',
+      slots().map((s) => titleOf(s)).join(' '));
     check('and the times were recomputed from the top',
-      slots()[0].text().includes('8:00 AM – 8:30 AM'), slots()[0].text().trim());
+      slots()[0].text().includes('8:00 AM'), slots()[0].text().trim());
     check('every transform was cleared', slots().every((s) => !s.style.transform));
   }
 
   console.log('\ndragging up, and off the ends');
   {
-    const { ctx, slots, cardOf } = boot();
+    const { ctx, slots, cardOf , titleOf } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -1360,8 +1360,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     await wait(SETTLED);
 
     check('it clamps to first rather than falling off',
-      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'C A B',
-      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
+      slots().map((s) => titleOf(s)).join(' ') === 'C A B',
+      slots().map((s) => titleOf(s)).join(' '));
   }
 
   console.log('\ngesture arbitration');
@@ -1399,7 +1399,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
   console.log('\nreduced motion keeps the reorder and drops the movement');
   {
-    const { ctx, slots, cardOf } = boot({ reduced: true });
+    const { ctx, slots, cardOf , titleOf } = boot({ reduced: true });
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -1419,8 +1419,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     up(card, 100, 100 + SLOT);
     // No settle to wait for: reduced motion commits immediately.
     check('the reorder still happened',
-      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'B A',
-      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
+      slots().map((s) => titleOf(s)).join(' ') === 'B A',
+      slots().map((s) => titleOf(s)).join(' '));
   }
 
   console.log('\nthe rest of the builder still holds');
@@ -1455,7 +1455,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('still a stepper', byId['wake-time'].textContent === '8:00 AM');
     byId['wake-plus'].onclick();
     check('one step is half an hour', byId['wake-time'].textContent === '8:30 AM');
-    check('and the day moved with it', slots()[0].text().includes('8:30 AM – 9:00 AM'),
+    check('and the day moved with it', slots()[0].text().includes('8:30 AM'),
       slots()[0].text().trim());
     for (let i = 0; i < 40; i++) byId['wake-minus'].onclick();
     check('still clamped at 4:00 AM', byId['wake-time'].textContent === '4:00 AM');
@@ -1734,9 +1734,10 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // And nothing in its place. The chip is withheld because the length can no
     // longer change; there is no question to put there, because a block that
     // did not happen comes out of the day instead.
-    check('a past block carries nothing beside its title',
-      rowOf(slots()[0]).children.length === 1, String(rowOf(slots()[0]).children.length));
-    check('nor does the second one', rowOf(slots()[1]).children.length === 1,
+    // Its hour and its name, and nothing else: no chip, no label, no question.
+    check('a past block carries nothing beside its hour and its name',
+      rowOf(slots()[0]).children.length === 2, String(rowOf(slots()[0]).children.length));
+    check('nor does the second one', rowOf(slots()[1]).children.length === 2,
       String(rowOf(slots()[1]).children.length));
 
     const divider = byId.builder.children.filter((c) => c._class.has('now'));
@@ -1753,7 +1754,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       !/NOW|Next/i.test(divider[0].text()), divider[0].text());
 
     check('a past block keeps the hour it happened at',
-      slots()[0].text().includes('8:00 AM – 9:00 AM'), slots()[0].text().trim());
+      slots()[0].text().includes('8:00 AM'), slots()[0].text().trim());
   }
 
   console.log('\na past block is not asked about, and swipes away like any other');
@@ -1768,8 +1769,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
     check('the past block asks nothing',
       !rowOf(slots()[0]).children.some((c) => c._class.has('askmiss')));
-    check('and carries nothing at all beside its title',
-      rowOf(slots()[0]).children.length === 1,
+    check('and carries nothing at all beside its hour and its name',
+      rowOf(slots()[0]).children.length === 2,
       String(rowOf(slots()[0]).children.length));
 
     // Tapping where the question used to be must not do anything either.
@@ -1808,7 +1809,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // 11:17 rounds up to 11:30, but UF application runs to 13:00, so the
     // cursor is later than the boundary and wins.
     check('it follows the last block rather than the clock',
-      slots()[3].text().includes('1:00 PM – 1:30 PM'), slots()[3].text().trim());
+      slots()[3].text().includes('1:00 PM'), slots()[3].text().trim());
   }
 
   console.log('\na day that has run out of blocks starts the next one at the half hour');
@@ -1829,10 +1830,10 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
     ctx.addBlock({ title: 'Next' });
     check('two blocks', titles().join() === 'Done,Next', titles().join());
-    check('the finished one kept its hour', slots()[0].text().includes('8:00 AM – 9:00 AM'),
+    check('the finished one kept its hour', slots()[0].text().includes('8:00 AM'),
       slots()[0].text().trim());
     check('and the new one starts at the next half hour, not the wake time',
-      slots()[1].text().includes('11:30 AM – 12:00 PM'), slots()[1].text().trim());
+      slots()[1].text().includes('11:30 AM'), slots()[1].text().trim());
   }
 
   console.log('\ntomorrow has no past and no divider');
@@ -1850,7 +1851,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('and there is no divider',
       byId.builder.children.filter((c) => c._class.has('now')).length === 0);
     ctx.addBlock({ title: 'Later' });
-    check('a new block flows from the wake time', slots()[1].text().includes('9:00 AM – 9:30 AM'),
+    check('a new block flows from the wake time', slots()[1].text().includes('9:00 AM'),
       slots()[1].text().trim());
   }
 
@@ -2055,10 +2056,10 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     await ctx.load();
 
     check('the delivered block is where it always was',
-      slots()[0].text().includes('8:00 AM – 9:00 AM'), slots()[0].text().trim());
+      slots()[0].text().includes('8:00 AM'), slots()[0].text().trim());
     check('and reads as past', slots()[0].children[1]._class.has('past'));
     check('what is left moved up to the next half hour',
-      slots()[1].text().includes('9:30 AM – 10:30 AM'), slots()[1].text().trim());
+      slots()[1].text().includes('9:30 AM'), slots()[1].text().trim());
     check('so the day no longer matches what is stored, and says so',
       byId['confirm'].textContent === 'Confirm', byId['confirm'].textContent);
 
@@ -2108,7 +2109,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     });
     await ctx.load();
 
-    check('it stayed where it was stored', slots()[0].text().includes('8:00 AM – 9:00 AM'),
+    check('it stayed where it was stored', slots()[0].text().includes('8:00 AM'),
       slots()[0].text().trim());
     check('and still reads as past', slots()[0].children[1]._class.has('past'));
 
@@ -2361,7 +2362,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       const { slots, rowOf, chipOf } = await stale();
       chipOf(slots()[1]).onclick();
       check('pressing it does not resize the block',
-        slots()[1].text().includes('10:00 AM – 2:00 PM'), slots()[1].text().trim());
+        slots()[1].text().includes('10:00 AM'), slots()[1].text().trim());
       check('it clears the chip instead', !chipOf(slots()[1]));
       check('and the block says it is active',
         Boolean(rowOf(slots()[1]).children.find((c) => c._class.has('running'))));

@@ -2101,23 +2101,42 @@ Today / Tomorrow switch and the shape of a past block.
 tabular figures. Storage is untouched: the page still sends minutes, the row is
 still a 24-hour `time`, and one function on each side decides how a time reads.
 
-**Paper, not a dark screen.** This table went on listing the dark build long
-after the washi one shipped — near-black paper, a pale blue — so the one
-document anybody would read to answer "what colour is this app" answered with a
-build that no longer exists. `plan-layout-check.js` now reads both and refuses
-**any** hex in this section that `:root` has never heard of, prose included,
-which is why the old values are described here rather than quoted.
+**Neutral and light.** It was cream paper and ink: a fibre texture behind the
+page, block cards whose edges were displaced through turbulence by an SVG filter
+so no two matched, a shadow under each, a name seal for Confirm, an ensō for the
+loading mark. It was chosen when this was a notebook, and it was well made — but
+this is a planner you open several times a day to answer *what now*, and the
+answer has to be the loudest thing on the screen, which it is not when the screen
+is being something.
+
+So: nothing here is a colour that is not doing work. A white page, three greys
+that differ enough to rank, one blue for what can be pressed, one red for what is
+running out.
+
+This table has been wrong before — it went on listing an even earlier dark build
+long after the paper one shipped, so the one document anybody would read to
+answer "what colour is this app" answered with a build that no longer existed.
+`plan-layout-check.js` reads both and refuses **any** hex in this section that
+`:root` has never heard of, prose included, which is why the old values are
+described here rather than quoted.
 
 | | |
 |---|---|
-| bg | `#f5f1e8` |
-| card | `#e7e0d2` |
-| hairline | `#ded7c8` |
-| text | `#2b2a28` |
-| muted | `#5f5a52` |
-| faint | `#8a857c` |
-| accent — indigo | `#37516e` |
-| warn — persimmon | `#b8492a` |
+| bg | `#ffffff` |
+| surface | `#f4f4f5` |
+| hairline | `#e4e4e7` |
+| rule — the heavier division | `#d4d4d8` |
+| text | `#18181b` |
+| muted | `#71717a` |
+| faint | `#8e8e98` |
+| accent — blue | `#2563eb` |
+| warn — red | `#dc2626` |
+
+Contrast is checked rather than trusted. Text 17.7:1, muted 4.8:1, blue 5.2:1 and
+red 4.8:1 against the page; faint clears 3:1, which is all a mark is asked to
+carry. White on blue clears 4.5:1 the other way round, which is what Confirm
+needs. And the three greys have to **rank** — if two of them land close enough to
+read as one, the page has three registers and shows two.
 
 The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
 

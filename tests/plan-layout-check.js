@@ -152,15 +152,25 @@ function selectorsUsing(value) {
 // the same inks. Written out in both places it drifted the first time the
 // theme moved: eight checks went on reporting failures about colours neither
 // file still contained.
+// NEUTRAL AND LIGHT. It was cream paper and ink, with a fibre texture, torn
+// edges and two warm inks — a look chosen when this was a notebook. It is a
+// planner you open several times a day to answer "what now", and the answer has
+// to be the loudest thing on the screen, which it is not when the screen is
+// being something.
+//
+// Nothing here is a colour that is not doing work: a near-white page, greys that
+// differ enough to rank, one blue for what can be pressed, one red for what is
+// running out.
 const want = {
-  '--bg': '#f5f1e8',
-  '--card': '#e7e0d2',
-  '--line': '#ded7c8',
-  '--text': '#2b2a28',
-  '--muted': '#5f5a52',
-  '--faint': '#8a857c',
-  '--accent': '#37516e',
-  '--warn': '#b8492a',
+  '--bg': '#ffffff',
+  '--surface': '#f4f4f5',
+  '--line': '#e4e4e7',
+  '--rule': '#d4d4d8',
+  '--text': '#18181b',
+  '--muted': '#71717a',
+  '--faint': '#8e8e98',
+  '--accent': '#2563eb',
+  '--warn': '#dc2626',
 };
 
 console.log('0. the stylesheet parses');
@@ -205,9 +215,11 @@ console.log('\n1. the palette is exactly the one specified');
     check(`the spec's table has ${name}`, new RegExp(value, 'i').test(look), value);
   }
 
-  // CONTRAST, because this is the failure the theme is most prone to and the
-  // one that cost the reference its legibility. Paper is the look; readable is
-  // the requirement, and where they disagree the requirement wins.
+  // CONTRAST. It was the failure the paper theme was most prone to — a warm
+  // ground eats contrast, and the reference it came from was illegible at
+  // 3.8:1. A white page is far more forgiving, which is a reason to keep
+  // checking rather than to stop: nothing here is a colour anybody had to fight
+  // for, so nothing stops one drifting lighter for the look of it.
   //
   // WCAG relative luminance, then the contrast ratio against the paper.
   const lum = (hex) => {
@@ -215,7 +227,7 @@ console.log('\n1. the palette is exactly the one specified');
     const [r, g, b] = c.map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
-  const against = (hex, bg = '#f5f1e8') =>
+  const against = (hex, bg = '#ffffff') =>
     (Math.max(lum(hex), lum(bg)) + 0.05) / (Math.min(lum(hex), lum(bg)) + 0.05);
 
   const ratio = (hex) => Math.round(against(hex) * 10) / 10;
@@ -235,19 +247,27 @@ console.log('\n1. the palette is exactly the one specified');
   check('body ink clears 4.5:1 on the paper',
     against(ink('--text')) >= 4.5, `${ratio(ink('--text'))}:1`);
   check('and the secondary ink does too, which is what the reference missed',
-    against(ink('--muted')) >= 4.5,
-    `${ratio(ink('--muted'))}:1 (reference was #7C7871 at ${ratio('#7c7871')}:1)`);
-  check('indigo clears it, because it carries words and not just lines',
+    against(ink('--muted')) >= 4.5, `${ratio(ink('--muted'))}:1`);
+  check('the blue clears it, because it carries words and not just lines',
     against(ink('--accent')) >= 4.5, `${ratio(ink('--accent'))}:1`);
-  check('persimmon clears it as ink on the page',
+  check('and the red does, as a mark on the page',
     against(ink('--warn')) >= 4.5, `${ratio(ink('--warn'))}:1`);
-  // The hanko is the other direction: paper-coloured text on a persimmon
-  // ground. Same pair, and it has to clear the bar both ways round.
-  check('and the hanko clears it the other way, paper on persimmon',
-    against(ink('--bg'), ink('--warn')) >= 4.5,
-    `${Math.round(against(ink('--bg'), ink('--warn')) * 10) / 10}:1`);
+  // Confirm is white on blue now rather than paper on persimmon. Same question:
+  // the pair has to clear the bar both ways round.
+  check('and the confirm clears it the other way, white on blue',
+    against(ink('--bg'), ink('--accent')) >= 4.5,
+    `${Math.round(against(ink('--bg'), ink('--accent')) * 10) / 10}:1`);
   check('the faint ink clears 3:1, which is all it is asked to carry',
     against(ink('--faint')) >= 3, `${ratio(ink('--faint'))}:1`);
+
+  // THE THREE GREYS HAVE TO RANK. Text, then muted, then faint: if two of them
+  // land close enough to read as one, the page has three registers and shows
+  // two, and every "quieter than" decision in this file stops meaning anything.
+  const step = (a, b) => Math.abs(lum(ink(a)) - lum(ink(b)));
+  check('muted is plainly lighter than text', step('--text', '--muted') > 0.08,
+    `${Math.round(step('--text', '--muted') * 1000) / 1000}`);
+  check('and faint plainly lighter than muted', step('--muted', '--faint') > 0.08,
+    `${Math.round(step('--muted', '--faint') * 1000) / 1000}`);
 
   // Nothing under 15px may be lighter than 400. The reference set 11px meta at
   // weight 300 on a textured ground, which is the other half of why it was
@@ -285,7 +305,7 @@ console.log('\n2. one label style, and the action is quieter than it');
     !/color: var\(--text\)/.test(act), act.match(/color[^;]*/) || '');
 }
 
-console.log('\n3. rows are rows; only builder blocks are cards');
+console.log('\n3. everything is a row, and nothing is a card');
 {
   const row = rule('.row');
   const divider = rule('.thing + .thing');
@@ -321,9 +341,12 @@ console.log('\n3. rows are rows; only builder blocks are cards');
   //
   // Pinned because putting it back broke nothing: the page went on working and
   // only looked wrong, which is the kind of change that comes back.
-  check('no paper is drawn under a row that slides aside',
-    /content: none/.test(rule('.thing .backing::after')),
-    rule('.thing .backing::after') || '(no rule at all)');
+  // There used to be a rule here cancelling the paper drawn under a row that
+  // slides aside: a block was a slip and needed a sheet beneath it, a Things
+  // row is part of the page and a second sheet read as an object appearing from
+  // nowhere. Nothing draws paper any more, so the cancellation went with it.
+  check('nothing is drawn under a row that slides aside',
+    !/backing::after/.test(css));
 
   // AN ANYTIME ROW IS THREE THINGS ON ONE LINE, and they are measured from one
   // number so they cannot drift apart.
@@ -355,71 +378,68 @@ console.log('\n3. rows are rows; only builder blocks are cards');
     !/border/.test(rule('.atime + .atime')), rule('.atime + .atime') || '(no rule, which is the point)');
   check('so nothing on the row is centred against the whole of it',
     !/align-self: center/.test(rule('.atick') + rule('.ax')));
-  check('while a block still has some, because a block is a slip',
-    /filter: url\(#deckle/.test(rule('.backing::after')), rule('.backing::after'));
-
+  // A BLOCK IS A ROW NOW. It was a slip of paper: a card in its own colour,
+  // its edge displaced through turbulence by an SVG filter so no two slips
+  // matched, a shadow under it, and a fibre texture behind the whole page.
+  //
+  // That was chosen when this was a notebook. It is a planner opened several
+  // times a day to answer "what now", and the answer has to be the loudest
+  // thing on screen — which it is not when the screen is being something. What
+  // the paper cost was a day you could read down in one movement; what it
+  // bought was the sense of an object you could pick up, which the drag gives
+  // anyway.
   const block = rule('.block');
-  // The paper sits on the layer behind the text, so that is where to look for
-  // it. See the deckle checks below for why it is not on the slip itself.
-  check('a block IS a card', /background: var\(--card\)/.test(rule('.block::after')));
-  // NO RADIUS. The edge is torn rather than cut — the deckle filter displaces
-  // the whole shape through turbulence, so no two slips share an edge. A
-  // rounded rectangle behind a torn edge is two different ideas about one
-  // object.
-  check('but not a radius: paper is torn, not cut', !/border-radius/.test(block), block);
-  check('its edge is displaced rather than drawn',
-    /filter: url\(#deckle\)/.test(rule('.block::after')));
+  check('a block draws no card', !/background: var\(--surface\)/.test(block), block);
+  check('it sits on the page itself', /background: var\(--bg\)/.test(block), block);
+  check('with no radius', !/border-radius/.test(block), block);
+  check('and no shadow', !/box-shadow/.test(block), block);
 
-  // THE DECKLE NEVER TOUCHES TEXT, and this is the check that matters most in
-  // this theme.
-  //
-  // A CSS filter applies to an element and everything inside it. Put the
-  // deckle on the slip and feDisplacementMap pushes the title and the time
-  // through the same turbulence as the edge — every glyph bent, reading as a
-  // strange handwritten typeface. It is close to untraceable from the symptom:
-  // the property is named for an edge and the damage is to the words.
-  //
-  // So every filtered thing is a pseudo-element holding a background and
-  // nothing else. Any rule that carries a deckle must be a ::before or an
-  // ::after.
-  for (const m of css.matchAll(/\n {6,8}([^{@\n][^{]*?)\{([^}]*)\}/g)) {
-    if (!/url\(#deckle/.test(m[2])) continue;
-    const selector = m[1].trim().replace(/\s+/g, ' ');
-    check(`the deckle on ${selector} is on a layer, not on the text`,
-      /::(before|after)\s*$/.test(selector), selector);
-  }
+  // THE HAIRLINE IS THE WHOLE SEPARATION, and it is between rows rather than
+  // around them — the same rule the Things list follows, for the same reason.
+  check('one hairline between one block and the next',
+    /border-top: 1px solid var\(--line\)/.test(rule('.slot + .slot .block')),
+    rule('.slot + .slot .block'));
+  check('and none above the first', !/border-top/.test(block), block);
 
-  check('and the slip itself carries none of it',
-    !/filter/.test(rule('.block')), rule('.block'));
-  check('nor does the undo bar, which had the same fault',
-    !/filter/.test(rule('.undo')), rule('.undo'));
-  check('and the filter really exists in the markup',
-    /<filter id="deckle"[ >]/.test(body) && /feDisplacementMap/.test(body));
+  // NOTHING IS DISPLACED, DRAWN OR FILTERED. Named piece by piece because a
+  // half-removed theme leaves a filter reference pointing at a def that no
+  // longer exists, which renders as nothing at all on some engines and as an
+  // invisible element on others.
+  check('no turbulence filter is referenced anywhere', !/url\(#deckle/.test(css));
+  check('nor defined in the markup', !/feTurbulence|feDisplacementMap/.test(body));
+  check('and the page has no fibre behind it',
+    !/repeating-linear-gradient/.test(rule('body::before')) &&
+      !/body::before/.test(css));
 
-  // AND HAS ROOM TO BE RAGGED IN. A filter's default region is the element
-  // grown by ten per cent a side; these displace pixels by up to half their
-  // `scale`, which on a short element is more than ten per cent of its height.
-  // A bite clipped flat is the one thing this filter exists not to be.
-  for (const id of ['deckle', 'deckle-soft']) {
-    const tag = (body.match(new RegExp(`<filter id="${id}"[^>]*>`)) || [''])[0];
-    check(`#${id} states its own region`, /height="1[3-9]\d%"/.test(tag), tag);
-  }
-  check('the slot does not clip it flat',
-    !/overflow: hidden/.test(rule('.slot')), rule('.slot'));
+  // TIME FIRST, IN A COLUMN OF ONE WIDTH. This is the change the whole redesign
+  // is for: the hours stack down the left, so a glance down the edge is the
+  // shape of the day and the block you are in is found by running a finger down
+  // a column rather than by reading each row's second line.
+  const time = rule('.block .time');
+  check('the hour leads the row and is a fixed column',
+    /flex: none/.test(time) && /width: \d+px/.test(time), time);
+  check('it is tabular, so the hours stack',
+    /font-variant-numeric: tabular-nums/.test(time), time);
+  check('and quieter than the name it introduces',
+    /color: var\(--muted\)/.test(time), time);
+  check('the name takes the rest of the row',
+    /flex: 1/.test(rule('.brow > div:not(.time)')), rule('.brow > div:not(.time)'));
+  check('and truncates rather than pushing the chip off it',
+    /text-overflow: ellipsis/.test(rule('.block .t')), rule('.block .t'));
 
-  // Nothing else may take the card background. It is the mark of an object you
-  // manipulate. The disabled Confirm was on this list and has come off it: a
-  // sealed day is still ink, not paper.
-  const carded = selectorsUsing('var(--card)').filter((s) => !/^:root/.test(s));
-  check('nothing else uses the card background',
-    carded.every((s) => /\.block|\.undo/.test(s)), carded.join(' | '));
+  // A row states its START. The end of one block is the start of the next and
+  // the day's end is at the foot of the list, so a row stating both said twice
+  // what the column beside it already says.
+  check('a row states one time, not a span',
+    /time\.textContent = clock\(b\.start\);/.test(code));
+  check('and the day still says where it ends', /id="end-time"/.test(body));
 }
 
 console.log('\n4. sections are separated by space, not by boxes');
 {
   const section = rule('.section');
   check('36px between sections', /margin-bottom: var\(--gap\)/.test(section));
-  check('and the gap is 36px', /--gap:\s*36px/.test(rule(':root')));
+  check('and the gap is 28px', /--gap:\s*28px/.test(rule(':root')));
   check('a section has no border', !/border/.test(section), section);
   check('nor a background', !/background/.test(section), section);
 
@@ -492,7 +512,7 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   const acts =
     // `.addfield:focus` is the same idiom as the two fields already here: the
     // rule under a caret goes blue to say which line is being typed on.
-    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.back|\.thingnote:focus|\.addfield:focus/;
+    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.back|\.thingnote:focus|\.addfield:focus|\.confirm|\.running|\.block\.live::before/;
   // The divider: the knot and the line it fastens. Both are indigo now, where
   // the dark build tinted the line with a separate near-blue that belonged to
   // nothing — one fewer colour on the page, and the two halves of one object
@@ -500,7 +520,12 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   //
   // It says "here is where you are", which is the nearest thing to an action
   // that is not one. Listed by name so a third has to be argued for here.
-  const orients = /\.now \.dot|\.now \.ln/;
+  // The divider, and the two marks on the block you are in: the bar at its
+  // edge and the word beside its name. Both say "this one, now", which is what
+  // orienting is — neither can be pressed. The block you are in used to be
+  // marked by a three-strand cord in indigo, persimmon and tan, and its label
+  // was muted grey; one colour that already means "here" replaces both.
+  const orients = /\.now \.dot|\.now \.ln|\.running|\.block\.live::before/;
   check('blue appears only on the controls that act, or the one that orients',
     blue.every((s) => acts.test(s) || orients.test(s)), blue.join(' | '));
   // WHOLE CLASS NAMES. `\b` is not a class boundary in CSS: a hyphen ends a
@@ -509,128 +534,51 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // lookahead refuses a following letter, digit or hyphen, which is what
   // "this class and not one that merely starts with it" actually means.
   const whole = (name) => new RegExp(`\\.${name}(?![\\w-])`);
+  // Measured against what is left after the orienting marks are taken out. The
+  // bar on the block you are in is drawn on `.block.live::before`, which
+  // contains `.block` and so reads as decoration to a name-based sweep — while
+  // being the exact thing named as orienting two lines above.
+  const decorative = blue.filter((s) => !orients.test(s));
   check('and nothing decorative has it',
-    !blue.some((s) => ['cal', 'backing', 'block', 'row'].some((n) => whole(n).test(s))),
-    blue.join(' | '));
+    !decorative.some((s) => ['cal', 'backing', 'block', 'row'].some((n) => whole(n).test(s))),
+    decorative.join(' | '));
 
   check('the start steppers are blue', /color: var\(--accent\)/.test(rule('.step')));
   check('the duration chip is blue, because it is now the control',
     /color: var\(--accent\)/.test(rule('.dur')));
-  // Confirm is NOT indigo any more — it is the hanko, and a seal is stamped in
-  // persimmon. That moves it under the warn colour's list, which is the one
-  // deliberate widening this theme asks for: see section 7.
-  check('confirm is not indigo, because it is a seal',
-    !/var\(--accent\)/.test(rule('.confirm')), rule('.confirm'));
-
-  // THE SEAL HAS NO RING. A real hanko is carved in relief, so its border
-  // stands and prints while the cut stays paper — which is what the reference
-  // drew. On screen that reads as a line drawn around a button, and drawing is
-  // the one thing this theme does not do. What makes it a stamp is the edge:
-  // pressed by hand, ink does not land square.
-  check('no ring is drawn around it', !/box-shadow/.test(rule('.confirm')), rule('.confirm'));
-  check('its edge is pressed rather than cut',
-    /filter: url\(#deckle\)/.test(rule('.confirm::after')));
-
-  // AND NOTHING ACROSS THE MIDDLE. It carried four pale flecks, meant as ink
-  // not taking evenly. At this size and softness they did not read as texture —
-  // they read as bubbles trapped under a sticker, which is a defect rather than
-  // a mark. The uneven edge is what says stamp; the middle is solid ink.
-  check('the ink is solid, with no flecks in it',
-    !/gradient/.test(rule('.confirm::after')), rule('.confirm::after'));
-
-  // A SEALED DAY IS STILL INK. It used to go paper-and-grey when confirmed,
-  // which read as the button being taken away rather than the day being
-  // agreed to. Same persimmon, so the contrast holds both ways round.
-  check('confirmed stays persimmon rather than going to paper',
-    !/background/.test(rule('.confirm:disabled')), rule('.confirm:disabled'));
-  check('and keeps its full contrast',
-    /color: var\(--bg\)/.test(rule('.confirm:disabled')));
-
-  // AND THE SAME EDGE, WHICH IS A BUG FIX. Confirmed used to take a wider
-  // bite — ink that had settled — and that swapped the referenced filter on
-  // this layer every time the state changed. Confirm a day, tap Tomorrow, tap
-  // Today, and the word came back cut off: a re-rasterised filter layer can
-  // return short, and the word is painted in the PAGE colour on top of that
-  // persimmon, so wherever the persimmon is missing the letters are not
-  // clipped, they are invisible.
+  // CONFIRM IS BLUE, and it is the one filled control on the page.
   //
-  // The state was never wrong — right word, disabled, nothing left over — so
-  // the fix is here rather than in the script. What separates Confirm from
-  // Confirmed is the word and being unpressable, which was doing the work
-  // anyway.
-  check('the seal keeps one edge in every state',
-    !/filter/.test(rule('.confirm:disabled::after')),
-    rule('.confirm:disabled::after'));
-  // UNDER THE HAND. Saving is a round trip, so the seal used to say nothing
-  // for about a second after the tap, which reads as a tap that missed.
-  // Leaning on a real stamp drives more ink in and seats it, and that is the
-  // whole of the feedback.
-  // Read once and asserted non-empty first, because "no second red in it" is
-  // true of a rule that is not there at all.
-  const pressed = rule('.confirm.pressing::after');
-  check('the pressed seal is styled at all', pressed !== '');
-  check('it deepens its ink', /brightness\(/.test(pressed), pressed);
-  check('deepened rather than given a second red',
-    !/#[0-9a-f]{6}/i.test(pressed), pressed);
-  check('and it is still the same torn edge',
-    /url\(#deckle\)/.test(pressed), pressed);
-  // AND THE STAMP DOES NOT MOVE. It used to seat a hair into the paper —
-  // `transform: scale(0.985)` with a transition to carry it — and that
-  // transform is what cut the word in half.
-  //
-  // A transformed, transitioned element gets its own composited layer, and the
-  // layer keeps its raster across a text change. Confirm a day, tap Tomorrow
-  // and the word shortens to Confirm, re-rastering the layer at seven
-  // characters; tap Today and it lengthens to Confirmed with no reason to
-  // re-raster, so the extra two are painted outside the layer. Centred text
-  // loses them one a side: ONFIRME, with the D clipped to its stem.
-  //
-  // Nothing that composites the TEXT may be animated on this button. The press
-  // is answered on the layer beneath instead, which carries no text at all.
-  // The property, not the substring: `.confirm` sets `text-transform:
-  // uppercase`, and a bare /transform/ matches that and reports the seal as
-  // animated when it is only capitalised.
-  const moves = (selector) => /(^|[^-\w])transform:/.test(rule(selector));
+  // It was the hanko: a persimmon seal drawn on a layer beneath the word, with
+  // a turbulence filter giving it an uneven bite. That cost two composited
+  // layers and two separate bugs — a word painted outside its own raster and
+  // coming back as ONFIRME, and a filter swap on the day switch that made the
+  // whole face invisible. A filled rectangle in the colour that already means
+  // "this can be pressed" says the same thing with one layer.
+  const confirm = rule('.confirm');
+  check('confirm is filled in the accent', /background: var\(--accent\)/.test(confirm), confirm);
+  check('and its word is the page colour, for contrast the other way',
+    /color: #fff/.test(confirm), confirm);
+  check('nothing is drawn beneath it any more', !/\.confirm::after/.test(css));
+  check('and nothing about it is filtered', !/filter/.test(confirm), confirm);
 
-  check('nothing on the seal itself is transformed',
-    !moves('.confirm') && !moves('.confirm.pressing'),
-    `${rule('.confirm.pressing')} ${rule('.confirm')}`);
-  check('and nothing on it is transitioned',
-    !/transition:/.test(rule('.confirm')), rule('.confirm'));
+  // CONFIRMED IS SETTLED, NOT REMOVED. It went to paper and grey once, which
+  // read as the button having been taken away rather than the day having been
+  // agreed to.
+  const done = rule('.confirm:disabled');
+  check('a confirmed day still shows a button',
+    /background: var\(--surface\)/.test(done), done);
+  check('quieter, but not invisible', /color: var\(--muted\)/.test(done), done);
 
-  // There is nothing left for it to outrank, and that is the point. This used
-  // to check source order, because `.confirm.pressing::after` and
-  // `.confirm:disabled::after` set the same property at the same weight and
-  // the pressed seal had to stay pressed until the answer was in. With the
-  // settled edge gone there is exactly one rule touching this layer's filter
-  // outside the press, so nothing can quietly win over it.
-  const touchesFilter = [...css.matchAll(/\n {6}([^{@\n][^{]*?)\{([^}]*)\}/g)]
-    .filter((m) => /\.confirm/.test(m[1]) && /filter:/.test(m[2]))
-    .map((m) => m[1].trim().replace(/\s+/g, ' '));
+  // BEING PRESSED. The save is a round trip, and a control that answers a
+  // second late reads as one that missed.
+  check('the press is answered at once', /background/.test(rule('.confirm.pressing')),
+    rule('.confirm.pressing'));
+  check('and it is the button itself that darkens, not a layer under it',
+    !/\.confirm\.pressing::after/.test(css));
 
-  check('only the seal and its press set that edge',
-    touchesFilter.length === 2, touchesFilter.join(' | '));
-  check('and the press is the later of the two',
-    touchesFilter[1] === '.confirm.pressing::after', touchesFilter.join(' | '));
-
-  check('undo is blue, because undoing is an action',
-    /color: var\(--accent\)/.test(rule('.undo button')));
-
-  // The specific traps: the calendar aside and the type chooser both look
-  // like places a designer would reach for an accent, and neither is one.
-  check('the calendar aside is not blue', !/--accent/.test(rule('.cal')));
-  check('nor its rule', !/--accent/.test(rule('.cal h4')));
-  check('the type chooser is not blue', !/--accent/.test(rule('.choices button')));
-  check('nor when chosen', !/--accent/.test(rule('.choices button[aria-pressed="true"]')));
-  check('a disabled stepper goes faint, not pale blue',
-    /color: var\(--faint\)/.test(rule('.step:disabled')));
-
-  // The near miss. "active" sits in the slot the duration chip vacates, and
-  // the NOW divider right above it is blue for saying the same thing — so
-  // blue is the obvious reach. It is wrong here: that slot has held a
-  // tappable pill on every block above this one, and a blue word in it is an
-  // invitation to press something that does nothing.
-  check('the active label is not blue', !/--accent/.test(rule('.running')));
+  // The keyboard keeps its ring; the pointer does not.
+  check('a pointer press leaves no outline', /outline: none/.test(rule('.confirm:focus')));
+  check('but a keyboard keeps one', /outline: 2px solid/.test(rule('.confirm:focus-visible')));
 }
 
 console.log('\n7. the warn colour warns; it does not narrate');
@@ -681,11 +629,14 @@ console.log('\n7. the warn colour warns; it does not narrate');
   // was not what made it safe — it was just loud, and loudest on a past block,
   // where taking the block out is how the day is recorded rather than damage.
   const backing = rule('.backing');
-  // On its layer, like every other sheet of paper here.
+  // A flat surface, on the backing itself. It used to be a second sheet of torn
+  // paper drawn on a layer beneath — which a block needed, because a block was
+  // a slip and something has to be under one. A row is part of the page, and
+  // what shows when it slides is simply the surface colour.
   check('the backing is the neutral surface',
-    /background: var\(--line\)/.test(rule('.backing::after')));
-  check('and it is torn like the slip that covers it, not a hard rectangle',
-    /filter: url\(#deckle/.test(rule('.backing::after')));
+    /background: var\(--surface\)/.test(backing), backing);
+  check('drawn on itself, with no layer beneath it',
+    !/\.backing::after/.test(css));
   check('not the warn colour', !/--warn/.test(backing), backing);
   check('nor blue', !/--accent/.test(backing), backing);
   check('and the loud variant is gone, not merely unused',
@@ -846,7 +797,8 @@ console.log('\n7b. the right edge of a block says one thing per state');
   // question any more.
   const act = rule('.running');
   check('the block in progress has a label', act.length > 0);
-  check('it is muted, not faint', /color: var\(--muted\)/.test(act));
+  check('it is the accent, being the one row that is happening',
+    /color: var\(--accent\)/.test(act), act);
   check('it is 12px, like the chip it replaces', /font-size: 12px/.test(act));
   check('it does not wrap', /white-space: nowrap/.test(act));
 
@@ -854,21 +806,17 @@ console.log('\n7b. the right edge of a block says one thing per state');
   check('it has no pill border, unlike the chip it replaces', !/border/.test(act), act);
   check('and no background', !/background/.test(act), act);
 
-  // But it does keep the chip's BOX. Without the padding a bare label sits
-  // 15px closer to the card edge than chip text does, because the chip carries
-  // that inset inside its border — so "active" crowded the edge while every
-  // block above it looked comfortable. Matching it also keeps a begun block the
-  // same height as its neighbours.
-  const chip = rule('.dur');
-  const pad = (r) => (r.match(/padding: ([^;]+);/) || [])[1];
-  check('it borrows the chip\'s padding, so the word is not against the edge',
-    pad(act) === pad(chip), `${pad(act)} vs chip ${pad(chip)}`);
+  // It used to borrow the chip's padding, because a bare label sat 15px nearer
+  // the card edge than chip text did and "active" crowded it. There is no card
+  // edge now — a row runs to the margin — so the label needs no box of its own,
+  // only to keep out of the title's way.
+  check('it takes no more room than its word', /flex: none/.test(act), act);
 
   check('the word is "active"', /className = 'running';[\s\S]{0,120}textContent = 'active'/.test(code));
   check('a block that has begun gets it',
-    /\} else if \(begun\) \{\s*row\.append\(left, activeLabel\(\)\);/.test(code));
-  check('and a block that is over gets nothing beside it',
-    /if \(past\) \{\s*row\.append\(left\);/.test(code));
+    /\} else if \(begun\) \{\s*row\.append\(time, left, activeLabel\(\)\);/.test(code));
+  check('and a block that is over gets nothing beside its hour and its name',
+    /if \(past\) \{\s*row\.append\(time, left\);/.test(code));
 }
 
 console.log('\n8. the calendar aside is a left rule, not a card');
@@ -919,8 +867,10 @@ console.log('\n8. the calendar aside is a left rule, not a card');
     /width: 68px/.test(rule('.ctime')), rule('.ctime'));
 
   const root = rule(':root');
-  check('which is a warm grey, not a blue', /--cal-head:\s*#5f5a52/i.test(root));
-  check('and not persimmon either', !/--cal-head:\s*#b8492a/i.test(root));
+  check('which is the same grey the rest of the page is quiet in',
+    /--cal-head:\s*#71717a/i.test(root));
+  check('and neither of the two colours that mean something',
+    !/--cal-head:\s*(#2563eb|#dc2626)/i.test(root));
 }
 
 console.log('\n9. tabular figures on every time');
@@ -1402,17 +1352,22 @@ console.log('\n17. today and tomorrow');
   // after a day of being carried around. The dark build drew an outline; an
   // outline is a drawing of a thing, and this theme lays things down and takes
   // them away rather than drawing them.
-  check('a finished slip settles toward the page rather than becoming an outline',
-    /background: var\(--card-spent\)/.test(rule('.block.past::after')) &&
-      !/border:/.test(rule('.block.past::after')), rule('.block.past::after'));
-  check('its edge goes soft with handling',
-    /filter: url\(#deckle-soft\)/.test(rule('.block.past::after')));
-  check('with a lightened title', /color: #8e8a82/.test(rule('.block.past .t')));
+  // A SPENT ROW IS GREYED, and that is all. It was a second paper colour with a
+  // softer torn edge — an outline was refused then for the right reason, that
+  // an outline draws a thing rather than laying it down, and the reason is gone
+  // with the paper. What is left is the cheapest true statement: the same row,
+  // quieter, on a faintly different ground.
+  check('a finished block goes faint rather than being drawn differently',
+    /color: var\(--faint\)/.test(rule('.block.past .t,')) ||
+      /\.block\.past \.t,[\s\S]{0,60}color: var\(--faint\)/.test(css));
+  check('on a ground a shade off the page', /background: var\(--spent\)/.test(rule('.slot.past-slot .block')));
+  check('and it is still a row, not an outline', !/border/.test(rule('.slot.past-slot .block')));
   // Not just a past one. A block you are in the middle of kept its chip, and
   // shrinking it below the time already elapsed moved it into the past — an
   // action the server refuses on a delivered block anyway.
   check('a block that has begun gets no chip', /\} else if \(begun\) \{/.test(code));
-  check('and one that is over gets nothing at all', /if \(past\) \{\s*row\.append\(left\);/.test(code));
+  check('and one that is over gets nothing at all',
+    /if \(past\) \{\s*row\.append\(time, left\);/.test(code));
   check('begun is read off the stored start, the same as the reflow',
     /const blockBegun = \(b\) => onToday\(\) && hasBegun\(b, nowMinutes\(\)\)/.test(code));
   check('and there is one definition of it', (code.match(/hasBegun\(/g) || []).length === 2,

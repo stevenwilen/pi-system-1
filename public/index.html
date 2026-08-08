@@ -53,51 +53,56 @@
          weight 400. Paper is the look; legible is the requirement, and where
          they disagreed the requirement won. */
       :root {
-        /* Paper and ink. The page is the lightest thing; a slip sits a shade
-           into the fibre so it reads as something laid ON the page. */
-        --bg: #f5f1e8;
-        --card: #e7e0d2;
-        --line: #ded7c8;
+        /* NEUTRAL AND LIGHT. The page was cream, the cards were a shade into
+           the fibre, and the whole thing read as paper on purpose. It is a
+           planner you open several times a day to answer 'what now' — and the
+           answer has to be the loudest thing on the screen, which it is not
+           when the screen is being something.
 
-        --text: #2b2a28;
-        /* 6.2:1. The reference's #7C7871 was 3.8. */
-        --muted: #5f5a52;
-        /* 3.6:1 — for hints and spent slips only, never for a body size. */
-        --faint: #8a857c;
+           So: no colour that is not doing work. A near-white page, three greys
+           that differ enough to rank, one blue for what can be pressed, one red
+           for what is running out. Everything else is the content. */
+        --bg: #ffffff;
+        /* Rows sit on the page rather than above it. This is for the surfaces
+           that genuinely are a layer — the sheet, the settings rows — not for
+           blocks, which are rows now. */
+        --surface: #f4f4f5;
+        --line: #e4e4e7;
+        /* A second, heavier rule for the divisions that matter: the edge of the
+           past, a section from the next. One weight for everything made the
+           screen read as evenly divided when it is not. */
+        --rule: #d4d4d8;
 
-        --accent: #37516e;
-        /* Darkened from the reference's #C2512E, which was 4.1:1 on this
-           paper — under the bar both as the asterisks ON the page and as the
-           paper-coloured text ON the hanko. This clears 4.6:1 both ways and
-           is otherwise the same persimmon. */
-        --warn: #b8492a;
+        --text: #18181b;
+        /* 4.8:1 on white. */
+        --muted: #71717a;
+        /* 3.4:1 — marks and hints only, never a body size. */
+        --faint: #8e8e98;
 
-        /* A slip held above the page: lifted toward the paper rather than
-           away from it, because picking something up brings it into the
-           light. The dark build darkened here; paper does the opposite. */
-        --card-raised: #efe9dc;
+        /* The one thing that can be pressed. 5.2:1 on white. */
+        --accent: #2563eb;
+        /* Running out of room. 4.8:1, and it appears on nothing but the
+           deadline marks and the removing side of a swipe. */
+        --warn: #dc2626;
 
-        /* A slip that has been spent. Nearer the page than a live one — it is
-           settling back into it. */
-        --card-spent: #efeae0;
+        /* Something that has happened, or is happening. */
+        --spent: #fafafa;
 
         /* The calendar aside. Reference material: neither actionable nor
-           wrong, so it takes neither indigo nor persimmon. */
-        --cal-rule: #c9bfa8;
-        --cal-head: #5f5a52;
-        --cal-text: #3a3733;
+           wrong, so it takes neither blue nor red. */
+        --cal-rule: #e4e4e7;
+        --cal-head: #71717a;
+        --cal-text: #3f3f46;
 
-        --gap: 36px;
+        --gap: 28px;
 
-        /* Hiragino is on every iPhone and is the face this theme wants. The
-           reference fetched Zen Kaku Gothic New from Google, which costs a
-           round trip and a flash of the wrong font on every cold load — for a
-           page whose whole point is to be open before you have finished
-           reaching for it. */
-        --face: -apple-system, BlinkMacSystemFont, 'Hiragino Sans',
-          'Noto Sans JP', 'Segoe UI', Roboto, sans-serif;
+        /* WHATEVER THIS PHONE ALREADY USES. The theme wanted a face and fetched
+           one; a tool wants the face the rest of the device is set in, because
+           the fastest thing to read is the thing you have been reading all day.
+           It also costs no round trip and cannot flash the wrong font. */
+        --face: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          'Helvetica Neue', Arial, sans-serif;
       }
-
       * {
         box-sizing: border-box;
         margin: 0;
@@ -117,41 +122,6 @@
         overscroll-behavior-y: none;
         -webkit-tap-highlight-color: transparent;
       }
-
-      /* The fibre in the paper.
-         Two sets of ruled lines at odd angles, crossing, plus a fine speckle —
-         which is what laid paper actually is close up. Fixed to the viewport
-         rather than the page, so the grain belongs to the sheet you are
-         holding instead of scrolling past like content.
-         Behind everything and untouchable. */
-      body::before {
-        content: '';
-        position: fixed;
-        inset: 0;
-        /* Behind everything, without having to lift everything else above it.
-           A z-index of 0 here would have put the grain over the in-flow text,
-           and the fix for that — a group listing every top-level element —
-           quietly broke rule lookups in the layout check, because `#booting`
-           on its own line inside a selector group reads exactly like the start
-           of the real `#booting` rule. */
-        z-index: -1;
-        pointer-events: none;
-        opacity: 0.55;
-        background-image:
-          repeating-linear-gradient(
-            84deg,
-            rgba(124, 120, 113, 0.045) 0 1px,
-            transparent 1px 26px
-          ),
-          repeating-linear-gradient(
-            -77deg,
-            rgba(124, 120, 113, 0.035) 0 1px,
-            transparent 1px 41px
-          ),
-          radial-gradient(circle, rgba(124, 120, 113, 0.05) 0.5px, transparent 0.6px);
-        background-size: auto, auto, 7px 7px;
-      }
-
 
       main {
         max-width: 480px;
@@ -368,14 +338,6 @@
          the release rather than after it. */
       .thing .backing {
         padding: 0;
-      }
-      /* AND NO PAPER UNDER IT. A block swipe reveals another slip because a
-         block IS a slip — something has to be underneath one. A Things row is
-         not laid on the page, it is part of the page, so sliding it aside
-         uncovers the page and the word alone. The torn sheet that belongs
-         under a slip read here as a second object appearing from nowhere. */
-      .thing .backing::after {
-        content: none;
       }
       .thing .backing.left {
         color: var(--warn);
@@ -704,63 +666,42 @@
          its duration to lengthen it, swipe it away or swipe a buffer in after
          it, hold it to pick it up and move it. */
 
-      /* The slot holds the card and the backing the card slides off to reveal.
-         Overflow is clipped here so a backing cannot bleed past the corner
-         radius while the card is mid-swipe. */
-      /* No clipping, and that is load-bearing rather than a tidy-up.
-         The deckle pushes pixels up to 4px outside the slip's box; a slot that
-         clipped to its own bounds would cut every one of those off and hand
-         back the straight edge the filter exists to destroy.
+      /* A row of the day, and the surface it slides off to reveal.
 
-         The radius went with it. A rounded rectangle behind a torn edge is two
-         different ideas about the same object.
+         IT WAS A SLIP OF PAPER. The card had a torn edge drawn by a turbulence
+         filter, a shadow, and a fibre texture behind the whole page — a look
+         chosen when this was a notebook. It is a planner you open several times
+         a day to answer "what now", and the answer has to be the loudest thing
+         on the screen, which it is not when the screen is being something.
 
-         The removal animation sets overflow: hidden on the slot itself while
-         it collapses — that is a different job, and it wants the clip. */
+         So a block is a row: no card, no fill, no shadow, and a hairline
+         between one and the next. What it costs is the sense of a thing you can
+         pick up; what it buys is a day you can read down in one movement. The
+         hairline is the whole of the separation, which is why nothing else
+         here draws an edge.
+
+         Clipped, now that nothing is displaced past its own bounds. */
       .slot {
         position: relative;
-        margin-bottom: 12px;
+        overflow: hidden;
+      }
+      .slot + .slot .block {
+        border-top: 1px solid var(--line);
       }
 
-      /* One surface for both swipes, and the edge the label sits at is the
-         only thing that differs.
-
-         The removing side used to fill with the warn colour, which turned the
-         whole card red under the finger. That was a lot of shouting for
-         something that carries a six-second undo, and it shouted loudest on a
-         past block — where taking a block out is not destruction at all, it is
-         how you record that the thing did not happen.
-
-         There was a loudness axis here as well as a side, from when left meant
-         two different things depending on the clock. Left means one thing now
-         and neither swipe is loud, so the axis is gone rather than left in
-         place holding a single value. */
-      /* What is under a slip when you slide it aside: more paper, torn the same
-         way. It was a hard-edged rectangle, which made the one moment the theme
-         is most visible — a slip actually moving — the one moment it broke.
-
-         The paper is on a layer again, for the reason it is everywhere else:
-         this element carries the word Remove, and a filter here would bend it. */
+      /* Under a row when it slides aside. A flat surface and the word, at the
+         edge the finger is heading for. */
       .backing {
         position: absolute;
         inset: 0;
-        isolation: isolate;
         display: flex;
         align-items: center;
-        padding: 0 18px;
+        padding: 0 16px;
         font-size: 13px;
+        font-weight: 500;
         opacity: 0;
-        color: var(--text);
-      }
-      .backing::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        z-index: -1;
-        background: var(--line);
-        /* The softer one. This sheet is beneath the slip and a little further
-           from the eye, and the edge that shows is the one being uncovered. */
-        filter: url(#deckle-soft);
+        color: var(--muted);
+        background: var(--surface);
       }
       .backing.left {
         justify-content: flex-end;
@@ -769,27 +710,10 @@
         justify-content: flex-start;
       }
 
-      /* A slip of paper laid on the page.
-         No radius — the edge is torn, not cut. #deckle displaces the shape
-         through real turbulence, so no two slips share an edge and none of
-         them is quite a rectangle.
-
-         THE PAPER IS A LAYER BEHIND THE TEXT, and that is the whole reason
-         this is not simply `filter` on the slip. A CSS filter applies to an
-         element AND EVERYTHING INSIDE IT: put the deckle on the card and
-         feDisplacementMap pushes the title and the time through the same
-         turbulence as the edge, bending every letter. It reads as a strange
-         handwritten typeface, which is a hard thing to trace back to a
-         property named for an edge.
-
-         So the slip itself is unfiltered and holds only text. `::after` draws
-         the paper underneath it, and the filter lives there. `isolation`
-         keeps that negative layer inside the slip rather than letting it fall
-         behind the page. */
       .block {
         position: relative;
-        isolation: isolate;
-        padding: 16px 17px 17px;
+        background: var(--bg);
+        padding: 11px 2px 12px;
         display: flex;
         flex-direction: column;
         align-items: stretch;
@@ -808,37 +732,38 @@
         -webkit-touch-callout: none;
       }
 
-      /* The sheet the slip is written on. Everything the deckle touches lives
-         here and nothing else does, so the torn edge never reaches the text. */
-      .block::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        z-index: -1;
-        background: var(--card);
-        filter: url(#deckle) drop-shadow(0 1px 1px rgba(43, 42, 40, 0.07));
-      }
+      /* TIME FIRST, IN A COLUMN OF ONE WIDTH. It used to sit under the title,
+         set in letterspaced small caps, and every row stated its own start and
+         end — which reads well and answers "what now" slowly, because finding
+         the hour meant reading the second line of each row in turn.
 
-      /* The block's own line: what it is, and how long. A note, when there is
-         one, sits under this rather than beside it. */
+         Down the left at a fixed width, the hours stack. A glance down the edge
+         is the shape of the day, and the block you are in is found by running a
+         finger down a column rather than by reading. */
       .brow {
         display: flex;
-        justify-content: space-between;
-        align-items: center;
+        align-items: baseline;
         gap: 12px;
+      }
+      .block .time {
+        flex: none;
+        width: 68px;
+        font-size: 13px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      /* The title takes the rest. `min-width: 0` is what lets it be truncated
+         rather than pushing the chip off the row. */
+      .brow > div:not(.time) {
+        flex: 1;
+        min-width: 0;
       }
       .block .t {
         font-size: 15px;
-        line-height: 1.5;
-      }
-      /* Letterspaced, the way a time is set on a printed slip. Tabular still,
-         because the hours have to stack when you read down the day. */
-      .block .time {
-        font-size: 12px;
-        letter-spacing: 0.14em;
-        color: var(--muted);
-        margin-top: 6px;
-        font-variant-numeric: tabular-nums;
+        line-height: 1.4;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       /* What they said they were doing. Small and muted, so a glance down the
@@ -879,76 +804,54 @@
         border-bottom-color: var(--muted);
       }
 
-      /* A block that has already happened. Still paper — it has been handled,
-         not withdrawn. It settles nearer the page than a live slip, and its
-         edge is displaced further and softened a fraction, which is what an
-         edge does after a day of being carried around.
-
-         The dark build made this an outline. An outline is a drawing of a
-         thing, and this theme does not draw: it lays things down and takes
-         them away. */
-      .block.past::after {
-        background: var(--card-spent);
-        filter: url(#deckle-soft) drop-shadow(0 1px 1px rgba(43, 42, 40, 0.03));
-      }
-      .block.past .t {
-        color: #8e8a82;
-      }
+      /* A block that has already happened. Nothing is drawn to say so and
+         nothing is taken away: it is the same row, greyed. An outline or a fill
+         would make the past the most decorated part of a screen that is about
+         what is next. */
+      .block.past .t,
       .block.past .time {
-        color: #a29e95;
+        color: var(--faint);
+      }
+      .slot.past-slot .block {
+        background: var(--spent);
       }
 
-      /* The block you are in, in the slot the duration chip has vacated.
-         Muted rather than faint: it is the one block on the page that is
-         happening, and faint is the register of a block that is over. No
-         border and no background, so nothing about it suggests a press.
-
-         The padding is the chip's padding, and that is the whole reason for
-         it. The chip carries 8px/15px inside a border, so its text sits 15px
-         further from the card edge than a bare label does — which left "active"
-         crowding the right edge while every block above it looked comfortable.
-         Matching the box puts the word where chip text sits, and gives a begun
-         block the same height as the ones around it.
+      /* The block you are in. Muted rather than faint: it is the one row on the
+         page that is happening, and faint is the register of one that is over.
 
          Named .running, not .act: .act is already the "+ Add" affordance in a
          section label, and an unscoped .act here bled onto it. */
       .running {
+        flex: none;
         font-size: 12px;
-        letter-spacing: 0.14em;
-        color: var(--muted);
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--accent);
         white-space: nowrap;
-        padding: 8px 4px 8px 15px;
       }
 
-      /* THE MIZUHIKI CORD, on the slip you are in.
-         Three twisted strands laid down its left edge — indigo, persimmon, and
-         the paper's own tan. A cord is tied onto something that matters today
-         and cut off afterwards, which is exactly the life of this state.
+      /* The block you are in, marked at its edge.
 
-         Built from one gradient rather than three elements: each strand is a
-         2px band, and the 160deg repeat is the twist. Nothing in the markup
-         changes, so a slip becoming live is still a class.
+         A cord of three twisted strands used to be laid down it — indigo,
+         persimmon and the paper's own tan, tied onto what matters today and cut
+         off afterwards. A bar in the accent says the same thing, in the colour
+         that already means "this one", and does not need three gradients and a
+         twist to do it.
 
-         The extra left padding is on the slip, not the cord, so the text
-         clears it instead of sitting under it. */
+         Nothing in the markup changes: a row becoming live is still a class. */
       .block.live {
-        padding-left: 28px;
+        padding-left: 12px;
       }
       .block.live::before {
         content: '';
         position: absolute;
-        left: 10px;
-        top: 13px;
-        bottom: 13px;
-        width: 7px;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: var(--accent);
         pointer-events: none;
-        background-image:
-          repeating-linear-gradient(160deg, #37516e 0 3px, #4a6786 3px 6px),
-          repeating-linear-gradient(160deg, #b8492a 0 3px, #d46a47 3px 6px),
-          repeating-linear-gradient(160deg, #c9bfa8 0 3px, #dcd3bf 3px 6px);
-        background-size: 2px 100%, 2px 100%, 2px 100%;
-        background-position: 0 0, 2.5px 0, 5px 0;
-        background-repeat: no-repeat;
       }
 
       /* The wait before the first day is on screen.
@@ -1308,7 +1211,7 @@
         stroke-width: 1;
       }
       .fig-fill {
-        fill: var(--card-spent);
+        fill: var(--surface);
         stroke: none;
       }
       .fig-head {
@@ -1664,8 +1567,8 @@
         z-index: 3;
       }
       .block.lifted::after {
-        background: var(--card-raised);
-        filter: url(#deckle) drop-shadow(0 10px 18px rgba(43, 42, 40, 0.16));
+        background: var(--bg);
+        box-shadow: 0 -1px 0 var(--line);
       }
       .slot.dimmed {
         opacity: 0.55;
@@ -1704,7 +1607,7 @@
         display: flex;
         align-items: center;
         gap: 14px;
-        background: var(--card-raised);
+        background: var(--bg);
         border: 0;
         padding: 13px 18px;
         font-size: 13px;
@@ -1720,8 +1623,8 @@
         position: absolute;
         inset: 0;
         z-index: -1;
-        background: var(--card-raised);
-        filter: url(#deckle) drop-shadow(0 2px 6px rgba(43, 42, 40, 0.14));
+        background: var(--bg);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
       }
       .undo button {
         background: none;
@@ -1781,6 +1684,8 @@
       }
 
       .ends {
+        border-top: 1px solid var(--rule);
+        padding-top: 12px;
         display: flex;
         justify-content: space-between;
         align-items: baseline;
@@ -1802,63 +1707,37 @@
         color: var(--warn);
       }
 
-      /* THE HANKO: ink pressed onto paper, to say the day is agreed.
+      /* THE ONE BUTTON ON THE PAGE, and it looks like one.
 
-         RECTANGULAR, and full width. The reference drew a 74px square, which is
-         the shape of a real name seal but the wrong shape for the only button
-         on the page — a square asks to be aimed at, and this one should be
-         impossible to miss. It keeps the seal's proportion in its letterspacing
-         rather than in its outline.
+         IT WAS A HANKO: a name seal, ink pressed onto paper, drawn on a layer
+         beneath the word so the turbulence filter that gave it an uneven bite
+         did not bend the letters. It cost two composited layers, a filter, and
+         two separate bug fixes — a word painted outside its own raster and
+         coming back as ONFIRME, and a filter swap on the day switch that made
+         the whole face invisible.
 
-         NO RING around it. The reference carved one — a real seal is relief, so
-         the border stands and the cut prints white — but that reads as a line
-         drawn around a button, and the one thing this theme does not do is
-         draw.
-
-         So the EDGE is the whole of it: ink pressed by hand does not land
-         square, and the deckle gives it an uneven bite. Nothing across the
-         middle. It carried four pale flecks there, meant as ink not taking
-         evenly — at this size and this softness they did not read as texture,
-         they read as bubbles under a sticker, which is a defect rather than a
-         mark. Uneven at the edge, solid in the middle, which is what a stamp
-         actually leaves.
-
-         On the layer beneath, because the button carries a word and a filter on
-         the button would bend it. */
+         A filled rectangle in the accent does the same job: it is the only
+         thing on the screen that commits the day, and it should be impossible
+         to miss and obvious what it is. Nothing beneath it, nothing filtered,
+         one layer. */
       .confirm {
         display: block;
-        position: relative;
-        isolation: isolate;
         width: 100%;
-        background: none;
-        color: var(--bg);
+        background: var(--accent);
+        color: #fff;
         text-align: center;
-        padding: 17px;
-        font-size: 12px;
-        letter-spacing: 0.22em;
-        text-transform: uppercase;
+        padding: 14px;
+        font-size: 15px;
         font-weight: 500;
         border: 0;
+        border-radius: 8px;
         font-family: inherit;
         cursor: pointer;
       }
-      .confirm::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        z-index: -1;
-        pointer-events: none;
-        background: var(--warn);
-        filter: url(#deckle);
-      }
-      /* NO RING AFTER A TAP. A pressed button keeps focus, and the browser
-         draws its own outline around it — a hard pale rectangle sitting over
-         a torn edge, which is the one shape this seal is built not to have.
-         Every other control on the page already turns it off.
-
-         Only the pointer's, though. `:focus-visible` is what a keyboard gets,
-         and it keeps a ring, because a keyboard user with no focus indicator
-         cannot see where they are. */
+      /* NO RING AFTER A TAP. A pressed button keeps focus and the browser draws
+         its own outline. Only the pointer's, though: `:focus-visible` is what a
+         keyboard gets, and it keeps one, because a keyboard user with no focus
+         indicator cannot see where they are. */
       .confirm:focus {
         outline: none;
       }
@@ -1866,66 +1745,24 @@
         outline: 2px solid var(--text);
         outline-offset: 3px;
       }
-      /* CONFIRMED: the seal already pressed, and still ink.
-         It used to go to paper and grey, which read as the button having been
-         taken away rather than the day having been sealed — and a day you have
-         agreed to should look agreed to.
+      /* CONFIRMED: agreed to, and not taken away.
 
-         The same persimmon, so the contrast is the same both ways round. What
-         separates it from the unpressed seal is that the ink has settled: the
-         edge is the softer bite, because it has had time to spread into the
-         paper. That, and the word says Confirmed. */
+         It went to paper and grey once, which read as the button having been
+         removed rather than the day having been settled. The surface colour and
+         the muted ink say "done" without saying "gone", and the word already
+         says which — it is the word that carries this, and always was. */
       .confirm:disabled {
-        color: var(--bg);
+        background: var(--surface);
+        color: var(--muted);
         cursor: default;
       }
-      /* THE SAME EDGE IN EVERY STATE, and that is a bug fix rather than a
-         simplification.
-
-         A confirmed day used to get `url(#deckle-soft)` here, a wider bite for
-         ink that had settled. It looked right and it broke on the day switch:
-         confirm today, tap Tomorrow, tap Today, and the word came back cut
-         off. Switching swaps the referenced filter on this layer twice, and a
-         re-rasterised filter layer can come back short — the word is painted
-         in the PAGE colour on top of this persimmon, so wherever the persimmon
-         is missing the letters are not cut off at all, they are invisible.
-
-         The state was never wrong: right word, disabled, no leftover classes.
-         Only the paint was, which is why the fix is here and not in the script.
-
-         Confirm and Confirmed are still plainly different — one says Confirmed
-         and cannot be pressed. That was doing the work anyway. */
-      /* BEING PRESSED. The save is a round trip, so for about a second after
-         the tap the seal said nothing — and a stamp that answers a second late
-         reads as a stamp that missed.
-
-         Leaning on a real one drives more ink into the paper and seats it, so
-         that is the whole of it: the ink deepens and the stamp sits a hair
-         smaller. Brightness rather than a second persimmon, so there is still
-         one red in the file and it cannot drift from the other.
-
-         After the disabled rules, and deliberately: the two carry the same
-         weight, so source order decides, and the seal should stay pressed
-         until the answer is actually in rather than lighten the instant the
-         word changes. */
-      /* THE INK DEEPENS AND THE BUTTON DOES NOT MOVE.
-         It used to seat a hair into the paper as well — `transform:
-         scale(0.985)` with a transition to carry it. That transform is what
-         cut the word in half.
-
-         A transformed, transitioned element gets its own composited layer, and
-         that layer keeps its raster across a text change. Confirm a day, tap
-         Tomorrow, and the word shortens to Confirm: the layer is re-rastered
-         at seven characters. Tap Today and it lengthens to Confirmed with no
-         reason to re-raster, so the extra two characters are painted outside
-         the layer and never appear. Centred text loses them one a side, which
-         is exactly what a screenshot of it showed: ONFIRME, with the D clipped
-         to its stem.
-
-         The press still answers — the ink darkens — and that lives on the
-         layer beneath, which composites nothing the text is on. */
-      .confirm.pressing::after {
-        filter: url(#deckle) brightness(0.82);
+      /* BEING PRESSED. The save is a round trip, so for about a second after the
+         tap the button said nothing, and a control that answers a second late
+         reads as one that missed. A shade darker, on the button itself: the
+         seal did this on a layer beneath, and that layer is what clipped the
+         word in half. */
+      .confirm.pressing {
+        background: #1d4ed8;
       }
 
       /* --- the add sheet --------------------------------------------------- */
@@ -2051,8 +1888,7 @@
           transition: none !important;
         }
         .block.lifted::after {
-          filter: url(#deckle);
-        }
+          }
         /* Nothing to still here any more: the seal answers a press by
            deepening its ink, which is not movement. */
       }
@@ -2071,42 +1907,6 @@
       Covering it is honest about the wait instead of showing a wrong answer
       during it.
     -->
-    <!--
-      The torn edge, and it is torn rather than drawn.
-
-      feTurbulence generates fractal noise; feDisplacementMap pushes every
-      pixel of the slip sideways by how bright that noise is there. So the edge
-      is the shape of the noise field, no two slips are alike, and nothing here
-      is a border — a border would be a straight line pretending to be a torn
-      one.
-
-      A spent slip uses the softer filter: displaced further, then blurred a
-      fraction, which is what an edge does after being handled.
-
-      Zero-sized and aria-hidden. It is a definition, not a picture.
-    -->
-    <svg width="0" height="0" aria-hidden="true" focusable="false"
-         style="position: absolute">
-      <!-- ROOM TO BE DISPLACED INTO. A filter's default region is the element
-           grown by ten per cent on each side, and these push pixels up to half
-           the `scale` in any direction — three pixels for the softer one. Ten
-           per cent of a short element is less than that, so the bite could be
-           clipped flat exactly where it was meant to be raggedest. Stated
-           generously here so it never depends on how tall the thing is. -->
-      <filter id="deckle" x="-5%" y="-20%" width="110%" height="140%">
-        <feTurbulence type="fractalNoise" baseFrequency="0.028 0.09"
-                      numOctaves="3" seed="7" result="n" />
-        <feDisplacementMap in="SourceGraphic" in2="n" scale="4"
-                           xChannelSelector="R" yChannelSelector="G" />
-      </filter>
-      <filter id="deckle-soft" x="-5%" y="-20%" width="110%" height="140%">
-        <feTurbulence type="fractalNoise" baseFrequency="0.02 0.07"
-                      numOctaves="3" seed="3" result="n" />
-        <feDisplacementMap in="SourceGraphic" in2="n" scale="6"
-                           xChannelSelector="R" yChannelSelector="G" />
-        <feGaussianBlur stdDeviation="0.35" />
-      </filter>
-    </svg>
 
     <div id="booting"><span></span></div>
 
@@ -4344,8 +4144,8 @@
         time.className = 'time';
         time.textContent = ' ';
 
-        left.append(t, time);
-        row.append(left);
+        left.append(t);
+        row.append(time, left);
         ghost.append(row);
         return ghost;
       }
@@ -4839,7 +4639,7 @@
 
       function blockCard(b, i, { begun = false, past = false } = {}) {
         const slot = document.createElement('div');
-        slot.className = 'slot';
+        slot.className = past ? 'slot past-slot' : 'slot';
         // Which block this draws, so slotAt can find it without counting.
         slot.dataset.at = String(i);
 
@@ -4856,14 +4656,24 @@
         const row = document.createElement('div');
         row.className = 'brow';
 
+        // THE START, AND NOT THE SPAN. Every row used to state its own start
+        // and end under the title, which reads well and answers "what now"
+        // slowly: finding the hour meant reading the second line of each row in
+        // turn. The end of one block is the start of the next, and the end of
+        // the day is at the foot of the list — a row stating both was saying
+        // twice what the column beside it already says.
+        const time = document.createElement('div');
+        time.className = 'time';
+        time.textContent = clock(b.start);
+
+        // Kept as a wrapper although it holds one thing now: it is what takes
+        // the space the time column leaves, so a long title truncates instead
+        // of pushing the duration chip off the row.
         const left = document.createElement('div');
         const t = document.createElement('div');
         t.className = 't';
         t.textContent = b.title;
-        const time = document.createElement('div');
-        time.className = 'time';
-        time.textContent = `${clock(b.start)} – ${clock(b.start + b.duration)}`;
-        left.append(t, time);
+        left.append(t);
 
         // A block that has begun carries no length control. A length it can no
         // longer be given is a control that can only mislead, and the server
@@ -4875,9 +4685,9 @@
         // instead. The outline card and the faint title are what mark it as
         // done, and they were always doing that work.
         if (past) {
-          row.append(left);
+          row.append(time, left);
         } else if (begun) {
-          row.append(left, activeLabel());
+          row.append(time, left, activeLabel());
         } else {
           const dur = document.createElement('button');
           dur.type = 'button';
@@ -4896,7 +4706,7 @@
             cycleDuration(i);
           };
 
-          row.append(left, dur);
+          row.append(time, left, dur);
         }
 
         card.append(row);
