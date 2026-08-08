@@ -214,7 +214,7 @@ console.log('\n0b. one gutter, and nothing wider than the phone');
   check('rows pull back out to the edge',
     /margin-left: -18px/.test(bleed) && /margin-right: -18px/.test(bleed), bleed);
   check('and put their contents back on the gutter',
-    /padding: \d+px 18px/.test(rule('.block')) && /padding: \d+px 18px/.test(rule('.arow')));
+    /padding: \d+px 18px/.test(rule('.block')) && /padding: 0 18px/.test(rule('.arow')));
 
   // OFF EXPLICITLY. Without this, the inflation returns the next time anything
   // overflows by a pixel — and it returns as "the type scale is wrong", which
@@ -1054,8 +1054,9 @@ console.log('\n8. the calendar aside is a left rule, not a card');
   check('its heading is a mono capital, like every other section head',
     /font-family: var\(--mono\)/.test(head) && /text-transform: uppercase/.test(head), head);
   check('and quiet', /color: var\(--faint\)/.test(head), head);
-  check('its body is muted', /color: var\(--muted\)/.test(rule('.cal p')));
-
+  // Ghost rather than muted: "Nothing on it." is the absence of a fact, not a
+  // quiet one.
+  check('its empty line is ghost', /color: var[(]--ghost[)]/.test(rule('.cal p')));
   // PRESSABLE NOW, and still not a card. What changed is what a row does, not
   // what it is: a line of text under a rule, with the affordance out at the
   // edge where it can be ignored.
@@ -1087,9 +1088,14 @@ console.log('\n8. the calendar aside is a left rule, not a card');
 
   // THE TITLE IS THE TARGET, and with the + gone it is most of the row: it
   // stretches to fill whatever the time column leaves.
-  check('the title takes the rest of the row', /flex: 1/.test(rule('.ctitle')), rule('.ctitle'));
-  check('and the times line up in a column of one width',
-    /width: 68px/.test(rule('.ctime')), rule('.ctime'));
+  // ONE LINE, NOT TWO COLUMNS. There are one or two events on a day, and a
+  // column of two is a table with nothing to compare down it. The hour runs
+  // inline ahead of the name, in mono, so it still reads as a figure.
+  check('the hour runs inline ahead of the name',
+    /padding-right: 7px/.test(rule('.ctime')), rule('.ctime'));
+  check('and it is a figure, in the figure face',
+    /font-family: var\(--mono\)/.test(rule('.ctime')) && /tabular-nums/.test(rule('.ctime')),
+    rule('.ctime'));
 
   const root = rule(':root');
   check('which is the same grey the rest of the page is quiet in',

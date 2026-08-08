@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledger — white / blue</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FFFFFF;
+    --tint:#F4F7FC;          /* faint blue-white for the active row */
+    --ink:#0F1620;
+    --grey:#5C6B7F;
+    --faint:#97A3B4;
+    --ghost:#C3CCD8;
+    --rule:#E6EBF1;          /* hairline */
+    --rule-mid:#CFD8E3;      /* section rule */
+    --blue:#1E4FD8;
+    --blue-soft:#7B9BEE;
+    --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+    --sans:'Inter',-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:#E8ECF2;font-family:var(--sans);
+    display:flex;justify-content:center;gap:20px;flex-wrap:wrap;padding:28px 12px;
+  }
+  .wrap{text-align:center}
+  .cap{color:#67717F;font-size:12px;margin-top:11px;font-weight:500}
+
+  .phone{
+    width:352px;background:var(--bg);color:var(--ink);
+    border-radius:16px;overflow:hidden;text-align:left;
+    box-shadow:0 1px 2px rgba(15,22,32,.06);
+  }
+
+  /* ---------- helpers ---------- */
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .cap8{font-family:var(--mono);font-size:8.5px;letter-spacing:.2em;
+        text-transform:uppercase;color:var(--faint);font-weight:500}
+
+  /* ---------- header ---------- */
+  .head{padding:18px 18px 0}
+  .h1{display:flex;justify-content:space-between;align-items:baseline}
+  .day{font-size:16px;font-weight:600;letter-spacing:-.01em}
+  .day em{font-style:normal;color:var(--ghost);font-weight:400}
+  .dots{color:var(--ghost);font-size:16px;letter-spacing:1px;line-height:1}
+
+
+  /* ---------- calendar strip ---------- */
+  .cal{margin:16px 18px 0;border-left:2px solid var(--rule-mid);padding:2px 0 2px 13px}
+  .cal .k{font-family:var(--mono);font-size:8.5px;letter-spacing:.2em;
+          text-transform:uppercase;color:var(--faint);font-weight:500}
+  .cal .v{font-size:13.5px;color:var(--ink);line-height:1.55;margin-top:5px}
+  .cal .v.none{color:var(--ghost)}
+  .cal .v .t{font-family:var(--mono);font-size:11.5px;color:var(--grey);
+             font-variant-numeric:tabular-nums;padding-right:7px}
+  .cal.warn{border-left-color:var(--blue)}
+  .cal.warn .v{color:var(--blue)}
+
+  /* ---------- table ---------- */
+  .tbl{margin-top:18px}
+  .colhead{
+    display:flex;align-items:center;gap:10px;padding:0 18px 6px;
+    border-bottom:1.5px solid var(--ink);
+  }
+  .c-i{width:20px;flex:none}
+  .c-n{flex:1;min-width:0}
+  .c-s{width:58px;flex:none;text-align:right}
+
+  .row{
+    position:relative;display:flex;align-items:flex-start;gap:10px;
+    min-height:62px;padding:12px 18px;border-bottom:1px solid var(--rule);
+  }
+  .c-i{padding-top:2px}
+  .c-s{padding-top:2px}
+  .idx{font-family:var(--mono);font-size:9.5px;color:var(--ghost);
+       font-variant-numeric:tabular-nums;letter-spacing:.04em}
+  .nm{font-size:14.5px;font-weight:400;line-height:1.35}
+  .tm{font-family:var(--mono);font-size:11px;color:var(--faint);
+      font-variant-numeric:tabular-nums;letter-spacing:.01em;margin-top:4px}
+  .st{font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--faint)}
+  .st.dur{color:var(--grey)}
+
+  /* done */
+  .row.done .nm{color:var(--faint)}
+  .row.done .tm{color:var(--ghost)}
+  .row.done .st{color:var(--ghost)}
+
+  /* active — tinted, ruled, marked in the gutter */
+  .row.now{background:var(--tint);border-bottom-color:var(--rule-mid)}
+  .row.now::before{
+    content:"";position:absolute;left:0;top:-1px;bottom:-1px;width:2px;background:var(--blue);
+  }
+  .row.now .nm{font-weight:600}
+  .row.now .tm{color:var(--blue);font-weight:500}
+  .row.now .st{color:var(--blue);font-weight:500}
+  .row.now .idx{color:var(--blue-soft)}
+
+  /* free gap — measured, dashed, hatched */
+  .row.free{min-height:0;padding:9px 18px;align-items:center;border-bottom:1px dashed var(--rule-mid);background:
+    repeating-linear-gradient(-45deg,#FAFBFD 0 5px,#FFFFFF 5px 10px)}
+  .row.free .nm{color:var(--ghost);font-size:12px;letter-spacing:.02em}
+  .row.free .st{color:var(--ghost)}
+  .row.free .tm{color:var(--ghost)}
+
+  /* ---------- links line ---------- */
+  .links{display:flex;gap:20px;padding:14px 18px 2px}
+  .links a{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;
+           color:var(--blue);text-decoration:none;text-transform:uppercase}
+
+  .ends{display:flex;justify-content:space-between;align-items:baseline;
+        margin:20px 18px 0;padding-top:15px;border-top:1.5px solid var(--ink)}
+  .ends b{font-family:var(--mono);font-size:19px;font-weight:600;
+          font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+
+  /* ---------- anytime ---------- */
+  .any{margin-top:22px;border-top:1.5px solid var(--ink)}
+  .arow{display:flex;align-items:center;gap:12px;min-height:62px;padding:0 18px;
+        border-bottom:1px solid var(--rule)}
+  
+  .box{width:15px;height:15px;border:1.25px solid var(--ghost);border-radius:3px;flex:none}
+  .arow span{flex:1;font-size:14px}
+  
+  .pad{height:22px}
+
+  /* ---------- detail panel ---------- */
+  .note{font-size:13px;color:#4A5768;line-height:1.75;padding:16px 18px}
+  .note b{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;
+          font-weight:500;color:var(--blue);text-transform:uppercase}
+  .sec{padding:14px 18px 6px;border-bottom:1.5px solid var(--ink);margin-bottom:2px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<div class="phone">
+
+  <div class="head">
+    <div class="h1">
+      <div class="day">Today <em>/ Tomorrow</em></div>
+      <div class="dots">···</div>
+    </div>
+
+  </div>
+
+
+  <div class="cal">
+    <div class="k">ON YOUR CALENDAR</div>
+    <div class="v"><span class="t">1:00 PM</span>Dentist</div>
+  </div>
+
+  <div class="tbl">
+    <div class="colhead">
+      <div class="c-i cap8">#</div>
+      <div class="c-n cap8">BLOCK</div>
+      <div class="c-s cap8">STATUS</div>
+    </div>
+
+    <div class="row done">
+      <div class="c-i idx">01</div>
+      <div class="c-n">
+        <div class="nm">Morning routine</div>
+        <div class="tm">9:00 – 10:30 AM</div>
+      </div>
+      <div class="c-s st">DONE</div>
+    </div>
+
+    <div class="row done">
+      <div class="c-i idx">02</div>
+      <div class="c-n">
+        <div class="nm">Spanish call</div>
+        <div class="tm">10:30 – 11:00 AM</div>
+      </div>
+      <div class="c-s st">DONE</div>
+    </div>
+
+    <div class="row now">
+      <div class="c-i idx">03</div>
+      <div class="c-n">
+        <div class="nm">Business Intelligence</div>
+        <div class="tm">11:00 AM – 3:00 PM</div>
+      </div>
+      <div class="c-s st">NOW · 4H</div>
+    </div>
+
+    <div class="row free">
+      <div class="c-i idx"></div>
+      <div class="c-n"><div class="nm">unscheduled</div></div>
+      <div class="c-s st">—</div>
+    </div>
+
+    <div class="row ">
+      <div class="c-i idx">04</div>
+      <div class="c-n">
+        <div class="nm">Roommate Balance System</div>
+        <div class="tm">3:00 – 4:00 PM</div>
+      </div>
+      <div class="c-s st dur">1H</div>
+    </div>
+
+    <div class="row ">
+      <div class="c-i idx">05</div>
+      <div class="c-n">
+        <div class="nm">Party Regulation System</div>
+        <div class="tm">4:00 – 5:00 PM</div>
+      </div>
+      <div class="c-s st dur">1H</div>
+    </div>
+  </div>
+
+  <div class="links">
+    <a href="#">+ block</a>
+  </div>
+
+  <div class="any">
+    <div class="cap8" style="padding:14px 18px 7px">ANYTIME TODAY &nbsp;·&nbsp; 02</div>
+    <div class="arow"><i class="box"></i><span>Parking pass</span></div>
+    <div class="arow"><i class="box"></i><span>Reading</span></div>
+    <div class="links" style="padding:14px 18px 2px"><a href="#">+ anytime</a></div>
+  </div>
+
+  <div class="ends">
+    <span class="cap8">DAY ENDS</span>
+    <b>5:00 PM</b>
+  </div>
+
+  <div class="pad"></div>
+</div>
+<div class="cap">Ledger &mdash; white ground, blue accent</div>
+</div>
+
+<div class="wrap">
+<div class="phone">
+
+  <div class="sec"><span class="cap8">CALENDAR STRIP &mdash; FOUR STATES</span></div>
+  <div class="cal" style="margin-top:16px">
+    <div class="k">ON YOUR CALENDAR</div>
+    <div class="v"><span class="t">1:00 PM</span>Dentist</div>
+  </div>
+  <div class="cal" style="margin-top:14px">
+    <div class="k">ON YOUR CALENDAR</div>
+    <div class="v none">Nothing on it.</div>
+  </div>
+  <div class="cal warn" style="margin-top:14px">
+    <div class="k">ON YOUR CALENDAR</div>
+    <div class="v">Couldn&rsquo;t reach your calendar.</div>
+  </div>
+  <div class="cal" style="margin-top:14px;margin-bottom:6px">
+    <div class="k">ON YOUR CALENDAR</div>
+    <div class="v none">No calendar yet. Add one in setup.</div>
+  </div>
+  <div class="note" style="padding-top:12px">
+    A rule in the margin, not a card &mdash; it is reference, not something
+    you act on. The 2px rule matches the active row&rsquo;s gutter mark, and
+    turns blue only when the feed could not be read.
+  </div>
+
+  <div class="sec"><span class="cap8">WHAT MAKES IT READ AS BUILT</span></div>
+  <div class="note">
+    <b>Two typefaces, split by job.</b> Every number is IBM Plex Mono with
+    tabular figures, so times and durations align in real columns down
+    the page. Every name is Inter. Nothing crosses over.
+  </div>
+  <div class="note" style="padding-top:0">
+    <b>Real column headers.</b> # / TIME / BLOCK / STATUS under a 1.5px
+    rule. The index column is what makes it a table rather than a list.
+  </div>
+  <div class="note" style="padding-top:0">
+    <b>Three rule weights, each meaning something.</b> 1.5px solid ends a
+    section. 1px hairline separates rows. 1px dashed marks a gap that
+    isn't a row at all.
+  </div>
+  <div class="note" style="padding-top:0">
+    <b>Free time is hatched.</b> Diagonal 45° hatching, the drafting
+    convention for an empty region, with its span measured beside it.
+  </div>
+  <div class="note" style="padding-top:0">
+    <b>The active row is marked four ways.</b> Blue bar in the gutter,
+    tinted ground, heavier weight, and its index goes blue. No badge.
+  </div>
+  <div class="note" style="padding-top:0">
+    <b>Blue acts, and only acts.</b> The active marker, + block,
+    + anytime, and the one figure that changes. Nothing decorative is
+    blue.
+  </div>
+  <div class="pad"></div>
+</div>
+<div class="cap">The detailing, and why each piece is there</div>
+</div>
+
+</body>
+</html>
