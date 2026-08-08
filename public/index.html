@@ -77,12 +77,11 @@
 
         --text: #0f1620;
         --muted: #5c6b7f;
-        /* #97a3b4 in the reference, which is 2.6:1 on white — under the 3:1 a
-           mark is asked to carry, and this one carries the times on finished
-           rows and the whole status column at 9px. Two steps darker clears it
-           at 3.1:1 and is not a colour anybody can tell from the original
-           without the two side by side. */
-        --faint: #8794a7;
+        /* 2.6:1 on white, which is under the 3:1 a mark is usually asked to
+           carry. Specified twice, so it is the reference's value and not a
+           corrected one — see the note in the spec. It carries the times on
+           finished rows and the status column, never a body size. */
+        --faint: #97a3b4;
         /* A fourth grey, lighter than faint: the index column and everything
            about a row that is over. It carries no words at a body size. */
         --ghost: #c3ccd8;
@@ -245,7 +244,7 @@
       .dayswitch .opt {
         /* Dimmer than faint. The day you are not looking at should be legible
            as a way back and nothing more. */
-        color: #b6ae9f;
+        color: var(--ghost);
         background: none;
         border: 0;
         padding: 0;
@@ -258,7 +257,7 @@
         color: var(--text);
       }
       .dayswitch .sep {
-        color: #3a342d;
+        color: var(--ghost);
       }
       .dayswitch .date {
         letter-spacing: 0;
@@ -353,26 +352,19 @@
         mask-size: contain;
       }
 
-      .thing + .thing {
-        border-top: 1px solid var(--line);
-      }
 
       .row {
-        padding: 12px 0;
-        /* Opaque, so the backing is behind the row rather than through it.
-           The list is otherwise transparent and every word underneath would
-           read straight through the title. */
-        background: var(--bg);
         position: relative;
-        /* Vertical pans belong to the page, horizontal ones are ours. The same
-           line the blocks carry, and the same reason: a swipe and a scroll
-           live on one element without anything arbitrating in script. */
+        background: var(--bg);
+        padding: 12px 18px;
+        min-height: 62px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        border-bottom: 1px solid var(--line);
         touch-action: pan-y;
         user-select: none;
         -webkit-user-select: none;
-        /* These rows are held too — a long press puts a thing in the day
-           without an hour — so they need the same guard the blocks do against
-           a phone raising its own menu over the gesture. */
         -webkit-touch-callout: none;
       }
 
@@ -400,21 +392,28 @@
       }
 
       .row .title {
-        font-size: 15px;
+        font-size: 14.5px;
+        font-weight: 400;
         flex: 1;
+        min-width: 0;
         line-height: 1.35;
+        color: var(--text);
       }
 
       /* The meta line: its own line, with real space above it. */
       /* Letterspaced and set small, the way a printed catalogue sets its
          particulars. Uppercase would cost legibility at this size for no gain,
          so the tracking alone does the work. */
+      /* The particulars, under the name: what kind of thing it is and how long
+         it has been waiting. Mono, because half of it is a figure and the
+         column of them reads down the page. */
       .row .meta {
-        font-size: 12px;
-        letter-spacing: 0.08em;
-        color: var(--muted);
-        margin-top: 7px;
-        line-height: 1.5;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--faint);
+        margin-top: 4px;
+        line-height: 1.4;
+        font-variant-numeric: tabular-nums;
       }
 
 
@@ -447,8 +446,7 @@
         color: var(--faint);
       }
       .row.locked .meta {
-        color: var(--faint);
-        opacity: 0.7;
+        color: var(--ghost);
       }
 
 
@@ -466,12 +464,13 @@
          emphasis down the page and compete with the titles. */
       .hint {
         position: relative;
-        font-size: 13px;
-        color: var(--faint);
+        flex: none;
+        font-size: 15px;
+        line-height: 1;
+        color: var(--ghost);
         background: none;
         border: 0;
         font-family: inherit;
-        line-height: 1;
         padding: 0 2px;
         cursor: pointer;
       }
@@ -776,11 +775,28 @@
         flex: 1;
         min-width: 0;
       }
+      /* NEAR-BLACK, and the row's own state is what lightens it. The title is
+         the thing you are reading the page for. */
       .block .t {
         font-size: 14.5px;
         font-weight: 400;
         line-height: 1.35;
+        color: var(--text);
       }
+      /* Still to come: the name in ink, its hours faint, its length in the
+         middle grey. Stated rather than inherited, so the three states are three
+         sets of rules and not two plus a default.
+
+         One rule each, never a group: a group written down the page ends on a
+         line reading `.dur {`, which is what a lookup by name finds first — the
+         third time that has bitten. */
+      .block .st {
+        color: var(--muted);
+      }
+      /* A TIME IS NOT A CONTROL. These were blue on every row, and blue on this
+         page means "act on this" — a time you cannot act on has no business
+         wearing it. Faint grey on every row, and blue on exactly one: the row
+         you are in, where it is the only figure that is still moving. */
       .block .time {
         font-family: var(--mono);
         font-size: 11px;
@@ -1723,37 +1739,35 @@
         color: var(--warn);
       }
 
-      /* THE ONE BUTTON ON THE PAGE, and it looks like one.
+      /* THE ONE BUTTON ON THE PAGE. A bar, edge to edge, in the one colour that
+         means "press this".
 
-         IT WAS A HANKO: a name seal, ink pressed onto paper, drawn on a layer
-         beneath the word so the turbulence filter that gave it an uneven bite
-         did not bend the letters. It cost two composited layers, a filter, and
-         two separate bug fixes — a word painted outside its own raster and
-         coming back as ONFIRME, and a filter swap on the day switch that made
-         the whole face invisible.
+         IT WAS A FILLED PALE-BLUE CARD, which is the one thing this layout does
+         not have: everything else is a row with a rule under it. A card at the
+         foot of a table reads as a different kind of object arriving from
+         another design.
 
-         A filled rectangle in the accent does the same job: it is the only
-         thing on the screen that commits the day, and it should be impossible
-         to miss and obvious what it is. Nothing beneath it, nothing filtered,
-         one layer. */
+         CONFIRMED IS AN OUTLINE, not a fill. A day you have agreed to should
+         still show its button — going to a grey slab reads as the control
+         having been taken away — but it should stop being the loudest thing on
+         a screen you are now just reading. */
       .confirm {
         display: block;
         width: 100%;
+        margin-top: 18px;
         background: var(--accent);
         color: #fff;
         text-align: center;
         padding: 14px;
-        font-size: 15px;
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
         font-weight: 500;
-        border: 0;
-        border-radius: 8px;
-        font-family: inherit;
+        border: 1px solid var(--accent);
+        border-radius: 5px;
         cursor: pointer;
       }
-      /* NO RING AFTER A TAP. A pressed button keeps focus and the browser draws
-         its own outline. Only the pointer's, though: `:focus-visible` is what a
-         keyboard gets, and it keeps one, because a keyboard user with no focus
-         indicator cannot see where they are. */
       .confirm:focus {
         outline: none;
       }
@@ -1761,24 +1775,15 @@
         outline: 2px solid var(--text);
         outline-offset: 3px;
       }
-      /* CONFIRMED: agreed to, and not taken away.
-
-         It went to paper and grey once, which read as the button having been
-         removed rather than the day having been settled. The surface colour and
-         the muted ink say "done" without saying "gone", and the word already
-         says which — it is the word that carries this, and always was. */
       .confirm:disabled {
-        background: var(--surface);
-        color: var(--muted);
+        background: none;
+        border-color: var(--line);
+        color: var(--faint);
         cursor: default;
       }
-      /* BEING PRESSED. The save is a round trip, so for about a second after the
-         tap the button said nothing, and a control that answers a second late
-         reads as one that missed. A shade darker, on the button itself: the
-         seal did this on a layer beneath, and that layer is what clipped the
-         word in half. */
       .confirm.pressing {
-        background: #1d4ed8;
+        background: var(--accent);
+        opacity: 0.85;
       }
 
       /* --- the add sheet --------------------------------------------------- */
@@ -2012,7 +2017,7 @@
              index, a name, and a status, under a rule heavier than the ones
              between rows. Hidden with the day it heads when there is no day. -->
         <div class="colhead" id="colhead">
-          <div class="c-i cap8">#</div>
+          <div class="c-i cap8" aria-hidden="true"></div>
           <div class="c-n cap8">Block</div>
           <div class="c-s cap8">Status</div>
         </div>

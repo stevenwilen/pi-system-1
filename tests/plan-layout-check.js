@@ -166,7 +166,7 @@ const want = {
   '--tint': '#f4f7fc',
   '--text': '#0f1620',
   '--muted': '#5c6b7f',
-  '--faint': '#8794a7',
+  '--faint': '#97a3b4',
   '--ghost': '#c3ccd8',
   '--line': '#e6ebf1',
   '--rule': '#cfd8e3',
@@ -268,8 +268,20 @@ console.log('\n1. the palette is exactly the one specified');
   check('and the confirm clears it the other way, white on blue',
     against(ink('--bg'), ink('--accent')) >= 4.5,
     `${Math.round(against(ink('--bg'), ink('--accent')) * 10) / 10}:1`);
-  check('the faint ink clears 3:1, which is all it is asked to carry',
-    against(ink('--faint')) >= 3, `${ratio(ink('--faint'))}:1`);
+  // FAINT IS 2.6:1, AND IT IS SPECIFIED. It was darkened once to clear 3:1 and
+  // put back by hand afterwards, so it is a decision rather than an oversight —
+  // which is the only reason this is a note and not a failure.
+  //
+  // What keeps it defensible is what it is allowed to carry: the times on rows
+  // that are already over, and the status column. Never a title, never a body
+  // size, never the only copy of anything. The check below is what holds that
+  // line — if faint ever reaches a title, this stops being a note.
+  check('faint carries no title', !/color: var\(--faint\)/.test(rule('.block .t')),
+    rule('.block .t'));
+  check('nor a things row title', !/color: var\(--faint\)/.test(rule('.row .title')),
+    rule('.row .title'));
+  check('and it is lighter than the grey that does carry words',
+    lum(ink('--faint')) > lum(ink('--muted')));
 
   // THE THREE GREYS HAVE TO RANK. Text, then muted, then faint: if two of them
   // land close enough to read as one, the page has three registers and shows
@@ -343,12 +355,16 @@ console.log('\n3. everything is a row, and nothing is a card');
   // The hairline moved off the row and onto the slot that holds it, and that
   // is load-bearing rather than tidy: a divider travelling with the row would
   // make the whole list look like it was coming apart under one finger.
-  check('rows are separated by a hairline', /border-top: 1px solid var\(--line\)/.test(divider));
-  check('and only between them, never around them',
-    !/border:/.test(row) && css.indexOf('.thing + .thing') > -1);
-  check('the divider is on the slot, not on the row that moves',
-    !/border-top/.test(rule('.row + .row')) && !/border-top/.test(row),
-    rule('.row + .row') + row);
+  // THE HAIRLINE IS ON THE ROW, like every other row on the page. It used to
+  // sit on the slot that holds it, so a row sliding under a finger did not take
+  // its own divider with it — which mattered when a row was the only thing on
+  // the page that moved. Everything is a ruled row now, and one rule that lives
+  // in a different place from all the others is the thing that drifts.
+  check('every things row is ruled underneath',
+    /border-bottom: 1px solid var\(--line\)/.test(row), row);
+  check('and ruled nowhere else', !/border-top|border-left|border-right/.test(row), row);
+  check('the old slot divider is gone, not merely unused',
+    !/\.thing \+ \.thing/.test(css));
 
   // AND NOTHING CARD-LIKE UNDER ONE EITHER, which is the same rule applied to
   // the one place a row has anything behind it at all.
@@ -516,14 +532,19 @@ console.log('\n4. sections are separated by space, not by boxes');
 
 console.log('\n5. two text sizes in a row, with real space between them');
 {
-  check('the title is 15px', /font-size: 15px/.test(rule('.row .title')));
+  check('the title is 14.5px', /font-size: 14\.5px/.test(rule('.row .title')));
+  check('and in ink, because it is what you are reading for',
+    /color: var\(--text\)/.test(rule('.row .title')));
 
   const meta = rule('.row .meta');
-  check('the meta is 12px', /font-size: 12px/.test(meta));
-  check('and muted', /color: var\(--muted\)/.test(meta));
-  check('on its own line, with space above it', /margin-top: 7px/.test(meta));
-  check('and letterspaced, the way a catalogue sets its particulars',
-    /letter-spacing: 0\.08em/.test(meta));
+  check('the meta is 11px', /font-size: 11px/.test(meta));
+  check('and faint, under a title in ink', /color: var\(--faint\)/.test(meta));
+  // Mono, because half of it is a figure — "4 days since scheduled" — and the
+  // column of them reads down the page beside the times above.
+  check('in the mono face, because half of it is a figure',
+    /font-family: var\(--mono\)/.test(meta));
+  check('tabular with them', /font-variant-numeric: tabular-nums/.test(meta));
+  check('on its own line, with space above it', /margin-top: \d+px/.test(meta));
 }
 
 console.log('\n6. blue is actionable, and nothing else is blue');
@@ -640,10 +661,14 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // CONFIRMED IS SETTLED, NOT REMOVED. It went to paper and grey once, which
   // read as the button having been taken away rather than the day having been
   // agreed to.
+  // AN OUTLINE, NOT A FILL. A day you have agreed to should still show its
+  // button — going to a grey slab reads as the control having been taken away —
+  // and it should stop being the loudest thing on a screen you are now reading
+  // rather than deciding on.
   const done = rule('.confirm:disabled');
-  check('a confirmed day still shows a button',
-    /background: var\(--surface\)/.test(done), done);
-  check('quieter, but not invisible', /color: var\(--muted\)/.test(done), done);
+  check('a confirmed day shows an outline, not a fill',
+    /background: none/.test(done) && /border-color: var\(--line\)/.test(done), done);
+  check('quieter, but not invisible', /color: var\(--faint\)/.test(done), done);
 
   // BEING PRESSED. The save is a round trip, and a control that answers a
   // second late reads as one that missed.
@@ -1118,8 +1143,10 @@ console.log('\n13. a row says it has more actions, rather than hiding them');
 
   const hint = rule('.hint');
   check('there is a hint', hint.length > 0);
-  check('it is faint, so it does not compete with the title',
-    /color: var\(--faint\)/.test(hint), hint.match(/color[^;]*/) || '');
+  // The lightest thing on the row: it is an affordance, not a fact about the
+  // thing, and it sits inside a title it must not compete with.
+  check('it is the ghost grey, so it does not compete with the title',
+    /color: var\(--ghost\)/.test(hint), hint.match(/color[^;]*/) || '');
   check('and never the accent, because it does not commit to anything',
     !/--accent/.test(hint));
   check('nor the miss colour', !/--warn/.test(hint));
@@ -1456,8 +1483,8 @@ console.log('\n17. today and tomorrow');
   check('and given room under it', /margin-bottom: \d+px/.test(sw), sw);
   // Lighter than the paper's own ink rather than darker than it — on paper the
   // way to recede is toward the page, not away from it.
-  check('the inactive word recedes toward the paper',
-    /color: #b6ae9f/.test(rule('.dayswitch .opt')), rule('.dayswitch .opt'));
+  check('the inactive word recedes toward the page',
+    /color: var[(]--ghost[)]/.test(rule('.dayswitch .opt')), rule('.dayswitch .opt'));
   check('the active one is full text', /color: var\(--text\)/.test(rule('.dayswitch .opt.on')));
 
   console.log('   today');
@@ -1822,8 +1849,11 @@ console.log('\n17. the mockup still describes the page');
   check('switch.html is kept as the reference for the day switch',
     /class="dayswitch"/.test(sw));
   check('it shows both states', /opt on">Today/.test(sw) && /opt on">Tomorrow/.test(sw));
-  check('and the page uses its inactive colour',
-    /#B6AE9F/i.test(sw) && /#b6ae9f/i.test(rule('.dayswitch .opt')));
+  // The reference was drawn in the washi palette and its tan is not a colour
+  // this page has any more. What still has to hold is the RELATION: the day you
+  // are not looking at recedes toward the page rather than away from it.
+  check('and the page recedes it the same way',
+    /color: var[(]--ghost[)]/.test(rule('.dayswitch .opt')));
 
   // What was replaced must not survive in the reference either.
   check('no tab bar', !/class="tabs"/.test(mock));

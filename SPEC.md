@@ -2126,7 +2126,7 @@ described here rather than quoted.
 | tint — the row you are in | `#f4f7fc` |
 | text | `#0f1620` |
 | muted | `#5c6b7f` |
-| faint | `#8794a7` |
+| faint | `#97a3b4` |
 | ghost — figures, never words | `#c3ccd8` |
 | hairline, between rows | `#e6ebf1` |
 | rule, under the row you are in | `#cfd8e3` |
@@ -2160,10 +2160,13 @@ on blue clears 4.5:1 the other way round, which is what Confirm needs. And the
 greys have to **rank** — if two land close enough to read as one, the page has
 four registers and shows three.
 
-`faint` is the one value that is not the reference's. Its `#97a3b4` is 2.6:1 on
-white, under the bar, and it carries the times on finished rows and the whole
-status column at 9px. Two steps darker clears it, and is not a colour anybody
-could pick out without the two side by side.
+`faint` is the one value on the page that does not clear a contrast bar: 2.6:1 on
+white, against the 3:1 a mark is usually asked to carry. It was darkened once to
+clear it and put back by hand, so it is a decision rather than an oversight —
+and what keeps it defensible is what it is allowed to carry. Times on rows
+already over, and the status column. Never a title, never a body size, never the
+only copy of anything. Two checks hold that line, and if faint ever reaches a
+title it stops being a note.
 
 The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
 
