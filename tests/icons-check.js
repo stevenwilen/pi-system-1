@@ -82,8 +82,8 @@ console.log('\nthe manifest is coherent');
   // meant. Before that they were both a dark build's near-black long after the
   // paper theme shipped, which is the failure this pair exists to catch: an
   // install colour outliving the design it belonged to.
-  const ground = '#ffffff';
-  const mark = '#1e4fd8';
+  const ground = '#f5f1e8';
+  const mark = '#f5f1e8';
   check('the splash is the app\'s own ground',
     manifest.background_color.toLowerCase() === ground, manifest.background_color);
   check('and the chrome is the mark\'s blue',

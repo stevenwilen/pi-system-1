@@ -152,33 +152,16 @@ function selectorsUsing(value) {
 // the same inks. Written out in both places it drifted the first time the
 // theme moved: eight checks went on reporting failures about colours neither
 // file still contained.
-// NEUTRAL AND LIGHT. It was cream paper and ink, with a fibre texture, torn
-// edges and two warm inks — a look chosen when this was a notebook. It is a
-// planner you open several times a day to answer "what now", and the answer has
-// to be the loudest thing on the screen, which it is not when the screen is
-// being something.
-//
-// Nothing here is a colour that is not doing work: a near-white page, greys that
-// differ enough to rank, one blue for what can be pressed, one red for what is
-// running out.
 const want = {
-  '--bg': '#ffffff',
-  '--tint': '#f4f7fc',
-  '--text': '#0f1620',
-  '--muted': '#5c6b7f',
-  '--faint': '#97a3b4',
-  '--ghost': '#c3ccd8',
-  '--line': '#e6ebf1',
-  '--rule': '#cfd8e3',
-  '--accent': '#1e4fd8',
-  '--warn': '#dc2626',
+  '--bg': '#f5f1e8',
+  '--card': '#e7e0d2',
+  '--line': '#ded7c8',
+  '--text': '#2b2a28',
+  '--muted': '#5f5a52',
+  '--faint': '#8a857c',
+  '--accent': '#37516e',
+  '--warn': '#b8492a',
 };
-
-// FOUR GREYS, NOT THREE, and the fourth is the reason to say so. `ghost` is
-// lighter than anything a contrast bar would pass, and it is allowed to be: it
-// carries the index column and the state of a row that is already over —
-// figures you count down, never words you read. It is checked for being the
-// lightest of the four rather than for a ratio it is not asked to meet.
 
 console.log('0. the stylesheet parses');
 {
@@ -187,102 +170,6 @@ console.log('0. the stylesheet parses');
   // throws half of away. See cssDamage.
   const damage = cssDamage(rawCss);
   check('nothing is broken open or left open', damage === null, damage || '');
-}
-
-console.log('\n0b. one gutter, and nothing wider than the phone');
-{
-  // THE MARGIN IS ON ONE CONTAINER. It was a horizontal padding on ten separate
-  // elements plus a margin on two more, and those behave differently the moment
-  // anything overflows — which is exactly what happened: on iOS the labels,
-  // + BLOCK, + ANYTIME and DAY ENDS lost their gutter while the table rows kept
-  // theirs, and the whole page was 1.6x too large with the DAY ENDS figure
-  // clipped off the right edge.
-  //
-  // Desktop rendered it correctly at the same width, which is the tell. Safari
-  // INFLATES TEXT on any page it decides is not mobile-optimised, and
-  // horizontal overflow is one of the things that decides it. So the sizes were
-  // never wrong; something was too wide, and the type scale was the symptom.
-  check('the page carries the only gutter',
-    /padding: 18px 18px /.test(rule('main')), rule('main').replace(/\s+/g, ' '));
-  check('and nothing else carries one', !/padding-left: 18px/.test(css));
-
-  // A row reaches the edge by pulling itself back out of that padding. This is
-  // the one place the number appears twice, and they have to stay equal.
-  // Read out of the sheet directly: a lookup by name finds the plain `.slot`
-  // rule, which is the one that does NOT carry this.
-  const bleed = (css.match(/\.slot,\s*\.thing,\s*\.atime \{[^}]*/) || [''])[0];
-  check('rows pull back out to the edge',
-    /margin-left: -18px/.test(bleed) && /margin-right: -18px/.test(bleed), bleed);
-  check('and put their contents back on the gutter',
-    /padding: \d+px 18px/.test(rule('.block')) && /padding: 0 18px/.test(rule('.arow')));
-
-  // OFF EXPLICITLY. Without this, the inflation returns the next time anything
-  // overflows by a pixel — and it returns as "the type scale is wrong", which
-  // is three steps from the cause.
-  check('text inflation is refused', /-webkit-text-size-adjust: 100%/.test(css));
-  check('and by the standard property too', /[^-]text-size-adjust: 100%/.test(css));
-
-  // Nothing may be wider than what holds it. A flex child's default min-width
-  // is auto, which is why a long title pushed a row past the viewport instead
-  // of wrapping inside it.
-  check('no flex child refuses to shrink', /min-width: 0;/.test(rule('*')), rule('*'));
-
-  // AND THE MOCKUP'S PHONE FRAME IS NOT IN HERE. It was 352px wide, and a fixed
-  // width copied out of it is the first thing that would overflow a 390px
-  // screen once the gutters are added.
-  check('no phone frame came across from the mockup',
-    !/width: 352px/.test(css) && !/\.phone/.test(css));
-
-  // Pinch-zoom belongs to whoever needs it. maximum-scale and user-scalable=no
-  // were on the viewport and do not prevent the inflation above — that is a
-  // different mechanism — so they were costing accessibility for nothing.
-  check('the viewport is the three things it should be',
-    /width=device-width,\s*initial-scale=1,\s*viewport-fit=cover/.test(html) &&
-      !/maximum-scale/.test(html));
-  check('and does not block pinch-zoom',
-    !/maximum-scale/.test(body) && !/user-scalable/.test(body));
-
-  // So it does not stretch on a tablet.
-  check('and it stops widening at 480', /max-width: 480px/.test(rule('main')));
-}
-
-console.log('\n0c. a section rule, its label, and the rows under it');
-{
-  // ONE RELATIONSHIP, IN THREE PLACES:
-  //
-  //   section rule → 14px → label → 7px → first row
-  //
-  // The label belongs to the rows below it rather than to the rule above, so
-  // the space under it is the smaller of the two. Equal gaps leave it floating
-  // between the two things it exists to bind, and no gap at all — which is what
-  // ANYTIME TODAY had — reads as a caption stuck to the underside of a line.
-  const RULE_TO_LABEL = 14;
-  const LABEL_TO_ROW = 7;
-
-  check(`a label sits ${LABEL_TO_ROW}px above its first row`,
-    new RegExp(`margin-bottom: ${LABEL_TO_ROW}px`).test(rule('.label')), rule('.label'));
-
-  for (const [what, sel] of [['the anytime list', '.anytime'], ['the things list', '.things-head']]) {
-    const r = rule(sel);
-    check(`${what} is under a section rule`,
-      /border-top: 1\.5px solid var\(--heavy\)/.test(r), r.replace(/\s+/g, ' ').slice(0, 60));
-    check(`  and its label is ${RULE_TO_LABEL}px below it`,
-      new RegExp(`padding-top: ${RULE_TO_LABEL}px`).test(r), r.replace(/\s+/g, ' ').slice(0, 80));
-  }
-
-  // THE COLUMN HEAD IS THE SAME RELATIONSHIP INVERTED: its label sits ABOVE its
-  // rule, because the rule is the top of the table rather than the top of a
-  // section. Six px, and tighter than the 14 for the same reason the 7 is
-  // tighter than the 14 — the label is bound to the thing it names.
-  check('the column head sits above its rule',
-    /border-bottom: 1\.5px solid var\(--heavy\)/.test(rule('.colhead')));
-  check('  with 6px between them',
-    /padding: 0 0 6px/.test(rule('.colhead')), rule('.colhead').replace(/\s+/g, ' '));
-
-  // And the three rules are the same weight, because they are the same kind of
-  // division: the end of one part of the page and the start of another.
-  const heavy = (css.match(/border-(top|bottom): 1\.5px solid var\(--heavy\)/g) || []).length;
-  check('three sections, three rules of one weight', heavy >= 3, `${heavy}`);
 }
 
 console.log('\n1. the palette is exactly the one specified');
@@ -307,13 +194,9 @@ console.log('\n1. the palette is exactly the one specified');
   const spec = fs.readFileSync(ROOT + '/SPEC.md', 'utf8');
   const look = spec.slice(spec.indexOf('## 7. The look'));
   const inks = new Set(Object.values(want).map((v) => v.toLowerCase()));
-  // One exception, named rather than exempted by pattern: the reference's own
-  // faint, quoted in the prose that explains why the page does not use it. A
-  // sweep that refused it would be refusing the sentence that gives the reason.
-  const explained = new Set(['#97a3b4']);
   const strays = [...look.matchAll(/#[0-9a-fA-F]{6}\b/g)]
     .map((m) => m[0].toLowerCase())
-    .filter((hex) => !inks.has(hex) && !explained.has(hex));
+    .filter((hex) => !inks.has(hex));
 
   check('and the spec names no colour the page does not have',
     strays.length === 0, [...new Set(strays)].join(', '));
@@ -322,11 +205,9 @@ console.log('\n1. the palette is exactly the one specified');
     check(`the spec's table has ${name}`, new RegExp(value, 'i').test(look), value);
   }
 
-  // CONTRAST. It was the failure the paper theme was most prone to — a warm
-  // ground eats contrast, and the reference it came from was illegible at
-  // 3.8:1. A white page is far more forgiving, which is a reason to keep
-  // checking rather than to stop: nothing here is a colour anybody had to fight
-  // for, so nothing stops one drifting lighter for the look of it.
+  // CONTRAST, because this is the failure the theme is most prone to and the
+  // one that cost the reference its legibility. Paper is the look; readable is
+  // the requirement, and where they disagree the requirement wins.
   //
   // WCAG relative luminance, then the contrast ratio against the paper.
   const lum = (hex) => {
@@ -334,7 +215,7 @@ console.log('\n1. the palette is exactly the one specified');
     const [r, g, b] = c.map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
-  const against = (hex, bg = '#ffffff') =>
+  const against = (hex, bg = '#f5f1e8') =>
     (Math.max(lum(hex), lum(bg)) + 0.05) / (Math.min(lum(hex), lum(bg)) + 0.05);
 
   const ratio = (hex) => Math.round(against(hex) * 10) / 10;
@@ -354,39 +235,19 @@ console.log('\n1. the palette is exactly the one specified');
   check('body ink clears 4.5:1 on the paper',
     against(ink('--text')) >= 4.5, `${ratio(ink('--text'))}:1`);
   check('and the secondary ink does too, which is what the reference missed',
-    against(ink('--muted')) >= 4.5, `${ratio(ink('--muted'))}:1`);
-  check('the blue clears it, because it carries words and not just lines',
+    against(ink('--muted')) >= 4.5,
+    `${ratio(ink('--muted'))}:1 (reference was #7C7871 at ${ratio('#7c7871')}:1)`);
+  check('indigo clears it, because it carries words and not just lines',
     against(ink('--accent')) >= 4.5, `${ratio(ink('--accent'))}:1`);
-  check('and the red does, as a mark on the page',
+  check('persimmon clears it as ink on the page',
     against(ink('--warn')) >= 4.5, `${ratio(ink('--warn'))}:1`);
-  // Confirm is white on blue now rather than paper on persimmon. Same question:
-  // the pair has to clear the bar both ways round.
-  check('and the confirm clears it the other way, white on blue',
-    against(ink('--bg'), ink('--accent')) >= 4.5,
-    `${Math.round(against(ink('--bg'), ink('--accent')) * 10) / 10}:1`);
-  // FAINT IS 2.6:1, AND IT IS SPECIFIED. It was darkened once to clear 3:1 and
-  // put back by hand afterwards, so it is a decision rather than an oversight —
-  // which is the only reason this is a note and not a failure.
-  //
-  // What keeps it defensible is what it is allowed to carry: the times on rows
-  // that are already over, and the status column. Never a title, never a body
-  // size, never the only copy of anything. The check below is what holds that
-  // line — if faint ever reaches a title, this stops being a note.
-  check('faint carries no title', !/color: var\(--faint\)/.test(rule('.block .t')),
-    rule('.block .t'));
-  check('nor a things row title', !/color: var\(--faint\)/.test(rule('.row .title')),
-    rule('.row .title'));
-  check('and it is lighter than the grey that does carry words',
-    lum(ink('--faint')) > lum(ink('--muted')));
-
-  // THE THREE GREYS HAVE TO RANK. Text, then muted, then faint: if two of them
-  // land close enough to read as one, the page has three registers and shows
-  // two, and every "quieter than" decision in this file stops meaning anything.
-  const step = (a, b) => Math.abs(lum(ink(a)) - lum(ink(b)));
-  check('muted is plainly lighter than text', step('--text', '--muted') > 0.08,
-    `${Math.round(step('--text', '--muted') * 1000) / 1000}`);
-  check('and faint plainly lighter than muted', step('--muted', '--faint') > 0.08,
-    `${Math.round(step('--muted', '--faint') * 1000) / 1000}`);
+  // The hanko is the other direction: paper-coloured text on a persimmon
+  // ground. Same pair, and it has to clear the bar both ways round.
+  check('and the hanko clears it the other way, paper on persimmon',
+    against(ink('--bg'), ink('--warn')) >= 4.5,
+    `${Math.round(against(ink('--bg'), ink('--warn')) * 10) / 10}:1`);
+  check('the faint ink clears 3:1, which is all it is asked to carry',
+    against(ink('--faint')) >= 3, `${ratio(ink('--faint'))}:1`);
 
   // Nothing under 15px may be lighter than 400. The reference set 11px meta at
   // weight 300 on a textured ground, which is the other half of why it was
@@ -401,24 +262,16 @@ console.log('\n2. one label style, and the action is quieter than it');
   // Smaller and tracked wider than the dark build. Letterspacing is how a
   // printed page makes a word quieter without making it fainter, which is the
   // trade this theme keeps having to make.
-  // MONO CAPITALS, which is what heads a column in a ledger. Set in the same
-  // face as every figure on the page, so a section heading and the numbers
-  // under it belong to one another.
-  check('8.5px', /font-size: 8\.5px/.test(label));
+  check('9.5px', /font-size: 9\.5px/.test(label));
   check('uppercase', /text-transform: uppercase/.test(label));
-  check('0.2em tracking', /letter-spacing: 0\.2em/.test(label));
-  check('in the mono face, like the figures it heads',
-    /font-family: var\(--mono\)/.test(label));
-  check('and set at 500, because 400 disappears at this size',
-    /font-weight: 500/.test(label));
-  check('faint', /color: var\(--faint\)/.test(label));
+  check('0.26em tracking', /letter-spacing: 0\.26em/.test(label));
+  check('and set at 400, because 300 disappears at this size',
+    /font-weight: 400/.test(label));
+  check('muted', /color: var\(--muted\)/.test(label));
 
   // Baseline, so the action sits on the label's line rather than centred
   // against a taller box.
-  // The label is a column head now: the action beside it sits on the same
-  // line, and the line box is the label's own.
-  check('the action sits on its line',
-    /align-items: (baseline|center)/.test(label) || /display: flex/.test(label), label);
+  check('the action shares its baseline', /align-items: baseline/.test(label));
 
   const act = rule('.label .act');
   check('the action drops the uppercase', /text-transform: none/.test(act));
@@ -432,7 +285,7 @@ console.log('\n2. one label style, and the action is quieter than it');
     !/color: var\(--text\)/.test(act), act.match(/color[^;]*/) || '');
 }
 
-console.log('\n3. everything is a row, and nothing is a card');
+console.log('\n3. rows are rows; only builder blocks are cards');
 {
   const row = rule('.row');
   const divider = rule('.thing + .thing');
@@ -451,16 +304,12 @@ console.log('\n3. everything is a row, and nothing is a card');
   // The hairline moved off the row and onto the slot that holds it, and that
   // is load-bearing rather than tidy: a divider travelling with the row would
   // make the whole list look like it was coming apart under one finger.
-  // THE HAIRLINE IS ON THE ROW, like every other row on the page. It used to
-  // sit on the slot that holds it, so a row sliding under a finger did not take
-  // its own divider with it — which mattered when a row was the only thing on
-  // the page that moved. Everything is a ruled row now, and one rule that lives
-  // in a different place from all the others is the thing that drifts.
-  check('every things row is ruled underneath',
-    /border-bottom: 1px solid var\(--line\)/.test(row), row);
-  check('and ruled nowhere else', !/border-top|border-left|border-right/.test(row), row);
-  check('the old slot divider is gone, not merely unused',
-    !/\.thing \+ \.thing/.test(css));
+  check('rows are separated by a hairline', /border-top: 1px solid var\(--line\)/.test(divider));
+  check('and only between them, never around them',
+    !/border:/.test(row) && css.indexOf('.thing + .thing') > -1);
+  check('the divider is on the slot, not on the row that moves',
+    !/border-top/.test(rule('.row + .row')) && !/border-top/.test(row),
+    rule('.row + .row') + row);
 
   // AND NOTHING CARD-LIKE UNDER ONE EITHER, which is the same rule applied to
   // the one place a row has anything behind it at all.
@@ -472,12 +321,9 @@ console.log('\n3. everything is a row, and nothing is a card');
   //
   // Pinned because putting it back broke nothing: the page went on working and
   // only looked wrong, which is the kind of change that comes back.
-  // There used to be a rule here cancelling the paper drawn under a row that
-  // slides aside: a block was a slip and needed a sheet beneath it, a Things
-  // row is part of the page and a second sheet read as an object appearing from
-  // nowhere. Nothing draws paper any more, so the cancellation went with it.
-  check('nothing is drawn under a row that slides aside',
-    !/backing::after/.test(css));
+  check('no paper is drawn under a row that slides aside',
+    /content: none/.test(rule('.thing .backing::after')),
+    rule('.thing .backing::after') || '(no rule at all)');
 
   // AN ANYTIME ROW IS THREE THINGS ON ONE LINE, and they are measured from one
   // number so they cannot drift apart.
@@ -487,18 +333,16 @@ console.log('\n3. everything is a row, and nothing is a card');
   // height came from whichever child was tallest, so centring moved the tick
   // against the title the moment the × gained four pixels of padding. Nothing
   // failed — it only looked wrong, which is the category this file exists for.
-  // A CHECKBOX AND A NAME, centred on one line. It was a tick, a title and an
-  // × measured off a shared line-height so three things could hang from the top
-  // of a row of any height — the × is gone (the row swipes now, like every
-  // other row), and two things on one line need no shared measure.
-  check('the tick is a square box', /width: 15px/.test(rule('.atick')) &&
-    /height: 15px/.test(rule('.atick')), rule('.atick'));
-  check('which fills when it is ticked',
-    /background: var\(--accent\)/.test(rule('.arow.did .atick')));
-  check('and draws its own tick, needing no glyph',
-    /border-width: 0 1\.5px 1\.5px 0/.test(rule('.arow.did .atick::before')));
-  check('the row centres the two of them',
-    /align-items: center/.test(rule('.arow')), rule('.arow'));
+  for (const [what, selector] of [
+    ['the tick', '.atick'],
+    ['the title', '.atitle'],
+    ['the ×', '.ax'],
+  ]) {
+    check(`${what} is measured from the shared line box`,
+      /var\(--aline\)/.test(rule(selector)), rule(selector) || '(no rule at all)');
+  }
+  check('and they hang from the top of the row, not its middle or its baseline',
+    /align-items: flex-start/.test(rule('.arow')), rule('.arow'));
 
   // NO RULE BETWEEN THEM, unlike the Things list above. That looks like an
   // inconsistency and is the opposite: Things is a long list you scan down,
@@ -510,105 +354,72 @@ console.log('\n3. everything is a row, and nothing is a card');
   check('nothing is ruled between the anytime rows',
     !/border/.test(rule('.atime + .atime')), rule('.atime + .atime') || '(no rule, which is the point)');
   check('so nothing on the row is centred against the whole of it',
-    !/align-self: center/.test(rule('.atick')));
+    !/align-self: center/.test(rule('.atick') + rule('.ax')));
+  check('while a block still has some, because a block is a slip',
+    /filter: url\(#deckle/.test(rule('.backing::after')), rule('.backing::after'));
 
-  // AND IT IS WORKED LIKE ANY OTHER ROW. It carried an × — a second way to
-  // remove a thing, in a different place, with no undo behind it, while every
-  // other row on the screen removes by swiping left and takes a note by
-  // swiping right.
-  check('no × is styled', !/\.ax(?![\w-])/.test(css));
-  check('nor written', !/'ax'/.test(code));
-  check('it slides off a backing, like a block',
-    /className = 'backing'/.test(code) &&
-      /attach\(\{ slot, card: row, backing, index: i \}\)/.test(code));
-  check('and draws the same note editor a block does',
-    /if \(i === noting\) row\.append\(noteEditor\(b, i\)\)/.test(code));
-  // A BLOCK IS A ROW NOW. It was a slip of paper: a card in its own colour,
-  // its edge displaced through turbulence by an SVG filter so no two slips
-  // matched, a shadow under it, and a fibre texture behind the whole page.
-  //
-  // That was chosen when this was a notebook. It is a planner opened several
-  // times a day to answer "what now", and the answer has to be the loudest
-  // thing on screen — which it is not when the screen is being something. What
-  // the paper cost was a day you could read down in one movement; what it
-  // bought was the sense of an object you could pick up, which the drag gives
-  // anyway.
   const block = rule('.block');
-  check('a block draws no card', !/background: var\(--surface\)/.test(block), block);
-  check('it sits on the page itself', /background: var\(--bg\)/.test(block), block);
-  check('with no radius', !/border-radius/.test(block), block);
-  check('and no shadow', !/box-shadow/.test(block), block);
+  // The paper sits on the layer behind the text, so that is where to look for
+  // it. See the deckle checks below for why it is not on the slip itself.
+  check('a block IS a card', /background: var\(--card\)/.test(rule('.block::after')));
+  // NO RADIUS. The edge is torn rather than cut — the deckle filter displaces
+  // the whole shape through turbulence, so no two slips share an edge. A
+  // rounded rectangle behind a torn edge is two different ideas about one
+  // object.
+  check('but not a radius: paper is torn, not cut', !/border-radius/.test(block), block);
+  check('its edge is displaced rather than drawn',
+    /filter: url\(#deckle\)/.test(rule('.block::after')));
 
-  // THE HAIRLINE IS THE WHOLE SEPARATION, and it is between rows rather than
-  // around them — the same rule the Things list follows, for the same reason.
-  // ON THE ROW, not between two of them. Every row carries its own rule
-  // underneath, the way a ruled page does — so the table is ruled all the way
-  // down rather than only where two rows meet.
-  check('every row is ruled underneath',
-    /border-bottom: 1px solid var\(--line\)/.test(block), block);
-  check('and the anytime rows the same',
-    /border-bottom: 1px solid var\(--line\)/.test(rule('.arow')), rule('.arow'));
-  check('the column heads sit under the heavier rule',
-    /border-bottom: 1\.5px solid var\(--heavy\)/.test(rule('.colhead')), rule('.colhead'));
-
-  // NOTHING IS DISPLACED, DRAWN OR FILTERED. Named piece by piece because a
-  // half-removed theme leaves a filter reference pointing at a def that no
-  // longer exists, which renders as nothing at all on some engines and as an
-  // invisible element on others.
-  check('no turbulence filter is referenced anywhere', !/url\(#deckle/.test(css));
-  check('nor defined in the markup', !/feTurbulence|feDisplacementMap/.test(body));
-  check('and the page has no fibre behind it',
-    !/repeating-linear-gradient/.test(rule('body::before')) &&
-      !/body::before/.test(css));
-
-  // THE SPAN, UNDER THE TITLE. It was a single start time in a fixed column
-  // down the left for one revision: the hours stacked, and a glance down the
-  // edge was the shape of the day.
+  // THE DECKLE NEVER TOUCHES TEXT, and this is the check that matters most in
+  // this theme.
   //
-  // What that cost is the length of things. A block is a piece of the day WITH A
-  // SIZE, and a start time says when it opens without saying what it takes — the
-  // chip says 30m, so the row would state its length twice and its end not at
-  // all. The span says both at once, which is what a block is.
-  const time = rule('.block .time');
-  check('the time sits under the title, not beside it',
-    /margin-top: \d+px/.test(time) && !/flex: none/.test(time), time);
-  check('it is tabular, so the hours line up down the page',
-    /font-variant-numeric: tabular-nums/.test(time), time);
-  check('and quieter than the name above it',
-    /color: var\(--faint\)/.test(time), time);
-  check('it is set in the mono face, with every other figure',
-    /font-family: var\(--mono\)/.test(time), time);
+  // A CSS filter applies to an element and everything inside it. Put the
+  // deckle on the slip and feDisplacementMap pushes the title and the time
+  // through the same turbulence as the edge — every glyph bent, reading as a
+  // strange handwritten typeface. It is close to untraceable from the symptom:
+  // the property is named for an edge and the damage is to the words.
+  //
+  // So every filtered thing is a pseudo-element holding a background and
+  // nothing else. Any rule that carries a deckle must be a ::before or an
+  // ::after.
+  for (const m of css.matchAll(/\n {6,8}([^{@\n][^{]*?)\{([^}]*)\}/g)) {
+    if (!/url\(#deckle/.test(m[2])) continue;
+    const selector = m[1].trim().replace(/\s+/g, ' ');
+    check(`the deckle on ${selector} is on a layer, not on the text`,
+      /::(before|after)\s*$/.test(selector), selector);
+  }
 
-  // THE INDEX COLUMN is what makes this a table rather than a list.
-  const idx = rule('.idx');
-  check('there is an index column', /width: 20px/.test(idx) && /flex: none/.test(idx), idx);
-  check('in mono, tabular, so 09 and 10 are one width',
-    /font-family: var\(--mono\)/.test(idx) && /tabular-nums/.test(idx), idx);
-  check('and it is the lightest thing on the row',
-    /color: var\(--ghost\)/.test(idx), idx);
-  check('numbered by row of the day, not by place in the array',
-    /rowOfBlock\(i\) \+ 1/.test(code));
+  check('and the slip itself carries none of it',
+    !/filter/.test(rule('.block')), rule('.block'));
+  check('nor does the undo bar, which had the same fault',
+    !/filter/.test(rule('.undo')), rule('.undo'));
+  check('and the filter really exists in the markup',
+    /<filter id="deckle"[ >]/.test(body) && /feDisplacementMap/.test(body));
 
-  // AND A STATUS COLUMN. Over, happening, or still to come — one column.
-  const st = rule('.st');
-  check('there is a status column of one width', /width: 58px/.test(st), st);
-  check('read from the right', /text-align: right/.test(st), st);
-  check('a finished row says so', /textContent = 'DONE'/.test(code));
-  check('and the one you are in says how long it runs',
-    /NOW · \$\{span\(b\.duration\)\.toUpperCase\(\)\}/.test(code));
+  // AND HAS ROOM TO BE RAGGED IN. A filter's default region is the element
+  // grown by ten per cent a side; these displace pixels by up to half their
+  // `scale`, which on a short element is more than ten per cent of its height.
+  // A bite clipped flat is the one thing this filter exists not to be.
+  for (const id of ['deckle', 'deckle-soft']) {
+    const tag = (body.match(new RegExp(`<filter id="${id}"[^>]*>`)) || [''])[0];
+    check(`#${id} states its own region`, /height="1[3-9]\d%"/.test(tag), tag);
+  }
+  check('the slot does not clip it flat',
+    !/overflow: hidden/.test(rule('.slot')), rule('.slot'));
 
-  // A row states its WHOLE SPAN. Both ends, from the block's own start and
-  // length — not the day's arithmetic restated.
-  check('a row states a span, not one time',
-    /time\.textContent = `\$\{clock\(b\.start\)\} – \$\{clock\(b\.start \+ b\.duration\)\}`;/.test(code));
-  check('and the day still says where it ends', /id="end-time"/.test(body));
+  // Nothing else may take the card background. It is the mark of an object you
+  // manipulate. The disabled Confirm was on this list and has come off it: a
+  // sealed day is still ink, not paper.
+  const carded = selectorsUsing('var(--card)').filter((s) => !/^:root/.test(s));
+  check('nothing else uses the card background',
+    carded.every((s) => /\.block|\.undo/.test(s)), carded.join(' | '));
 }
 
 console.log('\n4. sections are separated by space, not by boxes');
 {
   const section = rule('.section');
   check('36px between sections', /margin-bottom: var\(--gap\)/.test(section));
-  check('and the gap is 22px', /--gap:\s*22px/.test(rule(':root')));
+  check('and the gap is 36px', /--gap:\s*36px/.test(rule(':root')));
   check('a section has no border', !/border/.test(section), section);
   check('nor a background', !/background/.test(section), section);
 
@@ -628,19 +439,14 @@ console.log('\n4. sections are separated by space, not by boxes');
 
 console.log('\n5. two text sizes in a row, with real space between them');
 {
-  check('the title is 14.5px', /font-size: 14\.5px/.test(rule('.row .title')));
-  check('and in ink, because it is what you are reading for',
-    /color: var\(--text\)/.test(rule('.row .title')));
+  check('the title is 15px', /font-size: 15px/.test(rule('.row .title')));
 
   const meta = rule('.row .meta');
-  check('the meta is 11px', /font-size: 11px/.test(meta));
-  check('and faint, under a title in ink', /color: var\(--faint\)/.test(meta));
-  // Mono, because half of it is a figure — "4 days since scheduled" — and the
-  // column of them reads down the page beside the times above.
-  check('in the mono face, because half of it is a figure',
-    /font-family: var\(--mono\)/.test(meta));
-  check('tabular with them', /font-variant-numeric: tabular-nums/.test(meta));
-  check('on its own line, with space above it', /margin-top: \d+px/.test(meta));
+  check('the meta is 12px', /font-size: 12px/.test(meta));
+  check('and muted', /color: var\(--muted\)/.test(meta));
+  check('on its own line, with space above it', /margin-top: 7px/.test(meta));
+  check('and letterspaced, the way a catalogue sets its particulars',
+    /letter-spacing: 0\.08em/.test(meta));
 }
 
 console.log('\n6. blue is actionable, and nothing else is blue');
@@ -686,7 +492,7 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   const acts =
     // `.addfield:focus` is the same idiom as the two fields already here: the
     // rule under a caret goes blue to say which line is being typed on.
-    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.back|\.thingnote:focus|\.addfield:focus|\.confirm|\.running|\.block\.live::before/;
+    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.back|\.thingnote:focus|\.addfield:focus/;
   // The divider: the knot and the line it fastens. Both are indigo now, where
   // the dark build tinted the line with a separate near-blue that belonged to
   // nothing — one fewer colour on the page, and the two halves of one object
@@ -694,20 +500,7 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   //
   // It says "here is where you are", which is the nearest thing to an action
   // that is not one. Listed by name so a third has to be argued for here.
-  // The divider, and the two marks on the block you are in: the bar at its
-  // edge and the word beside its name. Both say "this one, now", which is what
-  // orienting is — neither can be pressed. The block you are in used to be
-  // marked by a three-strand cord in indigo, persimmon and tan, and its label
-  // was muted grey; one colour that already means "here" replaces both.
-  // THE ROW YOU ARE IN, marked four ways and with no badge: a bar in the
-  // gutter, a tinted ground, a heavier name, and its figures in blue. Four
-  // quiet marks read as one state; one loud mark reads as an alarm. None of
-  // them can be pressed, which is what makes them orienting rather than acting.
-  //
-  // The ticked checkbox is here too. It fills with the accent — the one place
-  // on the page where blue reports rather than offers, and it is reporting
-  // something you did with a press half a second ago.
-  const orients = /\.running|\.block\.live|\.arow\.did \.atick/;
+  const orients = /\.now \.dot|\.now \.ln/;
   check('blue appears only on the controls that act, or the one that orients',
     blue.every((s) => acts.test(s) || orients.test(s)), blue.join(' | '));
   // WHOLE CLASS NAMES. `\b` is not a class boundary in CSS: a hyphen ends a
@@ -716,66 +509,128 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // lookahead refuses a following letter, digit or hyphen, which is what
   // "this class and not one that merely starts with it" actually means.
   const whole = (name) => new RegExp(`\\.${name}(?![\\w-])`);
-  // Measured against what is left after the orienting marks are taken out. The
-  // bar on the block you are in is drawn on `.block.live::before`, which
-  // contains `.block` and so reads as decoration to a name-based sweep — while
-  // being the exact thing named as orienting two lines above.
-  const decorative = blue.filter((s) => !orients.test(s));
   check('and nothing decorative has it',
-    !decorative.some((s) => ['cal', 'backing', 'block', 'row'].some((n) => whole(n).test(s))),
-    decorative.join(' | '));
+    !blue.some((s) => ['cal', 'backing', 'block', 'row'].some((n) => whole(n).test(s))),
+    blue.join(' | '));
 
   check('the start steppers are blue', /color: var\(--accent\)/.test(rule('.step')));
-  // THE CHIP IS A FIGURE IN A COLUMN, and it stopped being blue when it moved
-  // into one. It was the one control on a block, so it wore the action colour —
-  // in the status column it sits under DONE and beside NOW · 4H, and a blue
-  // figure there was the loudest thing on the row you are NOT in.
+  check('the duration chip is blue, because it is now the control',
+    /color: var\(--accent\)/.test(rule('.dur')));
+  // Confirm is NOT indigo any more — it is the hanko, and a seal is stamped in
+  // persimmon. That moves it under the warn colour's list, which is the one
+  // deliberate widening this theme asks for: see section 7.
+  check('confirm is not indigo, because it is a seal',
+    !/var\(--accent\)/.test(rule('.confirm')), rule('.confirm'));
+
+  // THE SEAL HAS NO RING. A real hanko is carved in relief, so its border
+  // stands and prints while the cut stays paper — which is what the reference
+  // drew. On screen that reads as a line drawn around a button, and drawing is
+  // the one thing this theme does not do. What makes it a stamp is the edge:
+  // pressed by hand, ink does not land square.
+  check('no ring is drawn around it', !/box-shadow/.test(rule('.confirm')), rule('.confirm'));
+  check('its edge is pressed rather than cut',
+    /filter: url\(#deckle\)/.test(rule('.confirm::after')));
+
+  // AND NOTHING ACROSS THE MIDDLE. It carried four pale flecks, meant as ink
+  // not taking evenly. At this size and softness they did not read as texture —
+  // they read as bubbles trapped under a sticker, which is a defect rather than
+  // a mark. The uneven edge is what says stamp; the middle is solid ink.
+  check('the ink is solid, with no flecks in it',
+    !/gradient/.test(rule('.confirm::after')), rule('.confirm::after'));
+
+  // A SEALED DAY IS STILL INK. It used to go paper-and-grey when confirmed,
+  // which read as the button being taken away rather than the day being
+  // agreed to. Same persimmon, so the contrast holds both ways round.
+  check('confirmed stays persimmon rather than going to paper',
+    !/background/.test(rule('.confirm:disabled')), rule('.confirm:disabled'));
+  check('and keeps its full contrast',
+    /color: var\(--bg\)/.test(rule('.confirm:disabled')));
+
+  // AND THE SAME EDGE, WHICH IS A BUG FIX. Confirmed used to take a wider
+  // bite — ink that had settled — and that swapped the referenced filter on
+  // this layer every time the state changed. Confirm a day, tap Tomorrow, tap
+  // Today, and the word came back cut off: a re-rasterised filter layer can
+  // return short, and the word is painted in the PAGE colour on top of that
+  // persimmon, so wherever the persimmon is missing the letters are not
+  // clipped, they are invisible.
   //
-  // It is still pressed to cycle the length; what says so is that it is the
-  // only thing in that column on a block still to come.
-  check('the duration chip is a figure, not a shout',
-    /color: var\(--muted\)/.test(rule('.dur')), rule('.dur'));
-  check('set in the mono face with the rest of the column',
-    /font-family: var\(--mono\)/.test(rule('.dur')));
-  check('and in the column, at its width',
-    /width: 58px/.test(rule('.dur')), rule('.dur'));
-  // CONFIRM IS BLUE, and it is the one filled control on the page.
+  // The state was never wrong — right word, disabled, nothing left over — so
+  // the fix is here rather than in the script. What separates Confirm from
+  // Confirmed is the word and being unpressable, which was doing the work
+  // anyway.
+  check('the seal keeps one edge in every state',
+    !/filter/.test(rule('.confirm:disabled::after')),
+    rule('.confirm:disabled::after'));
+  // UNDER THE HAND. Saving is a round trip, so the seal used to say nothing
+  // for about a second after the tap, which reads as a tap that missed.
+  // Leaning on a real stamp drives more ink in and seats it, and that is the
+  // whole of the feedback.
+  // Read once and asserted non-empty first, because "no second red in it" is
+  // true of a rule that is not there at all.
+  const pressed = rule('.confirm.pressing::after');
+  check('the pressed seal is styled at all', pressed !== '');
+  check('it deepens its ink', /brightness\(/.test(pressed), pressed);
+  check('deepened rather than given a second red',
+    !/#[0-9a-f]{6}/i.test(pressed), pressed);
+  check('and it is still the same torn edge',
+    /url\(#deckle\)/.test(pressed), pressed);
+  // AND THE STAMP DOES NOT MOVE. It used to seat a hair into the paper —
+  // `transform: scale(0.985)` with a transition to carry it — and that
+  // transform is what cut the word in half.
   //
-  // It was the hanko: a persimmon seal drawn on a layer beneath the word, with
-  // a turbulence filter giving it an uneven bite. That cost two composited
-  // layers and two separate bugs — a word painted outside its own raster and
-  // coming back as ONFIRME, and a filter swap on the day switch that made the
-  // whole face invisible. A filled rectangle in the colour that already means
-  // "this can be pressed" says the same thing with one layer.
-  const confirm = rule('.confirm');
-  check('confirm is filled in the accent', /background: var\(--accent\)/.test(confirm), confirm);
-  check('and its word is the page colour, for contrast the other way',
-    /color: #fff/.test(confirm), confirm);
-  check('nothing is drawn beneath it any more', !/\.confirm::after/.test(css));
-  check('and nothing about it is filtered', !/filter/.test(confirm), confirm);
+  // A transformed, transitioned element gets its own composited layer, and the
+  // layer keeps its raster across a text change. Confirm a day, tap Tomorrow
+  // and the word shortens to Confirm, re-rastering the layer at seven
+  // characters; tap Today and it lengthens to Confirmed with no reason to
+  // re-raster, so the extra two are painted outside the layer. Centred text
+  // loses them one a side: ONFIRME, with the D clipped to its stem.
+  //
+  // Nothing that composites the TEXT may be animated on this button. The press
+  // is answered on the layer beneath instead, which carries no text at all.
+  // The property, not the substring: `.confirm` sets `text-transform:
+  // uppercase`, and a bare /transform/ matches that and reports the seal as
+  // animated when it is only capitalised.
+  const moves = (selector) => /(^|[^-\w])transform:/.test(rule(selector));
 
-  // CONFIRMED IS SETTLED, NOT REMOVED. It went to paper and grey once, which
-  // read as the button having been taken away rather than the day having been
-  // agreed to.
-  // AN OUTLINE, NOT A FILL. A day you have agreed to should still show its
-  // button — going to a grey slab reads as the control having been taken away —
-  // and it should stop being the loudest thing on a screen you are now reading
-  // rather than deciding on.
-  const done = rule('.confirm:disabled');
-  check('a confirmed day shows an outline, not a fill',
-    /background: none/.test(done) && /border-color: var\(--line\)/.test(done), done);
-  check('quieter, but not invisible', /color: var\(--faint\)/.test(done), done);
+  check('nothing on the seal itself is transformed',
+    !moves('.confirm') && !moves('.confirm.pressing'),
+    `${rule('.confirm.pressing')} ${rule('.confirm')}`);
+  check('and nothing on it is transitioned',
+    !/transition:/.test(rule('.confirm')), rule('.confirm'));
 
-  // BEING PRESSED. The save is a round trip, and a control that answers a
-  // second late reads as one that missed.
-  check('the press is answered at once', /background/.test(rule('.confirm.pressing')),
-    rule('.confirm.pressing'));
-  check('and it is the button itself that darkens, not a layer under it',
-    !/\.confirm\.pressing::after/.test(css));
+  // There is nothing left for it to outrank, and that is the point. This used
+  // to check source order, because `.confirm.pressing::after` and
+  // `.confirm:disabled::after` set the same property at the same weight and
+  // the pressed seal had to stay pressed until the answer was in. With the
+  // settled edge gone there is exactly one rule touching this layer's filter
+  // outside the press, so nothing can quietly win over it.
+  const touchesFilter = [...css.matchAll(/\n {6}([^{@\n][^{]*?)\{([^}]*)\}/g)]
+    .filter((m) => /\.confirm/.test(m[1]) && /filter:/.test(m[2]))
+    .map((m) => m[1].trim().replace(/\s+/g, ' '));
 
-  // The keyboard keeps its ring; the pointer does not.
-  check('a pointer press leaves no outline', /outline: none/.test(rule('.confirm:focus')));
-  check('but a keyboard keeps one', /outline: 2px solid/.test(rule('.confirm:focus-visible')));
+  check('only the seal and its press set that edge',
+    touchesFilter.length === 2, touchesFilter.join(' | '));
+  check('and the press is the later of the two',
+    touchesFilter[1] === '.confirm.pressing::after', touchesFilter.join(' | '));
+
+  check('undo is blue, because undoing is an action',
+    /color: var\(--accent\)/.test(rule('.undo button')));
+
+  // The specific traps: the calendar aside and the type chooser both look
+  // like places a designer would reach for an accent, and neither is one.
+  check('the calendar aside is not blue', !/--accent/.test(rule('.cal')));
+  check('nor its rule', !/--accent/.test(rule('.cal h4')));
+  check('the type chooser is not blue', !/--accent/.test(rule('.choices button')));
+  check('nor when chosen', !/--accent/.test(rule('.choices button[aria-pressed="true"]')));
+  check('a disabled stepper goes faint, not pale blue',
+    /color: var\(--faint\)/.test(rule('.step:disabled')));
+
+  // The near miss. "active" sits in the slot the duration chip vacates, and
+  // the NOW divider right above it is blue for saying the same thing — so
+  // blue is the obvious reach. It is wrong here: that slot has held a
+  // tappable pill on every block above this one, and a blue word in it is an
+  // invitation to press something that does nothing.
+  check('the active label is not blue', !/--accent/.test(rule('.running')));
 }
 
 console.log('\n7. the warn colour warns; it does not narrate');
@@ -826,14 +681,11 @@ console.log('\n7. the warn colour warns; it does not narrate');
   // was not what made it safe — it was just loud, and loudest on a past block,
   // where taking the block out is how the day is recorded rather than damage.
   const backing = rule('.backing');
-  // A flat surface, on the backing itself. It used to be a second sheet of torn
-  // paper drawn on a layer beneath — which a block needed, because a block was
-  // a slip and something has to be under one. A row is part of the page, and
-  // what shows when it slides is simply the surface colour.
-  check('the backing is the tint, the one other ground on the page',
-    /background: var\(--tint\)/.test(backing), backing);
-  check('drawn on itself, with no layer beneath it',
-    !/\.backing::after/.test(css));
+  // On its layer, like every other sheet of paper here.
+  check('the backing is the neutral surface',
+    /background: var\(--line\)/.test(rule('.backing::after')));
+  check('and it is torn like the slip that covers it, not a hard rectangle',
+    /filter: url\(#deckle/.test(rule('.backing::after')));
   check('not the warn colour', !/--warn/.test(backing), backing);
   check('nor blue', !/--accent/.test(backing), backing);
   check('and the loud variant is gone, not merely unused',
@@ -852,24 +704,17 @@ console.log('\n7. the warn colour warns; it does not narrate');
   // because they belong in the margin rather than in the text, and at 12px the
   // colour alone was doing all the work — bold is what makes three of them read
   // as louder than one without making them any bigger.
-  // WEIGHT, PLAINLY, now that the glyph is one every font has.
-  //
-  // It was ✱ — U+2731, in the Dingbats block, carried by no font in the stack —
-  // so every platform fell back for that one character to a single-weight
-  // symbol font, and `font-weight: 700` depended on the browser faking a bold
-  // that did not exist. Chrome fakes one; iOS Safari does not. It read bold on
-  // a laptop and thin on the phone it is actually used on, and the fix was a
-  // stroke painted on the glyph's own outline.
-  //
-  // An exclamation mark is in every font at every weight, so 700 is simply 700
-  // and the stroke went with the glyph that needed it.
-  check('the mark is the one the server computed',
-    /mark\.textContent = item\.mark;/.test(code));
-  check('and no glyph is substituted for it', !/✱/.test(code));
-  check('it is set bold, which now means something', /font-weight: 700/.test(rule('.mark')),
-    rule('.mark'));
-  check('and needs no stroke to fake one', !/-webkit-text-stroke/.test(rule('.mark')),
-    rule('.mark'));
+  // STROKED, NOT WEIGHTED, and the difference is the whole of it. ✱ is
+  // U+2731 and no font in --face has it, so every platform falls back for this
+  // one character to something shipping a single weight. font-weight: 700 then
+  // depends on the browser faking a bold that does not exist — Chrome does, iOS
+  // Safari does not — so it read bold on a laptop and thin on the phone it is
+  // actually used on. A stroke is painted on the glyph's own outline and needs
+  // no bold face to exist.
+  check('and it is thickened by a stroke, which needs no bold face',
+    /-webkit-text-stroke: 0.4px/.test(rule('.mark')), rule('.mark'));
+  check('and not by a weight that half the platforms will ignore',
+    !/font-weight/.test(rule('.mark')), rule('.mark'));
 
   check('an ordinary row does not', !/--warn/.test(rule('.row')));
   check('nor an ordinary meta line', !/--warn/.test(rule('.row .meta')));
@@ -1001,62 +846,43 @@ console.log('\n7b. the right edge of a block says one thing per state');
   // question any more.
   const act = rule('.running');
   check('the block in progress has a label', act.length > 0);
-  // It sits IN the status column, so it takes that column's size and the live
-  // row's colour rather than setting either itself. One place decides how the
-  // row you are in looks, and it is the row.
-  check('it sets no colour of its own', !/color:/.test(act), act);
-  check('the row it is on sets one',
-    /\.block\.live \.time,[\s\S]{0,90}color: var\(--accent\)/.test(css));
-  check('and it wears the status column', /className = 'st running'/.test(code));
+  check('it is muted, not faint', /color: var\(--muted\)/.test(act));
+  check('it is 12px, like the chip it replaces', /font-size: 12px/.test(act));
   check('it does not wrap', /white-space: nowrap/.test(act));
 
   // Not a control: no border, no background, nothing to press.
   check('it has no pill border, unlike the chip it replaces', !/border/.test(act), act);
   check('and no background', !/background/.test(act), act);
 
-  // It used to borrow the chip's padding, because a bare label sat 15px nearer
-  // the card edge than chip text did and "active" crowded it. There is no card
-  // edge now — a row runs to the margin — so the label needs no box of its own,
-  // only to keep out of the title's way.
-  check('it takes no more room than its word', /white-space: nowrap/.test(act), act);
+  // But it does keep the chip's BOX. Without the padding a bare label sits
+  // 15px closer to the card edge than chip text does, because the chip carries
+  // that inset inside its border — so "active" crowded the edge while every
+  // block above it looked comfortable. Matching it also keeps a begun block the
+  // same height as its neighbours.
+  const chip = rule('.dur');
+  const pad = (r) => (r.match(/padding: ([^;]+);/) || [])[1];
+  check('it borrows the chip\'s padding, so the word is not against the edge',
+    pad(act) === pad(chip), `${pad(act)} vs chip ${pad(chip)}`);
 
-  check('it says NOW and how long it runs',
-    /NOW · \$\{span\(b\.duration\)\.toUpperCase\(\)\}/.test(code));
+  check('the word is "active"', /className = 'running';[\s\S]{0,120}textContent = 'active'/.test(code));
   check('a block that has begun gets it',
-    /\} else if \(begun\) \{\s*row\.append\(idx, left, activeLabel\(b\)\);/.test(code));
-  check('and one that is over says DONE in the same column',
-    /if \(past\) \{\s*row\.append\(idx, left, doneLabel\(\)\);/.test(code));
+    /\} else if \(begun\) \{\s*row\.append\(left, activeLabel\(\)\);/.test(code));
+  check('and a block that is over gets nothing beside it',
+    /if \(past\) \{\s*row\.append\(left\);/.test(code));
 }
 
 console.log('\n8. the calendar aside is a left rule, not a card');
 {
-  // NOT A CARD, AND NOT A BAR EITHER. It was a left rule and indented text,
-  // which was right on a page made of paper — and on a page made of horizontal
-  // rules it was the only vertical line, so it read as the one section that had
-  // been boxed off.
-  //
-  // It is a heading and some quiet text now, in the same mono capitals every
-  // other section head uses. What separates it is space, which is what
-  // separates everything here.
   const cal = rule('.cal');
-  // IT KEEPS ITS LEFT RULE. Everything else on the page is a row of a table or
-  // a heading over one; this is the one thing that is neither, and the bar down
-  // its side is what says so. Taking it away made the aside read as another
-  // section of the ledger.
-  check('a left rule', /border-left: 2px solid/.test(cal), cal);
-  check('and only a left rule',
-    !/border-top|border-right|border-bottom|border:/.test(cal), cal);
+  check('a left rule', /border-left: 2px solid/.test(cal));
+  check('and only a left rule', !/border-top|border-right|border-bottom|border:/.test(cal), cal);
   check('no background', !/background/.test(cal), cal);
   check('no radius', !/border-radius/.test(cal), cal);
-  check('the text is indented from it', /padding: [^;]*13px/.test(cal), cal);
+  check('the text is indented from the rule', /padding: [^;]*13px/.test(cal), cal);
 
-  const head = rule('.cal h4');
-  check('its heading is a mono capital, like every other section head',
-    /font-family: var\(--mono\)/.test(head) && /text-transform: uppercase/.test(head), head);
-  check('and quiet', /color: var\(--faint\)/.test(head), head);
-  // Ghost rather than muted: "Nothing on it." is the absence of a fact, not a
-  // quiet one.
-  check('its empty line is ghost', /color: var[(]--ghost[)]/.test(rule('.cal p')));
+  check('its heading is neutral warm grey', /color: var\(--cal-head\)/.test(rule('.cal h4')));
+  check('and its body too', /color: var\(--cal-text\)/.test(rule('.cal p')));
+
   // PRESSABLE NOW, and still not a card. What changed is what a row does, not
   // what it is: a line of text under a rule, with the affordance out at the
   // edge where it can be ignored.
@@ -1088,20 +914,13 @@ console.log('\n8. the calendar aside is a left rule, not a card');
 
   // THE TITLE IS THE TARGET, and with the + gone it is most of the row: it
   // stretches to fill whatever the time column leaves.
-  // ONE LINE, NOT TWO COLUMNS. There are one or two events on a day, and a
-  // column of two is a table with nothing to compare down it. The hour runs
-  // inline ahead of the name, in mono, so it still reads as a figure.
-  check('the hour runs inline ahead of the name',
-    /padding-right: 7px/.test(rule('.ctime')), rule('.ctime'));
-  check('and it is a figure, in the figure face',
-    /font-family: var\(--mono\)/.test(rule('.ctime')) && /tabular-nums/.test(rule('.ctime')),
-    rule('.ctime'));
+  check('the title takes the rest of the row', /flex: 1/.test(rule('.ctitle')), rule('.ctitle'));
+  check('and the times line up in a column of one width',
+    /width: 68px/.test(rule('.ctime')), rule('.ctime'));
 
   const root = rule(':root');
-  check('which is the same grey the rest of the page is quiet in',
-    /--cal-head:\s*#97a3b4/i.test(root));
-  check('and neither of the two colours that mean something',
-    !/--cal-head:\s*(#1e4fd8|#dc2626)/i.test(root));
+  check('which is a warm grey, not a blue', /--cal-head:\s*#5f5a52/i.test(root));
+  check('and not persimmon either', !/--cal-head:\s*#b8492a/i.test(root));
 }
 
 console.log('\n9. tabular figures on every time');
@@ -1111,6 +930,7 @@ console.log('\n9. tabular figures on every time');
     ['a block time', '.block .time'],
     ['a block duration', '.dur'],
     ['the day end', '.ends b'],
+    ['the calendar aside', '.cal p'],
     ['an event time', '.ctime'],
   ]) {
     check(`${what} is tabular`, /font-variant-numeric: tabular-nums/.test(rule(selector)));
@@ -1223,7 +1043,7 @@ console.log('\n13. a row says it has more actions, rather than hiding them');
   // Checked as a pair. A hit area on something that is not positioned lands
   // against the nearest positioned ancestor instead — which is a whole row, or
   // the page — and that failure is invisible until a tap opens the wrong thing.
-  for (const small of ['.hint', '.atick', '.step']) {
+  for (const small of ['.hint', '.atick', '.ax', '.step']) {
     check(`${small} carries a hit area`, /inset: -\d+px/.test(rule(`${small}::after`)),
       rule(`${small}::after`));
     check(`and is positioned, so it lands on itself`,
@@ -1245,10 +1065,8 @@ console.log('\n13. a row says it has more actions, rather than hiding them');
 
   const hint = rule('.hint');
   check('there is a hint', hint.length > 0);
-  // The lightest thing on the row: it is an affordance, not a fact about the
-  // thing, and it sits inside a title it must not compete with.
-  check('it is the ghost grey, so it does not compete with the title',
-    /color: var\(--ghost\)/.test(hint), hint.match(/color[^;]*/) || '');
+  check('it is faint, so it does not compete with the title',
+    /color: var\(--faint\)/.test(hint), hint.match(/color[^;]*/) || '');
   check('and never the accent, because it does not commit to anything',
     !/--accent/.test(hint));
   check('nor the miss colour', !/--warn/.test(hint));
@@ -1463,10 +1281,8 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
   // the script does.
   check('the browser keeps vertical panning', /touch-action: pan-y/.test(css));
   check('on the card', /touch-action: pan-y/.test(rule('.block')));
-  // The chip inherits the row's own pan-y rather than declaring one: it is a
-  // child of the block, and the block is what the browser is arbitrating with.
-  check('and the chip does not take the gesture back',
-    !/touch-action: (none|auto)/.test(rule('.dur')), rule('.dur'));
+  check('and on the chip, so a swipe can start there too',
+    /touch-action: pan-y/.test(rule('.dur')));
 
   console.log('   and a carried block takes it back');
   // The reorder died here once: pan-y let the browser claim the drag as a
@@ -1529,15 +1345,11 @@ console.log('\n16. the shape of the day');
   // and be unreachable on a real screen. The section is hidden until something
   // is in it, and a way in you cannot use until you have already used it is not
   // a way in.
-  // IT SITS AT THE FOOT OF THE SECTION IT FILLS, which it could not do while
-  // that section was hidden until something was in it. The heading and the way
-  // in stay whatever the list holds now — a section you can only add to once it
-  // is not empty is not a way in — so the rows have somewhere to arrive.
-  check('the way in is inside the section it fills',
-    body.indexOf('id="add-anytime"') > body.indexOf('id="anytime"'),
+  check('the way in sits above the section it fills',
+    body.indexOf('id="add-anytime"') < body.indexOf('id="anytime"'),
     `${body.indexOf('id="add-anytime"')} vs ${body.indexOf('id="anytime"')}`);
-  check('and the section is always there to be added to',
-    /class="anytime" id="anytime"/.test(body));
+  check('which is hidden until it holds something',
+    /class="anytime hidden" id="anytime"/.test(body));
 
   // NOTHING ON THE THINGS LIST BEHIND IT. The whole point of the control: a
   // reminder is not something you are carrying, so it never becomes an entry.
@@ -1574,19 +1386,14 @@ console.log('\n17. today and tomorrow');
   check('with both words', /id="pick-today"/.test(body) && /id="pick-tomorrow"/.test(body));
   check('and the date beside them', /class="date" id="plan-date"/.test(body));
 
-  // THE ONE SENTENCE ON THE SCREEN. It was set as a label — small letterspaced
-  // capitals, the same as every section head — which made the line naming the
-  // day you are looking at read as a heading over the table rather than as the
-  // title of the page.
   const sw = rule('.dayswitch');
-  check('the day is a title, not a label',
-    /font-size: 16px/.test(sw) && !/text-transform: uppercase/.test(sw), sw);
-  check('set in the name face, with the names', !/var\(--mono\)/.test(sw), sw);
-  check('and given room under it', /margin-bottom: \d+px/.test(sw), sw);
+  check('same type as any other label', /font-size: 10px/.test(sw) &&
+    /letter-spacing: 0\.14em/.test(sw) && /text-transform: uppercase/.test(sw));
+  check('and the same space under it', /margin-bottom: 14px/.test(sw));
   // Lighter than the paper's own ink rather than darker than it — on paper the
   // way to recede is toward the page, not away from it.
-  check('the inactive word recedes toward the page',
-    /color: var[(]--ghost[)]/.test(rule('.dayswitch .opt')), rule('.dayswitch .opt'));
+  check('the inactive word recedes toward the paper',
+    /color: #b6ae9f/.test(rule('.dayswitch .opt')), rule('.dayswitch .opt'));
   check('the active one is full text', /color: var\(--text\)/.test(rule('.dayswitch .opt.on')));
 
   console.log('   today');
@@ -1595,25 +1402,17 @@ console.log('\n17. today and tomorrow');
   // after a day of being carried around. The dark build drew an outline; an
   // outline is a drawing of a thing, and this theme lays things down and takes
   // them away rather than drawing them.
-  // A SPENT ROW IS GREYED, and that is all. It was a second paper colour with a
-  // softer torn edge — an outline was refused then for the right reason, that
-  // an outline draws a thing rather than laying it down, and the reason is gone
-  // with the paper. What is left is the cheapest true statement: the same row,
-  // quieter, on a faintly different ground.
-  // OVER: every part of the row steps back a shade. Nothing is drawn
-  // differently, nothing is taken away, and the status column says DONE.
-  check('a finished block goes faint', /color: var\(--faint\)/.test(rule('.block.past .t')),
-    rule('.block.past .t'));
-  check('its figures go lighter still',
-    /\.block\.past \.time,[\s\S]{0,80}color: var\(--ghost\)/.test(css));
-  check('and it is still a row, not an outline or a fill',
-    !/border:/.test(rule('.block.past .t')));
+  check('a finished slip settles toward the page rather than becoming an outline',
+    /background: var\(--card-spent\)/.test(rule('.block.past::after')) &&
+      !/border:/.test(rule('.block.past::after')), rule('.block.past::after'));
+  check('its edge goes soft with handling',
+    /filter: url\(#deckle-soft\)/.test(rule('.block.past::after')));
+  check('with a lightened title', /color: #8e8a82/.test(rule('.block.past .t')));
   // Not just a past one. A block you are in the middle of kept its chip, and
   // shrinking it below the time already elapsed moved it into the past — an
   // action the server refuses on a delivered block anyway.
   check('a block that has begun gets no chip', /\} else if \(begun\) \{/.test(code));
-  check('and one that is over carries no chip either',
-    /if \(past\) \{\s*row\.append\(idx, left, doneLabel\(\)\);/.test(code));
+  check('and one that is over gets nothing at all', /if \(past\) \{\s*row\.append\(left\);/.test(code));
   check('begun is read off the stored start, the same as the reflow',
     /const blockBegun = \(b\) => onToday\(\) && hasBegun\(b, nowMinutes\(\)\)/.test(code));
   check('and there is one definition of it', (code.match(/hasBegun\(/g) || []).length === 2,
@@ -1644,18 +1443,8 @@ console.log('\n17. today and tomorrow');
   check('nothing posts a miss', !/\/miss/.test(code));
   check('and no block carries a missed flag', !/\bmissed\b/.test(code));
 
-  // NO DIVIDER AT ALL. A line was drawn across the day where the past ended —
-  // a knot and a rule, with no word, because every word tried there was a claim
-  // about one side of it.
-  //
-  // The row you are in is marked four ways now: a bar in the gutter, a tinted
-  // ground, a heavier name, and blue figures. A line above it is a fifth mark
-  // for the same fact, and it was the only thing on the screen that was neither
-  // a row nor a rule between two of them.
-  check('nothing draws a line across the day', !/className = 'ln'/.test(code));
-  check('nor the knot that fastened it', !/className = 'dot'/.test(code));
-  check('and nothing is left counting one', !/markedNow/.test(code));
-  check('nor styling one', !/\.now(?![\w-])/.test(css));
+  check('a divider is drawn once', /markedNow = true/.test(code));
+  check('with a dot and a rule', /className = 'dot'/.test(code) && /className = 'ln'/.test(code));
   check('the Starts control is hidden', /\$\('starts'\)\.classList\.toggle\('hidden', onToday\(\)\)/.test(code));
 
   console.log('   the past does not flow');
@@ -1951,11 +1740,8 @@ console.log('\n17. the mockup still describes the page');
   check('switch.html is kept as the reference for the day switch',
     /class="dayswitch"/.test(sw));
   check('it shows both states', /opt on">Today/.test(sw) && /opt on">Tomorrow/.test(sw));
-  // The reference was drawn in the washi palette and its tan is not a colour
-  // this page has any more. What still has to hold is the RELATION: the day you
-  // are not looking at recedes toward the page rather than away from it.
-  check('and the page recedes it the same way',
-    /color: var[(]--ghost[)]/.test(rule('.dayswitch .opt')));
+  check('and the page uses its inactive colour',
+    /#B6AE9F/i.test(sw) && /#b6ae9f/i.test(rule('.dayswitch .opt')));
 
   // What was replaced must not survive in the reference either.
   check('no tab bar', !/class="tabs"/.test(mock));

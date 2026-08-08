@@ -16,16 +16,14 @@
 -->
 <style>
   :root{
-    --bg:#ffffff; --tint:#f4f7fc; --surface:#f4f7fc;
-    --text:#0f1620; --muted:#5c6b7f; --faint:#8794a7; --ghost:#c3ccd8;
-    --line:#e6ebf1; --rule:#cfd8e3; --heavy:#0f1620;
-    --accent:#1e4fd8; --accent-soft:#7b9bee; --warn:#dc2626;
-    --spent:#ffffff;
-    --cal-rule:#e6ebf1; --cal-head:#97a3b4; --cal-text:#5c6b7f;
+    --bg:#F5F1E8; --card:#E7E0D2; --line:#DED7C8;
+    --text:#2B2A28; --muted:#5F5A52; --faint:#8A857C;
+    --accent:#37516E; --warn:#B8492A;
+    --cal-rule:#C9BFA8; --cal-head:#5F5A52; --cal-text:#3A3733;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{
-    background:#e8ecf2;
+    background:#DFD9CB;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
     display:flex;justify-content:center;flex-wrap:wrap;gap:20px;padding:28px 12px;
   }
@@ -93,7 +91,7 @@
 
   /* blocks ARE cards — they're objects you manipulate */
   .block{
-    background:var(--surface);padding:14px 15px;
+    background:var(--card);padding:14px 15px;
     margin-bottom:9px;display:flex;justify-content:space-between;align-items:center;
   }
   .block .t{font-size:15px}
@@ -141,7 +139,7 @@
   .dimmed{opacity:.55}
 
   /* the safety net for a swipe, which commits with no confirm */
-  .undo{display:inline-flex;align-items:center;gap:14px;background:var(--surface);
+  .undo{display:inline-flex;align-items:center;gap:14px;background:var(--card);
         border:1px solid var(--line);border-radius:11px;padding:11px 16px;
         font-size:13px;color:var(--muted)}
   .undo b{color:var(--accent);font-weight:400}

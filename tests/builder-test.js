@@ -705,7 +705,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       slots()[1].text().trim());
     check('and the one below that', slots()[2].text().includes('9:30 AM – 10:00 AM'),
       slots()[2].text().trim());
-    check('the one above did not', slots()[0].text().includes('8:00 AM'),
+    check('the one above did not', slots()[0].text().includes('8:00 AM – 9:00 AM'),
       slots()[0].text().trim());
     check('the end time followed live', byId['end-time'].textContent === '10:00 AM',
       byId['end-time'].textContent);
@@ -798,7 +798,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       noteOf(slots()[0]).textContent);
     check('and the editor closed', !editorOf(slots()[0]));
     check('the block is otherwise unchanged',
-      slots()[0].text().includes('8:00 AM'), slots()[0].text().trim());
+      slots()[0].text().includes('8:00 AM – 8:30 AM'), slots()[0].text().trim());
   }
 
   console.log('\nswiping a block that has a note reopens it');
@@ -1041,7 +1041,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // Nothing should scroll while a block is carried. If something does
     // anyway, the block has to stay under the finger rather than drift by
     // however far the page moved.
-    const { ctx, slots, cardOf, win , titleOf } = boot();
+    const { ctx, slots, cardOf, win } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -1063,8 +1063,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     up(card, 100, 100);
     await wait(SETTLED);
     check('so it lands where it looked like it would',
-      slots().map((s) => titleOf(s)).join(' ') === 'B A C',
-      slots().map((s) => titleOf(s)).join(' '));
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'B A C',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
   }
 
   console.log('\ndragging a day that also holds anytime items');
@@ -1081,14 +1081,14 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // comment on `siblings` says so: filtering the builder's children to slots
     // fixed the divider, and it does not fix this, because here it is `blocks`
     // that has the extra entries rather than the builder.
-    const { ctx, slots, cardOf, byId , titleOf } = boot();
+    const { ctx, slots, cardOf, byId } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addAnytime({ title: 'Loose' });
     ctx.addBlock({ title: 'B' });
     ctx.addBlock({ title: 'C' });
 
-    const onScreen = () => slots().map((s) => titleOf(s)).join(' ');
+    const onScreen = () => slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ');
     check('the day draws its three timed blocks', onScreen() === 'A B C', onScreen());
     check('and the anytime item is not one of them', !onScreen().includes('Loose'), onScreen());
 
@@ -1125,10 +1125,10 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // top. Every arrangement here would have behaved differently; all of them
     // have to behave the same now.
     const day = async (build) => {
-      const { ctx, slots, cardOf, byId , titleOf } = boot();
+      const { ctx, slots, cardOf, byId } = boot();
       await ctx.load();
       build(ctx);
-      return { ctx, slots, cardOf, byId, titleOf };
+      return { ctx, slots, cardOf, byId };
     };
 
     const drag = async ({ slots, cardOf }, row, rows) => {
@@ -1139,7 +1139,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       up(card, 100, 100 + rows * SLOT);
       await wait(SETTLED);
     };
-    const order = (d) => d.slots().map((s) => d.titleOf(s)).join(' ');
+    const order = (slots) => slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ');
 
     {
       // Loose ones first, so every row is offset.
@@ -1152,7 +1152,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       });
       await drag(d, 2, -2); // carry C to the top
       check('two loose items above the day: the carried block still lands',
-        order(d) === 'C A B', order(d));
+        order(d.slots) === 'C A B', order(d.slots));
       const was = 'L1,L2';
       check('and both loose items are untouched',
         anytimeTitles(d.byId).join() === was, anytimeTitles(d.byId).join());
@@ -1174,7 +1174,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       });
       await drag(d, 0, 2); // A to the bottom
       check('interleaved: the carried block still lands',
-        order(d) === 'B C A', order(d));
+        order(d.slots) === 'B C A', order(d.slots));
       check('and the loose items keep their own order',
         anytimeTitles(d.byId).join() === 'L1,L2', anytimeTitles(d.byId).join());
       check('and the places they held in the array',
@@ -1194,7 +1194,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       });
       await drag(d, 0, 4); // four rows down, in a day two rows long
       check('carried past the last row, it stops at the last row',
-        order(d) === 'B A', order(d));
+        order(d.slots) === 'B A', order(d.slots));
       check('with the loose items still loose',
         anytimeTitles(d.byId).join() === 'L1,L2,L3', anytimeTitles(d.byId).join());
       check('exactly where they were',
@@ -1211,7 +1211,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       });
       await drag(d, 2, -1);
       check('a day with nothing loose in it is unchanged by all this',
-        order(d) === 'A C B', order(d));
+        order(d.slots) === 'A C B', order(d.slots));
     }
   }
 
@@ -1225,7 +1225,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     //
     // What the finger is over is a question about positions. It is answered by
     // reading them now.
-    const { ctx, slots, cardOf , titleOf } = boot();
+    const { ctx, slots, cardOf } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -1234,7 +1234,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // B gets a note, so everything below B sits 26px lower than a flat ladder.
     ctx.saveNote(1, 'ring first');
 
-    const order = () => slots().map((s) => titleOf(s)).join(' ');
+    const order = () => slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ');
     check('the day is as built', order() === 'A B C D', order());
 
     const tops = slots().map((s) => s.getBoundingClientRect().top);
@@ -1271,12 +1271,12 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('and the note stayed with the block that had it',
       (slots().find((s) => s.text().includes('ring first')) || { text: () => '' })
         .text().includes('B'),
-      slots().map((s) => titleOf(s)).join(' '));
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
   }
 
   console.log('\nstarting a drag on an already-scrolled page');
   {
-    const { ctx, slots, cardOf, win , titleOf } = boot();
+    const { ctx, slots, cardOf, win } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -1293,8 +1293,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     up(card, 100, 100 + SLOT);
     await wait(SETTLED);
     check('and it still reorders correctly',
-      slots().map((s) => titleOf(s)).join(' ') === 'B A C',
-      slots().map((s) => titleOf(s)).join(' '));
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'B A C',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
   }
 
   console.log('\na swipe and a tap never hold the page');
@@ -1316,7 +1316,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
   console.log('\nheld, then dragged to a new place');
   {
-    const { ctx, slots, cardOf, titles , titleOf } = boot();
+    const { ctx, slots, cardOf, titles } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -1337,16 +1337,16 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
     check('it landed last', titles().indexOf('A') > titles().indexOf('C'), titles().join(' '));
     check('the order is B C A',
-      slots().map((s) => titleOf(s)).join(' ') === 'B C A',
-      slots().map((s) => titleOf(s)).join(' '));
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'B C A',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
     check('and the times were recomputed from the top',
-      slots()[0].text().includes('8:00 AM'), slots()[0].text().trim());
+      slots()[0].text().includes('8:00 AM – 8:30 AM'), slots()[0].text().trim());
     check('every transform was cleared', slots().every((s) => !s.style.transform));
   }
 
   console.log('\ndragging up, and off the ends');
   {
-    const { ctx, slots, cardOf , titleOf } = boot();
+    const { ctx, slots, cardOf } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -1360,8 +1360,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     await wait(SETTLED);
 
     check('it clamps to first rather than falling off',
-      slots().map((s) => titleOf(s)).join(' ') === 'C A B',
-      slots().map((s) => titleOf(s)).join(' '));
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'C A B',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
   }
 
   console.log('\ngesture arbitration');
@@ -1399,7 +1399,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
   console.log('\nreduced motion keeps the reorder and drops the movement');
   {
-    const { ctx, slots, cardOf , titleOf } = boot({ reduced: true });
+    const { ctx, slots, cardOf } = boot({ reduced: true });
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -1419,8 +1419,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     up(card, 100, 100 + SLOT);
     // No settle to wait for: reduced motion commits immediately.
     check('the reorder still happened',
-      slots().map((s) => titleOf(s)).join(' ') === 'B A',
-      slots().map((s) => titleOf(s)).join(' '));
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' ') === 'B A',
+      slots().map((s) => s.text().trim().split(/\s+/)[0]).join(' '));
   }
 
   console.log('\nthe rest of the builder still holds');
@@ -1734,27 +1734,26 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // And nothing in its place. The chip is withheld because the length can no
     // longer change; there is no question to put there, because a block that
     // did not happen comes out of the day instead.
-    // Its hour and its name, and nothing else: no chip, no label, no question.
-    check('a past block carries its three columns and no chip',
-      rowOf(slots()[0]).children.length === 3, String(rowOf(slots()[0]).children.length));
-    check('nor does the second one', rowOf(slots()[1]).children.length === 3,
+    check('a past block carries nothing beside its title',
+      rowOf(slots()[0]).children.length === 1, String(rowOf(slots()[0]).children.length));
+    check('nor does the second one', rowOf(slots()[1]).children.length === 1,
       String(rowOf(slots()[1]).children.length));
 
-    // NO LINE ACROSS THE DAY. It was drawn once, above the first block that had
-    // not ended — a knot and a rule with no word, because every word tried
-    // there was a claim about one side of it.
-    //
-    // The row you are in is marked four ways now, and where the past ends is
-    // said by the rows themselves: they go faint and their status column reads
-    // DONE. A line above them was a fifth mark for a fact already made twice.
     const divider = byId.builder.children.filter((c) => c._class.has('now'));
-    check('nothing is drawn across the day', divider.length === 0, String(divider.length));
-    check('the builder holds rows and nothing else',
-      byId.builder.children.every((c) => c._class.has('slot')),
-      byId.builder.children.map((c) => [...c._class].join('.')).join(' '));
+    check('one divider', divider.length === 1, `${divider.length}`);
+    check('between the past and what is left',
+      byId.builder.children.indexOf(divider[0]) === 2,
+      String(byId.builder.children.indexOf(divider[0])));
+    check('it carries a dot and a rule',
+      divider[0].children.some((c) => c._class.has('dot')) &&
+        divider[0].children.some((c) => c._class.has('ln')));
+    check('and no word at all', divider[0].text().trim() === '',
+      JSON.stringify(divider[0].text()));
+    check('so nothing there claims a side of the line',
+      !/NOW|Next/i.test(divider[0].text()), divider[0].text());
 
     check('a past block keeps the hour it happened at',
-      slots()[0].text().includes('8:00 AM'), slots()[0].text().trim());
+      slots()[0].text().includes('8:00 AM – 9:00 AM'), slots()[0].text().trim());
   }
 
   console.log('\na past block is not asked about, and swipes away like any other');
@@ -1769,8 +1768,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
     check('the past block asks nothing',
       !rowOf(slots()[0]).children.some((c) => c._class.has('askmiss')));
-    check('and carries its three columns and nothing more',
-      rowOf(slots()[0]).children.length === 3,
+    check('and carries nothing at all beside its title',
+      rowOf(slots()[0]).children.length === 1,
       String(rowOf(slots()[0]).children.length));
 
     // Tapping where the question used to be must not do anything either.
@@ -1830,7 +1829,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
     ctx.addBlock({ title: 'Next' });
     check('two blocks', titles().join() === 'Done,Next', titles().join());
-    check('the finished one kept its hour', slots()[0].text().includes('8:00 AM'),
+    check('the finished one kept its hour', slots()[0].text().includes('8:00 AM – 9:00 AM'),
       slots()[0].text().trim());
     check('and the new one starts at the next half hour, not the wake time',
       slots()[1].text().includes('11:30 AM – 12:00 PM'), slots()[1].text().trim());
@@ -2056,7 +2055,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     await ctx.load();
 
     check('the delivered block is where it always was',
-      slots()[0].text().includes('8:00 AM'), slots()[0].text().trim());
+      slots()[0].text().includes('8:00 AM – 9:00 AM'), slots()[0].text().trim());
     check('and reads as past', slots()[0].children[1]._class.has('past'));
     check('what is left moved up to the next half hour',
       slots()[1].text().includes('9:30 AM – 10:30 AM'), slots()[1].text().trim());
@@ -2109,7 +2108,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     });
     await ctx.load();
 
-    check('it stayed where it was stored', slots()[0].text().includes('8:00 AM'),
+    check('it stayed where it was stored', slots()[0].text().includes('8:00 AM – 9:00 AM'),
       slots()[0].text().trim());
     check('and still reads as past', slots()[0].children[1]._class.has('past'));
 
@@ -2146,18 +2145,11 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     });
     await ctx.load();
 
-    // THE BUILDER HOLDS EXACTLY THE ROWS. This case was written when it did
-    // not: a divider was drawn across the day, the gap-opening read every child
-    // of the builder, and the two lists disagreed by one from the divider down.
-    //
-    // The divider is gone — the row you are in is marked four ways, and where
-    // the past ends is said by the rows themselves. So the mistake is no longer
-    // reachable from this direction, and the case stays because it is still
-    // reachable from the other: `blocks` holds the anytime items too, which is
-    // what the cases further down are about.
     const kids = () => byId.builder.children;
-    check('the builder holds exactly the rows',
-      kids().length === slots().length, `${kids().length} vs ${slots().length}`);
+    const divider = () => kids().find((c) => c._class.has('now'));
+    check('the day has a divider in it', Boolean(divider()));
+    check('so the builder holds more children than blocks',
+      kids().length === slots().length + 1, `${kids().length} vs ${slots().length}`);
 
     // Carry the last block up one place — the case reported.
     const card = cardOf(slots()[3]);
@@ -2171,6 +2163,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('the finished blocks are left alone',
       !slots()[0].style.transform && !slots()[1].style.transform,
       `${slots()[0].style.transform} / ${slots()[1].style.transform}`);
+    check('and the divider is not dragged around with them',
+      !divider().style.transform, divider().style.transform);
 
     up(card, 100, 300 - SLOT);
     await wait(SETTLED);
@@ -2239,12 +2233,10 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('the finished ones kept the hours they happened at',
       hours[0] === '8:00 AM' && hours[1] === '9:00 AM', JSON.stringify(hours));
 
-    // The rows say which side of the past they are on, so nothing has to draw
-    // a line between them: the finished ones are faint and their status column
-    // reads DONE.
-    check("and nothing is drawn between them",
-      byId.builder.children.every((c) => c._class.has("slot")),
-      byId.builder.children.map((c) => [...c._class].join(".")).join(" "));
+    const line = byId.builder.children.filter((c) => c._class.has('now'));
+    check('and there is still exactly one divider', line.length === 1, String(line.length));
+    check('below the two that are over', byId.builder.children.indexOf(line[0]) === 2,
+      String(byId.builder.children.indexOf(line[0])));
   }
 
   console.log('\na block you are in the middle of is locked');
@@ -2283,7 +2275,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // It says what it is instead. The slot the chip vacated was reading as a
     // block that had failed to render one.
     const actIn = (s) => rowOf(s).children.find((c) => c._class.has('running'));
-    check('it says it is active', actIn(slots()[1]) && actIn(slots()[1]).textContent === 'NOW · 1H',
+    check('it says it is active', actIn(slots()[1]) && actIn(slots()[1]).textContent === 'active',
       actIn(slots()[1]) && actIn(slots()[1]).textContent);
     check('the one that is over does not', !actIn(slots()[0]));
     check('nor does the one still to come', !actIn(slots()[2]));
@@ -2297,11 +2289,14 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // next. With the word gone the line goes back to marking the edge of the
     // past, which is the division that was wanted all along.
     const kids = byId.builder.children;
-    check("nothing is drawn across the day",
-      kids.every((c) => c._class.has("slot")),
-      kids.map((c) => [...c._class].join(".")).join(" "));
-    check('and the block that is over is still above the one running',
-      kids.indexOf(slots()[0]) < kids.indexOf(slots()[1]));
+    const line = kids.filter((c) => c._class.has('now'));
+    check('there is one divider', line.length === 1, String(line.length));
+    check('and it sits above the block in progress',
+      kids.indexOf(line[0]) === 1, String(kids.indexOf(line[0])));
+    check('so the running block is below the line, with what is still to come',
+      kids.indexOf(line[0]) < kids.indexOf(slots()[1]));
+    check('and the block that is over is above it',
+      kids.indexOf(slots()[0]) < kids.indexOf(line[0]));
 
     // Holding it must not pick it up.
     const card = cardOf(slots()[1]);
@@ -3531,8 +3526,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
     // REACHABLE ON AN EMPTY DAY. The Anytime section is hidden until something
     // is in it, so a button inside it could never add the first one.
-    check('the anytime section is there to be added to',
-      !byId['anytime']._class.has('hidden'));
+    check('the anytime section starts hidden', byId['anytime']._class.has('hidden'));
     check('but the way in is there anyway', typeof byId['add-anytime'].onclick === 'function');
 
     const endedAt = byId['end-time'].textContent;
@@ -3548,7 +3542,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       String(byId['add-field'].getAttribute('placeholder')));
 
     typeAdd('Walk the dog');
-    check('the section holds it', anytimeTitles(byId).length === 1);
+    check('the section opens', !byId['anytime']._class.has('hidden'));
     check('with the one-off on it',
       anytimeTitles(byId).join() === 'Walk the dog', anytimeTitles(byId).join());
 
@@ -3593,7 +3587,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     for (const nothing of ['', '   ']) typeAdd(nothing);
     check('an empty line adds nothing', anytimeTitles(byId).length === 0,
       anytimeTitles(byId).join());
-    check('and it holds nothing', anytimeTitles(byId).length === 0);
+    check('and the section stays hidden', byId['anytime']._class.has('hidden'));
     check('but the field is still open to type in',
       !byId['add-field']._class.has('hidden'));
 
@@ -3629,106 +3623,6 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       slots().length === 1, `${slots().length}`);
     check('with the anytime list untouched', anytimeTitles(byId).length === 4,
       anytimeTitles(byId).join());
-  }
-
-  console.log('\nan anytime row is worked like any other row');
-  {
-    // IT HAD AN × INSTEAD: a second way to remove a thing, in a different
-    // place, with no undo behind it — while every other row on the screen
-    // removes by swiping left and takes a note by swiping right. A row with no
-    // hour is still a row of the day.
-    //
-    // Nothing tested that × in this file. It could be deleted and the whole
-    // suite stayed green, which is why these cases exist at all.
-    const rowOfAny = (byId) => anytimeRows(byId)[0];
-
-    {
-      const { ctx, byId } = boot();
-      await ctx.load();
-      ctx.addAnytime({ title: 'Parking pass' });
-
-      const row = rowOfAny(byId);
-      check('there is no × on it', !row.children.some((c) => c._class.has('ax')),
-        row.children.map((c) => [...c._class].join('.')).join(' '));
-      check('nor anywhere in the page', !/class="ax"|'ax'/.test(html));
-      check('but it still has its tick', Boolean(tickOf(row)));
-      check('and it takes the pointer, like a block',
-        typeof row.onpointerdown === 'function');
-      check('with a backing to slide off',
-        anytimeSlots(byId)[0].children.some((c) => c._class.has('backing')));
-    }
-
-    {
-      // LEFT REMOVES. Past the threshold, and it is the same removeBlock the
-      // day above uses — so it keeps the same undo.
-      const { ctx, byId } = boot();
-      await ctx.load();
-      ctx.addAnytime({ title: 'Parking pass' });
-      ctx.addAnytime({ title: 'Reading' });
-
-      const row = rowOfAny(byId);
-      down(row, 200, 40);
-      move(row, 100, 40);
-      up(row, 100, 40);
-      await wait(SETTLED + CLOSED);
-
-      check('swiping one left takes it off the day',
-        anytimeTitles(byId).join() === 'Reading', anytimeTitles(byId).join());
-      const bar = byId['undo-host'].children[0];
-      check('and the undo is offered, the same as a block',
-        Boolean(bar) && bar._class.has('undo'));
-    }
-
-    {
-      // RIGHT OPENS THE NOTE. The same editor a block gets.
-      const { ctx, byId, slots } = boot();
-      await ctx.load();
-      ctx.addAnytime({ title: 'Parking pass' });
-
-      const row = rowOfAny(byId);
-      down(row, 100, 40);
-      move(row, 200, 40);
-      up(row, 200, 40);
-
-      const editor = anytimeRows(byId)[0].children.find((c) => c._class.has('noteedit'));
-      check('swiping one right opens a note on it', Boolean(editor),
-        anytimeRows(byId)[0].children.map((c) => [...c._class].join('.')).join(' '));
-      check('and it did not get promoted into the day on the way',
-        slots().length === 0, );
-    }
-
-    {
-      // A COMMITTED SWIPE DOES NOT PROMOTE. Letting go fires a click on
-      // whatever was under the finger, and a plain tap on one of these puts it
-      // into the day at an hour — so without the guard, removing one would
-      // schedule it on its way out.
-      const { ctx, byId, slots } = boot();
-      await ctx.load();
-      ctx.addAnytime({ title: 'Parking pass' });
-
-      const row = rowOfAny(byId);
-      down(row, 100, 40);
-      move(row, 200, 40);
-      up(row, 200, 40);
-      if (row.onclick) row.onclick();
-
-      check('the click a swipe leaves behind is swallowed',
-        slots().length === 0, );
-    }
-
-    {
-      // AND A PLAIN TAP STILL PROMOTES, which is the thing the guard must not
-      // break.
-      const { ctx, byId, slots } = boot();
-      await ctx.load();
-      ctx.addAnytime({ title: 'Parking pass' });
-
-      rowOfAny(byId).onclick();
-      check('a tap with no swipe before it still puts it in the day',
-        slots().length === 1, `${slots().length}`);
-      check('and it leaves the anytime list', anytimeTitles(byId).length === 0,
-        anytimeTitles(byId).join());
-    }
   }
 
   console.log('\nthe calendar aside puts things in the day, and never greys');

@@ -2101,113 +2101,42 @@ Today / Tomorrow switch and the shape of a past block.
 tabular figures. Storage is untouched: the page still sends minutes, the row is
 still a 24-hour `time`, and one function on each side decides how a time reads.
 
-**Neutral and light.** It was cream paper and ink: a fibre texture behind the
-page, block cards whose edges were displaced through turbulence by an SVG filter
-so no two matched, a shadow under each, a name seal for Confirm, an ensō for the
-loading mark. It was chosen when this was a notebook, and it was well made — but
-this is a planner you open several times a day to answer *what now*, and the
-answer has to be the loudest thing on the screen, which it is not when the screen
-is being something.
-
-So: nothing here is a colour that is not doing work. A white page, three greys
-that differ enough to rank, one blue for what can be pressed, one red for what is
-running out.
-
-This table has been wrong before — it went on listing an even earlier dark build
-long after the paper one shipped, so the one document anybody would read to
-answer "what colour is this app" answered with a build that no longer existed.
-`plan-layout-check.js` reads both and refuses **any** hex in this section that
-`:root` has never heard of, prose included, which is why the old values are
-described here rather than quoted.
+**Paper, not a dark screen.** This table went on listing the dark build long
+after the washi one shipped — near-black paper, a pale blue — so the one
+document anybody would read to answer "what colour is this app" answered with a
+build that no longer exists. `plan-layout-check.js` now reads both and refuses
+**any** hex in this section that `:root` has never heard of, prose included,
+which is why the old values are described here rather than quoted.
 
 | | |
 |---|---|
-| bg | `#ffffff` |
-| tint — the row you are in | `#f4f7fc` |
-| text | `#0f1620` |
-| muted | `#5c6b7f` |
-| faint | `#97a3b4` |
-| ghost — figures, never words | `#c3ccd8` |
-| hairline, between rows | `#e6ebf1` |
-| rule, under the row you are in | `#cfd8e3` |
-| accent — blue | `#1e4fd8` |
-| warn — red | `#dc2626` |
-
-**Two faces, split by job.** Every figure is **IBM Plex Mono** with tabular
-numerals, so times, durations and indexes fall into real columns down the page;
-every name is **Inter**. Nothing crosses over. Both are fetched, which this page
-had refused to do and for a good reason — a round trip on a cold load of an app
-whose point is being open before you have finished reaching for it. `display=swap`
-is what makes it survivable: the system stack renders first and the page never
-blocks. Both stacks end in what the device already has, so a failed fetch
-degrades rather than breaks.
-
-**Three rule weights, each meaning something.** A **1.5px solid** in the ink
-colour ends a section — the column heads, Anytime, Day ends. A **1px hairline**
-separates two rows of the same kind. The **mid rule** sits under the row you are
-in. Rules run the full width: the page's side margin is on the things between
-rows, not on the page, because a line inset by 18px reads as a card with a
-border rather than as a ledger.
-
-**Four greys, not three**, and the fourth is why that is worth saying. `ghost` is
-lighter than any contrast bar would pass and is allowed to be: it carries the
-index column and the state of a row already over — figures you count down, never
-words you read.
-
-Contrast is checked rather than trusted. Text 18.2:1, muted 5.4:1 and blue 6.6:1
-against the page; faint clears 3:1, which is all a mark is asked to carry. White
-on blue clears 4.5:1 the other way round, which is what Confirm needs. And the
-greys have to **rank** — if two land close enough to read as one, the page has
-four registers and shows three.
-
-`faint` is the one value on the page that does not clear a contrast bar: 2.6:1 on
-white, against the 3:1 a mark is usually asked to carry. It was darkened once to
-clear it and put back by hand, so it is a decision rather than an oversight —
-and what keeps it defensible is what it is allowed to carry. Times on rows
-already over, and the status column. Never a title, never a body size, never the
-only copy of anything. Two checks hold that line, and if faint ever reaches a
-title it stops being a note.
+| bg | `#f5f1e8` |
+| card | `#e7e0d2` |
+| hairline | `#ded7c8` |
+| text | `#2b2a28` |
+| muted | `#5f5a52` |
+| faint | `#8a857c` |
+| accent — indigo | `#37516e` |
+| warn — persimmon | `#b8492a` |
 
 The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
 
-- **Everything is a row, and nothing is a card.** Things and blocks alike: a
-  hairline between one and the next, no fill, no radius, no shadow. A block used
-  to be a card because a card says "this is an object you move" and blocks are
-  the only things here that move — the drag says that on its own, and it says it
-  while your finger is on it rather than all day.
-- **A block states its whole span, under its title.** `8:00 AM – 8:30 AM`, in
-  tabular figures.
-
-  It was a single start time in a fixed column down the left for one revision.
-  The hours stacked, and a glance down the edge was the shape of the day — which
-  is a real gain, and it cost more than it was worth: a block is a piece of the
-  day **with a size**, and a start time says when it opens without saying what it
-  takes. The chip on the right says `30m`, so the row would have stated its
-  length twice and its end never. The span says both at once.
-- **A spent block is greyed, not redrawn.** Faint text on a ground a shade off
-  the page. It was an outline once and that was refused for the right reason —
-  an outline draws a thing rather than laying it down — and it was a second
-  paper colour with a softer torn edge after that. Greying is the cheapest true
-  statement: the same row, quieter.
-- **Sections are separated by space**, 28px of it — not by borders, not by nested
-  containers. The one heavier rule on the page is above **Day ends**, because
-  that is the only division that is not between two rows of the same kind.
-- **One label style:** 9.5px, uppercase, 0.26em tracking, muted. Actions like
+- **A row is a row.** Things is plain rows with hairline dividers between them.
+  Only a builder block is a card, because a card says "this is an object you
+  move", and those are the only objects here that move — and a block that has
+  already happened drops to an outline, because it has stopped being one.
+- **Sections are separated by space**, 36px of it — not by borders, not by nested
+  containers.
+- **One label style:** 10px, uppercase, 0.14em tracking, muted. Actions like
   `+ Add` sit on its baseline and are **quieter** than it, never louder.
 - **Two text sizes per row:** 15px title, 12px muted meta on its own line with
   real space between them.
-- **There are two colours, and neither is subordinate to the other.** Blue says
-  *you can press this*; red says *this is running out*. Both lists are enforced
-  **by name** in the layout check, so a third use of either has to be argued for
-  in that file rather than added quietly. Collapsing them into one would leave
-  the day screen with no way to tell a control from a warning at a glance — a
-  duration chip and a deadline mark would read alike.
-- **Confirm is the one filled control.** A blue rectangle, white word. It was a
-  hanko — a persimmon name seal drawn on a layer beneath the text with a
-  turbulence filter for an uneven bite — and it cost two composited layers and
-  two separate bugs: a word painted outside its own raster and coming back as
-  `ONFIRME`, and a filter swap on the day switch that made the whole face
-  invisible.
+- **There are two inks, and neither is subordinate to the other.** Indigo says
+  *you can press this*; persimmon says *this warns you, or this commits*. Both
+  lists are enforced **by name** in the layout check, so a third use of either
+  has to be argued for in that file rather than added quietly. Collapsing them
+  into one would leave the day screen with no way to tell a control from a
+  warning at a glance — a duration chip and a deadline mark would read alike.
 
 - **Blue is actionable, plus two things that are not.** The Starts steppers, the
   duration chip, `+ Block`, Undo, Save, Back, Clear and a focused field are all
