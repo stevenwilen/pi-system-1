@@ -189,35 +189,61 @@ console.log('0. the stylesheet parses');
   check('nothing is broken open or left open', damage === null, damage || '');
 }
 
-console.log('\n0b. the page has a margin, and the rules reach past it');
+console.log('\n0b. one gutter, and nothing wider than the phone');
 {
-  // THE MARGIN IS ON THE THINGS BETWEEN ROWS. `main` has none at its sides, so
-  // a row's own padding is its gutter and its rule runs edge to edge — which is
-  // what makes this read as a ledger rather than as a list of bordered cards.
+  // THE MARGIN IS ON ONE CONTAINER. It was a horizontal padding on ten separate
+  // elements plus a margin on two more, and those behave differently the moment
+  // anything overflows — which is exactly what happened: on iOS the labels,
+  // + BLOCK, + ANYTIME and DAY ENDS lost their gutter while the table rows kept
+  // theirs, and the whole page was 1.6x too large with the DAY ENDS figure
+  // clipped off the right edge.
   //
-  // The cost is that everything which is NOT a row has to carry the margin
-  // itself, and that was one grouped selector naming all of them. It was
-  // destroyed wholesale when the NOW divider came out: the divider was the last
-  // name in the group, and removing it took the group. Nothing failed — every
-  // rule still applied, and the entire page simply sat flush against the left
-  // edge of the phone. It shipped, and a screenshot found it.
-  //
-  // That is the second group in this file to be lost by being a group, and the
-  // fourth to cause a bug. They are written one per selector now.
-  check('the page itself has no side padding',
-    /padding: 18px 0 /.test(rule('main')), rule('main'));
+  // Desktop rendered it correctly at the same width, which is the tell. Safari
+  // INFLATES TEXT on any page it decides is not mobile-optimised, and
+  // horizontal overflow is one of the things that decides it. So the sizes were
+  // never wrong; something was too wide, and the type scale was the symptom.
+  check('the page carries the only gutter',
+    /padding: 18px 18px /.test(rule('main')), rule('main').replace(/\s+/g, ' '));
+  check('and nothing else carries one', !/padding-left: 18px/.test(css));
 
-  for (const sel of ['.dayswitch', '.label', '.adds', '.ends', '.inline', '.stats', '.refresh']) {
-    check(`${sel} carries the margin itself`,
-      /padding-left: 18px/.test(rule(sel)), rule(sel).slice(0, 70).replace(/\s+/g, ' '));
-  }
+  // A row reaches the edge by pulling itself back out of that padding. This is
+  // the one place the number appears twice, and they have to stay equal.
+  // Read out of the sheet directly: a lookup by name finds the plain `.slot`
+  // rule, which is the one that does NOT carry this.
+  const bleed = (css.match(/\.slot,\s*\.thing,\s*\.atime \{[^}]*/) || [''])[0];
+  check('rows pull back out to the edge',
+    /margin-left: -18px/.test(bleed) && /margin-right: -18px/.test(bleed), bleed);
+  check('and put their contents back on the gutter',
+    /padding: \d+px 18px/.test(rule('.block')) && /padding: \d+px 18px/.test(rule('.arow')));
 
-  // And the rows do not: theirs is padding inside a rule that has to reach the
-  // edge, which is a different thing that happens to be the same number.
-  for (const sel of ['.block', '.arow', '.row']) {
-    check(`${sel} has its gutter inside its own rule`,
-      /padding: \d+px 18px/.test(rule(sel)), rule(sel).slice(0, 70).replace(/\s+/g, ' '));
-  }
+  // OFF EXPLICITLY. Without this, the inflation returns the next time anything
+  // overflows by a pixel — and it returns as "the type scale is wrong", which
+  // is three steps from the cause.
+  check('text inflation is refused', /-webkit-text-size-adjust: 100%/.test(css));
+  check('and by the standard property too', /[^-]text-size-adjust: 100%/.test(css));
+
+  // Nothing may be wider than what holds it. A flex child's default min-width
+  // is auto, which is why a long title pushed a row past the viewport instead
+  // of wrapping inside it.
+  check('no flex child refuses to shrink', /min-width: 0;/.test(rule('*')), rule('*'));
+
+  // AND THE MOCKUP'S PHONE FRAME IS NOT IN HERE. It was 352px wide, and a fixed
+  // width copied out of it is the first thing that would overflow a 390px
+  // screen once the gutters are added.
+  check('no phone frame came across from the mockup',
+    !/width: 352px/.test(css) && !/\.phone/.test(css));
+
+  // Pinch-zoom belongs to whoever needs it. maximum-scale and user-scalable=no
+  // were on the viewport and do not prevent the inflation above — that is a
+  // different mechanism — so they were costing accessibility for nothing.
+  check('the viewport is the three things it should be',
+    /width=device-width,\s*initial-scale=1,\s*viewport-fit=cover/.test(html) &&
+      !/maximum-scale/.test(html));
+  check('and does not block pinch-zoom',
+    !/maximum-scale/.test(body) && !/user-scalable/.test(body));
+
+  // So it does not stretch on a tablet.
+  check('and it stops widening at 480', /max-width: 480px/.test(rule('main')));
 }
 
 console.log('\n1. the palette is exactly the one specified');

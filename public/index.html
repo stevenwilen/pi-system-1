@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
     <meta name="theme-color" content="#1E4FD8" />
     <!-- TWO FACES, SPLIT BY JOB. Every figure is IBM Plex Mono with tabular
@@ -115,8 +115,13 @@
           monospace;
       }
 
+      /* NOTHING IS WIDER THAN WHAT HOLDS IT. box-sizing was already here; the
+         overflow guard is not, and it is what turns "this row is two pixels too
+         wide" from a page that inflates all its own text into a title that
+         wraps. */
       * {
         box-sizing: border-box;
+        min-width: 0;
         margin: 0;
         padding: 0;
       }
@@ -124,6 +129,17 @@
       html,
       body {
         height: 100%;
+      }
+
+      /* SAFARI INFLATES TEXT ON ANY PAGE IT DECIDES IS NOT MOBILE-OPTIMISED,
+         and horizontal overflow is one of the things that decides it. The
+         result is every size on the page multiplied by something near 1.6,
+         which reads as "the type scale is wrong" and is not — the same
+         stylesheet at the same width is correct on a desktop.
+         Off explicitly, so the sizes below are the sizes. */
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
       }
 
       body {
@@ -138,7 +154,19 @@
       main {
         max-width: 480px;
         margin: 0 auto;
-        padding: 18px 0 calc(40px + env(safe-area-inset-bottom));
+        padding: 18px 18px calc(40px + env(safe-area-inset-bottom));
+      }
+
+      /* ONE GUTTER, ON ONE CONTAINER, and the rows pull themselves back out of
+         it. It was a horizontal padding on each of ten elements and a margin on
+         two others — which behave differently the moment anything overflows,
+         and is why the labels collapsed on a phone while the rows kept theirs.
+         The number appears twice here and nowhere else. */
+      .slot,
+      .thing,
+      .atime {
+        margin-left: -18px;
+        margin-right: -18px;
       }
 
       /* The small mono capitals that head a column. Set in the same face as
@@ -160,7 +188,7 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 0 18px 6px;
+        padding: 0 0 6px;
         border-bottom: 1.5px solid var(--heavy);
       }
       .colhead .c-i {
@@ -193,8 +221,6 @@
          it fainter, which is the trade this theme keeps having to make.
          Weight 400, not 300 — at this size and tracking, 300 disappears. */
       .label {
-        padding-left: 18px;
-        padding-right: 18px;
         font-family: var(--mono);
         font-size: 8.5px;
         letter-spacing: 0.2em;
@@ -235,8 +261,6 @@
          section heading — the word that used to name the day now chooses it,
          and there is no new control on the screen. */
       .dayswitch {
-        padding-left: 18px;
-        padding-right: 18px;
         display: flex;
         align-items: baseline;
         gap: 8px;
@@ -603,8 +627,7 @@
       .cal {
         border-left: 2px solid var(--cal-rule);
         padding: 2px 0 2px 13px;
-        margin: 0 0 22px 18px;
-        width: calc(100% - 36px);
+        margin: 0 0 22px;
       }
       .cal h4 {
         font-family: var(--mono);
@@ -670,8 +693,6 @@
       /* --- inline control, not a card ------------------------------------- */
 
       .inline {
-        padding-left: 18px;
-        padding-right: 18px;
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -1484,8 +1505,6 @@
          is how close to the cadence you came, and a part-filled bar answers
          that without being read. */
       .stats {
-        padding-left: 18px;
-        padding-right: 18px;
         margin: 30px 0 34px;
       }
       .stats .label {
@@ -1536,8 +1555,6 @@
          muted so it never competes with the day above it. Not blue — blue is
          for the controls that change the day, and this changes nothing. */
       .refresh {
-        padding-left: 18px;
-        padding-right: 18px;
         margin: 34px 0 4px;
         text-align: center;
       }
@@ -1553,8 +1570,6 @@
       }
 
       .signout {
-        padding-left: 18px;
-        padding-right: 18px;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -1634,8 +1649,6 @@
       /* A folded slip pushed across the desk. Paper like everything else, with
          a deckle of its own so it belongs to the same sheet. */
       .undo {
-        padding-left: 18px;
-        padding-right: 18px;
         position: fixed;
         left: 50%;
         transform: translateX(-50%);
@@ -1677,8 +1690,6 @@
       /* The two ways in, side by side. A gap rather than a rule between them:
          they are alternatives, not a control with two halves. */
       .adds {
-        padding-left: 18px;
-        padding-right: 18px;
         display: flex;
         gap: 22px;
       }
@@ -1689,8 +1700,6 @@
          a boxed field would be the one thing on the screen pretending to be
          software. */
       .addfield {
-        padding-left: 18px;
-        padding-right: 18px;
         width: 100%;
         margin-top: 12px;
         padding: 4px 0;
@@ -1724,8 +1733,6 @@
       }
 
       .ends {
-        padding-left: 18px;
-        padding-right: 18px;
         display: flex;
         justify-content: space-between;
         align-items: baseline;
@@ -1773,9 +1780,7 @@
          a screen you are now just reading. */
       .confirm {
         display: block;
-        width: calc(100% - 36px);
-        margin-left: 18px;
-        margin-right: 18px;
+        width: 100%;
         margin-top: 18px;
         background: var(--accent);
         color: #fff;
