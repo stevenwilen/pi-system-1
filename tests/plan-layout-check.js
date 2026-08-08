@@ -289,7 +289,7 @@ console.log('\n0c. a section rule, its label, and the rows under it');
   check('the column head sits above its rule',
     /border-bottom: 1\.5px solid var\(--heavy\)/.test(rule('.colhead')));
   check('  with 6px between them',
-    /padding: 0 0 6px/.test(rule('.colhead')), rule('.colhead').replace(/\s+/g, ' '));
+    /padding-bottom: 6px/.test(rule('.colhead')), rule('.colhead').replace(/\s+/g, ' '));
 
   // And the three rules are the same weight, because they are the same kind of
   // division: the end of one part of the page and the start of another.
@@ -349,6 +349,48 @@ console.log('\n0a. nothing absolute is left without an anchor');
   }
   check('and the ones that position them say so',
     /position: relative/.test(rule('.tzrow')) && /position: fixed/.test(rule('.undo')));
+}
+
+console.log('\n0d. no shorthand quietly undoes a longhand above it');
+{
+  // `padding-left: 18px` then `padding: 0 0 6px` four lines later is zero on the
+  // left, and CSS says so without complaining. That is what put the # column
+  // head hard on the screen edge and clipped STATUS off the other one, while
+  // every check in this file went on passing — they read the longhand, which
+  // was there, and never asked whether anything below it took it back.
+  //
+  // A margin shorthand did the same to the negative margins that make a rule
+  // reach the edge. Two rules, one mistake, and it is the third time a
+  // stylesheet detail has been invisible to a checker reading declarations one
+  // at a time.
+  const PAIRS = [['padding', ['padding-left', 'padding-right', 'padding-top', 'padding-bottom']],
+                 ['margin', ['margin-left', 'margin-right', 'margin-top', 'margin-bottom']]];
+
+  const offenders = [];
+  for (const m of css.matchAll(/\n {6}([^{@\n][^{]*?)\{([^}]*)\}/g)) {
+    const selector = m[1].split('}').pop().trim().replace(/\s+/g, ' ');
+    const body = m[2];
+    for (const [short, longs] of PAIRS) {
+      const at = body.search(new RegExp(`(^|;|\\s)${short}:`));
+      if (at === -1) continue;
+      for (const long of longs) {
+        const lat = body.indexOf(long + ':');
+        // A longhand ABOVE a shorthand of the same family is overwritten by it.
+        if (lat !== -1 && lat < at) offenders.push(`${selector}: ${long} then ${short}`);
+      }
+    }
+  }
+
+  check('nothing states a side and then takes it back',
+    offenders.length === 0, offenders.join(' | ') || 'none');
+
+  // And the three that were wrong, by name, so the fix cannot be undone by
+  // reformatting.
+  for (const sel of ['.colhead', '.anytime', '.things-head']) {
+    const r = rule(sel);
+    check(`${sel} keeps its gutter`, /padding-left: 18px/.test(r), r.replace(/\s+/g, ' ').slice(0, 80));
+    check(`  and its bleed`, /margin-left: -18px/.test(r), r.replace(/\s+/g, ' ').slice(0, 80));
+  }
 }
 
 console.log('\n1. the palette is exactly the one specified');

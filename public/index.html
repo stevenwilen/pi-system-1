@@ -209,7 +209,9 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 0 0 6px;
+        /* Longhand: a padding shorthand here would reset the two sides set
+           above it, which is what put the # head on the screen edge. */
+        padding-bottom: 6px;
         border-bottom: 1.5px solid var(--heavy);
       }
       .colhead .c-i {
@@ -1438,7 +1440,10 @@
         padding-right: 18px;
         border-top: 1.5px solid var(--heavy);
         padding-top: 14px;
-        margin: 22px 0 4px;
+        /* Longhand, for the reason the column head gives: a margin shorthand
+           here resets the negative sides above it. */
+        margin-top: 22px;
+        margin-bottom: 4px;
 
         /* ONE LINE BOX, SHARED BY ALL THREE THINGS ON A ROW. The tick, the
            title and the × are each exactly this tall and each aligned to the
