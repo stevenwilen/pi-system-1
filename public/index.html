@@ -732,38 +732,35 @@
         -webkit-touch-callout: none;
       }
 
-      /* TIME FIRST, IN A COLUMN OF ONE WIDTH. It used to sit under the title,
-         set in letterspaced small caps, and every row stated its own start and
-         end — which reads well and answers "what now" slowly, because finding
-         the hour meant reading the second line of each row in turn.
-
-         Down the left at a fixed width, the hours stack. A glance down the edge
-         is the shape of the day, and the block you are in is found by running a
-         finger down a column rather than by reading. */
+      /* The block's own line: what it is, and how long. A note, when there is
+         one, sits under this rather than beside it. */
       .brow {
         display: flex;
-        align-items: baseline;
+        justify-content: space-between;
+        align-items: center;
         gap: 12px;
-      }
-      .block .time {
-        flex: none;
-        width: 68px;
-        font-size: 13px;
-        color: var(--muted);
-        font-variant-numeric: tabular-nums;
-      }
-      /* The title takes the rest. `min-width: 0` is what lets it be truncated
-         rather than pushing the chip off the row. */
-      .brow > div:not(.time) {
-        flex: 1;
-        min-width: 0;
       }
       .block .t {
         font-size: 15px;
         line-height: 1.4;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      }
+      /* UNDER THE TITLE, AND THE WHOLE SPAN. It was a single start time in a
+         fixed column down the left for one revision — the hours stacked, and a
+         glance down the edge was the shape of the day.
+
+         What that cost is the length of things. A block is a piece of the day
+         with a size, and reading "8:00 AM" tells you when it opens without
+         telling you what it takes; the chip on the right says 30m, but then the
+         row is stating its length twice and its end not at all. The span says
+         both at once, which is what a block is.
+
+         Tabular, so the hours still line up down the page even though they are
+         no longer in a column of their own. */
+      .block .time {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 4px;
+        font-variant-numeric: tabular-nums;
       }
 
       /* What they said they were doing. Small and muted, so a glance down the
@@ -4144,8 +4141,8 @@
         time.className = 'time';
         time.textContent = ' ';
 
-        left.append(t);
-        row.append(time, left);
+        left.append(t, time);
+        row.append(left);
         ghost.append(row);
         return ghost;
       }
@@ -4656,24 +4653,18 @@
         const row = document.createElement('div');
         row.className = 'brow';
 
-        // THE START, AND NOT THE SPAN. Every row used to state its own start
-        // and end under the title, which reads well and answers "what now"
-        // slowly: finding the hour meant reading the second line of each row in
-        // turn. The end of one block is the start of the next, and the end of
-        // the day is at the foot of the list — a row stating both was saying
-        // twice what the column beside it already says.
-        const time = document.createElement('div');
-        time.className = 'time';
-        time.textContent = clock(b.start);
-
-        // Kept as a wrapper although it holds one thing now: it is what takes
-        // the space the time column leaves, so a long title truncates instead
-        // of pushing the duration chip off the row.
+        // THE WHOLE SPAN, under the title. A block is a piece of the day with
+        // a size: a single start time says when it opens without saying what it
+        // takes, and the chip alone would state the length twice and the end
+        // never. This says both at once, which is what a block is.
         const left = document.createElement('div');
         const t = document.createElement('div');
         t.className = 't';
         t.textContent = b.title;
-        left.append(t);
+        const time = document.createElement('div');
+        time.className = 'time';
+        time.textContent = `${clock(b.start)} – ${clock(b.start + b.duration)}`;
+        left.append(t, time);
 
         // A block that has begun carries no length control. A length it can no
         // longer be given is a control that can only mislead, and the server
@@ -4685,9 +4676,9 @@
         // instead. The outline card and the faint title are what mark it as
         // done, and they were always doing that work.
         if (past) {
-          row.append(time, left);
+          row.append(left);
         } else if (begun) {
-          row.append(time, left, activeLabel());
+          row.append(left, activeLabel());
         } else {
           const dur = document.createElement('button');
           dur.type = 'button';
@@ -4706,7 +4697,7 @@
             cycleDuration(i);
           };
 
-          row.append(time, left, dur);
+          row.append(left, dur);
         }
 
         card.append(row);

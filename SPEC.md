@@ -2140,22 +2140,44 @@ read as one, the page has three registers and shows two.
 
 The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
 
-- **A row is a row.** Things is plain rows with hairline dividers between them.
-  Only a builder block is a card, because a card says "this is an object you
-  move", and those are the only objects here that move — and a block that has
-  already happened drops to an outline, because it has stopped being one.
-- **Sections are separated by space**, 36px of it — not by borders, not by nested
-  containers.
-- **One label style:** 10px, uppercase, 0.14em tracking, muted. Actions like
+- **Everything is a row, and nothing is a card.** Things and blocks alike: a
+  hairline between one and the next, no fill, no radius, no shadow. A block used
+  to be a card because a card says "this is an object you move" and blocks are
+  the only things here that move — the drag says that on its own, and it says it
+  while your finger is on it rather than all day.
+- **A block states its whole span, under its title.** `8:00 AM – 8:30 AM`, in
+  tabular figures.
+
+  It was a single start time in a fixed column down the left for one revision.
+  The hours stacked, and a glance down the edge was the shape of the day — which
+  is a real gain, and it cost more than it was worth: a block is a piece of the
+  day **with a size**, and a start time says when it opens without saying what it
+  takes. The chip on the right says `30m`, so the row would have stated its
+  length twice and its end never. The span says both at once.
+- **A spent block is greyed, not redrawn.** Faint text on a ground a shade off
+  the page. It was an outline once and that was refused for the right reason —
+  an outline draws a thing rather than laying it down — and it was a second
+  paper colour with a softer torn edge after that. Greying is the cheapest true
+  statement: the same row, quieter.
+- **Sections are separated by space**, 28px of it — not by borders, not by nested
+  containers. The one heavier rule on the page is above **Day ends**, because
+  that is the only division that is not between two rows of the same kind.
+- **One label style:** 9.5px, uppercase, 0.26em tracking, muted. Actions like
   `+ Add` sit on its baseline and are **quieter** than it, never louder.
 - **Two text sizes per row:** 15px title, 12px muted meta on its own line with
   real space between them.
-- **There are two inks, and neither is subordinate to the other.** Indigo says
-  *you can press this*; persimmon says *this warns you, or this commits*. Both
-  lists are enforced **by name** in the layout check, so a third use of either
-  has to be argued for in that file rather than added quietly. Collapsing them
-  into one would leave the day screen with no way to tell a control from a
-  warning at a glance — a duration chip and a deadline mark would read alike.
+- **There are two colours, and neither is subordinate to the other.** Blue says
+  *you can press this*; red says *this is running out*. Both lists are enforced
+  **by name** in the layout check, so a third use of either has to be argued for
+  in that file rather than added quietly. Collapsing them into one would leave
+  the day screen with no way to tell a control from a warning at a glance — a
+  duration chip and a deadline mark would read alike.
+- **Confirm is the one filled control.** A blue rectangle, white word. It was a
+  hanko — a persimmon name seal drawn on a layer beneath the text with a
+  turbulence filter for an uneven bite — and it cost two composited layers and
+  two separate bugs: a word painted outside its own raster and coming back as
+  `ONFIRME`, and a filter swap on the day switch that made the whole face
+  invisible.
 
 - **Blue is actionable, plus two things that are not.** The Starts steppers, the
   duration chip, `+ Block`, Undo, Save, Back, Clear and a focused field are all

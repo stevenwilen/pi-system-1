@@ -411,27 +411,28 @@ console.log('\n3. everything is a row, and nothing is a card');
     !/repeating-linear-gradient/.test(rule('body::before')) &&
       !/body::before/.test(css));
 
-  // TIME FIRST, IN A COLUMN OF ONE WIDTH. This is the change the whole redesign
-  // is for: the hours stack down the left, so a glance down the edge is the
-  // shape of the day and the block you are in is found by running a finger down
-  // a column rather than by reading each row's second line.
+  // THE SPAN, UNDER THE TITLE. It was a single start time in a fixed column
+  // down the left for one revision: the hours stacked, and a glance down the
+  // edge was the shape of the day.
+  //
+  // What that cost is the length of things. A block is a piece of the day WITH A
+  // SIZE, and a start time says when it opens without saying what it takes — the
+  // chip says 30m, so the row would state its length twice and its end not at
+  // all. The span says both at once, which is what a block is.
   const time = rule('.block .time');
-  check('the hour leads the row and is a fixed column',
-    /flex: none/.test(time) && /width: \d+px/.test(time), time);
-  check('it is tabular, so the hours stack',
+  check('the time sits under the title, not beside it',
+    /margin-top: \d+px/.test(time) && !/flex: none/.test(time), time);
+  check('it is tabular, so the hours line up down the page',
     /font-variant-numeric: tabular-nums/.test(time), time);
-  check('and quieter than the name it introduces',
+  check('and quieter than the name above it',
     /color: var\(--muted\)/.test(time), time);
-  check('the name takes the rest of the row',
-    /flex: 1/.test(rule('.brow > div:not(.time)')), rule('.brow > div:not(.time)'));
-  check('and truncates rather than pushing the chip off it',
-    /text-overflow: ellipsis/.test(rule('.block .t')), rule('.block .t'));
+  check('the title and its time are one thing, and the chip the other',
+    /justify-content: space-between/.test(rule('.brow')), rule('.brow'));
 
-  // A row states its START. The end of one block is the start of the next and
-  // the day's end is at the foot of the list, so a row stating both said twice
-  // what the column beside it already says.
-  check('a row states one time, not a span',
-    /time\.textContent = clock\(b\.start\);/.test(code));
+  // A row states its WHOLE SPAN. Both ends, from the block's own start and
+  // length — not the day's arithmetic restated.
+  check('a row states a span, not one time',
+    /time\.textContent = `\$\{clock\(b\.start\)\} – \$\{clock\(b\.start \+ b\.duration\)\}`;/.test(code));
   check('and the day still says where it ends', /id="end-time"/.test(body));
 }
 
@@ -814,9 +815,9 @@ console.log('\n7b. the right edge of a block says one thing per state');
 
   check('the word is "active"', /className = 'running';[\s\S]{0,120}textContent = 'active'/.test(code));
   check('a block that has begun gets it',
-    /\} else if \(begun\) \{\s*row\.append\(time, left, activeLabel\(\)\);/.test(code));
-  check('and a block that is over gets nothing beside its hour and its name',
-    /if \(past\) \{\s*row\.append\(time, left\);/.test(code));
+    /\} else if \(begun\) \{\s*row\.append\(left, activeLabel\(\)\);/.test(code));
+  check('and a block that is over gets nothing beside its title',
+    /if \(past\) \{\s*row\.append\(left\);/.test(code));
 }
 
 console.log('\n8. the calendar aside is a left rule, not a card');
@@ -1367,7 +1368,7 @@ console.log('\n17. today and tomorrow');
   // action the server refuses on a delivered block anyway.
   check('a block that has begun gets no chip', /\} else if \(begun\) \{/.test(code));
   check('and one that is over gets nothing at all',
-    /if \(past\) \{\s*row\.append\(time, left\);/.test(code));
+    /if \(past\) \{\s*row\.append\(left\);/.test(code));
   check('begun is read off the stored start, the same as the reflow',
     /const blockBegun = \(b\) => onToday\(\) && hasBegun\(b, nowMinutes\(\)\)/.test(code));
   check('and there is one definition of it', (code.match(/hasBegun\(/g) || []).length === 2,

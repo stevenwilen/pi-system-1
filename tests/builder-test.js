@@ -697,13 +697,13 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
     ctx.addBlock({ title: 'C' });
-    check('laid out in sequence', slots()[2].text().includes('9:00 AM'),
+    check('laid out in sequence', slots()[2].text().includes('9:00 AM – 9:30 AM'),
       slots()[2].text().trim());
 
     chipOf(slots()[0]).onclick(); // A: 30 -> 60
-    check('the one below moved', slots()[1].text().includes('9:00 AM'),
+    check('the one below moved', slots()[1].text().includes('9:00 AM – 9:30 AM'),
       slots()[1].text().trim());
-    check('and the one below that', slots()[2].text().includes('9:30 AM'),
+    check('and the one below that', slots()[2].text().includes('9:30 AM – 10:00 AM'),
       slots()[2].text().trim());
     check('the one above did not', slots()[0].text().includes('8:00 AM'),
       slots()[0].text().trim());
@@ -1455,7 +1455,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('still a stepper', byId['wake-time'].textContent === '8:00 AM');
     byId['wake-plus'].onclick();
     check('one step is half an hour', byId['wake-time'].textContent === '8:30 AM');
-    check('and the day moved with it', slots()[0].text().includes('8:30 AM'),
+    check('and the day moved with it', slots()[0].text().includes('8:30 AM – 9:00 AM'),
       slots()[0].text().trim());
     for (let i = 0; i < 40; i++) byId['wake-minus'].onclick();
     check('still clamped at 4:00 AM', byId['wake-time'].textContent === '4:00 AM');
@@ -1735,9 +1735,9 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // longer change; there is no question to put there, because a block that
     // did not happen comes out of the day instead.
     // Its hour and its name, and nothing else: no chip, no label, no question.
-    check('a past block carries nothing beside its hour and its name',
-      rowOf(slots()[0]).children.length === 2, String(rowOf(slots()[0]).children.length));
-    check('nor does the second one', rowOf(slots()[1]).children.length === 2,
+    check('a past block carries nothing beside its title',
+      rowOf(slots()[0]).children.length === 1, String(rowOf(slots()[0]).children.length));
+    check('nor does the second one', rowOf(slots()[1]).children.length === 1,
       String(rowOf(slots()[1]).children.length));
 
     const divider = byId.builder.children.filter((c) => c._class.has('now'));
@@ -1769,8 +1769,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
     check('the past block asks nothing',
       !rowOf(slots()[0]).children.some((c) => c._class.has('askmiss')));
-    check('and carries nothing at all beside its hour and its name',
-      rowOf(slots()[0]).children.length === 2,
+    check('and carries nothing at all beside its title',
+      rowOf(slots()[0]).children.length === 1,
       String(rowOf(slots()[0]).children.length));
 
     // Tapping where the question used to be must not do anything either.
@@ -1809,7 +1809,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // 11:17 rounds up to 11:30, but UF application runs to 13:00, so the
     // cursor is later than the boundary and wins.
     check('it follows the last block rather than the clock',
-      slots()[3].text().includes('1:00 PM'), slots()[3].text().trim());
+      slots()[3].text().includes('1:00 PM – 1:30 PM'), slots()[3].text().trim());
   }
 
   console.log('\na day that has run out of blocks starts the next one at the half hour');
@@ -1833,7 +1833,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('the finished one kept its hour', slots()[0].text().includes('8:00 AM'),
       slots()[0].text().trim());
     check('and the new one starts at the next half hour, not the wake time',
-      slots()[1].text().includes('11:30 AM'), slots()[1].text().trim());
+      slots()[1].text().includes('11:30 AM – 12:00 PM'), slots()[1].text().trim());
   }
 
   console.log('\ntomorrow has no past and no divider');
@@ -1851,7 +1851,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('and there is no divider',
       byId.builder.children.filter((c) => c._class.has('now')).length === 0);
     ctx.addBlock({ title: 'Later' });
-    check('a new block flows from the wake time', slots()[1].text().includes('9:00 AM'),
+    check('a new block flows from the wake time', slots()[1].text().includes('9:00 AM – 9:30 AM'),
       slots()[1].text().trim());
   }
 
@@ -2059,7 +2059,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       slots()[0].text().includes('8:00 AM'), slots()[0].text().trim());
     check('and reads as past', slots()[0].children[1]._class.has('past'));
     check('what is left moved up to the next half hour',
-      slots()[1].text().includes('9:30 AM'), slots()[1].text().trim());
+      slots()[1].text().includes('9:30 AM – 10:30 AM'), slots()[1].text().trim());
     check('so the day no longer matches what is stored, and says so',
       byId['confirm'].textContent === 'Confirm', byId['confirm'].textContent);
 
@@ -2362,7 +2362,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       const { slots, rowOf, chipOf } = await stale();
       chipOf(slots()[1]).onclick();
       check('pressing it does not resize the block',
-        slots()[1].text().includes('10:00 AM'), slots()[1].text().trim());
+        slots()[1].text().includes('10:00 AM – 2:00 PM'), slots()[1].text().trim());
       check('it clears the chip instead', !chipOf(slots()[1]));
       check('and the block says it is active',
         Boolean(rowOf(slots()[1]).children.find((c) => c._class.has('running'))));
