@@ -4,9 +4,25 @@
     <meta charset="utf-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#F5F1E8" />
+    <meta name="theme-color" content="#1E4FD8" />
+    <!-- TWO FACES, SPLIT BY JOB. Every figure is IBM Plex Mono with tabular
+         numerals, so times and durations fall into real columns down the page;
+         every name is Inter. Nothing crosses over.
+
+         FETCHED, which this page has refused to do before now and for a good
+         reason: a round trip on a cold load of an app whose whole point is
+         being open before you have finished reaching for it. `display=swap`
+         is what makes it survivable — the system stack below renders first and
+         the page never blocks on this — and both are named in every stack so a
+         failed fetch degrades to something close rather than to nothing. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
     <title>Schedule</title>
 
     <link rel="manifest" href="/manifest.json" />
@@ -21,7 +37,6 @@
 
     <style>
       /* WASHI. Paper, ink, restraint.
-         Reference: public/washi.html.
 
          The rules the whole page is built on. The first four are unchanged
          from the dark build — the theme is a surface, and the structure it
@@ -53,53 +68,62 @@
          weight 400. Paper is the look; legible is the requirement, and where
          they disagreed the requirement won. */
       :root {
-        /* Paper and ink. The page is the lightest thing; a slip sits a shade
-           into the fibre so it reads as something laid ON the page. */
-        --bg: #f5f1e8;
-        --card: #e7e0d2;
-        --line: #ded7c8;
+        /* A LEDGER: white ground, one blue, figures in a mono face.
+           Nothing here is a colour that is not doing work. */
+        --bg: #ffffff;
+        /* The ground under the row you are in. */
+        --tint: #f4f7fc;
+        --surface: #f4f7fc;
 
-        --text: #2b2a28;
-        /* 6.2:1. The reference's #7C7871 was 3.8. */
-        --muted: #5f5a52;
-        /* 3.6:1 — for hints and spent slips only, never for a body size. */
-        --faint: #8a857c;
+        --text: #0f1620;
+        --muted: #5c6b7f;
+        /* 2.6:1 on white, which is under the 3:1 a mark is usually asked to
+           carry. Specified twice, so it is the reference's value and not a
+           corrected one — see the note in the spec. It carries the times on
+           finished rows and the status column, never a body size. */
+        --faint: #97a3b4;
+        /* A fourth grey, lighter than faint: the index column and everything
+           about a row that is over. It carries no words at a body size. */
+        --ghost: #c3ccd8;
 
-        --accent: #37516e;
-        /* Darkened from the reference's #C2512E, which was 4.1:1 on this
-           paper — under the bar both as the asterisks ON the page and as the
-           paper-coloured text ON the hanko. This clears 4.6:1 both ways and
-           is otherwise the same persimmon. */
-        --warn: #b8492a;
+        /* THREE RULE WEIGHTS, EACH MEANING SOMETHING. A hairline separates two
+           rows of the same kind; the mid rule marks the row you are in; a
+           1.5px solid ends a section. */
+        --line: #e6ebf1;
+        --rule: #cfd8e3;
+        --heavy: #0f1620;
 
-        /* A slip held above the page: lifted toward the paper rather than
-           away from it, because picking something up brings it into the
-           light. The dark build darkened here; paper does the opposite. */
-        --card-raised: #efe9dc;
+        --accent: #1e4fd8;
+        --accent-soft: #7b9bee;
+        --warn: #dc2626;
 
-        /* A slip that has been spent. Nearer the page than a live one — it is
-           settling back into it. */
-        --card-spent: #efeae0;
+        --spent: #ffffff;
 
-        /* The calendar aside. Reference material: neither actionable nor
-           wrong, so it takes neither indigo nor persimmon. */
-        --cal-rule: #c9bfa8;
-        --cal-head: #5f5a52;
-        --cal-text: #3a3733;
+        /* The aside's rule is the SECTION weight, not the hairline: it marks
+           something apart from the table rather than one row from the next. */
+        --cal-rule: #cfd8e3;
+        --cal-head: #97a3b4;
+        --cal-text: #0f1620;
 
-        --gap: 36px;
+        --gap: 22px;
 
-        /* Hiragino is on every iPhone and is the face this theme wants. The
-           reference fetched Zen Kaku Gothic New from Google, which costs a
-           round trip and a flash of the wrong font on every cold load — for a
-           page whose whole point is to be open before you have finished
-           reaching for it. */
-        --face: -apple-system, BlinkMacSystemFont, 'Hiragino Sans',
-          'Noto Sans JP', 'Segoe UI', Roboto, sans-serif;
+        /* TWO FACES, SPLIT BY JOB. Every figure is mono with tabular numerals
+           so times and durations fall into real columns; every name is Inter.
+           Nothing crosses over. Both stacks end in what the device already
+           has, so a failed fetch degrades rather than breaks. */
+        --face: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          'Helvetica Neue', Arial, sans-serif;
+        --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas,
+          monospace;
       }
 
+      /* NOTHING IS WIDER THAN WHAT HOLDS IT. box-sizing was already here; the
+         overflow guard is not, and it is what turns "this row is two pixels too
+         wide" from a page that inflates all its own text into a title that
+         wraps. */
       * {
         box-sizing: border-box;
+        min-width: 0;
         margin: 0;
         padding: 0;
       }
@@ -107,6 +131,17 @@
       html,
       body {
         height: 100%;
+      }
+
+      /* SAFARI INFLATES TEXT ON ANY PAGE IT DECIDES IS NOT MOBILE-OPTIMISED,
+         and horizontal overflow is one of the things that decides it. The
+         result is every size on the page multiplied by something near 1.6,
+         which reads as "the type scale is wrong" and is not — the same
+         stylesheet at the same width is correct on a desktop.
+         Off explicitly, so the sizes below are the sizes. */
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
       }
 
       body {
@@ -118,45 +153,71 @@
         -webkit-tap-highlight-color: transparent;
       }
 
-      /* The fibre in the paper.
-         Two sets of ruled lines at odd angles, crossing, plus a fine speckle —
-         which is what laid paper actually is close up. Fixed to the viewport
-         rather than the page, so the grain belongs to the sheet you are
-         holding instead of scrolling past like content.
-         Behind everything and untouchable. */
-      body::before {
-        content: '';
-        position: fixed;
-        inset: 0;
-        /* Behind everything, without having to lift everything else above it.
-           A z-index of 0 here would have put the grain over the in-flow text,
-           and the fix for that — a group listing every top-level element —
-           quietly broke rule lookups in the layout check, because `#booting`
-           on its own line inside a selector group reads exactly like the start
-           of the real `#booting` rule. */
-        z-index: -1;
-        pointer-events: none;
-        opacity: 0.55;
-        background-image:
-          repeating-linear-gradient(
-            84deg,
-            rgba(124, 120, 113, 0.045) 0 1px,
-            transparent 1px 26px
-          ),
-          repeating-linear-gradient(
-            -77deg,
-            rgba(124, 120, 113, 0.035) 0 1px,
-            transparent 1px 41px
-          ),
-          radial-gradient(circle, rgba(124, 120, 113, 0.05) 0.5px, transparent 0.6px);
-        background-size: auto, auto, 7px 7px;
-      }
-
-
       main {
         max-width: 480px;
         margin: 0 auto;
-        padding: 28px 20px calc(40px + env(safe-area-inset-bottom));
+        padding: 18px 18px calc(40px + env(safe-area-inset-bottom));
+      }
+
+      /* ONE GUTTER, ON ONE CONTAINER, and the rows pull themselves back out of
+         it. It was a horizontal padding on each of ten elements and a margin on
+         two others — which behave differently the moment anything overflows,
+         and is why the labels collapsed on a phone while the rows kept theirs.
+         The number appears twice here and nowhere else. */
+      .slot,
+      .thing,
+      .atime {
+        /* POSITIONED, BECAUSE EACH HOLDS A BACKING. A .backing is absolute with
+           inset: 0, so it anchors to its nearest POSITIONED ancestor — and an
+           anytime row lost this when it gained a swipe, so its backing walked
+           all the way up to the viewport and covered the whole screen.
+
+           It is invisible (opacity: 0) and still takes every touch, so nothing
+           looked wrong: the app rendered perfectly and simply stopped
+           responding. Refresh went on working because it sits after this
+           section in the document and painted on top of it. */
+        position: relative;
+        margin-left: -18px;
+        margin-right: -18px;
+      }
+
+      /* The small mono capitals that head a column. Set in the same face as
+         every figure on the page, so a heading and the numbers under it belong
+         to one another. */
+      .cap8 {
+        font-family: var(--mono);
+        font-size: 8.5px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--faint);
+        font-weight: 500;
+      }
+
+      /* THE COLUMN HEADS, under the one rule on the page that is neither a
+         hairline between rows nor the end of a section: it is the top of the
+         table, and it is the heaviest thing on the screen after the ink. */
+      .colhead {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 0 6px;
+        border-bottom: 1.5px solid var(--heavy);
+      }
+      .colhead .c-i {
+        width: 20px;
+        flex: none;
+        /* No tracking on a single character: 0.2em after a lone # is a hash
+           pushed off its own column. */
+        letter-spacing: 0;
+      }
+      .colhead .c-n {
+        flex: 1;
+        min-width: 0;
+      }
+      .colhead .c-s {
+        width: 58px;
+        flex: none;
+        text-align: right;
       }
 
       .hidden {
@@ -175,12 +236,13 @@
          it fainter, which is the trade this theme keeps having to make.
          Weight 400, not 300 — at this size and tracking, 300 disappears. */
       .label {
-        font-size: 9.5px;
-        letter-spacing: 0.26em;
+        font-family: var(--mono);
+        font-size: 8.5px;
+        letter-spacing: 0.2em;
         text-transform: uppercase;
-        color: var(--muted);
-        font-weight: 400;
-        margin-bottom: 16px;
+        color: var(--faint);
+        font-weight: 500;
+        margin-bottom: 7px;
         display: flex;
         justify-content: space-between;
         align-items: baseline;
@@ -216,16 +278,16 @@
       .dayswitch {
         display: flex;
         align-items: baseline;
-        gap: 9px;
-        margin-bottom: 14px;
-        font-size: 10px;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
+        gap: 8px;
+        margin-bottom: 18px;
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
       }
       .dayswitch .opt {
         /* Dimmer than faint. The day you are not looking at should be legible
            as a way back and nothing more. */
-        color: #b6ae9f;
+        color: var(--ghost);
         background: none;
         border: 0;
         padding: 0;
@@ -238,7 +300,7 @@
         color: var(--text);
       }
       .dayswitch .sep {
-        color: #3a342d;
+        color: var(--ghost);
       }
       .dayswitch .date {
         letter-spacing: 0;
@@ -333,26 +395,19 @@
         mask-size: contain;
       }
 
-      .thing + .thing {
-        border-top: 1px solid var(--line);
-      }
 
       .row {
-        padding: 12px 0;
-        /* Opaque, so the backing is behind the row rather than through it.
-           The list is otherwise transparent and every word underneath would
-           read straight through the title. */
-        background: var(--bg);
         position: relative;
-        /* Vertical pans belong to the page, horizontal ones are ours. The same
-           line the blocks carry, and the same reason: a swipe and a scroll
-           live on one element without anything arbitrating in script. */
+        background: var(--bg);
+        padding: 12px 18px;
+        min-height: 62px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        border-bottom: 1px solid var(--line);
         touch-action: pan-y;
         user-select: none;
         -webkit-user-select: none;
-        /* These rows are held too — a long press puts a thing in the day
-           without an hour — so they need the same guard the blocks do against
-           a phone raising its own menu over the gesture. */
         -webkit-touch-callout: none;
       }
 
@@ -369,14 +424,6 @@
       .thing .backing {
         padding: 0;
       }
-      /* AND NO PAPER UNDER IT. A block swipe reveals another slip because a
-         block IS a slip — something has to be underneath one. A Things row is
-         not laid on the page, it is part of the page, so sliding it aside
-         uncovers the page and the word alone. The torn sheet that belongs
-         under a slip read here as a second object appearing from nowhere. */
-      .thing .backing::after {
-        content: none;
-      }
       .thing .backing.left {
         color: var(--warn);
       }
@@ -388,21 +435,28 @@
       }
 
       .row .title {
-        font-size: 15px;
+        font-size: 14.5px;
+        font-weight: 400;
         flex: 1;
+        min-width: 0;
         line-height: 1.35;
+        color: var(--text);
       }
 
       /* The meta line: its own line, with real space above it. */
       /* Letterspaced and set small, the way a printed catalogue sets its
          particulars. Uppercase would cost legibility at this size for no gain,
          so the tracking alone does the work. */
+      /* The particulars, under the name: what kind of thing it is and how long
+         it has been waiting. Mono, because half of it is a figure and the
+         column of them reads down the page. */
       .row .meta {
-        font-size: 12px;
-        letter-spacing: 0.08em;
-        color: var(--muted);
-        margin-top: 7px;
-        line-height: 1.5;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--faint);
+        margin-top: 4px;
+        line-height: 1.4;
+        font-variant-numeric: tabular-nums;
       }
 
 
@@ -410,26 +464,22 @@
          mean to come back to. Same three levels, same arithmetic behind them —
          the glyph is set in the client, so nothing about what the server
          computes had to move. */
+      /* THE SERVER'S OWN MARK, SET BOLD. It computes '!!!', '!!' or '!' from
+         the days the size needs against the days that are left, and the screen
+         showed ✱ for each of them.
+         The swap is also what lets weight work again. ✱ is U+2731, in the
+         Dingbats block, and no font in the stack carries it — every platform
+         fell back for that one character to a single-weight symbol font, so
+         asking for 700 depended on the browser faking one: Chrome does, iOS
+         Safari does not, and it came out bold on a laptop and thin on the
+         phone. An exclamation mark is in every font at every weight, so 700 is
+         simply 700 and the stroke hack is gone with the glyph that needed it. */
       .mark {
-        font-size: 12px;
+        font-size: 13px;
+        font-weight: 700;
         color: var(--warn);
-        letter-spacing: 0.05em;
-        padding-top: 2px;
-        /* Heavier, and NOT with font-weight, which does nothing here on a
-           phone.
-           ✱ is U+2731, in the Dingbats block, and no font in --face contains
-           it: every platform falls back for this one character, and the fonts
-           it falls back to — Apple Symbols on iOS, Segoe UI Symbol on Windows
-           — ship a single weight. Asking for 700 therefore depends entirely on
-           whether the browser will FAKE one. Chrome does; iOS Safari does not.
-           So it came out bold on a laptop and thin on the phone, which is the
-           screen it is actually read on.
-           A stroke is painted on the glyph's own outline and needs no bold
-           face to exist, so both render the same. font-weight is gone rather
-           than kept alongside it: left in, the laptop would get a synthetic
-           bold AND the stroke, and be heavier than the phone — the same
-           mismatch, mirrored. */
-        -webkit-text-stroke: 0.4px var(--warn);
+        letter-spacing: 0.02em;
+        padding-top: 1px;
       }
 
       /* Already in the day on screen. Greying is the whole signal: it said
@@ -439,8 +489,7 @@
         color: var(--faint);
       }
       .row.locked .meta {
-        color: var(--faint);
-        opacity: 0.7;
+        color: var(--ghost);
       }
 
 
@@ -458,12 +507,13 @@
          emphasis down the page and compete with the titles. */
       .hint {
         position: relative;
-        font-size: 13px;
-        color: var(--faint);
+        flex: none;
+        font-size: 15px;
+        line-height: 1;
+        color: var(--ghost);
         background: none;
         border: 0;
         font-family: inherit;
-        line-height: 1;
         padding: 0 2px;
         cursor: pointer;
       }
@@ -495,11 +545,6 @@
          group and are looked up unambiguously by name, and this is a stylesheet
          a checker reads as text. */
       .atick::after {
-        content: '';
-        position: absolute;
-        inset: -12px;
-      }
-      .ax::after {
         content: '';
         position: absolute;
         inset: -12px;
@@ -596,21 +641,26 @@
 
       .cal {
         border-left: 2px solid var(--cal-rule);
-        padding: 8px 0 8px 13px;
-        margin-bottom: 22px;
+        padding: 2px 0 2px 13px;
+        margin: 0 0 22px;
       }
       .cal h4 {
-        font-size: 12px;
+        font-family: var(--mono);
+        font-size: 8.5px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
         font-weight: 500;
-        color: var(--cal-head);
+        color: var(--faint);
+        margin-bottom: 8px;
       }
+      /* A day with nothing on it, or a feed that could not be read. Ghost: it
+         is the absence of a fact rather than a quiet one. */
       .cal p {
-        font-size: 13px;
-        color: var(--cal-text);
-        margin-top: 6px;
+        font-size: 13.5px;
+        margin-top: 5px;
+        color: var(--ghost);
         line-height: 1.6;
         white-space: pre-line;
-        font-variant-numeric: tabular-nums;
       }
       .cal .failed {
         color: var(--warn);
@@ -619,37 +669,36 @@
       /* An event, which can be pressed into the day. Still a line of text under
          a rule — no card, no border, no fill — because what changes is what it
          does, not what it is. */
+      /* One line: the hour, then the name. Not a column — there are one or two
+         of these, and a column of two is a table with nothing to compare. */
       .calrow {
-        display: flex;
-        align-items: baseline;
-        gap: 8px;
+        display: block;
         width: 100%;
-        /* A row you press, so it is a row you can hit: 13px of text at 1.6
-           leaves 21px, and seven above and below carries it to 35. Not the 44
-           a guideline asks for — that would nearly double the height of an
-           aside that is read far more often than it is pressed — but far from
-           the 29 it was. */
-        padding: 7px 0;
+        padding: 5px 0 0;
         background: none;
         border: 0;
         text-align: left;
         font: inherit;
-        font-size: 13px;
-        line-height: 1.6;
+        font-size: 13.5px;
+        line-height: 1.55;
         color: var(--cal-text);
         cursor: pointer;
+      }
+      .calrow:active {
+        opacity: 0.55;
       }
       /* A COLUMN, not a comma. The times used to run inline after the title and
          now start the row, so a glance down the edge reads the shape of the day
          — which only works if they are all the same width. */
       .ctime {
-        flex: none;
-        width: 68px;
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--muted);
         font-variant-numeric: tabular-nums;
+        padding-right: 7px;
       }
       .ctitle {
-        flex: 1;
-        min-width: 0;
+        color: var(--cal-text);
       }
       /* THE ONLY FEEDBACK ON THE ROW ITSELF, and it lasts as long as the touch.
          The row never greys and never locks — what a press produces is a block
@@ -704,63 +753,27 @@
          its duration to lengthen it, swipe it away or swipe a buffer in after
          it, hold it to pick it up and move it. */
 
-      /* The slot holds the card and the backing the card slides off to reveal.
-         Overflow is clipped here so a backing cannot bleed past the corner
-         radius while the card is mid-swipe. */
-      /* No clipping, and that is load-bearing rather than a tidy-up.
-         The deckle pushes pixels up to 4px outside the slip's box; a slot that
-         clipped to its own bounds would cut every one of those off and hand
-         back the straight edge the filter exists to destroy.
-
-         The radius went with it. A rounded rectangle behind a torn edge is two
-         different ideas about the same object.
-
-         The removal animation sets overflow: hidden on the slot itself while
-         it collapses — that is a different job, and it wants the clip. */
+      /* A ROW OF THE LEDGER: an index, a name over its hours, and a status.
+         The rules run the full width of the page and the padding is on the row,
+         so nothing is inset from the edge — which is what makes a table read as
+         one rather than as a list of cards with lines between them. */
       .slot {
         position: relative;
-        margin-bottom: 12px;
+        overflow: hidden;
       }
-
-      /* One surface for both swipes, and the edge the label sits at is the
-         only thing that differs.
-
-         The removing side used to fill with the warn colour, which turned the
-         whole card red under the finger. That was a lot of shouting for
-         something that carries a six-second undo, and it shouted loudest on a
-         past block — where taking a block out is not destruction at all, it is
-         how you record that the thing did not happen.
-
-         There was a loudness axis here as well as a side, from when left meant
-         two different things depending on the clock. Left means one thing now
-         and neither swipe is loud, so the axis is gone rather than left in
-         place holding a single value. */
-      /* What is under a slip when you slide it aside: more paper, torn the same
-         way. It was a hard-edged rectangle, which made the one moment the theme
-         is most visible — a slip actually moving — the one moment it broke.
-
-         The paper is on a layer again, for the reason it is everywhere else:
-         this element carries the word Remove, and a filter here would bend it. */
       .backing {
         position: absolute;
         inset: 0;
-        isolation: isolate;
         display: flex;
         align-items: center;
         padding: 0 18px;
-        font-size: 13px;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
         opacity: 0;
-        color: var(--text);
-      }
-      .backing::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        z-index: -1;
-        background: var(--line);
-        /* The softer one. This sheet is beneath the slip and a little further
-           from the eye, and the edge that shows is the one being uncovered. */
-        filter: url(#deckle-soft);
+        color: var(--muted);
+        background: var(--tint);
       }
       .backing.left {
         justify-content: flex-end;
@@ -769,76 +782,84 @@
         justify-content: flex-start;
       }
 
-      /* A slip of paper laid on the page.
-         No radius — the edge is torn, not cut. #deckle displaces the shape
-         through real turbulence, so no two slips share an edge and none of
-         them is quite a rectangle.
-
-         THE PAPER IS A LAYER BEHIND THE TEXT, and that is the whole reason
-         this is not simply `filter` on the slip. A CSS filter applies to an
-         element AND EVERYTHING INSIDE IT: put the deckle on the card and
-         feDisplacementMap pushes the title and the time through the same
-         turbulence as the edge, bending every letter. It reads as a strange
-         handwritten typeface, which is a hard thing to trace back to a
-         property named for an edge.
-
-         So the slip itself is unfiltered and holds only text. `::after` draws
-         the paper underneath it, and the filter lives there. `isolation`
-         keeps that negative layer inside the slip rather than letting it fall
-         behind the page. */
       .block {
         position: relative;
-        isolation: isolate;
-        padding: 16px 17px 17px;
+        background: var(--bg);
+        min-height: 62px;
+        padding: 12px 18px;
         display: flex;
         flex-direction: column;
         align-items: stretch;
-        /* Vertical pans belong to the page, horizontal ones are ours. This one
-           line is what lets a swipe and a scroll live on the same element
-           without arbitrating between them in script. */
+        justify-content: center;
+        border-bottom: 1px solid var(--line);
         touch-action: pan-y;
         user-select: none;
         -webkit-user-select: none;
-        /* THE HOLD IS 400ms, which is also roughly when a phone decides a long
-           press was meant for it: iOS raises the callout — copy, look up, share
-           — over a held element, and it arrives at the exact moment the block
-           is being picked up. `user-select: none` above suppresses most of it
-           and this closes the rest. Neither is a substitute for the other, and
-           the failure is a drag that dies under a menu nobody asked for. */
         -webkit-touch-callout: none;
       }
 
-      /* The sheet the slip is written on. Everything the deckle touches lives
-         here and nothing else does, so the torn edge never reaches the text. */
-      .block::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        z-index: -1;
-        background: var(--card);
-        filter: url(#deckle) drop-shadow(0 1px 1px rgba(43, 42, 40, 0.07));
-      }
-
-      /* The block's own line: what it is, and how long. A note, when there is
-         one, sits under this rather than beside it. */
       .brow {
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
+        align-items: flex-start;
+        gap: 10px;
       }
-      .block .t {
-        font-size: 15px;
-        line-height: 1.5;
-      }
-      /* Letterspaced, the way a time is set on a printed slip. Tabular still,
-         because the hours have to stack when you read down the day. */
-      .block .time {
-        font-size: 12px;
-        letter-spacing: 0.14em;
-        color: var(--muted);
-        margin-top: 6px;
+      /* THE INDEX COLUMN, which is the whole difference between a table and a
+         list. Mono and tabular so 09 and 10 are the same width. */
+      .idx {
+        width: 20px;
+        flex: none;
+        padding-top: 2px;
+        font-family: var(--mono);
+        font-size: 9.5px;
         font-variant-numeric: tabular-nums;
+        letter-spacing: 0.04em;
+        color: var(--ghost);
+      }
+      .brow > div:not(.idx):not(.st):not(.dur) {
+        flex: 1;
+        min-width: 0;
+      }
+      /* NEAR-BLACK, and the row's own state is what lightens it. The title is
+         the thing you are reading the page for. */
+      .block .t {
+        font-size: 14.5px;
+        font-weight: 400;
+        line-height: 1.35;
+        color: var(--text);
+      }
+      /* Still to come: the name in ink, its hours faint, its length in the
+         middle grey. Stated rather than inherited, so the three states are three
+         sets of rules and not two plus a default.
+
+         One rule each, never a group: a group written down the page ends on a
+         line reading `.dur {`, which is what a lookup by name finds first — the
+         third time that has bitten. */
+      .block .st {
+        color: var(--muted);
+      }
+      /* A TIME IS NOT A CONTROL. These were blue on every row, and blue on this
+         page means "act on this" — a time you cannot act on has no business
+         wearing it. Faint grey on every row, and blue on exactly one: the row
+         you are in, where it is the only figure that is still moving. */
+      .block .time {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--faint);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.01em;
+        margin-top: 4px;
+      }
+      /* THE STATUS COLUMN. Over, happening, or still to come — one column, read
+         straight down. */
+      .st {
+        width: 58px;
+        flex: none;
+        padding-top: 2px;
+        text-align: right;
+        font-family: var(--mono);
+        font-size: 9px;
+        letter-spacing: 0.14em;
+        color: var(--faint);
       }
 
       /* What they said they were doing. Small and muted, so a glance down the
@@ -879,76 +900,46 @@
         border-bottom-color: var(--muted);
       }
 
-      /* A block that has already happened. Still paper — it has been handled,
-         not withdrawn. It settles nearer the page than a live slip, and its
-         edge is displaced further and softened a fraction, which is what an
-         edge does after a day of being carried around.
-
-         The dark build made this an outline. An outline is a drawing of a
-         thing, and this theme does not draw: it lays things down and takes
-         them away. */
-      .block.past::after {
-        background: var(--card-spent);
-        filter: url(#deckle-soft) drop-shadow(0 1px 1px rgba(43, 42, 40, 0.03));
-      }
+      /* OVER. Everything about the row steps back a shade; nothing is drawn
+         differently and nothing is taken away. */
       .block.past .t {
-        color: #8e8a82;
+        color: var(--faint);
       }
-      .block.past .time {
-        color: #a29e95;
-      }
-
-      /* The block you are in, in the slot the duration chip has vacated.
-         Muted rather than faint: it is the one block on the page that is
-         happening, and faint is the register of a block that is over. No
-         border and no background, so nothing about it suggests a press.
-
-         The padding is the chip's padding, and that is the whole reason for
-         it. The chip carries 8px/15px inside a border, so its text sits 15px
-         further from the card edge than a bare label does — which left "active"
-         crowding the right edge while every block above it looked comfortable.
-         Matching the box puts the word where chip text sits, and gives a begun
-         block the same height as the ones around it.
-
-         Named .running, not .act: .act is already the "+ Add" affordance in a
-         section label, and an unscoped .act here bled onto it. */
-      .running {
-        font-size: 12px;
-        letter-spacing: 0.14em;
-        color: var(--muted);
-        white-space: nowrap;
-        padding: 8px 4px 8px 15px;
+      .block.past .time,
+      .block.past .st {
+        color: var(--ghost);
       }
 
-      /* THE MIZUHIKI CORD, on the slip you are in.
-         Three twisted strands laid down its left edge — indigo, persimmon, and
-         the paper's own tan. A cord is tied onto something that matters today
-         and cut off afterwards, which is exactly the life of this state.
-
-         Built from one gradient rather than three elements: each strand is a
-         2px band, and the 160deg repeat is the twist. Nothing in the markup
-         changes, so a slip becoming live is still a class.
-
-         The extra left padding is on the slip, not the cord, so the text
-         clears it instead of sitting under it. */
+      /* THE ROW YOU ARE IN, marked four ways and with no badge: a bar in the
+         gutter, a tinted ground, a heavier name, and its index in blue. Four
+         quiet marks read as one state; one loud mark reads as an alarm. */
       .block.live {
-        padding-left: 28px;
+        background: var(--tint);
+        border-bottom-color: var(--rule);
       }
       .block.live::before {
         content: '';
         position: absolute;
-        left: 10px;
-        top: 13px;
-        bottom: 13px;
-        width: 7px;
+        left: 0;
+        top: -1px;
+        bottom: -1px;
+        width: 2px;
+        background: var(--accent);
         pointer-events: none;
-        background-image:
-          repeating-linear-gradient(160deg, #37516e 0 3px, #4a6786 3px 6px),
-          repeating-linear-gradient(160deg, #b8492a 0 3px, #d46a47 3px 6px),
-          repeating-linear-gradient(160deg, #c9bfa8 0 3px, #dcd3bf 3px 6px);
-        background-size: 2px 100%, 2px 100%, 2px 100%;
-        background-position: 0 0, 2.5px 0, 5px 0;
-        background-repeat: no-repeat;
+      }
+      .block.live .t {
+        font-weight: 600;
+      }
+      .block.live .time,
+      .block.live .st {
+        color: var(--accent);
+        font-weight: 500;
+      }
+      .block.live .idx {
+        color: var(--accent-soft);
+      }
+      .running {
+        white-space: nowrap;
       }
 
       /* The wait before the first day is on screen.
@@ -1308,7 +1299,7 @@
         stroke-width: 1;
       }
       .fig-fill {
-        fill: var(--card-spent);
+        fill: var(--surface);
         stroke: none;
       }
       .fig-head {
@@ -1412,7 +1403,19 @@
       /* Committed to the day, not to an hour. Plain rows and not slips: a slip
          is a thing that sits at a time, and the whole point of these is that
          they do not. They are the Things list's shape, in the day's section. */
+      /* A section of the page, under its own rule. The same relationship the
+         Anytime list has: rule, 14px, label, 7px, first row. */
+      .things-head {
+        border-top: 1.5px solid var(--heavy);
+        /* Its label already has the gutter; this is the rule, which reaches the
+           same edges every other section rule does. */
+        padding-top: 14px;
+        margin-top: 26px;
+      }
+
       .anytime {
+        border-top: 1.5px solid var(--heavy);
+        padding-top: 14px;
         margin: 22px 0 4px;
 
         /* ONE LINE BOX, SHARED BY ALL THREE THINGS ON A ROW. The tick, the
@@ -1442,30 +1445,50 @@
          short list look like a table. Space does the separating, which is what
          it does everywhere else on this screen. */
       .arow {
+        position: relative;
         display: flex;
-        /* Top, not baseline and not centre. A row with a note under its title
-           is taller than the title, and both other alignments would measure
-           the controls against the whole of it. */
-        align-items: flex-start;
-        gap: 10px;
-        padding: 11px 0;
+        align-items: center;
+        gap: 12px;
+        min-height: 62px;
+        padding: 0 18px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--line);
+        touch-action: pan-y;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
       }
 
       /* The tick. A box rather than a word, because it is pressed far more
          often than it is read, and it is the only control on the row. */
       .atick {
         position: relative;
+        width: 15px;
+        height: 15px;
         flex: none;
-        width: var(--aline);
-        height: var(--aline);
         padding: 0;
-        border: 1px solid var(--faint);
         background: none;
+        border: 1.25px solid var(--ghost);
+        border-radius: 3px;
         font-family: inherit;
-        font-size: 12px;
-        line-height: 1;
-        color: var(--text);
         cursor: pointer;
+      }
+      .arow.did .atick {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      /* The tick itself, drawn rather than typed: two strokes, so it needs no
+         glyph and no font to carry one. */
+      .arow.did .atick::before {
+        content: '';
+        position: absolute;
+        left: 4px;
+        top: 1px;
+        width: 4px;
+        height: 8px;
+        border: solid #fff;
+        border-width: 0 1.5px 1.5px 0;
+        transform: rotate(45deg);
       }
       .arow.did .atick {
         border-color: var(--text);
@@ -1476,8 +1499,11 @@
         min-width: 0;
       }
       .atitle {
-        font-size: 15px;
-        line-height: var(--aline);
+        font-size: 14px;
+        line-height: 1.35;
+      }
+      .arow.did .atitle {
+        color: var(--faint);
       }
       /* STRUCK THROUGH AND STILL THERE. What you got through is worth seeing at
          the end of a day, so a tick does not remove the row — it marks it. */
@@ -1501,28 +1527,6 @@
          move. Faint and at the far edge, like the ··· on a Things row, because
          it repeats down the list and is the rarer of the two things you do
          here. The padding is the touch target; the glyph is small on purpose. */
-      /* INSET FROM THE MARGIN, not flush against it. Sat hard on the page edge
-         it read as detached from the row it belongs to — the ··· on a Things
-         row gets away with that because three dots read as an edge affordance,
-         and a single × does not. The padding is the touch target and the margin
-         is what moves the glyph in without shrinking it. */
-      .ax {
-        position: relative;
-        flex: none;
-        height: var(--aline);
-        /* The glyph centred in the line box rather than pushed down it by
-           padding. Vertical padding is what broke the alignment: it grew the
-           row and took the centred controls with it. */
-        line-height: var(--aline);
-        padding: 0 6px 0 10px;
-        margin-right: 6px;
-        background: none;
-        border: 0;
-        font-family: inherit;
-        font-size: 15px;
-        color: var(--faint);
-        cursor: pointer;
-      }
 
       /* HOW OFTEN YOU GOT TO THINGS. Bars rather than a table: the question
          is how close to the cadence you came, and a part-filled bar answers
@@ -1629,33 +1633,6 @@
         }
       }
 
-      /* Where the past ends: a dot and a rule running out to the edge. It
-         carried a word between them once, and the word kept having to be a
-         claim about one side of the line or the other. */
-      .now {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin: 6px 0 16px;
-      }
-      /* The knot where the cord is tied off — the day's two halves joined at
-         the point they meet. It replaces the dot, which was a marker; a knot
-         is a fastening, and this line fastens rather than marks. */
-      .now .dot {
-        width: 17px;
-        height: 14px;
-        flex: none;
-        background: none;
-        border-radius: 0;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='17' height='14' fill='none'%3E%3Cpath d='M2 7 C2 3.4 5 2 7.6 4 C10.2 6 13 4.6 13 7 C13 9.4 10.2 8 7.6 10 C5 12 2 10.6 2 7 Z' stroke='%2337516E' stroke-width='1.05' opacity='.8'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-      }
-      .now .ln {
-        flex: 1;
-        height: 1px;
-        background: var(--accent);
-        opacity: 0.42;
-      }
 
       /* Picked up. Bigger, lighter, casting a shadow: it has to be obvious
          that this one is in your hand and the rest are not. */
@@ -1664,8 +1641,8 @@
         z-index: 3;
       }
       .block.lifted::after {
-        background: var(--card-raised);
-        filter: url(#deckle) drop-shadow(0 10px 18px rgba(43, 42, 40, 0.16));
+        background: var(--bg);
+        box-shadow: 0 -1px 0 var(--line);
       }
       .slot.dimmed {
         opacity: 0.55;
@@ -1679,18 +1656,20 @@
          caps in indigo, and no pill around it. The pill was a drawn object,
          and this theme does not draw — the word is the control. */
       .dur {
-        font-size: 12px;
-        letter-spacing: 0.16em;
+        width: 58px;
+        flex: none;
+        padding: 2px 0 0;
+        font-family: var(--mono);
+        font-size: 9px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
         font-variant-numeric: tabular-nums;
-        color: var(--accent);
+        color: var(--muted);
         background: none;
         border: 0;
-        padding: 8px 4px 8px 15px;
         text-align: right;
         white-space: nowrap;
-        font-family: inherit;
         cursor: pointer;
-        touch-action: pan-y;
       }
 
       /* The safety net for a swipe, which commits with no confirm. */
@@ -1704,7 +1683,7 @@
         display: flex;
         align-items: center;
         gap: 14px;
-        background: var(--card-raised);
+        background: var(--bg);
         border: 0;
         padding: 13px 18px;
         font-size: 13px;
@@ -1720,8 +1699,8 @@
         position: absolute;
         inset: 0;
         z-index: -1;
-        background: var(--card-raised);
-        filter: url(#deckle) drop-shadow(0 2px 6px rgba(43, 42, 40, 0.14));
+        background: var(--bg);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
       }
       .undo button {
         background: none;
@@ -1784,17 +1763,29 @@
         display: flex;
         justify-content: space-between;
         align-items: baseline;
-        margin-top: 28px;
+        margin-top: 20px;
+        padding-top: 15px;
         padding-bottom: 20px;
+        border-top: 1.5px solid var(--heavy);
+        font-family: var(--mono);
+        font-size: 8.5px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--faint);
+        font-weight: 500;
       }
       .ends span {
         font-size: 13px;
         color: var(--muted);
       }
       .ends b {
-        font-size: 17px;
-        font-weight: 500;
+        font-family: var(--mono);
+        font-size: 19px;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        color: var(--text);
         font-variant-numeric: tabular-nums;
+        text-transform: none;
       }
       /* A day running past midnight is the one thing the end time can be
          wrong about, so it is said in the miss colour. */
@@ -1802,63 +1793,35 @@
         color: var(--warn);
       }
 
-      /* THE HANKO: ink pressed onto paper, to say the day is agreed.
+      /* THE ONE BUTTON ON THE PAGE. A bar, edge to edge, in the one colour that
+         means "press this".
 
-         RECTANGULAR, and full width. The reference drew a 74px square, which is
-         the shape of a real name seal but the wrong shape for the only button
-         on the page — a square asks to be aimed at, and this one should be
-         impossible to miss. It keeps the seal's proportion in its letterspacing
-         rather than in its outline.
+         IT WAS A FILLED PALE-BLUE CARD, which is the one thing this layout does
+         not have: everything else is a row with a rule under it. A card at the
+         foot of a table reads as a different kind of object arriving from
+         another design.
 
-         NO RING around it. The reference carved one — a real seal is relief, so
-         the border stands and the cut prints white — but that reads as a line
-         drawn around a button, and the one thing this theme does not do is
-         draw.
-
-         So the EDGE is the whole of it: ink pressed by hand does not land
-         square, and the deckle gives it an uneven bite. Nothing across the
-         middle. It carried four pale flecks there, meant as ink not taking
-         evenly — at this size and this softness they did not read as texture,
-         they read as bubbles under a sticker, which is a defect rather than a
-         mark. Uneven at the edge, solid in the middle, which is what a stamp
-         actually leaves.
-
-         On the layer beneath, because the button carries a word and a filter on
-         the button would bend it. */
+         CONFIRMED IS AN OUTLINE, not a fill. A day you have agreed to should
+         still show its button — going to a grey slab reads as the control
+         having been taken away — but it should stop being the loudest thing on
+         a screen you are now just reading. */
       .confirm {
         display: block;
-        position: relative;
-        isolation: isolate;
         width: 100%;
-        background: none;
-        color: var(--bg);
+        margin-top: 18px;
+        background: var(--accent);
+        color: #fff;
         text-align: center;
-        padding: 17px;
+        padding: 14px;
+        font-family: var(--mono);
         font-size: 12px;
-        letter-spacing: 0.22em;
+        letter-spacing: 0.16em;
         text-transform: uppercase;
         font-weight: 500;
-        border: 0;
-        font-family: inherit;
+        border: 1px solid var(--accent);
+        border-radius: 5px;
         cursor: pointer;
       }
-      .confirm::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        z-index: -1;
-        pointer-events: none;
-        background: var(--warn);
-        filter: url(#deckle);
-      }
-      /* NO RING AFTER A TAP. A pressed button keeps focus, and the browser
-         draws its own outline around it — a hard pale rectangle sitting over
-         a torn edge, which is the one shape this seal is built not to have.
-         Every other control on the page already turns it off.
-
-         Only the pointer's, though. `:focus-visible` is what a keyboard gets,
-         and it keeps a ring, because a keyboard user with no focus indicator
-         cannot see where they are. */
       .confirm:focus {
         outline: none;
       }
@@ -1866,66 +1829,15 @@
         outline: 2px solid var(--text);
         outline-offset: 3px;
       }
-      /* CONFIRMED: the seal already pressed, and still ink.
-         It used to go to paper and grey, which read as the button having been
-         taken away rather than the day having been sealed — and a day you have
-         agreed to should look agreed to.
-
-         The same persimmon, so the contrast is the same both ways round. What
-         separates it from the unpressed seal is that the ink has settled: the
-         edge is the softer bite, because it has had time to spread into the
-         paper. That, and the word says Confirmed. */
       .confirm:disabled {
-        color: var(--bg);
+        background: none;
+        border-color: var(--line);
+        color: var(--faint);
         cursor: default;
       }
-      /* THE SAME EDGE IN EVERY STATE, and that is a bug fix rather than a
-         simplification.
-
-         A confirmed day used to get `url(#deckle-soft)` here, a wider bite for
-         ink that had settled. It looked right and it broke on the day switch:
-         confirm today, tap Tomorrow, tap Today, and the word came back cut
-         off. Switching swaps the referenced filter on this layer twice, and a
-         re-rasterised filter layer can come back short — the word is painted
-         in the PAGE colour on top of this persimmon, so wherever the persimmon
-         is missing the letters are not cut off at all, they are invisible.
-
-         The state was never wrong: right word, disabled, no leftover classes.
-         Only the paint was, which is why the fix is here and not in the script.
-
-         Confirm and Confirmed are still plainly different — one says Confirmed
-         and cannot be pressed. That was doing the work anyway. */
-      /* BEING PRESSED. The save is a round trip, so for about a second after
-         the tap the seal said nothing — and a stamp that answers a second late
-         reads as a stamp that missed.
-
-         Leaning on a real one drives more ink into the paper and seats it, so
-         that is the whole of it: the ink deepens and the stamp sits a hair
-         smaller. Brightness rather than a second persimmon, so there is still
-         one red in the file and it cannot drift from the other.
-
-         After the disabled rules, and deliberately: the two carry the same
-         weight, so source order decides, and the seal should stay pressed
-         until the answer is actually in rather than lighten the instant the
-         word changes. */
-      /* THE INK DEEPENS AND THE BUTTON DOES NOT MOVE.
-         It used to seat a hair into the paper as well — `transform:
-         scale(0.985)` with a transition to carry it. That transform is what
-         cut the word in half.
-
-         A transformed, transitioned element gets its own composited layer, and
-         that layer keeps its raster across a text change. Confirm a day, tap
-         Tomorrow, and the word shortens to Confirm: the layer is re-rastered
-         at seven characters. Tap Today and it lengthens to Confirmed with no
-         reason to re-raster, so the extra two characters are painted outside
-         the layer and never appear. Centred text loses them one a side, which
-         is exactly what a screenshot of it showed: ONFIRME, with the D clipped
-         to its stem.
-
-         The press still answers — the ink darkens — and that lives on the
-         layer beneath, which composites nothing the text is on. */
-      .confirm.pressing::after {
-        filter: url(#deckle) brightness(0.82);
+      .confirm.pressing {
+        background: var(--accent);
+        opacity: 0.85;
       }
 
       /* --- the add sheet --------------------------------------------------- */
@@ -2051,8 +1963,7 @@
           transition: none !important;
         }
         .block.lifted::after {
-          filter: url(#deckle);
-        }
+          }
         /* Nothing to still here any more: the seal answers a press by
            deepening its ink, which is not movement. */
       }
@@ -2071,42 +1982,6 @@
       Covering it is honest about the wait instead of showing a wrong answer
       during it.
     -->
-    <!--
-      The torn edge, and it is torn rather than drawn.
-
-      feTurbulence generates fractal noise; feDisplacementMap pushes every
-      pixel of the slip sideways by how bright that noise is there. So the edge
-      is the shape of the noise field, no two slips are alike, and nothing here
-      is a border — a border would be a straight line pretending to be a torn
-      one.
-
-      A spent slip uses the softer filter: displaced further, then blurred a
-      fraction, which is what an edge does after being handled.
-
-      Zero-sized and aria-hidden. It is a definition, not a picture.
-    -->
-    <svg width="0" height="0" aria-hidden="true" focusable="false"
-         style="position: absolute">
-      <!-- ROOM TO BE DISPLACED INTO. A filter's default region is the element
-           grown by ten per cent on each side, and these push pixels up to half
-           the `scale` in any direction — three pixels for the softer one. Ten
-           per cent of a short element is less than that, so the bite could be
-           clipped flat exactly where it was meant to be raggedest. Stated
-           generously here so it never depends on how tall the thing is. -->
-      <filter id="deckle" x="-5%" y="-20%" width="110%" height="140%">
-        <feTurbulence type="fractalNoise" baseFrequency="0.028 0.09"
-                      numOctaves="3" seed="7" result="n" />
-        <feDisplacementMap in="SourceGraphic" in2="n" scale="4"
-                           xChannelSelector="R" yChannelSelector="G" />
-      </filter>
-      <filter id="deckle-soft" x="-5%" y="-20%" width="110%" height="140%">
-        <feTurbulence type="fractalNoise" baseFrequency="0.02 0.07"
-                      numOctaves="3" seed="3" result="n" />
-        <feDisplacementMap in="SourceGraphic" in2="n" scale="6"
-                           xChannelSelector="R" yChannelSelector="G" />
-        <feGaussianBlur stdDeviation="0.35" />
-      </filter>
-    </svg>
 
     <div id="booting"><span></span></div>
 
@@ -2192,6 +2067,15 @@
 
         <div style="height: 14px"></div>
 
+        <!-- THE COLUMN HEADS. What makes this a table rather than a list: an
+             index, a name, and a status, under a rule heavier than the ones
+             between rows. Hidden with the day it heads when there is no day. -->
+        <div class="colhead" id="colhead">
+          <div class="c-i cap8">#</div>
+          <div class="c-n cap8">Block</div>
+          <div class="c-s cap8">Status</div>
+        </div>
+
         <div id="builder"></div>
 
         <!-- TWO WAYS INTO THE DAY, and the pair is the point: one with an hour
@@ -2208,7 +2092,6 @@
              to neither: Things is what you are carrying, and this is not. -->
         <div class="adds" id="adds">
           <button type="button" class="addblock" id="add-block">+ Block</button>
-          <button type="button" class="addblock" id="add-anytime">+ Anytime</button>
         </div>
 
         <!-- WHERE THE NAME IS TYPED, in the page rather than over it. This was
@@ -2229,9 +2112,12 @@
 
              Hidden when empty. A heading with nothing under it would be a
              section of the day screen that is blank on almost every day. -->
-        <div class="anytime hidden" id="anytime">
+        <div class="anytime" id="anytime">
           <div class="label" id="anytime-label">Anytime today</div>
           <div id="anytime-list"></div>
+          <div class="adds">
+            <button type="button" class="addblock" id="add-anytime">+ Anytime</button>
+          </div>
         </div>
 
         <div class="ends" id="ends">
@@ -2244,9 +2130,11 @@
 
       <!-- 2. THINGS --------------------------------------------------------- -->
       <section>
-        <div class="label">
-          Things
-          <button type="button" class="act" id="add-open">+ Add</button>
+        <div class="things-head">
+          <div class="label">
+            Things
+            <button type="button" class="act" id="add-open">+ Add</button>
+          </div>
         </div>
         <div id="things"></div>
 
@@ -3546,11 +3434,10 @@
         if (!locked && item.mark) {
           const mark = document.createElement('div');
           mark.className = 'mark';
-          // Set as marginal asterisks rather than exclamation marks. Display
-          // only: the server still computes '!!!', '!!' or '!' from the days
-          // the size needs against the days that are left, and the count still
-          // carries the whole meaning. One glyph swapped for another.
-          mark.textContent = '✱'.repeat(item.mark.length);
+          // Exactly what the server computed. It was rendered as ✱ for a
+          // while — a glyph no font in the stack carries, which is why it
+          // could not be made bold on the one screen it is read on.
+          mark.textContent = item.mark;
           top.append(mark);
         }
 
@@ -4023,7 +3910,6 @@
         box.replaceChildren();
 
         const now = onToday() ? nowMinutes() : null;
-        let markedNow = false;
         // Whether anything above the current block is over. The divider marks
         // the edge of the past, so there has to be a past for it to be the edge
         // of. See below.
@@ -4077,10 +3963,6 @@
           // day that has not begun. It could not be reached while the screen
           // opened on tomorrow, where none of this runs, and became reachable
           // the moment today became the day you land on.
-          if (onToday() && !past && !markedNow && seenPast) {
-            box.append(nowDivider());
-            markedNow = true;
-          }
           if (past) seenPast = true;
 
           box.append(blockCard(b, i, { begun, past }));
@@ -4161,13 +4043,18 @@
           .map((b, at) => ({ b, at }))
           .filter(({ b }) => untimed(b));
 
-        $('anytime').classList.toggle('hidden', !items.length);
-        if (!items.length) return;
+        // The heading and its way in stay whatever the list holds: a section you
+        // can only add to once it is not empty is not a way in.
 
         // The heading follows the day on screen. "Anytime today" over
         // tomorrow's list would be a heading that is simply untrue every
         // evening, which is when this screen is most used.
-        $('anytime-label').textContent = onToday() ? 'Anytime today' : 'Anytime tomorrow';
+        // THE COUNT BESIDE IT, the way a ledger heads a section it can total.
+        // Two of these is a glance; ten is a fact about the day.
+        // THE COUNT BESIDE IT, the way a ledger heads a section it can total.
+        // Two of these is a glance; ten is a fact about the day.
+        $('anytime-label').textContent =
+          `${onToday() ? 'Anytime today' : 'Anytime tomorrow'}  ·  ${String(items.length).padStart(2, '0')}`;
 
         for (const { b, at } of items) box.append(anytimeRow(b, at));
       }
@@ -4184,13 +4071,21 @@
         slot.className = 'atime';
         slot.dataset.at = String(i);
 
+        // THE SAME GESTURES A BLOCK HAS, from the same code. It carried an ×
+        // instead: a second way to remove a thing, in a different place, with
+        // no undo behind it — while every other row on the screen removes by
+        // swiping left and takes a note by swiping right. A row that has no
+        // hour is still a row of the day, and there is no reason for it to be
+        // worked differently from one that has.
+        const backing = document.createElement('div');
+        backing.className = 'backing';
+
         const row = document.createElement('div');
         row.className = b.done ? 'arow did' : 'arow';
 
         const tick = document.createElement('button');
         tick.type = 'button';
         tick.className = 'atick';
-        tick.textContent = b.done ? '✓' : '';
         tick.setAttribute('aria-pressed', String(Boolean(b.done)));
         tick.setAttribute('aria-label',
           b.done ? `${b.title}, done. Press to undo.` : `Mark ${b.title} done`);
@@ -4220,24 +4115,36 @@
           text.append(note);
         }
 
-        const off = document.createElement('button');
-        off.type = 'button';
-        off.className = 'ax';
-        off.textContent = '×';
-        off.setAttribute('aria-label', `Take ${b.title} off the list`);
-        off.onclick = (e) => {
-          if (e && e.stopPropagation) e.stopPropagation();
-          removeBlock(i);
+        row.append(tick, text);
+
+        // THE SAME EDITOR A BLOCK GETS. Swiping right calls the same openNote,
+        // and without this it set the state and drew nothing: the gesture
+        // worked, the note was never writable, and the only sign was that
+        // nothing happened.
+        if (i === noting) row.append(noteEditor(b, i));
+
+        // Tapping anywhere else promotes it into the day. The tick stops the
+        // press reaching here, so the only way to land on this is a press on
+        // the row itself.
+        //
+        // Guarded against a swipe that has just committed, the same way the
+        // duration chip is: without it, letting go of a swipe fires a click on
+        // whatever was under the finger and the row would be promoted on its
+        // way out of the day.
+        row.onclick = () => {
+          if (swallowClick) {
+            swallowClick = false;
+            return;
+          }
+          promote(i);
         };
 
-        row.append(tick, text, off);
+        slot.append(backing, row);
 
-        // Tapping anywhere else promotes it into the day. Both controls stop
-        // the press reaching here, so the only way to land on this is a press
-        // on the row itself.
-        row.onclick = () => promote(i);
-
-        slot.append(row);
+        // The block's own handler, unchanged. The hold finds no row to carry —
+        // rowOfBlock answers -1 for anything untimed — so a press and hold on
+        // one of these does nothing rather than picking up a neighbour.
+        attach({ slot, card: row, backing, index: i });
         return slot;
       }
 
@@ -4344,33 +4251,16 @@
         time.className = 'time';
         time.textContent = ' ';
 
+        const idx = document.createElement('div');
+        idx.className = 'idx';
+        idx.textContent = ' ';
+
         left.append(t, time);
-        row.append(left);
+        row.append(idx, left);
         ghost.append(row);
         return ghost;
       }
 
-      /**
-       * Where the past ends: a dot and a rule, and no word.
-       *
-       * It read NOW, then Next. A word here has to be a claim about one side of
-       * the line or the other, and it kept being the wrong one — Next named the
-       * block below it, which is not next when that block is already running.
-       * A line drawn across the day needs no caption; the blocks on either side
-       * of it say which side they are on.
-       */
-      function nowDivider() {
-        const bar = document.createElement('div');
-        bar.className = 'now';
-
-        const dot = document.createElement('div');
-        dot.className = 'dot';
-        const ln = document.createElement('div');
-        ln.className = 'ln';
-
-        bar.append(dot, ln);
-        return bar;
-      }
 
       // --- what a block can be told to do -------------------------------------
 
@@ -4839,7 +4729,7 @@
 
       function blockCard(b, i, { begun = false, past = false } = {}) {
         const slot = document.createElement('div');
-        slot.className = 'slot';
+        slot.className = past ? 'slot past-slot' : 'slot';
         // Which block this draws, so slotAt can find it without counting.
         slot.dataset.at = String(i);
 
@@ -4856,6 +4746,17 @@
         const row = document.createElement('div');
         row.className = 'brow';
 
+        // THE INDEX. Counted in rows of the day rather than places in `blocks`,
+        // so a day holding anytime items still numbers 01, 02, 03 down the
+        // page — see rowOfBlock. It is what makes this read as a table.
+        const idx = document.createElement('div');
+        idx.className = 'idx';
+        idx.textContent = String(rowOfBlock(i) + 1).padStart(2, '0');
+
+        // THE WHOLE SPAN, under the title. A block is a piece of the day with
+        // a size: a single start time says when it opens without saying what it
+        // takes, and the chip alone would state the length twice and the end
+        // never. This says both at once, which is what a block is.
         const left = document.createElement('div');
         const t = document.createElement('div');
         t.className = 't';
@@ -4875,9 +4776,9 @@
         // instead. The outline card and the faint title are what mark it as
         // done, and they were always doing that work.
         if (past) {
-          row.append(left);
+          row.append(idx, left, doneLabel());
         } else if (begun) {
-          row.append(left, activeLabel());
+          row.append(idx, left, activeLabel(b));
         } else {
           const dur = document.createElement('button');
           dur.type = 'button';
@@ -4896,7 +4797,7 @@
             cycleDuration(i);
           };
 
-          row.append(left, dur);
+          row.append(idx, left, dur);
         }
 
         card.append(row);
@@ -4923,10 +4824,20 @@
        * pill on every block above it, so blue here would be inviting a press
        * that does nothing.
        */
-      function activeLabel() {
+      /* THE STATUS COLUMN. Three states and one column: what is over says DONE,
+         what is happening says NOW and how long it runs, and what is still to
+         come carries the chip that sets its length. One place to read down. */
+      function activeLabel(b) {
         const tag = document.createElement('div');
-        tag.className = 'running';
-        tag.textContent = 'active';
+        tag.className = 'st running';
+        tag.textContent = `NOW · ${span(b.duration).toUpperCase()}`;
+        return tag;
+      }
+
+      function doneLabel() {
+        const tag = document.createElement('div');
+        tag.className = 'st';
+        tag.textContent = 'DONE';
         return tag;
       }
 
