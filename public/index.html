@@ -193,6 +193,8 @@
          it fainter, which is the trade this theme keeps having to make.
          Weight 400, not 300 — at this size and tracking, 300 disappears. */
       .label {
+        padding-left: 18px;
+        padding-right: 18px;
         font-family: var(--mono);
         font-size: 8.5px;
         letter-spacing: 0.2em;
@@ -233,6 +235,8 @@
          section heading — the word that used to name the day now chooses it,
          and there is no new control on the screen. */
       .dayswitch {
+        padding-left: 18px;
+        padding-right: 18px;
         display: flex;
         align-items: baseline;
         gap: 8px;
@@ -666,6 +670,8 @@
       /* --- inline control, not a card ------------------------------------- */
 
       .inline {
+        padding-left: 18px;
+        padding-right: 18px;
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -1478,6 +1484,8 @@
          is how close to the cadence you came, and a part-filled bar answers
          that without being read. */
       .stats {
+        padding-left: 18px;
+        padding-right: 18px;
         margin: 30px 0 34px;
       }
       .stats .label {
@@ -1528,6 +1536,8 @@
          muted so it never competes with the day above it. Not blue — blue is
          for the controls that change the day, and this changes nothing. */
       .refresh {
+        padding-left: 18px;
+        padding-right: 18px;
         margin: 34px 0 4px;
         text-align: center;
       }
@@ -1543,6 +1553,8 @@
       }
 
       .signout {
+        padding-left: 18px;
+        padding-right: 18px;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -1622,6 +1634,8 @@
       /* A folded slip pushed across the desk. Paper like everything else, with
          a deckle of its own so it belongs to the same sheet. */
       .undo {
+        padding-left: 18px;
+        padding-right: 18px;
         position: fixed;
         left: 50%;
         transform: translateX(-50%);
@@ -1663,6 +1677,8 @@
       /* The two ways in, side by side. A gap rather than a rule between them:
          they are alternatives, not a control with two halves. */
       .adds {
+        padding-left: 18px;
+        padding-right: 18px;
         display: flex;
         gap: 22px;
       }
@@ -1673,6 +1689,8 @@
          a boxed field would be the one thing on the screen pretending to be
          software. */
       .addfield {
+        padding-left: 18px;
+        padding-right: 18px;
         width: 100%;
         margin-top: 12px;
         padding: 4px 0;
@@ -1706,6 +1724,8 @@
       }
 
       .ends {
+        padding-left: 18px;
+        padding-right: 18px;
         display: flex;
         justify-content: space-between;
         align-items: baseline;
@@ -1753,7 +1773,9 @@
          a screen you are now just reading. */
       .confirm {
         display: block;
-        width: 100%;
+        width: calc(100% - 36px);
+        margin-left: 18px;
+        margin-right: 18px;
         margin-top: 18px;
         background: var(--accent);
         color: #fff;

@@ -189,6 +189,37 @@ console.log('0. the stylesheet parses');
   check('nothing is broken open or left open', damage === null, damage || '');
 }
 
+console.log('\n0b. the page has a margin, and the rules reach past it');
+{
+  // THE MARGIN IS ON THE THINGS BETWEEN ROWS. `main` has none at its sides, so
+  // a row's own padding is its gutter and its rule runs edge to edge — which is
+  // what makes this read as a ledger rather than as a list of bordered cards.
+  //
+  // The cost is that everything which is NOT a row has to carry the margin
+  // itself, and that was one grouped selector naming all of them. It was
+  // destroyed wholesale when the NOW divider came out: the divider was the last
+  // name in the group, and removing it took the group. Nothing failed — every
+  // rule still applied, and the entire page simply sat flush against the left
+  // edge of the phone. It shipped, and a screenshot found it.
+  //
+  // That is the second group in this file to be lost by being a group, and the
+  // fourth to cause a bug. They are written one per selector now.
+  check('the page itself has no side padding',
+    /padding: 18px 0 /.test(rule('main')), rule('main'));
+
+  for (const sel of ['.dayswitch', '.label', '.adds', '.ends', '.inline', '.stats', '.refresh']) {
+    check(`${sel} carries the margin itself`,
+      /padding-left: 18px/.test(rule(sel)), rule(sel).slice(0, 70).replace(/\s+/g, ' '));
+  }
+
+  // And the rows do not: theirs is padding inside a rule that has to reach the
+  // edge, which is a different thing that happens to be the same number.
+  for (const sel of ['.block', '.arow', '.row']) {
+    check(`${sel} has its gutter inside its own rule`,
+      /padding: \d+px 18px/.test(rule(sel)), rule(sel).slice(0, 70).replace(/\s+/g, ' '));
+  }
+}
+
 console.log('\n1. the palette is exactly the one specified');
 {
   const root = rule(':root');
