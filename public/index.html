@@ -227,7 +227,7 @@
         text-transform: uppercase;
         color: var(--faint);
         font-weight: 500;
-        margin-bottom: 16px;
+        margin-bottom: 7px;
         display: flex;
         justify-content: space-between;
         align-items: baseline;
@@ -1386,9 +1386,19 @@
       /* Committed to the day, not to an hour. Plain rows and not slips: a slip
          is a thing that sits at a time, and the whole point of these is that
          they do not. They are the Things list's shape, in the day's section. */
+      /* A section of the page, under its own rule. The same relationship the
+         Anytime list has: rule, 14px, label, 7px, first row. */
+      .things-head {
+        border-top: 1.5px solid var(--heavy);
+        /* Its label already has the gutter; this is the rule, which reaches the
+           same edges every other section rule does. */
+        padding-top: 14px;
+        margin-top: 26px;
+      }
+
       .anytime {
         border-top: 1.5px solid var(--heavy);
-        padding-top: 0;
+        padding-top: 14px;
         margin: 22px 0 4px;
 
         /* ONE LINE BOX, SHARED BY ALL THREE THINGS ON A ROW. The tick, the
@@ -2103,9 +2113,11 @@
 
       <!-- 2. THINGS --------------------------------------------------------- -->
       <section>
-        <div class="label">
-          Things
-          <button type="button" class="act" id="add-open">+ Add</button>
+        <div class="things-head">
+          <div class="label">
+            Things
+            <button type="button" class="act" id="add-open">+ Add</button>
+          </div>
         </div>
         <div id="things"></div>
 

@@ -246,6 +246,45 @@ console.log('\n0b. one gutter, and nothing wider than the phone');
   check('and it stops widening at 480', /max-width: 480px/.test(rule('main')));
 }
 
+console.log('\n0c. a section rule, its label, and the rows under it');
+{
+  // ONE RELATIONSHIP, IN THREE PLACES:
+  //
+  //   section rule → 14px → label → 7px → first row
+  //
+  // The label belongs to the rows below it rather than to the rule above, so
+  // the space under it is the smaller of the two. Equal gaps leave it floating
+  // between the two things it exists to bind, and no gap at all — which is what
+  // ANYTIME TODAY had — reads as a caption stuck to the underside of a line.
+  const RULE_TO_LABEL = 14;
+  const LABEL_TO_ROW = 7;
+
+  check(`a label sits ${LABEL_TO_ROW}px above its first row`,
+    new RegExp(`margin-bottom: ${LABEL_TO_ROW}px`).test(rule('.label')), rule('.label'));
+
+  for (const [what, sel] of [['the anytime list', '.anytime'], ['the things list', '.things-head']]) {
+    const r = rule(sel);
+    check(`${what} is under a section rule`,
+      /border-top: 1\.5px solid var\(--heavy\)/.test(r), r.replace(/\s+/g, ' ').slice(0, 60));
+    check(`  and its label is ${RULE_TO_LABEL}px below it`,
+      new RegExp(`padding-top: ${RULE_TO_LABEL}px`).test(r), r.replace(/\s+/g, ' ').slice(0, 80));
+  }
+
+  // THE COLUMN HEAD IS THE SAME RELATIONSHIP INVERTED: its label sits ABOVE its
+  // rule, because the rule is the top of the table rather than the top of a
+  // section. Six px, and tighter than the 14 for the same reason the 7 is
+  // tighter than the 14 — the label is bound to the thing it names.
+  check('the column head sits above its rule',
+    /border-bottom: 1\.5px solid var\(--heavy\)/.test(rule('.colhead')));
+  check('  with 6px between them',
+    /padding: 0 0 6px/.test(rule('.colhead')), rule('.colhead').replace(/\s+/g, ' '));
+
+  // And the three rules are the same weight, because they are the same kind of
+  // division: the end of one part of the page and the start of another.
+  const heavy = (css.match(/border-(top|bottom): 1\.5px solid var\(--heavy\)/g) || []).length;
+  check('three sections, three rules of one weight', heavy >= 3, `${heavy}`);
+}
+
 console.log('\n1. the palette is exactly the one specified');
 {
   const root = rule(':root');
