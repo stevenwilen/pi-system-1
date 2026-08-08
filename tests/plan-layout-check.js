@@ -590,8 +590,7 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   // The ticked checkbox is here too. It fills with the accent — the one place
   // on the page where blue reports rather than offers, and it is reporting
   // something you did with a press half a second ago.
-  const orients =
-    /\.now \.dot|\.now \.ln|\.running|\.block\.live|\.arow\.did \.atick/;
+  const orients = /\.running|\.block\.live|\.arow\.did \.atick/;
   check('blue appears only on the controls that act, or the one that orients',
     blue.every((s) => acts.test(s) || orients.test(s)), blue.join(' | '));
   // WHOLE CLASS NAMES. `\b` is not a class boundary in CSS: a hyphen ends a
@@ -610,8 +609,19 @@ console.log('\n6. blue is actionable, and nothing else is blue');
     decorative.join(' | '));
 
   check('the start steppers are blue', /color: var\(--accent\)/.test(rule('.step')));
-  check('the duration chip is blue, because it is now the control',
-    /color: var\(--accent\)/.test(rule('.dur')));
+  // THE CHIP IS A FIGURE IN A COLUMN, and it stopped being blue when it moved
+  // into one. It was the one control on a block, so it wore the action colour —
+  // in the status column it sits under DONE and beside NOW · 4H, and a blue
+  // figure there was the loudest thing on the row you are NOT in.
+  //
+  // It is still pressed to cycle the length; what says so is that it is the
+  // only thing in that column on a block still to come.
+  check('the duration chip is a figure, not a shout',
+    /color: var\(--muted\)/.test(rule('.dur')), rule('.dur'));
+  check('set in the mono face with the rest of the column',
+    /font-family: var\(--mono\)/.test(rule('.dur')));
+  check('and in the column, at its width',
+    /width: 58px/.test(rule('.dur')), rule('.dur'));
   // CONFIRM IS BLUE, and it is the one filled control on the page.
   //
   // It was the hanko: a persimmon seal drawn on a layer beneath the word, with
@@ -899,15 +909,31 @@ console.log('\n7b. the right edge of a block says one thing per state');
 
 console.log('\n8. the calendar aside is a left rule, not a card');
 {
+  // NOT A CARD, AND NOT A BAR EITHER. It was a left rule and indented text,
+  // which was right on a page made of paper — and on a page made of horizontal
+  // rules it was the only vertical line, so it read as the one section that had
+  // been boxed off.
+  //
+  // It is a heading and some quiet text now, in the same mono capitals every
+  // other section head uses. What separates it is space, which is what
+  // separates everything here.
   const cal = rule('.cal');
-  check('a left rule', /border-left: 2px solid/.test(cal));
-  check('and only a left rule', !/border-top|border-right|border-bottom|border:/.test(cal), cal);
+  // IT KEEPS ITS LEFT RULE. Everything else on the page is a row of a table or
+  // a heading over one; this is the one thing that is neither, and the bar down
+  // its side is what says so. Taking it away made the aside read as another
+  // section of the ledger.
+  check('a left rule', /border-left: 2px solid/.test(cal), cal);
+  check('and only a left rule',
+    !/border-top|border-right|border-bottom|border:/.test(cal), cal);
   check('no background', !/background/.test(cal), cal);
   check('no radius', !/border-radius/.test(cal), cal);
-  check('the text is indented from the rule', /padding: [^;]*13px/.test(cal), cal);
+  check('the text is indented from it', /padding: [^;]*13px/.test(cal), cal);
 
-  check('its heading is neutral warm grey', /color: var\(--cal-head\)/.test(rule('.cal h4')));
-  check('and its body too', /color: var\(--cal-text\)/.test(rule('.cal p')));
+  const head = rule('.cal h4');
+  check('its heading is a mono capital, like every other section head',
+    /font-family: var\(--mono\)/.test(head) && /text-transform: uppercase/.test(head), head);
+  check('and quiet', /color: var\(--faint\)/.test(head), head);
+  check('its body is muted', /color: var\(--muted\)/.test(rule('.cal p')));
 
   // PRESSABLE NOW, and still not a card. What changed is what a row does, not
   // what it is: a line of text under a rule, with the affordance out at the
@@ -958,7 +984,6 @@ console.log('\n9. tabular figures on every time');
     ['a block time', '.block .time'],
     ['a block duration', '.dur'],
     ['the day end', '.ends b'],
-    ['the calendar aside', '.cal p'],
     ['an event time', '.ctime'],
   ]) {
     check(`${what} is tabular`, /font-variant-numeric: tabular-nums/.test(rule(selector)));
@@ -1309,8 +1334,10 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
   // the script does.
   check('the browser keeps vertical panning', /touch-action: pan-y/.test(css));
   check('on the card', /touch-action: pan-y/.test(rule('.block')));
-  check('and on the chip, so a swipe can start there too',
-    /touch-action: pan-y/.test(rule('.dur')));
+  // The chip inherits the row's own pan-y rather than declaring one: it is a
+  // child of the block, and the block is what the browser is arbitrating with.
+  check('and the chip does not take the gesture back',
+    !/touch-action: (none|auto)/.test(rule('.dur')), rule('.dur'));
 
   console.log('   and a carried block takes it back');
   // The reorder died here once: pan-y let the browser claim the drag as a
@@ -1373,11 +1400,15 @@ console.log('\n16. the shape of the day');
   // and be unreachable on a real screen. The section is hidden until something
   // is in it, and a way in you cannot use until you have already used it is not
   // a way in.
-  check('the way in sits above the section it fills',
-    body.indexOf('id="add-anytime"') < body.indexOf('id="anytime"'),
+  // IT SITS AT THE FOOT OF THE SECTION IT FILLS, which it could not do while
+  // that section was hidden until something was in it. The heading and the way
+  // in stay whatever the list holds now — a section you can only add to once it
+  // is not empty is not a way in — so the rows have somewhere to arrive.
+  check('the way in is inside the section it fills',
+    body.indexOf('id="add-anytime"') > body.indexOf('id="anytime"'),
     `${body.indexOf('id="add-anytime"')} vs ${body.indexOf('id="anytime"')}`);
-  check('which is hidden until it holds something',
-    /class="anytime hidden" id="anytime"/.test(body));
+  check('and the section is always there to be added to',
+    /class="anytime" id="anytime"/.test(body));
 
   // NOTHING ON THE THINGS LIST BEHIND IT. The whole point of the control: a
   // reminder is not something you are carrying, so it never becomes an entry.
@@ -1414,10 +1445,15 @@ console.log('\n17. today and tomorrow');
   check('with both words', /id="pick-today"/.test(body) && /id="pick-tomorrow"/.test(body));
   check('and the date beside them', /class="date" id="plan-date"/.test(body));
 
+  // THE ONE SENTENCE ON THE SCREEN. It was set as a label — small letterspaced
+  // capitals, the same as every section head — which made the line naming the
+  // day you are looking at read as a heading over the table rather than as the
+  // title of the page.
   const sw = rule('.dayswitch');
-  check('same type as any other label', /font-size: 10px/.test(sw) &&
-    /letter-spacing: 0\.14em/.test(sw) && /text-transform: uppercase/.test(sw));
-  check('and the same space under it', /margin-bottom: 14px/.test(sw));
+  check('the day is a title, not a label',
+    /font-size: 16px/.test(sw) && !/text-transform: uppercase/.test(sw), sw);
+  check('set in the name face, with the names', !/var\(--mono\)/.test(sw), sw);
+  check('and given room under it', /margin-bottom: \d+px/.test(sw), sw);
   // Lighter than the paper's own ink rather than darker than it — on paper the
   // way to recede is toward the page, not away from it.
   check('the inactive word recedes toward the paper',
@@ -1479,8 +1515,18 @@ console.log('\n17. today and tomorrow');
   check('nothing posts a miss', !/\/miss/.test(code));
   check('and no block carries a missed flag', !/\bmissed\b/.test(code));
 
-  check('a divider is drawn once', /markedNow = true/.test(code));
-  check('with a dot and a rule', /className = 'dot'/.test(code) && /className = 'ln'/.test(code));
+  // NO DIVIDER AT ALL. A line was drawn across the day where the past ended —
+  // a knot and a rule, with no word, because every word tried there was a claim
+  // about one side of it.
+  //
+  // The row you are in is marked four ways now: a bar in the gutter, a tinted
+  // ground, a heavier name, and blue figures. A line above it is a fifth mark
+  // for the same fact, and it was the only thing on the screen that was neither
+  // a row nor a rule between two of them.
+  check('nothing draws a line across the day', !/className = 'ln'/.test(code));
+  check('nor the knot that fastened it', !/className = 'dot'/.test(code));
+  check('and nothing is left counting one', !/markedNow/.test(code));
+  check('nor styling one', !/\.now(?![\w-])/.test(css));
   check('the Starts control is hidden', /\$\('starts'\)\.classList\.toggle\('hidden', onToday\(\)\)/.test(code));
 
   console.log('   the past does not flow');

@@ -141,25 +141,6 @@
         margin: 0 auto;
         padding: 18px 0 calc(40px + env(safe-area-inset-bottom));
       }
-      /* Everything that is not a ruled row carries the page's own margin. The
-         rows do not: their padding is theirs, so their rules reach the edge. */
-      .dayswitch,
-      .cal,
-      .inline,
-      .ends,
-      .label,
-      .adds,
-      .addfield,
-      .stats,
-      .refresh,
-      .signout,
-      #things,
-      #saved,
-      #undo-host,
-      .now {
-        padding-left: 18px;
-        padding-right: 18px;
-      }
 
       /* The small mono capitals that head a column. Set in the same face as
          every figure on the page, so a heading and the numbers under it belong
@@ -255,11 +236,11 @@
       .dayswitch {
         display: flex;
         align-items: baseline;
-        gap: 9px;
-        margin-bottom: 14px;
-        font-size: 10px;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
+        gap: 8px;
+        margin-bottom: 18px;
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
       }
       .dayswitch .opt {
         /* Dimmer than faint. The day you are not looking at should be legible
@@ -618,21 +599,24 @@
 
       .cal {
         border-left: 2px solid var(--cal-rule);
-        padding: 8px 0 8px 13px;
-        margin-bottom: 22px;
+        padding: 2px 0 2px 13px;
+        margin: 0 0 22px 18px;
+        width: calc(100% - 36px);
       }
       .cal h4 {
-        font-size: 12px;
+        font-family: var(--mono);
+        font-size: 8.5px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
         font-weight: 500;
-        color: var(--cal-head);
+        color: var(--faint);
+        margin-bottom: 8px;
       }
       .cal p {
         font-size: 13px;
-        color: var(--cal-text);
-        margin-top: 6px;
+        color: var(--muted);
         line-height: 1.6;
         white-space: pre-line;
-        font-variant-numeric: tabular-nums;
       }
       .cal .failed {
         color: var(--warn);
@@ -1579,33 +1563,6 @@
         }
       }
 
-      /* Where the past ends: a dot and a rule running out to the edge. It
-         carried a word between them once, and the word kept having to be a
-         claim about one side of the line or the other. */
-      .now {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin: 6px 0 16px;
-      }
-      /* The knot where the cord is tied off — the day's two halves joined at
-         the point they meet. It replaces the dot, which was a marker; a knot
-         is a fastening, and this line fastens rather than marks. */
-      .now .dot {
-        width: 17px;
-        height: 14px;
-        flex: none;
-        background: none;
-        border-radius: 0;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='17' height='14' fill='none'%3E%3Cpath d='M2 7 C2 3.4 5 2 7.6 4 C10.2 6 13 4.6 13 7 C13 9.4 10.2 8 7.6 10 C5 12 2 10.6 2 7 Z' stroke='%2337516E' stroke-width='1.05' opacity='.8'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-      }
-      .now .ln {
-        flex: 1;
-        height: 1px;
-        background: var(--accent);
-        opacity: 0.42;
-      }
 
       /* Picked up. Bigger, lighter, casting a shadow: it has to be obvious
          that this one is in your hand and the rest are not. */
@@ -1629,18 +1586,20 @@
          caps in indigo, and no pill around it. The pill was a drawn object,
          and this theme does not draw — the word is the control. */
       .dur {
-        font-size: 12px;
-        letter-spacing: 0.16em;
+        width: 58px;
+        flex: none;
+        padding: 2px 0 0;
+        font-family: var(--mono);
+        font-size: 9px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
         font-variant-numeric: tabular-nums;
-        color: var(--accent);
+        color: var(--muted);
         background: none;
         border: 0;
-        padding: 8px 4px 8px 15px;
         text-align: right;
         white-space: nowrap;
-        font-family: inherit;
         cursor: pointer;
-        touch-action: pan-y;
       }
 
       /* The safety net for a swipe, which commits with no confirm. */
@@ -1731,23 +1690,32 @@
       }
 
       .ends {
-        border-top: 1.5px solid var(--heavy);
-        padding-top: 15px;
-        margin-top: 20px;
         display: flex;
         justify-content: space-between;
         align-items: baseline;
-        margin-top: 28px;
+        margin-top: 20px;
+        padding-top: 15px;
         padding-bottom: 20px;
+        border-top: 1.5px solid var(--heavy);
+        font-family: var(--mono);
+        font-size: 8.5px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--faint);
+        font-weight: 500;
       }
       .ends span {
         font-size: 13px;
         color: var(--muted);
       }
       .ends b {
-        font-size: 17px;
-        font-weight: 500;
+        font-family: var(--mono);
+        font-size: 19px;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        color: var(--text);
         font-variant-numeric: tabular-nums;
+        text-transform: none;
       }
       /* A day running past midnight is the one thing the end time can be
          wrong about, so it is said in the miss colour. */
@@ -2065,7 +2033,6 @@
              to neither: Things is what you are carrying, and this is not. -->
         <div class="adds" id="adds">
           <button type="button" class="addblock" id="add-block">+ Block</button>
-          <button type="button" class="addblock" id="add-anytime">+ Anytime</button>
         </div>
 
         <!-- WHERE THE NAME IS TYPED, in the page rather than over it. This was
@@ -2086,9 +2053,12 @@
 
              Hidden when empty. A heading with nothing under it would be a
              section of the day screen that is blank on almost every day. -->
-        <div class="anytime hidden" id="anytime">
+        <div class="anytime" id="anytime">
           <div class="label" id="anytime-label">Anytime today</div>
           <div id="anytime-list"></div>
+          <div class="adds">
+            <button type="button" class="addblock" id="add-anytime">+ Anytime</button>
+          </div>
         </div>
 
         <div class="ends" id="ends">
@@ -3879,7 +3849,6 @@
         box.replaceChildren();
 
         const now = onToday() ? nowMinutes() : null;
-        let markedNow = false;
         // Whether anything above the current block is over. The divider marks
         // the edge of the past, so there has to be a past for it to be the edge
         // of. See below.
@@ -3933,10 +3902,6 @@
           // day that has not begun. It could not be reached while the screen
           // opened on tomorrow, where none of this runs, and became reachable
           // the moment today became the day you land on.
-          if (onToday() && !past && !markedNow && seenPast) {
-            box.append(nowDivider());
-            markedNow = true;
-          }
           if (past) seenPast = true;
 
           box.append(blockCard(b, i, { begun, past }));
@@ -4017,8 +3982,8 @@
           .map((b, at) => ({ b, at }))
           .filter(({ b }) => untimed(b));
 
-        $('anytime').classList.toggle('hidden', !items.length);
-        if (!items.length) return;
+        // The heading and its way in stay whatever the list holds: a section you
+        // can only add to once it is not empty is not a way in.
 
         // The heading follows the day on screen. "Anytime today" over
         // tomorrow's list would be a heading that is simply untrue every
@@ -4230,27 +4195,6 @@
         return ghost;
       }
 
-      /**
-       * Where the past ends: a dot and a rule, and no word.
-       *
-       * It read NOW, then Next. A word here has to be a claim about one side of
-       * the line or the other, and it kept being the wrong one — Next named the
-       * block below it, which is not next when that block is already running.
-       * A line drawn across the day needs no caption; the blocks on either side
-       * of it say which side they are on.
-       */
-      function nowDivider() {
-        const bar = document.createElement('div');
-        bar.className = 'now';
-
-        const dot = document.createElement('div');
-        dot.className = 'dot';
-        const ln = document.createElement('div');
-        ln.className = 'ln';
-
-        bar.append(dot, ln);
-        return bar;
-      }
 
       // --- what a block can be told to do -------------------------------------
 

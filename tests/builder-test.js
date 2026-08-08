@@ -1740,18 +1740,18 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('nor does the second one', rowOf(slots()[1]).children.length === 3,
       String(rowOf(slots()[1]).children.length));
 
+    // NO LINE ACROSS THE DAY. It was drawn once, above the first block that had
+    // not ended — a knot and a rule with no word, because every word tried
+    // there was a claim about one side of it.
+    //
+    // The row you are in is marked four ways now, and where the past ends is
+    // said by the rows themselves: they go faint and their status column reads
+    // DONE. A line above them was a fifth mark for a fact already made twice.
     const divider = byId.builder.children.filter((c) => c._class.has('now'));
-    check('one divider', divider.length === 1, `${divider.length}`);
-    check('between the past and what is left',
-      byId.builder.children.indexOf(divider[0]) === 2,
-      String(byId.builder.children.indexOf(divider[0])));
-    check('it carries a dot and a rule',
-      divider[0].children.some((c) => c._class.has('dot')) &&
-        divider[0].children.some((c) => c._class.has('ln')));
-    check('and no word at all', divider[0].text().trim() === '',
-      JSON.stringify(divider[0].text()));
-    check('so nothing there claims a side of the line',
-      !/NOW|Next/i.test(divider[0].text()), divider[0].text());
+    check('nothing is drawn across the day', divider.length === 0, String(divider.length));
+    check('the builder holds rows and nothing else',
+      byId.builder.children.every((c) => c._class.has('slot')),
+      byId.builder.children.map((c) => [...c._class].join('.')).join(' '));
 
     check('a past block keeps the hour it happened at',
       slots()[0].text().includes('8:00 AM'), slots()[0].text().trim());
@@ -2146,11 +2146,18 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     });
     await ctx.load();
 
+    // THE BUILDER HOLDS EXACTLY THE ROWS. This case was written when it did
+    // not: a divider was drawn across the day, the gap-opening read every child
+    // of the builder, and the two lists disagreed by one from the divider down.
+    //
+    // The divider is gone — the row you are in is marked four ways, and where
+    // the past ends is said by the rows themselves. So the mistake is no longer
+    // reachable from this direction, and the case stays because it is still
+    // reachable from the other: `blocks` holds the anytime items too, which is
+    // what the cases further down are about.
     const kids = () => byId.builder.children;
-    const divider = () => kids().find((c) => c._class.has('now'));
-    check('the day has a divider in it', Boolean(divider()));
-    check('so the builder holds more children than blocks',
-      kids().length === slots().length + 1, `${kids().length} vs ${slots().length}`);
+    check('the builder holds exactly the rows',
+      kids().length === slots().length, `${kids().length} vs ${slots().length}`);
 
     // Carry the last block up one place — the case reported.
     const card = cardOf(slots()[3]);
@@ -2164,8 +2171,6 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('the finished blocks are left alone',
       !slots()[0].style.transform && !slots()[1].style.transform,
       `${slots()[0].style.transform} / ${slots()[1].style.transform}`);
-    check('and the divider is not dragged around with them',
-      !divider().style.transform, divider().style.transform);
 
     up(card, 100, 300 - SLOT);
     await wait(SETTLED);
@@ -2234,10 +2239,12 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('the finished ones kept the hours they happened at',
       hours[0] === '8:00 AM' && hours[1] === '9:00 AM', JSON.stringify(hours));
 
-    const line = byId.builder.children.filter((c) => c._class.has('now'));
-    check('and there is still exactly one divider', line.length === 1, String(line.length));
-    check('below the two that are over', byId.builder.children.indexOf(line[0]) === 2,
-      String(byId.builder.children.indexOf(line[0])));
+    // The rows say which side of the past they are on, so nothing has to draw
+    // a line between them: the finished ones are faint and their status column
+    // reads DONE.
+    check("and nothing is drawn between them",
+      byId.builder.children.every((c) => c._class.has("slot")),
+      byId.builder.children.map((c) => [...c._class].join(".")).join(" "));
   }
 
   console.log('\na block you are in the middle of is locked');
@@ -2290,14 +2297,11 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // next. With the word gone the line goes back to marking the edge of the
     // past, which is the division that was wanted all along.
     const kids = byId.builder.children;
-    const line = kids.filter((c) => c._class.has('now'));
-    check('there is one divider', line.length === 1, String(line.length));
-    check('and it sits above the block in progress',
-      kids.indexOf(line[0]) === 1, String(kids.indexOf(line[0])));
-    check('so the running block is below the line, with what is still to come',
-      kids.indexOf(line[0]) < kids.indexOf(slots()[1]));
-    check('and the block that is over is above it',
-      kids.indexOf(slots()[0]) < kids.indexOf(line[0]));
+    check("nothing is drawn across the day",
+      kids.every((c) => c._class.has("slot")),
+      kids.map((c) => [...c._class].join(".")).join(" "));
+    check('and the block that is over is still above the one running',
+      kids.indexOf(slots()[0]) < kids.indexOf(slots()[1]));
 
     // Holding it must not pick it up.
     const card = cardOf(slots()[1]);
@@ -3527,7 +3531,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
     // REACHABLE ON AN EMPTY DAY. The Anytime section is hidden until something
     // is in it, so a button inside it could never add the first one.
-    check('the anytime section starts hidden', byId['anytime']._class.has('hidden'));
+    check('the anytime section is there to be added to',
+      !byId['anytime']._class.has('hidden'));
     check('but the way in is there anyway', typeof byId['add-anytime'].onclick === 'function');
 
     const endedAt = byId['end-time'].textContent;
@@ -3543,7 +3548,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       String(byId['add-field'].getAttribute('placeholder')));
 
     typeAdd('Walk the dog');
-    check('the section opens', !byId['anytime']._class.has('hidden'));
+    check('the section holds it', anytimeTitles(byId).length === 1);
     check('with the one-off on it',
       anytimeTitles(byId).join() === 'Walk the dog', anytimeTitles(byId).join());
 
@@ -3588,7 +3593,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     for (const nothing of ['', '   ']) typeAdd(nothing);
     check('an empty line adds nothing', anytimeTitles(byId).length === 0,
       anytimeTitles(byId).join());
-    check('and the section stays hidden', byId['anytime']._class.has('hidden'));
+    check('and it holds nothing', anytimeTitles(byId).length === 0);
     check('but the field is still open to type in',
       !byId['add-field']._class.has('hidden'));
 
