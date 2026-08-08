@@ -589,40 +589,25 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('and nothing was left collapsing', slots().length === 1, String(slots().length));
   }
 
-  console.log('\nan empty day still takes a day\'s worth of room');
+  console.log('\nan empty day is empty, and nothing holds room open in it');
   {
-    // With nothing scheduled the builder collapsed to nothing and Starts sat
-    // against + Block, which read as a broken control rather than a day with
-    // space in it.
+    // A BLOCK'S WORTH OF ROOM used to be held here: a real block card, hidden
+    // with visibility so it kept its space, because collapsing the builder to
+    // nothing put Starts hard against + Block.
+    //
+    // The table frames an empty day on its own now — a column head with a rule
+    // under it, and a rule above whatever comes next — and the held-open room
+    // read as a gap somebody had forgotten to fill.
     const { ctx, byId, slots } = boot();
     await ctx.load();
 
-    const ghosts = () => byId.builder.children.filter((c) => c._class.has('ghost'));
-    check('an empty day holds a space open', ghosts().length === 1,
-      String(ghosts().length));
-    check('and it is built as a block, so it cannot drift from one',
-      ghosts()[0]._class.has('block'));
-    check('hidden from anything reading the page aloud',
-      ghosts()[0]._attrs['aria-hidden'] === 'true',
-      JSON.stringify(ghosts()[0]._attrs));
-
-    // The line boxes are what give it height. Empty divs have none, so the
-    // card would collapse to its padding.
-    const row = ghosts()[0].children.find((c) => c._class.has('brow'));
-    const left = row.children[0];
-    check('with both lines carrying a non-breaking space',
-      left.children.every((c) => c.textContent === ' '),
-      JSON.stringify(left.children.map((c) => c.textContent)));
-
-    // The one that would bite: it must not read as a block anywhere.
-    check('it is not a slot, so nothing counts it as a block',
-      slots().length === 0, String(slots().length));
-    check('and the day ends at nothing rather than at a dash',
-      byId['end-time'].textContent === '0:00', byId['end-time'].textContent);
+    check('the builder holds nothing at all', byId.builder.children.length === 0,
+      String(byId.builder.children.length));
+    check('and nothing counts as a block', slots().length === 0, String(slots().length));
 
     ctx.addBlock({ title: 'Real' });
-    check('a real block replaces it', ghosts().length === 0, String(ghosts().length));
-    check('and the day is one block long', slots().length === 1, String(slots().length));
+    check('a real block is the first thing in it', slots().length === 1,
+      String(slots().length));
   }
 
   console.log('\nthe cover comes off once the day is on screen');

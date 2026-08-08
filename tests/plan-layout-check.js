@@ -204,7 +204,19 @@ console.log('\n0b. one gutter, and nothing wider than the phone');
   // never wrong; something was too wide, and the type scale was the symptom.
   check('the page carries the only gutter',
     /padding: 18px 18px /.test(rule('main')), rule('main').replace(/\s+/g, ' '));
-  check('and nothing else carries one', !/padding-left: 18px/.test(css));
+  // Except the three section rules, which do the same trade a row does: out
+  // past the margin so the line reaches the edge, then padding to put their
+  // contents back on the gutter. A division that stops 18px short of the paper
+  // reads as the top of a box rather than the end of a section.
+  const bleeders = ['.colhead', '.anytime', '.things-head'];
+  for (const sel of bleeders) {
+    const r = rule(sel);
+    check(sel + ' reaches the edge', /margin-left: -18px/.test(r), r.replace(/s+/g,' ').slice(0,70));
+    check('  and puts its contents back', /padding-left: 18px/.test(r));
+  }
+  check('and nothing else carries a gutter of its own',
+    (css.match(/padding-left: 18px/g) || []).length === bleeders.length,
+    String((css.match(/padding-left: 18px/g) || []).length));
 
   // A row reaches the edge by pulling itself back out of that padding. This is
   // the one place the number appears twice, and they have to stay equal.
@@ -1002,28 +1014,20 @@ console.log('\n7a. the wait before the first day is on screen');
       !/\.confirm \{\s*transition: none/.test(css));
 }
 
-console.log('\n7a-iii. an empty day keeps a block\'s worth of room');
+console.log('\nan empty day is empty, and says so by being it');
 {
-  // Nothing scheduled collapsed the builder to nothing, putting Starts against
-  // + Block. Built from a real block card rather than a min-height: the number
-  // would have to be maintained against the card's padding, its two line
-  // heights and the gap below it, and would go wrong the first time any of
-  // those changed — silently, because nothing would fail.
-  const ghost = rule('.block.ghost');
-  check('there is a spacer', ghost.length > 0);
-  check('it is hidden, not removed — the space is the point',
-    /visibility: hidden/.test(ghost), ghost);
-  check('and not display:none, which would take the space with it',
-    !/display: none/.test(ghost), ghost);
-
-  check('it is a block card, so it cannot drift from one',
-    /ghost\.className = 'block ghost'/.test(code));
-  // EMPTY OF BLOCKS WITH AN HOUR IN THEM. A day holding nothing but untimed
-  // items has hours as empty as they look, and the spacer is about the hours.
-  check('shown only when the day has no timed block in it',
-    /if \(!timedBlocks\(\)\.length\) box\.append\(emptySpace\(\)\)/.test(code));
-  check('and hidden from a screen reader',
-    /setAttribute\('aria-hidden', 'true'\)/.test(code));
+  // A BLOCK'S WORTH OF ROOM used to be held open on a day with none — a real
+  // block card, hidden with `visibility` so it kept its space, because
+  // collapsing the builder to nothing put Starts hard against + Block.
+  //
+  // The table has its own structure now: a column head with a rule under it,
+  // and a rule above whatever comes next. An empty day reads as an empty day
+  // between those two lines, and the held-open room read as a gap somebody had
+  // forgotten to fill.
+  check('nothing holds room open on an empty day', !/emptySpace/.test(code));
+  check('and no spacer is styled', !/\.ghost(?![\w-])/.test(css));
+  check('the column head still frames it',
+    /border-bottom: 1\.5px solid var\(--heavy\)/.test(rule('.colhead')));
 }
 
 console.log('\n7a-ii. and the same dot when the day switch is fetching');

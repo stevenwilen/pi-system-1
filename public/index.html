@@ -197,6 +197,15 @@
          hairline between rows nor the end of a section: it is the top of the
          table, and it is the heaviest thing on the screen after the ink. */
       .colhead {
+        /* THE RULE REACHES THE EDGE. It is the end of one part of the page
+           and the start of another, and a division that stops 18px short of
+           the paper reads as the top of a box instead. Out past the margin,
+           then the padding puts its contents back on the gutter — the same
+           trade every row makes. */
+        margin-left: -18px;
+        margin-right: -18px;
+        padding-left: 18px;
+        padding-right: 18px;
         display: flex;
         align-items: center;
         gap: 10px;
@@ -421,9 +430,10 @@
          about something already caught. This one asks first and then writes for
          good — the colour is the difference between the two, arriving before
          the release rather than after it. */
-      .thing .backing {
-        padding: 0;
-      }
+      /* It carried `padding: 0` — from when a Things row ran to the page margin
+         and an 18px inset would have put Delete under the title. The rows bleed
+         out past the margin now, so zero puts the word hard against the edge of
+         the screen. It takes the same gutter every row does. */
       .thing .backing.left {
         color: var(--warn);
       }
@@ -992,12 +1002,6 @@
         animation: spin 1100ms cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite;
       }
 
-      /* The room a block would take, on a day that has none. `visibility`
-         rather than `display: none`, which is the whole point: it has to keep
-         its space while showing nothing. */
-      .block.ghost {
-        visibility: hidden;
-      }
 
       /* The day, mid-switch. It holds roughly a block's worth of height so the
          page does not jump as the old day leaves and the new one arrives. */
@@ -1406,6 +1410,15 @@
       /* A section of the page, under its own rule. The same relationship the
          Anytime list has: rule, 14px, label, 7px, first row. */
       .things-head {
+        /* THE RULE REACHES THE EDGE. It is the end of one part of the page
+           and the start of another, and a division that stops 18px short of
+           the paper reads as the top of a box instead. Out past the margin,
+           then the padding puts its contents back on the gutter — the same
+           trade every row makes. */
+        margin-left: -18px;
+        margin-right: -18px;
+        padding-left: 18px;
+        padding-right: 18px;
         border-top: 1.5px solid var(--heavy);
         /* Its label already has the gutter; this is the rule, which reaches the
            same edges every other section rule does. */
@@ -1414,6 +1427,15 @@
       }
 
       .anytime {
+        /* THE RULE REACHES THE EDGE. It is the end of one part of the page
+           and the start of another, and a division that stops 18px short of
+           the paper reads as the top of a box instead. Out past the margin,
+           then the padding puts its contents back on the gutter — the same
+           trade every row makes. */
+        margin-left: -18px;
+        margin-right: -18px;
+        padding-left: 18px;
+        padding-right: 18px;
         border-top: 1.5px solid var(--heavy);
         padding-top: 14px;
         margin: 22px 0 4px;
@@ -3968,11 +3990,6 @@
           box.append(blockCard(b, i, { begun, past }));
         }
 
-        // An empty day still takes up a day's worth of room. A day of nothing
-        // but untimed items is one: they are listed below, and the hours are
-        // as empty as they look.
-        if (!timedBlocks().length) box.append(emptySpace());
-
         renderAnytime();
 
         // 0:00 on an empty day, not a dash. A dash reads as "we could not work
@@ -4235,31 +4252,6 @@
         renderBuilder();
       }
 
-      function emptySpace() {
-        const ghost = document.createElement('div');
-        ghost.className = 'block ghost';
-        ghost.setAttribute('aria-hidden', 'true');
-
-        const row = document.createElement('div');
-        row.className = 'brow';
-
-        const left = document.createElement('div');
-        const t = document.createElement('div');
-        t.className = 't';
-        t.textContent = ' ';
-        const time = document.createElement('div');
-        time.className = 'time';
-        time.textContent = ' ';
-
-        const idx = document.createElement('div');
-        idx.className = 'idx';
-        idx.textContent = ' ';
-
-        left.append(t, time);
-        row.append(idx, left);
-        ghost.append(row);
-        return ghost;
-      }
 
 
       // --- what a block can be told to do -------------------------------------
