@@ -102,7 +102,14 @@ const boxOf = async (page, sel, n = 0) =>
   }
 
   {
-    const box = await boxOf(page, '.block', 0);
+    // THE LAST BLOCK, and the reason matters: a block that has BEGUN refuses
+    // the right swipe on purpose — a note says what you are about to do, so it
+    // is fixed once the block starts. The fixture's hours are fixed and the
+    // real clock is not, so picking the first block made this pass in the
+    // morning and fail in the evening. The last one is the one least likely to
+    // have started.
+    const n = await page.evaluate(() => document.querySelectorAll('.block').length);
+    const box = await boxOf(page, '.block', n - 1);
     await drag(page, { x: box.x - 90, y: box.y }, { x: box.x + 120, y: box.y });
     await page.waitForTimeout(300);
     check('swiping one right opens its note',

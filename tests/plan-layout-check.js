@@ -214,8 +214,13 @@ console.log('\n0b. one gutter, and nothing wider than the phone');
     check(sel + ' reaches the edge', /margin-left: -18px/.test(r), r.replace(/s+/g,' ').slice(0,70));
     check('  and puts its contents back', /padding-left: 18px/.test(r));
   }
+  // Day ends bleeds too now: the rule that ends the day reaches both edges the
+  // way every other section rule does.
+  check('day ends reaches the edge as well',
+    /margin-left: -18px/.test(rule('.ends')) && /padding-left: 18px/.test(rule('.ends')),
+    rule('.ends').replace(/\s+/g, ' ').slice(0, 70));
   check('and nothing else carries a gutter of its own',
-    (css.match(/padding-left: 18px/g) || []).length === bleeders.length,
+    (css.match(/padding-left: 18px/g) || []).length === bleeders.length + 1,
     String((css.match(/padding-left: 18px/g) || []).length));
 
   // A row reaches the edge by pulling itself back out of that padding. This is
@@ -293,8 +298,12 @@ console.log('\n0c. a section rule, its label, and the rows under it');
 
   for (const [what, sel] of [['the anytime list', '.anytime'], ['the things list', '.things-head']]) {
     const r = rule(sel);
-    check(`${what} is under a section rule`,
-      /border-top: 1\.5px solid var\(--heavy\)/.test(r), r.replace(/\s+/g, ' ').slice(0, 60));
+    // Things has no rule of its own: the one above Confirm already ends the
+    // day, and a second line under the button boxed it in.
+    if (sel !== '.things-head') {
+      check(`${what} is under a section rule`,
+        /border-top: 1\.5px solid var\(--heavy\)/.test(r), r.replace(/\s+/g, ' ').slice(0, 60));
+    }
     check(`  and its label is ${RULE_TO_LABEL}px below it`,
       new RegExp(`padding-top: ${RULE_TO_LABEL}px`).test(r), r.replace(/\s+/g, ' ').slice(0, 80));
   }
@@ -408,6 +417,26 @@ console.log('\n0d. no shorthand quietly undoes a longhand above it');
     check(`${sel} keeps its gutter`, /padding-left: 18px/.test(r), r.replace(/\s+/g, ' ').slice(0, 80));
     check(`  and its bleed`, /margin-left: -18px/.test(r), r.replace(/\s+/g, ' ').slice(0, 80));
   }
+}
+
+console.log('\n0f. a note sits under the title it belongs to');
+{
+  // A note is appended to the CARD, so it began at the card's own padding while
+  // the title began past the index column — 32px to its left, which reads as a
+  // second column nobody asked for.
+  //
+  // Written as the sum it is rather than as 32, so it cannot drift from the
+  // column it clears: the index is 22px wide and the row's gap is 10.
+  const indent = /margin-left: calc\(22px \+ 10px\)/;
+  check('a block note clears the index column', indent.test(rule('.note')), rule('.note'));
+  check('and so does the field that edits it', indent.test(rule('.noteedit')), rule('.noteedit'));
+  check('and those are the two numbers it is clearing',
+    /width: 22px/.test(rule('.idx')) && /gap: 10px/.test(rule('.brow')));
+
+  // The anytime editor went BESIDE its title rather than under it: .arow is a
+  // flex row, so a third child laid itself out as a third column.
+  check('an anytime note is written inside the text block, not beside it',
+    /if \(i === noting\) text\.append\(noteEditor\(b, i\)\)/.test(code));
 }
 
 console.log('\n1. the palette is exactly the one specified');
@@ -648,7 +677,7 @@ console.log('\n3. everything is a row, and nothing is a card');
     /className = 'backing'/.test(code) &&
       /attach\(\{ slot, card: row, backing, index: i \}\)/.test(code));
   check('and draws the same note editor a block does',
-    /if \(i === noting\) row\.append\(noteEditor\(b, i\)\)/.test(code));
+    /if [(]i === noting[)] text[.]append[(]noteEditor[(]b, i[)][)]/.test(code));
   // A BLOCK IS A ROW NOW. It was a slip of paper: a card in its own colour,
   // its edge displaced through turbulence by an SVG filter so no two slips
   // matched, a shadow under it, and a fibre texture behind the whole page.
@@ -1668,19 +1697,20 @@ console.log('\n16. the shape of the day');
   // NOTHING ON THE THINGS LIST BEHIND IT. The whole point of the control: a
   // reminder is not something you are carrying, so it never becomes an entry.
   check('a one-off is added with no entry',
-    /if \(adding === 'anytime'\) addAnytime\(\{ title \}\);/.test(code));
+    /if \(kind === 'anytime'\) addAnytime\(\{ title: title\.trim\(\) \}\);/.test(code));
 
   // TYPED IN THE PAGE, NOT OVER IT. Both controls asked through the browser's
   // own prompt: a system dialog that covers the app and has to be dismissed
   // before anything can be seen again, one per block, on a day built several at
   // a time.
-  check('nothing asks through the browser any more', !/\bprompt\(/.test(code));
-  check('there is a field in the page instead', /id="add-field"/.test(body));
-  check('which is a rule rather than a box',
-    /border-bottom: 1px solid/.test(rule('.addfield')) &&
-      /border: 0/.test(rule('.addfield')), rule('.addfield'));
-  check('and takes the selection the blocks refuse',
-    /user-select: text/.test(rule('.addfield')));
+  // THE BROWSER'S OWN DIALOG. It was an inline field for a while, on the
+  // argument that a system dialog covers the app and has to be dismissed before
+  // anything can be seen again. All true, and not what matters: the dialog
+  // arrives centred with the keyboard already up and the field already focused,
+  // and it is the one every other app on the phone uses. The inline field asked
+  // you to find a line at the foot of a list.
+  check('the name is asked for in the browser\'s own dialog', /\bprompt\(/.test(code));
+  check('and no field is left in the page', !/addfield/.test(body) && !/addfield/.test(css));
   check('a running day end', /id="end-time"/.test(body));
   check('and one Confirm', (body.match(/id="confirm"/g) || []).length === 1);
 

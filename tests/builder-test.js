@@ -278,6 +278,8 @@ function boot({
   // Every request that carried a body, so a case can read what the page sent
   // rather than infer it from what the page shows.
   const posted = [];
+  const prompts = [];
+  let promptAnswer = 'Typed block';
 
   // Every request the page made, and what it claimed to be. Separate from
   // `posted` because that one only sees writes, and the header matters on
@@ -372,6 +374,12 @@ function boot({
       return true;
     },
 
+    // Recorded and answerable. Two things ask — a block with an hour and a
+    // one-off without — and a case has to say which was asked.
+    prompt: (q) => {
+      prompts.push(q);
+      return promptAnswer;
+    },
     window: win,
     fetch: async (url, opts) => {
       // Every POST, with or without a body: Done and Delete carry none, and a
@@ -480,9 +488,14 @@ function boot({
     titleOf, titles, listeners, touchmoves, win, posted, confirmed, asked, stored,
     // Type a name into the open add field and press Enter, which is the whole
     // of adding something by hand now.
+    prompts,
+    answerPrompt: (v) => {
+      promptAnswer = v;
+    },
+    // Answer the dialog the next press opens. It was a field in the page for a
+    // while; the call site does not need to know which.
     typeAdd: (title) => {
-      byId['add-field'].value = title;
-      byId['add-field'].onkeydown({ key: 'Enter' });
+      promptAnswer = title;
     },
     reloads,
     // Every document listener of a kind, in order, so a case can drive the
@@ -3521,18 +3534,11 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('but the way in is there anyway', typeof byId['add-anytime'].onclick === 'function');
 
     const endedAt = byId['end-time'].textContent;
-    byId['add-anytime'].onclick();
-
-    // IN THE PAGE, NOT OVER IT. This was the browser's own prompt() — a system
-    // dialog covering the app, one per block, on a day you build several at a
-    // time.
-    check('the field opens where the controls were',
-      !byId['add-field']._class.has('hidden') && byId['adds']._class.has('hidden'));
-    check('and says what it will make',
-      byId['add-field'].getAttribute('placeholder') === 'What needs doing?',
-      String(byId['add-field'].getAttribute('placeholder')));
-
+    // THE DIALOG IS ANSWERED FIRST. The press is what asks, and it comes back
+    // with the answer already in hand — so a case says what it will type before
+    // it presses, not after.
     typeAdd('Walk the dog');
+    byId['add-anytime'].onclick();
     check('the section holds it', anytimeTitles(byId).length === 1);
     check('with the one-off on it',
       anytimeTitles(byId).join() === 'Walk the dog', anytimeTitles(byId).join());
@@ -3569,51 +3575,36 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       sent.entryId === null || sent.entryId === undefined, JSON.stringify(sent));
   }
 
-  console.log('\nthe add field: nothing typed adds nothing, and it stays open');
+  console.log('\nthe add dialog: nothing typed adds nothing');
   {
-    const { ctx, byId, typeAdd, slots } = boot();
+    // IT WAS AN INLINE FIELD for a while — a rule and a caret at the foot of
+    // the list — on the argument that a system dialog covers the app and has
+    // to be dismissed before anything can be seen. All true, and not what
+    // matters: the dialog arrives centred with the keyboard up and the field
+    // focused, and it is the one every other app on the phone uses.
+    const { ctx, byId, slots, typeAdd, prompts } = boot();
     await ctx.load();
 
-    byId['add-anytime'].onclick();
-    for (const nothing of ['', '   ']) typeAdd(nothing);
-    check('an empty line adds nothing', anytimeTitles(byId).length === 0,
-      anytimeTitles(byId).join());
-    check('and it holds nothing', anytimeTitles(byId).length === 0);
-    check('but the field is still open to type in',
-      !byId['add-field']._class.has('hidden'));
+    for (const nothing of [null, '', '   ']) {
+      typeAdd(nothing);
+      byId['add-anytime'].onclick();
+    }
+    check('a cancelled or empty answer adds nothing',
+      anytimeTitles(byId).length === 0, anytimeTitles(byId).join());
 
-    // OPEN AFTER EACH ONE. A day is built a handful at a time, and closing
-    // after every entry is the cost the browser's prompt used to charge.
     typeAdd('One');
-    check('the field stays open after adding', !byId['add-field']._class.has('hidden'));
-    check('and empties itself', byId['add-field'].value === '',
-      JSON.stringify(byId['add-field'].value));
-    typeAdd('Two');
-    typeAdd('Three');
-    check('so three go in without reopening anything',
-      anytimeTitles(byId).join() === 'One,Two,Three', anytimeTitles(byId).join());
-
-    // LEAVING SAVES IT, the rule a note on a block already follows. Tapping
-    // away from something you typed and watching it vanish loses work.
-    byId['add-field'].value = 'Typed and left';
-    byId['add-field'].onblur();
-    check('leaving the field keeps what was in it',
-      anytimeTitles(byId).join() === 'One,Two,Three,Typed and left',
+    byId['add-anytime'].onclick();
+    check('and an answer adds one', anytimeTitles(byId).join() === 'One',
       anytimeTitles(byId).join());
-    check('and closes it back to the controls',
-      byId['add-field']._class.has('hidden') && !byId['adds']._class.has('hidden'));
+    check('asked in the words that say which it will make',
+      prompts[prompts.length - 1] === 'What needs doing?', String(prompts[prompts.length - 1]));
 
-    // THE OTHER CONTROL MAKES A BLOCK, which is the whole difference between
-    // the pair, and it is one line apart in the page.
-    byId['add-block'].onclick();
-    check('the block field says what it will make',
-      byId['add-field'].getAttribute('placeholder') === 'What is this block?',
-      String(byId['add-field'].getAttribute('placeholder')));
     typeAdd('An hour of something');
-    check('and it lands in the day rather than under it',
-      slots().length === 1, `${slots().length}`);
-    check('with the anytime list untouched', anytimeTitles(byId).length === 4,
-      anytimeTitles(byId).join());
+    byId['add-block'].onclick();
+    check('the other control makes a block instead', slots().length === 1,
+      String(slots().length));
+    check('and asks for one', prompts[prompts.length - 1] === 'What is this block?',
+      String(prompts[prompts.length - 1]));
   }
 
   console.log('\nan anytime row is worked like any other row');
@@ -3675,9 +3666,11 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       move(row, 200, 40);
       up(row, 200, 40);
 
-      const editor = anytimeRows(byId)[0].children.find((c) => c._class.has('noteedit'));
+      // Inside the text block now, under the title rather than beside it: .arow is
+      // a flex row, so a third child laid itself out as a third column.
+      const editor = anytimeRows(byId)[0].querySelectorAll('.noteedit')[0];
       check('swiping one right opens a note on it', Boolean(editor),
-        anytimeRows(byId)[0].children.map((c) => [...c._class].join('.')).join(' '));
+        anytimeRows(byId)[0].text());
       check('and it did not get promoted into the day on the way',
         slots().length === 0, );
     }

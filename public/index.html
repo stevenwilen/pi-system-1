@@ -932,6 +932,7 @@
       /* What they said they were doing. Small and muted, so a glance down the
          day shows which blocks carry one without any of them shouting. */
       .note {
+        margin-left: calc(22px + 10px);
         font-size: 12px;
         color: var(--muted);
         line-height: 1.45;
@@ -943,6 +944,7 @@
       /* The same line, open for writing. A rule under it and nothing else: it
          is a note on a card, not a form on one. */
       .noteedit {
+        margin-left: calc(22px + 10px);
         margin-top: 9px;
         width: 100%;
         background: none;
@@ -1476,7 +1478,9 @@
         margin-right: -18px;
         padding-left: 18px;
         padding-right: 18px;
-        border-top: 1.5px solid var(--heavy);
+        /* NO RULE OF ITS OWN. The one above Confirm already ends the day, and
+           a second line under the button boxed it in. Its label is what says a
+           new section has started, which is what a heading is for. */
         /* Its label already has the gutter; this is the rule, which reaches the
            same edges every other section rule does. */
         padding-top: 14px;
@@ -1804,32 +1808,6 @@
         gap: 22px;
       }
 
-      /* The name, typed where the control was. A rule under it and nothing
-         else: the same line the add form's fields use, because it is the same
-         act. No border box, no fill — this sits inside a day made of paper and
-         a boxed field would be the one thing on the screen pretending to be
-         software. */
-      .addfield {
-        width: 100%;
-        margin-top: 12px;
-        padding: 4px 0;
-        background: none;
-        border: 0;
-        border-bottom: 1px solid var(--line);
-        border-radius: 0;
-        font-family: inherit;
-        font-size: 15px;
-        color: var(--text);
-        /* Typing is not a gesture: this one takes the callout and the selection
-           the blocks above it refuse. */
-        touch-action: auto;
-        user-select: text;
-        -webkit-user-select: text;
-      }
-      .addfield:focus {
-        outline: none;
-        border-bottom-color: var(--accent);
-      }
       .addblock {
         font-size: 11px;
         letter-spacing: 0.24em;
@@ -1843,6 +1821,12 @@
       }
 
       .ends {
+        /* Out past the margin, so the rule that ends the day reaches both
+           edges the way every other section rule does. */
+        margin-left: -18px;
+        margin-right: -18px;
+        padding-left: 18px;
+        padding-right: 18px;
         display: flex;
         justify-content: space-between;
         align-items: baseline;
@@ -2179,16 +2163,6 @@
           <button type="button" class="addblock" id="add-block">+ Block</button>
         </div>
 
-        <!-- WHERE THE NAME IS TYPED, in the page rather than over it. This was
-             the browser's own prompt() for both controls: a system dialog that
-             covers the app, arrives with no warning, and has to be dismissed
-             before anything can be seen again — and one of those per block, for
-             a day you build several at a time.
-
-             Enter keeps it open. Building a day is a handful of these in a row,
-             and closing after each one would put the cost back. -->
-        <input class="addfield hidden" id="add-field" type="text"
-               autocomplete="off" autocapitalize="sentences" enterkeyhint="done">
 
         <!-- ANYTIME TODAY. Things committed to the day and not to an hour —
              ring the dentist, put the bins out. Below the day because they are
@@ -4201,7 +4175,7 @@
         // and without this it set the state and drew nothing: the gesture
         // worked, the note was never writable, and the only sign was that
         // nothing happened.
-        if (i === noting) row.append(noteEditor(b, i));
+        if (i === noting) text.append(noteEditor(b, i));
 
         // Tapping anywhere else promotes it into the day. The tick stops the
         // press reaching here, so the only way to land on this is a press on
@@ -5289,89 +5263,29 @@
 
       // --- adding to the day by name ------------------------------------------
       //
-      // Both controls asked through the browser's own prompt(): a system dialog
-      // that covers the app, arrives with no warning, and has to be dismissed
-      // before anything can be seen again. One of those per block, on a day you
-      // build several at a time.
-      //
-      // Which of the two is being added. Null when nothing is being typed.
+      // THE BROWSER'S OWN DIALOG, and it is back on purpose. It was replaced by
+      // a rule-and-caret in the page, on the argument that a system dialog
+      // covers the app and has to be dismissed before anything can be seen.
+      // That is all true and it is not what matters here: the dialog arrives
+      // centred, with the keyboard already up and the field already focused,
+      // and it is the same one every other app on the phone uses. The inline
+      // field asked you to find a line at the bottom of a list.
       let adding = null;
 
-      /**
-       * A one-off, or a block with an hour.
-       *
-       * The difference between them is one line here and the whole point of the
-       * pair. A one-off carries NO ENTRY: `addAnytime` has always taken a null
-       * entry and never had a caller that used one, because every anytime item
-       * came off a Things row — so a reminder had to be filed as a permanent
-       * thing before it could be put on a day and ticked off, and then finished
-       * on the list separately, because ticking an anytime item answers "did
-       * this happen" rather than "is this over". Those are the same event for
-       * walking the dog and different ones for reading.
-       */
-      function openAdd(kind) {
+      function ask(kind) {
         adding = kind;
+        const title = prompt(kind === 'anytime' ? 'What needs doing?' : 'What is this block?');
+        if (!title || !title.trim()) return;
 
-        const field = $('add-field');
-        field.value = '';
-        field.setAttribute(
-          'placeholder',
-          kind === 'anytime' ? 'What needs doing?' : 'What is this block?'
-        );
-        field.setAttribute(
-          'aria-label',
-          kind === 'anytime' ? 'Something to do today, with no hour' : 'A block of the day'
-        );
-
-        $('adds').classList.add('hidden');
-        field.classList.remove('hidden');
-        // After the class comes off, or there is nothing focusable yet.
-        setTimeout(() => field.focus(), 0);
+        // A one-off carries NO ENTRY, which is the whole of what separates the
+        // two: it lives on the day and goes with it, and never becomes a
+        // permanent thing on the list.
+        if (kind === 'anytime') addAnytime({ title: title.trim() });
+        else addBlock({ title: title.trim(), duration: STEP });
       }
 
-      function closeAdd() {
-        adding = null;
-        $('add-field').classList.add('hidden');
-        $('adds').classList.remove('hidden');
-      }
-
-      /** Whatever is typed, added. Nothing is added for nothing typed. */
-      function commitAdd() {
-        const field = $('add-field');
-        const title = field.value.trim();
-        if (!title) return;
-
-        if (adding === 'anytime') addAnytime({ title });
-        else addBlock({ title, duration: STEP });
-
-        // Emptied and left open. A day is built a handful of these at a time,
-        // and closing after each one puts back the cost this replaced.
-        field.value = '';
-      }
-
-      $('add-block').onclick = () => openAdd('block');
-      $('add-anytime').onclick = () => openAdd('anytime');
-
-      $('add-field').onkeydown = (e) => {
-        if (e.key === 'Enter') {
-          // Or the form this is not part of submits and the page reloads.
-          if (e.preventDefault) e.preventDefault();
-          commitAdd();
-          return;
-        }
-        // No key for this on a phone, which is why leaving the field closes it
-        // too. On a keyboard it is the one people reach for.
-        if (e.key === 'Escape') closeAdd();
-      };
-
-      // LEAVING SAVES IT, the same rule a note on a block follows: the text is
-      // either there or it is not, and there is nothing to decide. Tapping away
-      // from something you typed and watching it vanish is the version of this
-      // that loses work.
-      $('add-field').onblur = () => {
-        commitAdd();
-        closeAdd();
-      };
+      $('add-block').onclick = () => ask('block');
+      $('add-anytime').onclick = () => ask('anytime');
 
       function renderConfirm() {
         const button = $('confirm');
