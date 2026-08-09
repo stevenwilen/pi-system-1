@@ -174,6 +174,10 @@ const serve = (dir) =>
     s.listen(0, () => done({ port: s.address().port, close: () => s.close() }));
   });
 
+module.exports = { serve, stub, API, PLAN, CALENDAR, TODAY, PHONE, FRAME, ROOT, OUT };
+
+if (require.main !== module) return;
+
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const site = await serve(path.join(ROOT, 'public'));

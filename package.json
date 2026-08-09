@@ -7,7 +7,9 @@
     "start": "node server.js",
     "scheduler": "node scheduler.js",
     "test": "node tests/run-all.js",
-    "look": "node tests/look.js"
+    "look": "node tests/look.js",
+    "touch": "node tests/touch.js",
+    "eyes": "node tests/look.js && node tests/touch.js"
   },
   "keywords": [],
   "author": "",
