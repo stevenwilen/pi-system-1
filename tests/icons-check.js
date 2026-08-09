@@ -82,8 +82,12 @@ console.log('\nthe manifest is coherent');
   // meant. Before that they were both a dark build's near-black long after the
   // paper theme shipped, which is the failure this pair exists to catch: an
   // install colour outliving the design it belonged to.
+  // BOTH WHITE. `background_color` paints the splash while the page loads and
+  // `theme_color` the chrome around the window — and the mark sits on white, so
+  // a blue bar over a white app is a seam where there should be none. They were
+  // different while the icon had a solid blue ground.
   const ground = '#ffffff';
-  const mark = '#1e4fd8';
+  const mark = '#ffffff';
   check('the splash is the app\'s own ground',
     manifest.background_color.toLowerCase() === ground, manifest.background_color);
   check('and the chrome is the mark\'s blue',
@@ -113,32 +117,40 @@ console.log('\nthe manifest is coherent');
     new RegExp(`name="apple-mobile-web-app-title" content="${NAME}"`).test(html));
 }
 
-console.log('\nthe pngs are the mark');
+console.log('\nthe mark, and every file the manifest names');
 {
-  // THE MARK IS FOUR ROWS ON BLUE — three at 34% white and the third solid,
-  // which is the ledger's active row. It was an ensō: an open circle in ink on
-  // paper, and this group sampled its empty centre to prove the ring was not a
-  // disc.
+  // A SEGMENTED RING ON WHITE: six arcs — blue, light blue, teal, amber and two
+  // greys — around a white centre with a blue dot. It was four rows on a solid
+  // blue ground before that, and an ensō in ink on paper before that.
   //
   // Read off the SVG rather than written here, so the drawing and the check
   // cannot disagree silently.
   const fills = [...svg.matchAll(/fill="(#[0-9A-Fa-f]{6})"/g)].map((m) => m[1].toLowerCase());
-  check('the svg is a ground and a mark', fills.length >= 2, fills.join(' '));
+  const unique = [...new Set(fills)];
 
-  const ground = fills[0];
-  check('the ground is the blue the chrome takes', ground === '#1e4fd8', ground);
-  check('and the mark is white', fills.slice(1).every((f) => f === '#ffffff'),
-    fills.slice(1).join(' '));
+  check('the ground is white', fills[0] === '#ffffff', fills[0]);
+  check('and the ring is segmented, not one colour',
+    unique.length >= 6, unique.join(' '));
+  check('it carries the app\'s own blue', unique.includes('#1e4fd8'), unique.join(' '));
 
   // EVERY FILE THE MANIFEST NAMES, at the size it claims. A manifest pointing
   // at a file that is not there is the failure this suite was written for, and
-  // it has happened twice.
+  // it has happened twice — most recently because the files arrived with the
+  // browser's duplicate-download suffix and would have 404'd as delivered.
   for (const icon of manifest.icons) {
     const file = icon.src.replace(/^\//, '');
     check(`${file} is on disk`, fs.existsSync(`${ROOT}/public/${file}`));
   }
 
-  // Reads a png well enough to sample one pixel: no library, and no trusting
+  // AND THE ONE THE MANIFEST NEVER MENTIONS. iOS ignores the manifest for
+  // installation and reads this tag alone, so a broken apple-touch-icon is
+  // invisible to every check that only reads the manifest.
+  const touch = (html.match(/rel="apple-touch-icon" href="\/([^"]+)"/) || [])[1];
+  check('the apple-touch-icon names a file', Boolean(touch), String(touch));
+  check('which is on disk', touch && fs.existsSync(`${ROOT}/public/${touch}`), String(touch));
+  check('and is 180, the size iOS actually wants', touch === 'icon-180.png', String(touch));
+
+  // Reads a png well enough to sample its header: no library, and no trusting
   // a generator to have run.
   const decode = (file) => {
     const b = fs.readFileSync(file);
@@ -166,29 +178,16 @@ console.log('\nthe pngs are the mark');
     };
   };
 
-  for (const [file, want] of [['icon-192.png', 192], ['icon-512.png', 512], ['icon-maskable-512.png', 512]]) {
+  for (const [file, want] of [['icon-180.png', 180], ['icon-192.png', 192], ['icon-512.png', 512], ['icon-maskable-512.png', 512]]) {
     const png = decode(`${ROOT}/public/${file}`);
-    const mid = Math.round(png.size / 2);
-
     check(`${file} is ${want} square`, png.size === want, `${png.size}`);
-
-    // NO PIXEL SAMPLING HERE ANY MORE, and it is worth saying why rather than
-    // quietly dropping it.
-    //
-    // The old icons were produced by make-icons.js, and the decoder above
-    // understands exactly what that wrote: one colour type, one filter, no
-    // interlacing. It samples a pixel by hand because pulling in a png library
-    // for one assertion was not worth it. These files came from somewhere else
-    // and it reads black out of all three of them — which is the decoder being
-    // wrong, not the icons.
-    //
-    // A check that reported those as failures would be reporting the tool's
-    // limits as the app's, and one that was 'fixed' by loosening it until it
-    // passed would be worse. What is still checked is everything that has ever
-    // actually broken: the file exists, it is a png, and it is the size the
-    // manifest claims. What is not is the drawing itself — which needs eyes on
-    // a home screen, and a real decoder if it is ever to be automated.
   }
+
+  // NO PIXEL SAMPLING. The decoder above understands exactly what the old
+  // generator wrote — one colour type, one filter, no interlacing — and reads
+  // black out of anything else. Reporting that would be reporting the tool's
+  // limits as the app's. What is checked is everything that has ever actually
+  // broken: the file exists, it is a png, and it is the size claimed.
 }
 
 console.log(bad === 0 ? '\nIcons clean' : `\n${bad} FAILURE(S)`);
