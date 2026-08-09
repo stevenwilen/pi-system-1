@@ -758,7 +758,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
   console.log('\nswipe right opens a note on that block');
   {
-    const { ctx, slots, cardOf, backingOf, noteOf, editorOf } = boot();
+    const { ctx, slots, cardOf, backingOf, noteOf, editorOf, prompts } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.addBlock({ title: 'B' });
@@ -777,31 +777,27 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('no block was added', slots().length === 2, `${slots().length}`);
     check('and none was called Buffer', !slots().some((s) => s.text().includes('Buffer')));
 
-    const area = editorOf(slots()[0]);
-    check('a field opened on that block', Boolean(area));
-    check('it is a textarea, so two lines are visible', area.tagName === 'textarea');
-    check('with the placeholder asked for',
-      area.placeholder === 'What are you doing in this block?', area.placeholder);
-    check('capitalised by sentence, for dictation',
-      area.getAttribute('autocapitalize') === 'sentences');
-    check('spellchecked', area.getAttribute('spellcheck') === 'true');
-    check('and not autocompleted at', area.getAttribute('autocomplete') === 'off');
-    check('the other block has none', !editorOf(slots()[1]));
 
-    area.value = 'Finish the pricing page';
-    area.onblur();
+    // ASKED FOR IN THE BROWSER. It was a textarea opened on the card — which
+    // meant a mode: the builder re-rendered to draw it, and the pointer handler
+    // had to refuse gestures on that one block so placing a cursor did not pick
+    // the card up. A dialog has none of that, and it arrives centred with the
+    // keyboard already up rather than somewhere down a list.
+    check('the browser was asked', prompts[prompts.length - 1] === 'What is this block for?',
+      String(prompts[prompts.length - 1]));
+    check('and nothing opened on the card', !editorOf(slots()[0]));
 
-    check('leaving the field saves it', Boolean(noteOf(slots()[0])));
-    check('under the title', noteOf(slots()[0]).textContent === 'Finish the pricing page',
-      noteOf(slots()[0]).textContent);
-    check('and the editor closed', !editorOf(slots()[0]));
+    check('the answer is saved under the title',
+      Boolean(noteOf(slots()[0])) && noteOf(slots()[0]).textContent === 'Typed block',
+      noteOf(slots()[0]) ? noteOf(slots()[0]).textContent : '(none)');
+
     check('the block is otherwise unchanged',
       slots()[0].text().includes('8:00 AM'), slots()[0].text().trim());
   }
 
   console.log('\nswiping a block that has a note reopens it');
   {
-    const { ctx, slots, cardOf, noteOf, editorOf } = boot();
+    const { ctx, slots, cardOf, noteOf, prompts, answerPrompt } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
 
@@ -812,79 +808,74 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       up(card, 190, 100);
     };
 
+    answerPrompt('first');
     swipeRight();
-    editorOf(slots()[0]).value = 'first';
-    editorOf(slots()[0]).onblur();
     check('a note is there', noteOf(slots()[0]).textContent === 'first');
 
+    // SEEDED WITH WHAT IS THERE, which is what makes a second swipe an EDIT
+    // rather than a replacement. The dialog is handed the current note as its
+    // default, and a case can only see that by reading what was offered.
+    answerPrompt('second');
     swipeRight();
-    check('swiping again reopens it', Boolean(editorOf(slots()[0])));
-    check('with the text already in it', editorOf(slots()[0]).value === 'first',
-      editorOf(slots()[0]).value);
-
-    editorOf(slots()[0]).value = 'second';
-    editorOf(slots()[0]).onblur();
     check('and it can be rewritten', noteOf(slots()[0]).textContent === 'second',
       noteOf(slots()[0]).textContent);
 
+    // CLEARED IS NOT CANCELLED. An empty answer removes the note; backing out
+    // leaves it alone, and the two arrive as '' and null.
+    answerPrompt('   ');
     swipeRight();
-    editorOf(slots()[0]).value = '   ';
-    editorOf(slots()[0]).onblur();
     check('clearing it removes the note', !noteOf(slots()[0]));
-    check('the block itself survives', slots().length === 1, `${slots().length}`);
 
-    // Whitespace was not stored as a note that happens to look empty.
+    check('the block itself survives', slots().length === 1, String(slots().length));
+
+    // CANCELLED IS NOT CLEARED. Backing out of the dialog must leave whatever
+    // is there alone, and the two arrive here as null and ''.
+    answerPrompt('kept');
     swipeRight();
-    check('and it really is gone, not stored as blank',
-      editorOf(slots()[0]).value === '', JSON.stringify(editorOf(slots()[0]).value));
+    answerPrompt(null);
+    swipeRight();
+    check('backing out leaves the note alone',
+      noteOf(slots()[0]) && noteOf(slots()[0]).textContent === 'kept',
+      noteOf(slots()[0]) ? noteOf(slots()[0]).textContent : '(none)');
   }
 
-  console.log('\na block being written in takes no gestures');
+  console.log('\nnothing on a block is written in place any more');
   {
-    const { ctx, slots, cardOf, editorOf } = boot();
-    await ctx.load();
-    ctx.addBlock({ title: 'A' });
-    ctx.addBlock({ title: 'B' });
-
-    const card = cardOf(slots()[0]);
-    down(card, 100, 100);
-    move(card, 190, 100);
-    up(card, 190, 100);
-    check('the note is open', Boolean(editorOf(slots()[0])));
-
-    // A press to place the cursor must not start a hold that lifts the card
-    // out from under the keyboard.
-    const open = cardOf(slots()[0]);
-    down(open, 100, 100);
-    await wait(HELD);
-    check('holding it does not pick it up', !open._class.has('lifted'));
-    up(open, 100, 100);
-
-    down(open, 200, 100);
-    move(open, 100, 100);
-    up(open, 100, 100);
-    check('and it cannot be swiped away', slots().length === 2, `${slots().length}`);
-    check('the note is still open', Boolean(editorOf(slots()[0])));
+    // There was a mode here: a textarea open on a card, the builder re-rendered
+    // to draw it, and the pointer handler refusing every gesture on that one
+    // block so a press to place a cursor did not lift the card out from under
+    // the keyboard.
+    //
+    // A dialog has none of that — it is open or it is not, and nothing
+    // underneath it is listening — so the mode, the re-render and the guard all
+    // went with it. Checked by reading the page, because what is being asserted
+    // is an absence.
+    const src = require('fs').readFileSync(ROOT + '/public/index.html', 'utf8');
+    check('no editor is drawn on a card', !/noteEditor|noteedit/.test(src));
+    check('and no mode is left for one', !/\bnoting\b/.test(src));
+    check('nor a field on a things row', !/thingNote|thingnote/.test(src));
   }
 
   console.log('\na note is a change to the day');
   {
-    const { ctx, byId, slots, editorOf } = boot();
+    const { ctx, byId, answerPrompt } = boot();
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.setSaved(true);
     check('the day starts saved', byId['confirm'].textContent === 'Confirmed');
 
+    answerPrompt('a note');
     ctx.openNote(0);
-    editorOf(slots()[0]).value = 'a note';
-    editorOf(slots()[0]).onblur();
     check('writing one un-saves it', byId['confirm'].textContent === 'Confirm',
       byId['confirm'].textContent);
 
+    // BACKING OUT IS NOT A CHANGE. It was "opened and closed without typing",
+    // which the dialog expresses as a cancel — and a cancel must not mark the
+    // day as differing from what is stored.
     ctx.setSaved(true);
+    answerPrompt(null);
     ctx.openNote(0);
-    editorOf(slots()[0]).onblur(); // closed without changing anything
-    check('but opening and closing without a change does not',
+    check('but opening and backing out does not',
       byId['confirm'].textContent === 'Confirmed', byId['confirm'].textContent);
   }
 
@@ -2804,114 +2795,55 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     }
 
     {
-      // SWIPE RIGHT WRITES ONE. The same direction the blocks use, because it
-      // is the same question asked of a different kind of row.
-      const { ctx, byId, posted } = fresh();
+      // SWIPE RIGHT WRITES ONE, through the browser. It was a field opened on
+      // the row; the dialog arrives centred with the keyboard already up.
+      const { ctx, byId, posted, prompts, answerPrompt } = fresh();
       await ctx.load();
       posted.length = 0;
 
+      answerPrompt('start with the pricing page');
       swipe(rows(byId)[0], 80);
-      const field = fieldOf(rows(byId)[0]);
-      check('the field opens', Boolean(field));
-      check('empty, because there was nothing there', field.value === '', field.value);
-      check('it is a plain input, not the block textarea',
-        field.tagName === 'input' && field.type === 'text', field.tagName);
-      check('capitalised by sentence, for dictation',
-        field.getAttribute('autocapitalize') === 'sentences');
-      check('and not autocompleted at',
-        field.getAttribute('autocomplete') === 'off' &&
-        field.getAttribute('autocorrect') === 'off');
-      check('nothing was written by opening it', posted.length === 0);
-
-      field.value = 'start with the pricing page';
-      field.onblur();
-      // The write goes through api(), which awaits a token before it fetches.
-      // Without a turn of the loop this reads an empty list and passes on nothing.
       await wait(0);
 
-      check('leaving the field writes it',
+      check('it asks for a note on that row by name',
+        /^Note for /.test(String(prompts[prompts.length - 1])), String(prompts[prompts.length - 1]));
+      check('and the answer is written',
         posted.length === 1 && posted[0].url === '/entries/e-a/note',
         JSON.stringify(posted.map((p) => p.url)));
       check('with the words in it',
         posted[0].body.note === 'start with the pricing page', JSON.stringify(posted[0].body));
-      check('the field closes', fieldOf(rows(byId)[0]) === null);
       check('and the row gains its mark', Boolean(markOf(rows(byId)[0])));
     }
 
     {
-      // SWIPING AGAIN IS HOW ONE IS READ, and how it is edited.
-      const { ctx, byId, posted } = fresh();
+      // BACKING OUT WRITES NOTHING, and is not the same as clearing it.
+      const { ctx, byId, posted, answerPrompt } = fresh();
       await ctx.load();
       posted.length = 0;
 
+      answerPrompt(null);
       swipe(rows(byId)[1], 80);
-      check('it opens with what is already there',
-        fieldOf(rows(byId)[1]).value === 'bring the blue folder',
-        fieldOf(rows(byId)[1]).value);
-
-      // Unchanged is not a write. A field opened to be read and closed again
-      // must not send anything.
-      fieldOf(rows(byId)[1]).onblur();
       await wait(0);
-      check('closing it unchanged writes nothing', posted.length === 0,
+      check('cancelling writes nothing', posted.length === 0,
         JSON.stringify(posted.map((p) => p.url)));
       check('and the note is still there', Boolean(markOf(rows(byId)[1])));
     }
 
     {
-      // EMPTY IS NOT A NOTE. Clearing the field is how one is removed.
-      const { ctx, byId, posted } = fresh();
+      // EMPTY IS NOT A NOTE. Clearing the answer is how one is removed.
+      const { ctx, byId, posted, answerPrompt } = fresh();
       await ctx.load();
       posted.length = 0;
 
+      answerPrompt('   ');
       swipe(rows(byId)[1], 80);
-      const field = fieldOf(rows(byId)[1]);
-      field.value = '   ';
-      field.onblur();
-      // The write goes through api(), which awaits a token before it fetches.
-      // Without a turn of the loop this reads an empty list and passes on nothing.
       await wait(0);
-
       check('whitespace clears it',
         posted.length === 1 && posted[0].body.note === null,
         JSON.stringify(posted.map((p) => p.body)));
       check('and the mark goes with it', markOf(rows(byId)[1]) === null);
     }
 
-    {
-      // ONCE, HOWEVER IT IS LEFT. Enter and blur both arrive on a phone — the
-      // keyboard's own Done fires one and dismissing it fires the other — and
-      // two writes for one sentence is one request too many.
-      const { ctx, byId, posted } = fresh();
-      await ctx.load();
-      posted.length = 0;
-
-      swipe(rows(byId)[0], 80);
-      const field = fieldOf(rows(byId)[0]);
-      field.value = 'said once';
-      field.onkeydown({ key: 'Enter' });
-      field.onblur();
-      // The write goes through api(), which awaits a token before it fetches.
-      // Without a turn of the loop this reads an empty list and passes on nothing.
-      await wait(0);
-
-      check('Enter then blur writes once', posted.length === 1,
-        JSON.stringify(posted.map((p) => p.body)));
-    }
-
-    {
-      // A ROW BEING WRITTEN ON IS NOT A ROW BEING TAPPED. The tap schedules,
-      // and reaching for the field would otherwise put the thing in the day
-      // under the keyboard that just opened.
-      const { ctx, byId, slots } = fresh();
-      await ctx.load();
-
-      swipe(rows(byId)[0], 80);
-      const before = slots().length;
-      rows(byId)[0].onclick({});
-      check('a tap on the row does not schedule it',
-        slots().length === before, String(slots().length));
-    }
 
     {
       // AND IT IS THE CONFIRM THAT SPENDS IT. The server decides — a block
@@ -3666,11 +3598,10 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       move(row, 200, 40);
       up(row, 200, 40);
 
-      // Inside the text block now, under the title rather than beside it: .arow is
-      // a flex row, so a third child laid itself out as a third column.
-      const editor = anytimeRows(byId)[0].querySelectorAll('.noteedit')[0];
-      check('swiping one right opens a note on it', Boolean(editor),
-        anytimeRows(byId)[0].text());
+      // ASKED FOR IN THE BROWSER, like every other note. What a case can see is
+      // that the answer landed on the row it was swiped on.
+      check('swiping one right writes a note on it',
+        anytimeRows(byId)[0].text().includes('Typed block'), anytimeRows(byId)[0].text());
       check('and it did not get promoted into the day on the way',
         slots().length === 0, );
     }

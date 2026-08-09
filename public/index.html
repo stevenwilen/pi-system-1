@@ -621,31 +621,6 @@
         flex: none;
       }
 
-      /* The field, open on a row. A plain input and not the block's textarea:
-         this is a line meant to be dictated at a list, and a box that grows to
-         two rows would push the list around every time one was opened. */
-      .thingnote {
-        width: 100%;
-        margin-top: 9px;
-        box-sizing: border-box;
-        font: inherit;
-        font-size: 14px;
-        color: var(--text);
-        background: var(--bg);
-        border: 0;
-        border-bottom: 1px solid var(--line);
-        padding: 4px 0;
-        border-radius: 0;
-        -webkit-appearance: none;
-        user-select: text;
-        -webkit-user-select: text;
-      }
-      /* Where the caret is, which is the same job the gate's fields give the
-         accent. No ring: the rule under the words is the whole affordance. */
-      .thingnote:focus {
-        outline: none;
-        border-bottom-color: var(--accent);
-      }
 
       /* --- the calendar aside --------------------------------------------- */
       /* A left rule and indented text. Not a card, not blue, not a warning:
@@ -941,33 +916,6 @@
         overflow-wrap: anywhere;
       }
 
-      /* The same line, open for writing. A rule under it and nothing else: it
-         is a note on a card, not a form on one. */
-      .noteedit {
-        margin-left: calc(22px + 10px);
-        margin-top: 9px;
-        width: 100%;
-        background: none;
-        border: 0;
-        border-bottom: 1px solid var(--line);
-        color: var(--text);
-        font: inherit;
-        font-size: 13px;
-        line-height: 1.45;
-        padding: 2px 0 5px;
-        resize: none;
-        /* Typing is not a gesture. The card above is pan-y; this is not. */
-        touch-action: auto;
-        user-select: text;
-        -webkit-user-select: text;
-      }
-      .noteedit::placeholder {
-        color: var(--faint);
-      }
-      .noteedit:focus {
-        outline: none;
-        border-bottom-color: var(--muted);
-      }
 
       /* OVER. Everything about the row steps back a shade; nothing is drawn
          differently and nothing is taken away. */
@@ -3086,7 +3034,6 @@
        * come back pointing at whichever row had moved into that place.
        */
       let askOn = null;
-      let noteOn = null;
 
       /**
        * A row, and the paper it slides off to reveal.
@@ -3106,7 +3053,7 @@
 
         // A row mid-question and a row being written on take no gestures. In
         // both cases the row is already showing what the swipe would ask for.
-        if (askOn !== item.id && noteOn !== item.id) {
+        if (askOn !== item.id) {
           attachThing({ row, backing, item });
         }
 
@@ -3192,58 +3139,6 @@
         return row;
       }
 
-      /**
-       * The note field, open on a row.
-       *
-       * A plain input, not the block's textarea. This is a line said at a
-       * list, and a box that opened two rows tall would shove the list around
-       * every time one was reached for.
-       *
-       * Set up for dictation: capitalised by sentence, spellchecked, and with
-       * autocomplete off — a field guessing at the next word is in the way of
-       * someone talking at it.
-       */
-      function thingNote(item) {
-        const field = document.createElement('input');
-        field.type = 'text';
-        field.className = 'thingnote';
-        field.value = item.note || '';
-        field.placeholder = 'For the next time you schedule this';
-        field.setAttribute('autocapitalize', 'sentences');
-        field.setAttribute('autocomplete', 'off');
-        field.setAttribute('autocorrect', 'off');
-        field.setAttribute('spellcheck', 'true');
-        field.setAttribute('enterkeyhint', 'done');
-        field.setAttribute('aria-label', `Note for ${item.title}`);
-
-        // Once, however it is left. Enter and blur both arrive on a phone —
-        // the keyboard's own Done fires one and dismissing it fires the other
-        // — and saving twice would send a second write for text that had not
-        // changed since the first.
-        let done = false;
-        const save = () => {
-          if (done) return;
-          done = true;
-          saveThingNote(item, field.value);
-        };
-
-        field.onblur = save;
-        field.onkeydown = (e) => {
-          if (e && e.key === 'Enter') save();
-        };
-
-        // A press in the field is a press in the field. Without this the row
-        // beneath it takes the tap and schedules the thing being written about.
-        field.onpointerdown = (e) => {
-          if (e && e.stopPropagation) e.stopPropagation();
-        };
-        field.onclick = (e) => {
-          if (e && e.stopPropagation) e.stopPropagation();
-        };
-
-        setTimeout(() => field.focus(), 0);
-        return field;
-      }
 
       /**
        * Written on the thing, and spent when the thing is next scheduled.
@@ -3256,7 +3151,6 @@
        * Empty is not a note. Clearing the field is how one is removed.
        */
       function saveThingNote(item, text) {
-        noteOn = null;
 
         const clean = String(text || '').trim();
         const before = item.note || null;
@@ -3282,12 +3176,13 @@
 
       function openThingNote(item) {
         askOn = null;
-        noteOn = item.id;
-        renderThings();
+
+        const next = prompt(`Note for ${item.title}`, item.note || '');
+        if (next === null) return;
+        saveThingNote(item, next);
       }
 
       function askDelete(item) {
-        noteOn = null;
         askOn = item.id;
         renderThings();
       }
@@ -3587,7 +3482,6 @@
         // the confirmation is: a Delete in a menu that asked a question would
         // be a second route to the same write, two paces apart, one of them
         // reachable by a finger that only meant to open the menu.
-        if (noteOn === item.id) row.append(thingNote(item));
 
         hint.onclick = (e) => {
           // Without this the row's own handler fires straight afterwards and
@@ -3599,7 +3493,6 @@
         row.onclick = () => {
           // Being written on, not handled. The field's own handlers stop most
           // of this, and the row is the one that would schedule the thing.
-          if (noteOn === item.id) return;
           // An open menu closes rather than scheduling. Tapping away from a
           // menu you opened should undo the opening, not commit to something.
           if (!acts.classList.contains('hidden')) {
@@ -4171,11 +4064,10 @@
 
         row.append(tick, text);
 
-        // THE SAME EDITOR A BLOCK GETS. Swiping right calls the same openNote,
+        // ASKED FOR THE SAME WAY A BLOCK NOTE IS. Swiping right calls the same
         // and without this it set the state and drew nothing: the gesture
         // worked, the note was never writable, and the only sign was that
         // nothing happened.
-        if (i === noting) text.append(noteEditor(b, i));
 
         // Tapping anywhere else promotes it into the day. The tick stops the
         // press reaching here, so the only way to land on this is a press on
@@ -4482,12 +4374,20 @@
       // While it is set, that block takes no gestures at all: placing a cursor
       // in a note is not handling the block, and a hold that lifted the card
       // out from under the keyboard would be the worst of both.
-      let noting = null;
 
       function openNote(i) {
-        if (!blocks[i]) return;
-        noting = i;
-        renderBuilder();
+        const b = blocks[i];
+        if (!b) return;
+
+        // Seeded with what is already there, so swiping a block that has a note
+        // is how the note is EDITED rather than replaced.
+        const next = prompt('What is this block for?', b.note || '');
+
+        // Cancel is not an empty note. Clearing the field is how a note is
+        // removed, and backing out has to leave it alone — the two arrive here
+        // as '' and null, and telling them apart is the whole of this line.
+        if (next === null) return;
+        saveNote(i, next);
       }
 
       /**
@@ -4501,7 +4401,6 @@
        * Empty is not a note. Clearing the field is how one is removed.
        */
       function saveNote(i, text) {
-        noting = null;
         if (!blocks[i]) return renderBuilder();
 
         const clean = String(text || '').trim();
@@ -4835,8 +4734,7 @@
         // over it is not answering that any more, so it stops being shown —
         // and only shown. The row still holds it, the confirm still sends it,
         // and the message that already went out carried it.
-        if (i === noting) card.append(noteEditor(b, i));
-        else if (b.note && !past) card.append(noteLine(b.note));
+        if (b.note && !past) card.append(noteLine(b.note));
 
         slot.append(backing, card);
 
@@ -4877,38 +4775,6 @@
         return note;
       }
 
-      /**
-       * The note, open for writing.
-       *
-       * A textarea rather than an input because it is a line or two and both
-       * should be visible. Set up for dictation: capitalised by sentence,
-       * spellchecked, and with autocomplete off — a field that guesses at the
-       * next word gets in the way of someone talking at it.
-       */
-      function noteEditor(b, i) {
-        const area = document.createElement('textarea');
-        area.className = 'noteedit';
-        area.rows = 2;
-        area.value = b.note || '';
-        area.placeholder = 'What are you doing in this block?';
-        area.setAttribute('autocapitalize', 'sentences');
-        area.setAttribute('autocomplete', 'off');
-        area.setAttribute('spellcheck', 'true');
-        area.setAttribute('aria-label', `Note for ${b.title}`);
-
-        // Leaving the field is what saves it. There is no button because there
-        // is nothing to decide: the text is either there or it is not.
-        area.onblur = () => saveNote(i, area.value);
-
-        // Belt and braces with the `noting` guard in the pointer handler: a
-        // press inside the field is never a press on the block.
-        area.onpointerdown = (e) => {
-          if (e && e.stopPropagation) e.stopPropagation();
-        };
-
-        setTimeout(() => area.focus(), 0);
-        return area;
-      }
 
       function attach({ slot, card, backing, index }) {
         /**
@@ -5054,10 +4920,6 @@
           // One at a time. A second finger is not a second gesture.
           if (gesture) return;
           if (e.button !== undefined && e.button !== 0) return;
-          // A block with its note open is being written in, not handled. No
-          // hold, no swipe: placing a cursor must not lift the card out from
-          // under the keyboard.
-          if (noting === index) return;
 
           gesture = {
             id: e.pointerId,

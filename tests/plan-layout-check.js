@@ -429,14 +429,12 @@ console.log('\n0f. a note sits under the title it belongs to');
   // column it clears: the index is 22px wide and the row's gap is 10.
   const indent = /margin-left: calc\(22px \+ 10px\)/;
   check('a block note clears the index column', indent.test(rule('.note')), rule('.note'));
-  check('and so does the field that edits it', indent.test(rule('.noteedit')), rule('.noteedit'));
+  // The field that edited one in the page is gone — a note is asked for in the
+  // browser now — so the indent is only wanted on the note that is drawn.
   check('and those are the two numbers it is clearing',
     /width: 22px/.test(rule('.idx')) && /gap: 10px/.test(rule('.brow')));
 
   // The anytime editor went BESIDE its title rather than under it: .arow is a
-  // flex row, so a third child laid itself out as a third column.
-  check('an anytime note is written inside the text block, not beside it',
-    /if \(i === noting\) text\.append\(noteEditor\(b, i\)\)/.test(code));
 }
 
 console.log('\n1. the palette is exactly the one specified');
@@ -676,8 +674,7 @@ console.log('\n3. everything is a row, and nothing is a card');
   check('it slides off a backing, like a block',
     /className = 'backing'/.test(code) &&
       /attach\(\{ slot, card: row, backing, index: i \}\)/.test(code));
-  check('and draws the same note editor a block does',
-    /if [(]i === noting[)] text[.]append[(]noteEditor[(]b, i[)][)]/.test(code));
+  check('an anytime note is asked for the same way', /return openNote[(]index[)]/.test(code));
   // A BLOCK IS A ROW NOW. It was a slip of paper: a card in its own colour,
   // its edge displaced through turbulence by an SVG filter so no two slips
   // matched, a shadow under it, and a fibre texture behind the whole page.
@@ -1526,69 +1523,33 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
   check('and there is no buffer constant left', !/BUFFER_TITLE/.test(code));
 
   console.log('   the note');
+  // THE BROWSER'S OWN DIALOG, for the same reason the add controls use it: it
+  // arrives centred with the keyboard already up and the field already
+  // focused. The inline textarea opened a rule somewhere in a list and left
+  // you to find it — and on a block near the foot of the day, the keyboard
+  // then covered the very thing you were writing about.
   check('it opens whether or not there is one, so a swipe edits',
     /openNote\(index\)/.test(code));
-  check('it is a textarea, for two lines', /createElement\('textarea'\)/.test(code));
-  check('with the placeholder asked for',
-    /What are you doing in this block\?/.test(code));
-  check('capitalised by sentence for dictation',
-    /'autocapitalize', 'sentences'/.test(code));
-  check('and not autocompleted at', /'autocomplete', 'off'/.test(code));
-  check('leaving the field saves it', /area\.onblur = \(\) => saveNote/.test(code));
-  check('an empty one is no note', /blocks\[i\]\.note = clean \|\| null/.test(code));
-  // TWO NOTES, AND THEY MUST NOT BECOME ONE FIELD BY ACCIDENT.
-  //
-  // A block's note says what you are doing in that session. "Finish the
-  // pricing page" is true of Tuesday morning and not of the project, and this
-  // used to be the whole rule: nothing on an entry, anywhere, at all.
-  //
-  // A thing now carries one too, and it is a different claim — a message to
-  // yourself for the NEXT time you schedule this. What keeps them apart is
-  // that it does not stay: the confirm moves it onto the first new block for
-  // that thing and clears the column. So the checks below are no longer "there
-  // is no note on an entry" but "the one on an entry is spent when it lands",
-  // which is the property that stops it becoming a standing instruction.
-  const entriesRoute = fs.readFileSync(ROOT + '/routes/entries.js', 'utf8');
-  const toolsSrc = fs.readFileSync(ROOT + '/tools.js', 'utf8');
-  const shape = fs.readFileSync(ROOT + '/entry-shape.js', 'utf8');
+  check('and asks in the browser rather than in the page',
+    /prompt\('What is this block for\?', b\.note \|\| ''\)/.test(code));
 
-  check('the add sheet still sends no note', !/body\.note/.test(code));
-  check('nor does the edit route carry one',
-    !/entries\/\$\{editingId\}\/update[\s\S]{0,400}note/.test(code));
-  // The merged object of the edit route, and nothing after it. A lazy
-  // `[\s\S]*?` reached past the closing brace and found the word in the note
-  // route further down the file, which made this pass by looking at the thing
-  // it was meant to rule out.
-  const merged = (entriesRoute.match(/merged = \{[^}]*\}/) || [''])[0];
-  check('a note reaches a thing by its own route and no other',
-    /'\/entries\/:id\/note'/.test(entriesRoute) && !/note/.test(merged), merged);
-  check('and toRow, which the sheet writes through, has no note in it',
-    !/note/.test((shape.match(/function toRow[\s\S]*?\n\}/) || [''])[0]));
-  check('it is updatable but never creatable: nothing writes one at birth',
-    /UPDATABLE = \[\.\.\.CREATABLE, 'status', 'note', 'priority', 'paused_at'\]/.test(toolsSrc) &&
-    !/CREATABLE = \[[^\]]*'note'/.test(toolsSrc));
+  // SEEDED WITH WHAT IS THERE, so swiping a block that already has a note is
+  // how the note is edited rather than replaced.
+  check('seeded with the note it already has', /b\.note \|\| ''/.test(code));
 
-  // The move itself, in the confirm. Read from the route rather than restated,
-  // so a change to how it works has to come through here.
-  const planRoute = fs.readFileSync(ROOT + '/routes/plan.js', 'utf8');
-  check('the confirm gives it to the first NEW block for that thing',
-    /if \(b\.id \|\| !b\.entryId\) continue;/.test(planRoute) &&
-    /if \(!firstNewFor\.has\(b\.entryId\)\) firstNewFor\.set/.test(planRoute));
-  check('and clears it from the thing once the block exists',
-    /\.update\(\{ note: null \}\)/.test(planRoute));
-  check('never over the top of a note the block already carries',
-    /if \(String\(blocks\[at\]\.note \|\| ''\)\.trim\(\)\) continue;/.test(planRoute));
-  check('one ceiling for both, because the text moves between them',
-    /NOTE_MAX/.test(shape) && /NOTE_MAX \} = require\('\.\.\/entry-shape'\)/.test(planRoute) &&
-    !/NOTE_MAX = /.test(planRoute));
-  check('a block with one shows it under the title', /className = 'note'/.test(code));
-  check('and it rides with the block through a confirm',
-    /note: b\.note \|\| null/.test(code));
+  // CANCEL IS NOT AN EMPTY NOTE. Clearing the field is how a note is removed
+  // and backing out has to leave it alone; the two arrive as '' and null.
+  check('backing out leaves the note alone',
+    /if \(next === null\) return;/.test(code));
 
-  // A press to place a cursor must not lift the card out from under the
-  // keyboard, so a block being written in takes no gestures at all.
-  check('a block being written in takes no gestures',
-    /if \(noting === index\) return;/.test(code));
+  // And no mode is left behind. `noting` held which block was being written
+  // in, the builder re-rendered to draw the field, and the pointer handler had
+  // to refuse gestures on that one block so placing a cursor did not pick the
+  // card up. A dialog is open or it is not.
+  check('no inline editor is left', !/noteEditor|noteedit/.test(code));
+  check('nor the mode it needed', !/\bnoting\b/.test(code));
+  check('and a things note asks the same way',
+    /prompt\(`Note for \$\{item\.title\}`, item\.note \|\| ''\)/.test(code));
 
   console.log('   the reorder');
   check('held, not dragged from a handle', /setTimeout\(startReorder, HOLD_MS\)/.test(code));

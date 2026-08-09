@@ -44,6 +44,7 @@ const boxOf = async (page, sel, n = 0) =>
   const site = await serve(path.join(ROOT, 'public'));
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: PHONE, height: 900 }, hasTouch: true });
+  page.on('dialog', (d) => d.accept('written by a finger'));
   await stub(page);
   await page.addInitScript(() =>
     localStorage.setItem(
@@ -112,8 +113,13 @@ const boxOf = async (page, sel, n = 0) =>
     const box = await boxOf(page, '.block', n - 1);
     await drag(page, { x: box.x - 90, y: box.y }, { x: box.x + 120, y: box.y });
     await page.waitForTimeout(300);
-    check('swiping one right opens its note',
-      await page.evaluate(() => Boolean(document.querySelector('.noteedit'))));
+    // ANSWERED, NOT DISMISSED. A note is asked for in the browser's own dialog
+    // now, and Playwright dismisses those by default — so without this the
+    // gesture works, prompt() returns null, and the check reads as a page that
+    // ignored the swipe.
+    check('swiping one right writes its note',
+      await page.evaluate(() => Boolean(document.querySelector('.note'))),
+      await page.evaluate(() => (document.querySelector('.note') || {}).textContent || 'none'));
   }
 
   {
