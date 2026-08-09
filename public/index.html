@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
     />
     <meta name="theme-color" content="#1E4FD8" />
     <!-- TWO FACES, SPLIT BY JOB. Every figure is IBM Plex Mono with tabular
@@ -6237,7 +6237,24 @@
        * it arrives, drawing over whatever is on screen. This only stops the
        * cover being the thing that waits.
        */
+      /**
+       * No pinch, because this is meant to feel installed rather than browsed.
+       *
+       * The viewport flags are ignored by iOS Safari on purpose — a page must
+       * not be able to take zoom from someone who needs it — so the flags serve
+       * the browsers that honour them and this serves the one that does not.
+       */
+      function refuseZoom() {
+        if (typeof document.addEventListener !== 'function') return;
+        for (const kind of ['gesturestart', 'gesturechange', 'gestureend']) {
+          document.addEventListener(kind, (e) => e.preventDefault && e.preventDefault(), {
+            passive: false,
+          });
+        }
+      }
+
       function begin() {
+        refuseZoom();
         let settled = false;
 
         start().finally(() => {

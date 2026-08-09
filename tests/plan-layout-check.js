@@ -248,11 +248,28 @@ console.log('\n0b. one gutter, and nothing wider than the phone');
   // Pinch-zoom belongs to whoever needs it. maximum-scale and user-scalable=no
   // were on the viewport and do not prevent the inflation above — that is a
   // different mechanism — so they were costing accessibility for nothing.
-  check('the viewport is the three things it should be',
-    /width=device-width,\s*initial-scale=1,\s*viewport-fit=cover/.test(html) &&
-      !/maximum-scale/.test(html));
-  check('and does not block pinch-zoom',
-    !/maximum-scale/.test(body) && !/user-scalable/.test(body));
+  check('the viewport is device width at scale one',
+    /width=device-width,\s*initial-scale=1,\s*viewport-fit=cover/.test(html));
+
+  // NO PINCH. This is meant to feel installed rather than browsed.
+  //
+  // The flags are not enough on their own: iOS Safari has ignored
+  // `user-scalable=no` since iOS 10, deliberately, so that a page cannot take
+  // zoom from someone who needs it. They are there for the browsers that honour
+  // them, and WebKit's gesture events are what actually stop a pinch on a
+  // phone. Both, or it works on a desktop and not on the device it is for.
+  check('and asks for no scaling', /maximum-scale=1/.test(html) && /user-scalable=no/.test(html));
+  check('which is not enough on its own, so the gestures are refused too',
+    /gesturestart/.test(code) && /gesturechange/.test(code));
+  check('refused on the document, since a pinch can start anywhere',
+    /document\.addEventListener\(kind/.test(code));
+  check('and non-passively, or preventDefault does nothing',
+    /passive: false/.test(code));
+
+  // It must not reach for a touch event to do this. The rows arbitrate a swipe
+  // against a scroll with touch handlers, and that arbitration was expensive.
+  check('and it does not touch the swipe arbitration',
+    !/gesturestart[\s\S]{0,200}touchstart/.test(code));
 
   // So it does not stretch on a tablet.
   check('and it stops widening at 480', /max-width: 480px/.test(rule('main')));
