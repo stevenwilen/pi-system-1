@@ -119,19 +119,29 @@ console.log('\nthe manifest is coherent');
 
 console.log('\nthe mark, and every file the manifest names');
 {
-  // A SEGMENTED RING ON WHITE: six arcs — blue, light blue, teal, amber and two
-  // greys — around a white centre with a blue dot. It was four rows on a solid
-  // blue ground before that, and an ensō in ink on paper before that.
-  //
-  // Read off the SVG rather than written here, so the drawing and the check
-  // cannot disagree silently.
+  // A 5x5 GRID OF ROUNDED CELLS ON WHITE, at varying intensity: a gradient for
+  // the strongest, then blue, teal and amber tints, and pale grey for empty. It
+  // was a segmented ring before this, four rows on solid blue before that, and
+  // an ensō in ink on paper before that. Each one has outlived a check written
+  // for the last, which is why these read the drawing rather than describe it.
   const fills = [...svg.matchAll(/fill="(#[0-9A-Fa-f]{6})"/g)].map((m) => m[1].toLowerCase());
   const unique = [...new Set(fills)];
+  const cells = (svg.match(/<rect/g) || []).length;
 
   check('the ground is white', fills[0] === '#ffffff', fills[0]);
-  check('and the ring is segmented, not one colour',
-    unique.length >= 6, unique.join(' '));
-  check('it carries the app\'s own blue', unique.includes('#1e4fd8'), unique.join(' '));
+
+  // TWENTY-FIVE CELLS AND A GROUND. A grid that has lost a row still draws, and
+  // still looks deliberate, which is exactly the kind of wrong nobody notices.
+  check('it is five by five, on a ground', cells === 26, `${cells} rects`);
+
+  // The strongest cells are a gradient rather than a flat fill, so they are not
+  // in the list above at all — which is why this asks the markup instead.
+  check('the strongest cells carry a gradient', /Gradient/.test(svg));
+
+  check('and the rest are the app\'s own colours',
+    unique.includes('#1e4fd8') && unique.includes('#2e9e8f') && unique.includes('#e8a33d'),
+    unique.join(' '));
+  check('with a pale grey for empty', unique.some((c) => /^#e[0-9a-f]/.test(c)), unique.join(' '));
 
   // EVERY FILE THE MANIFEST NAMES, at the size it claims. A manifest pointing
   // at a file that is not there is the failure this suite was written for, and
