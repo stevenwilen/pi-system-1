@@ -536,7 +536,8 @@ console.log('\n2. one label style, and the action is quieter than it');
     /font-family: var\(--mono\)/.test(label));
   check('and set at 500, because 400 disappears at this size',
     /font-weight: 500/.test(label));
-  check('faint', /color: var\(--faint\)/.test(label));
+  check('muted, because a label names what is under it',
+    /color: var\(--muted\)/.test(label));
 
   // Baseline, so the action sits on the label's line rather than centred
   // against a taller box.
@@ -699,8 +700,10 @@ console.log('\n3. everything is a row, and nothing is a card');
     /margin-top: \d+px/.test(time) && !/flex: none/.test(time), time);
   check('it is tabular, so the hours line up down the page',
     /font-variant-numeric: tabular-nums/.test(time), time);
+  // Muted, not faint: a block's own hours are the second thing read in the
+  // row, and faint on white is 2.6:1.
   check('and quieter than the name above it',
-    /color: var\(--faint\)/.test(time), time);
+    /color: var\(--muted\)/.test(time), time);
   check('it is set in the mono face, with every other figure',
     /font-family: var\(--mono\)/.test(time), time);
 
@@ -709,8 +712,11 @@ console.log('\n3. everything is a row, and nothing is a card');
   check('there is an index column', /width: 22px/.test(idx) && /flex: none/.test(idx), idx);
   check('in mono, tabular, so 09 and 10 are one width',
     /font-family: var\(--mono\)/.test(idx) && /tabular-nums/.test(idx), idx);
+  // THE ONE THING LEFT UNDER 4.5:1, and it is figures rather than words: a
+  // counter read positionally down the edge, never a fact to be made out. Ghost
+  // to faint, so it is at least the grey the rest of the quiet page uses.
   check('and it is the lightest thing on the row',
-    /color: var\(--ghost\)/.test(idx), idx);
+    /color: var\(--faint\)/.test(idx), idx);
   check('numbered by row of the day, not by place in the array',
     /rowOfBlock\(i\) \+ 1/.test(code));
 
@@ -759,7 +765,7 @@ console.log('\n5. two text sizes in a row, with real space between them');
 
   const meta = rule('.row .meta');
   check('the meta is 12px', /font-size: 12px/.test(meta));
-  check('and faint, under a title in ink', /color: var\(--faint\)/.test(meta));
+  check('and muted, under a title in ink', /color: var\(--muted\)/.test(meta));
   // Mono, because half of it is a figure — "4 days since scheduled" — and the
   // column of them reads down the page beside the times above.
   check('in the mono face, because half of it is a figure',
@@ -889,7 +895,7 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   const done = rule('.confirm:disabled');
   check('a confirmed day shows an outline, not a fill',
     /background: none/.test(done) && /border-color: var\(--line\)/.test(done), done);
-  check('quieter, but not invisible', /color: var\(--faint\)/.test(done), done);
+  check('quieter, but not invisible', /color: var\(--muted\)/.test(done), done);
 
   // BEING PRESSED. The save is a round trip, and a control that answers a
   // second late reads as one that missed.
@@ -1170,7 +1176,7 @@ console.log('\n8. the calendar aside is a left rule, not a card');
   const head = rule('.cal h4');
   check('its heading is a mono capital, like every other section head',
     /font-family: var\(--mono\)/.test(head) && /text-transform: uppercase/.test(head), head);
-  check('and quiet', /color: var\(--faint\)/.test(head), head);
+  check('and quiet without being unreadable', /color: var[(]--muted[)]/.test(head), head);
   // Ghost rather than muted: "Nothing on it." is the absence of a fact, not a
   // quiet one.
   check('its empty line is ghost', /color: var[(]--ghost[)]/.test(rule('.cal p')));
@@ -1364,8 +1370,11 @@ console.log('\n13. a row says it has more actions, rather than hiding them');
   check('there is a hint', hint.length > 0);
   // The lightest thing on the row: it is an affordance, not a fact about the
   // thing, and it sits inside a title it must not compete with.
-  check('it is the ghost grey, so it does not compete with the title',
-    /color: var\(--ghost\)/.test(hint), hint.match(/color[^;]*/) || '');
+  // A CONTROL, and it was 1.6:1 — fainter than the hairlines around it.
+  // "Quieter than the title" is what muted means here; faint is "barely there",
+  // and ghost was below even that.
+  check('it is muted, so it does not compete with the title',
+    /color: var\(--muted\)/.test(hint), hint.match(/color[^;]*/) || '');
   check('and never the accent, because it does not commit to anything',
     !/--accent/.test(hint));
   check('nor the miss colour', !/--warn/.test(hint));
@@ -1702,8 +1711,10 @@ console.log('\n17. today and tomorrow');
   check('and given room under it', /margin-bottom: \d+px/.test(sw), sw);
   // Lighter than the paper's own ink rather than darker than it — on paper the
   // way to recede is toward the page, not away from it.
-  check('the inactive word recedes toward the page',
-    /color: var[(]--ghost[)]/.test(rule('.dayswitch .opt')), rule('.dayswitch .opt'));
+  // It is the way back to the other day, so it is a control before it is a
+  // shade — and at ghost it read as disabled text rather than as a way back.
+  check('the inactive word recedes without going out',
+    /color: var[(]--muted[)]/.test(rule('.dayswitch .opt')), rule('.dayswitch .opt'));
   check('the active one is full text', /color: var\(--text\)/.test(rule('.dayswitch .opt.on')));
 
   console.log('   today');
@@ -1719,10 +1730,12 @@ console.log('\n17. today and tomorrow');
   // quieter, on a faintly different ground.
   // OVER: every part of the row steps back a shade. Nothing is drawn
   // differently, nothing is taken away, and the status column says DONE.
-  check('a finished block goes faint', /color: var\(--faint\)/.test(rule('.block.past .t')),
+  // Quieter, not unreadable. The hierarchy still holds — ink for a title still
+  // to come, muted for one that is over — and both are legible.
+  check('a finished block goes muted', /color: var\(--muted\)/.test(rule('.block.past .t')),
     rule('.block.past .t'));
   check('its figures go lighter still',
-    /\.block\.past \.time,[\s\S]{0,80}color: var\(--ghost\)/.test(css));
+    /\.block\.past \.time,[\s\S]{0,80}color: var\(--faint\)/.test(css));
   check('and it is still a row, not an outline or a fill',
     !/border:/.test(rule('.block.past .t')));
   // Not just a past one. A block you are in the middle of kept its chip, and
@@ -1820,7 +1833,7 @@ console.log('\n17. today and tomorrow');
   check('read off the blocks on screen, so removing one unlocks it',
     /blocks\.some\(\(b\) => b\.entryId === entryId\)/.test(code));
   check('a greyed row holds its warning mark back', /if \(!locked && item\.mark\)/.test(code));
-  check('and the row is dimmed', /color: var\(--faint\)/.test(rule('.row.locked .title')));
+  check('and the row is dimmed', /color: var[(]--muted[)]/.test(rule('.row.locked .title')));
   check('the menu is not locked with it', !/if \(locked\)[\s\S]{0,200}acts\.classList/.test(code));
 }
 
@@ -2072,7 +2085,7 @@ console.log('\n17. the mockup still describes the page');
   // this page has any more. What still has to hold is the RELATION: the day you
   // are not looking at recedes toward the page rather than away from it.
   check('and the page recedes it the same way',
-    /color: var[(]--ghost[)]/.test(rule('.dayswitch .opt')));
+    /color: var[(]--muted[)]/.test(rule('.dayswitch .opt')));
 
   // What was replaced must not survive in the reference either.
   check('no tab bar', !/class="tabs"/.test(mock));
