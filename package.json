@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "scheduler": "node scheduler.js",
-    "test": "node tests/run-all.js"
+    "test": "node tests/run-all.js",
+    "look": "node tests/look.js"
   },
   "keywords": [],
   "author": "",
@@ -22,5 +23,8 @@
     "express": "^5.2.1",
     "node-cron": "^4.6.0",
     "node-ical": "^0.27.1"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
   }
 }
