@@ -529,7 +529,7 @@ console.log('\n2. one label style, and the action is quieter than it');
   // MONO CAPITALS, which is what heads a column in a ledger. Set in the same
   // face as every figure on the page, so a section heading and the numbers
   // under it belong to one another.
-  check('8.5px', /font-size: 8\.5px/.test(label));
+  check('9.5px', /font-size: 9.5px/.test(label));
   check('uppercase', /text-transform: uppercase/.test(label));
   check('0.2em tracking', /letter-spacing: 0\.2em/.test(label));
   check('in the mono face, like the figures it heads',
@@ -706,7 +706,7 @@ console.log('\n3. everything is a row, and nothing is a card');
 
   // THE INDEX COLUMN is what makes this a table rather than a list.
   const idx = rule('.idx');
-  check('there is an index column', /width: 20px/.test(idx) && /flex: none/.test(idx), idx);
+  check('there is an index column', /width: 22px/.test(idx) && /flex: none/.test(idx), idx);
   check('in mono, tabular, so 09 and 10 are one width',
     /font-family: var\(--mono\)/.test(idx) && /tabular-nums/.test(idx), idx);
   check('and it is the lightest thing on the row',
@@ -716,7 +716,7 @@ console.log('\n3. everything is a row, and nothing is a card');
 
   // AND A STATUS COLUMN. Over, happening, or still to come — one column.
   const st = rule('.st');
-  check('there is a status column of one width', /width: 58px/.test(st), st);
+  check('there is a status column of one width', /width: 64px/.test(st), st);
   check('read from the right', /text-align: right/.test(st), st);
   check('a finished row says so', /textContent = 'DONE'/.test(code));
   check('and the one you are in says how long it runs',
@@ -753,12 +753,12 @@ console.log('\n4. sections are separated by space, not by boxes');
 
 console.log('\n5. two text sizes in a row, with real space between them');
 {
-  check('the title is 14.5px', /font-size: 14\.5px/.test(rule('.row .title')));
+  check('the title is 16px', /font-size: 16px/.test(rule('.row .title')));
   check('and in ink, because it is what you are reading for',
     /color: var\(--text\)/.test(rule('.row .title')));
 
   const meta = rule('.row .meta');
-  check('the meta is 11px', /font-size: 11px/.test(meta));
+  check('the meta is 12px', /font-size: 12px/.test(meta));
   check('and faint, under a title in ink', /color: var\(--faint\)/.test(meta));
   // Mono, because half of it is a figure — "4 days since scheduled" — and the
   // column of them reads down the page beside the times above.
@@ -863,7 +863,7 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   check('set in the mono face with the rest of the column',
     /font-family: var\(--mono\)/.test(rule('.dur')));
   check('and in the column, at its width',
-    /width: 58px/.test(rule('.dur')), rule('.dur'));
+    /width: 64px/.test(rule('.dur')), rule('.dur'));
   // CONFIRM IS BLUE, and it is the one filled control on the page.
   //
   // It was the hanko: a persimmon seal drawn on a layer beneath the word, with
