@@ -437,6 +437,35 @@ console.log('\n0f. a note sits under the title it belongs to');
   // The anytime editor went BESIDE its title rather than under it: .arow is a
 }
 
+console.log('\n0g. the scrollbar is hidden and the scrolling is not');
+{
+  // An installed app has no chrome, and a bar down the right edge is the one
+  // piece of browser left showing. On a phone it is already an overlay that
+  // fades; this is about the desktop, where it sits there permanently.
+  //
+  // ONLY THE INDICATOR GOES. The dangerous version of this change is the one
+  // that reaches for `overflow: hidden` and takes the scrolling with it — the
+  // page then looks right and the bottom half is unreachable, which is a thing
+  // you find by scrolling rather than by looking.
+  check('the bar is hidden', /scrollbar-width: none/.test(css));
+  check('in every engine', /-ms-overflow-style: none/.test(css) &&
+    /::-webkit-scrollbar \{ display: none/.test(css));
+  check('and nothing hides the overflow itself',
+    !/overflow:\s*hidden/.test(rule('html, body, #gate, .page, .sheet, .scrim')) &&
+      !/overflow-y:\s*hidden/.test(css));
+  check('the surfaces that scroll still say so',
+    (css.match(/overflow-y: auto/g) || []).length >= 3);
+
+  // ON ONE LINE, and that is not a style choice. A selector group listed down
+  // the page ends on a line reading `.page {`, which is exactly what a lookup
+  // by name finds first — four bugs in this file have come from that. On one
+  // line there is no such line to find.
+  check('the group is one line, so it shadows no rule by name',
+    /html, body, #gate, \.page, \.sheet, \.scrim \{[^\n]*\}/.test(css));
+  check('and .page still resolves to its own rule',
+    /position: fixed/.test(rule('.page')), rule('.page').slice(0, 40));
+}
+
 console.log('\n1. the palette is exactly the one specified');
 {
   const root = rule(':root');

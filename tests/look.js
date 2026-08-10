@@ -218,6 +218,25 @@ if (require.main !== module) return;
   // NO HORIZONTAL SCROLL. This is the one that mattered: overflow is what makes
   // Safari inflate the type, so it arrives as "everything is too big" rather
   // than as "something is too wide".
+  // THE BAR IS GONE AND THE SCROLLING IS NOT, asked of the browser rather than
+  // of the stylesheet: `scrollbar-width: none` is a declaration, and what
+  // matters is that the page still moves under a wheel.
+  const scroll = await page.evaluate(async () => {
+    const before = window.scrollY;
+    window.scrollTo(0, 400);
+    await new Promise((r) => setTimeout(r, 50));
+    const after = window.scrollY;
+    window.scrollTo(0, before);
+    return {
+      bar: window.innerWidth - document.documentElement.clientWidth,
+      tall: document.documentElement.scrollHeight > window.innerHeight,
+      moved: after - before,
+    };
+  });
+  check('no scrollbar takes up room', scroll.bar === 0, `${scroll.bar}px`);
+  check('and the page still scrolls', !scroll.tall || scroll.moved > 0,
+    `${scroll.moved}px of ${scroll.tall ? 'a long page' : 'a short one'}`);
+
   check('nothing is wider than the screen', m.scrollWidth <= PHONE,
     `${m.scrollWidth} vs ${PHONE}`);
   check('and nothing hangs past either edge', m.overflowing.length === 0,

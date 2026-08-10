@@ -140,6 +140,22 @@
          which reads as "the type scale is wrong" and is not — the same
          stylesheet at the same width is correct on a desktop.
          Off explicitly, so the sizes below are the sizes. */
+      /* NO SCROLLBAR, AND THE PAGE STILL SCROLLS. An installed app has no
+         chrome, and a bar down the right edge is the one piece of browser left
+         showing — on a phone it is already an overlay that fades, so this is
+         about the desktop, where it sits there permanently and gives the game
+         away.
+
+         Only the indicator goes. Overflow is untouched, so everything scrolls
+         exactly as it did, by wheel, by trackpad, by finger and by keyboard.
+
+         WRITTEN ON ONE LINE, deliberately. A selector group listed down the
+         page ends on a line reading `.page {`, which is what a lookup by name
+         finds first — that has bitten this file four times. On one line there is
+         no such line to find. */
+      html, body, #gate, .page, .sheet, .scrim { scrollbar-width: none; -ms-overflow-style: none; }
+      html::-webkit-scrollbar, body::-webkit-scrollbar, #gate::-webkit-scrollbar, .page::-webkit-scrollbar, .sheet::-webkit-scrollbar, .scrim::-webkit-scrollbar { display: none; }
+
       html {
         -webkit-text-size-adjust: 100%;
         text-size-adjust: 100%;
