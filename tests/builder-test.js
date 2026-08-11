@@ -602,24 +602,75 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('and nothing was left collapsing', slots().length === 1, String(slots().length));
   }
 
-  console.log('\nan empty day is empty, and nothing holds room open in it');
+  console.log('\nan empty list shows where its first row would go');
   {
     // A BLOCK'S WORTH OF ROOM used to be held here: a real block card, hidden
     // with visibility so it kept its space, because collapsing the builder to
-    // nothing put Starts hard against + Block.
+    // nothing put Starts hard against + Block. It went because blank room reads
+    // as a gap somebody forgot to fill.
     //
-    // The table frames an empty day on its own now — a column head with a rule
-    // under it, and a rule above whatever comes next — and the held-open room
-    // read as a gap somebody had forgotten to fill.
+    // WHAT REPLACED IT IS THE SAME SPACE, DRAWN. Hatched and dashed — the
+    // drafting convention for an empty region, and this design's third rule
+    // weight — so it reads as a space meant to be there rather than as one left
+    // by accident. An intermediate version hid the table's furniture instead
+    // and said "Nothing planned yet" once; that answered an empty day by taking
+    // the table away rather than by showing what goes in it.
     const { ctx, byId, slots } = boot();
     await ctx.load();
 
-    check('the builder holds nothing at all', byId.builder.children.length === 0,
-      String(byId.builder.children.length));
+    const only = byId.builder.children;
+    check('the builder holds one thing', only.length === 1, String(only.length));
+    check('and it is the space where a block would go',
+      Boolean(only[0]) && only[0]._class.has('free') && only[0]._class.has('free-block'),
+      only[0] ? [...only[0]._class].join(' ') : 'nothing there');
+    check('which says so in words', /\w/.test(only[0] ? only[0].text() : ''),
+      JSON.stringify(only[0] ? only[0].text() : ''));
+
+    // NOT A ROW. Everything that acts on a block finds it by `.slot` and by its
+    // place in `blocks`, and this is neither — so a day with a placeholder in it
+    // is still a day with nothing in it, and nothing can drag, swipe or confirm
+    // the space where a block is missing.
     check('and nothing counts as a block', slots().length === 0, String(slots().length));
+    check('so the day is still empty as far as the day is concerned',
+      byId['end-time'].textContent === '0:00', byId['end-time'].textContent);
+
+    // THE FURNITURE STAYS, because it is now heading something.
+    check('the column heads stand over it', !byId.colhead._class.has('hidden'));
+    check('and the anytime heading over its own',
+      !byId['anytime-label']._class.has('hidden') && !byId.anytime._class.has('hidden'));
+
+    const loose = byId['anytime-list'].children;
+    check('the anytime list shows one too', loose.length === 1, String(loose.length));
+    check('in that list\'s own columns, not the table\'s',
+      Boolean(loose[0]) && loose[0]._class.has('free-anytime'),
+      loose[0] ? [...loose[0]._class].join(' ') : 'nothing there');
+
+    const freeIn = (id) => [...byId[id].children].filter((c) => c._class.has('free')).length;
 
     ctx.addBlock({ title: 'Real' });
-    check('a real block is the first thing in it', slots().length === 1,
+    check('a real block is the first thing in the table', slots().length === 1,
+      String(slots().length));
+    check('and the space it was standing in gives way to it', freeIn('builder') === 0);
+
+    // THE TWO LISTS ANSWER SEPARATELY. A timed block does not fill the anytime
+    // list, so the space in it stays until something of its own arrives.
+    check('the anytime list still shows its own', freeIn('anytime-list') === 1,
+      String(freeIn('anytime-list')));
+    ctx.addAnytime({ title: 'Bins' });
+    check('until a one-off fills it', freeIn('anytime-list') === 0);
+    check('and the table does not get one back', freeIn('builder') === 0);
+
+    // AND IT COMES BACK. A day emptied by removing its last block is an empty
+    // day again, which is the case a first-render-only placeholder would miss.
+    //
+    // After the close, not before: a removal animates the row shut and drops the
+    // block at the end of it, so checking straight away asks the question before
+    // anything has happened.
+    ctx.removeBlock(0);
+    await wait(400);
+    check('removing the last block brings the space back', freeIn('builder') === 1,
+      String(freeIn('builder')));
+    check('and it is not mistaken for the row it replaced', slots().length === 0,
       String(slots().length));
   }
 

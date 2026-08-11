@@ -1483,6 +1483,53 @@
       .anytime .label {
         margin-bottom: 6px;
       }
+      /* WHERE A ROW WOULD GO. Diagonal 45° hatching is the drafting convention
+         for an empty region, and the dashed rule is this design's third weight:
+         1.5px solid ends a section, a hairline separates two rows, and dashed
+         marks a gap that is not a row at all. Both are lifted from ledger.html,
+         which draws exactly this for an unscheduled span.
+
+         SHORTER THAN A REAL ROW. A block is 68px because it carries a title, an
+         hour and a status; this carries one word, and standing it at full height
+         would make an empty day look like a day with something in it. */
+      .free {
+        /* Out past the margin, so the hatching and its rule reach both edges the
+           way every row on this page does, then the padding puts the words back
+           on the gutter. Longhand throughout: a padding shorthand here would
+           reset the two sides above it. */
+        margin-left: -18px;
+        margin-right: -18px;
+        padding-left: 18px;
+        padding-right: 18px;
+        padding-top: 13px;
+        padding-bottom: 13px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border-bottom: 1px dashed var(--rule);
+        background: repeating-linear-gradient(-45deg, #fafbfd 0 5px, #ffffff 5px 10px);
+      }
+      /* The anytime list leads with a 15px tick and a wider gap than the table's
+         index column, and the space where a row would be keeps its list's
+         columns. */
+      .free-anytime {
+        gap: 12px;
+      }
+      .freebox {
+        width: 15px;
+        flex: none;
+      }
+      .freenm {
+        flex: 1;
+        min-width: 0;
+        font-size: 12px;
+        letter-spacing: 0.02em;
+        color: var(--ghost);
+      }
+      /* On ONE line: a group listed down the page ends on a line reading
+         `.free .st {`, and a lookup by name has been shadowed by that four
+         times in this file. */
+      .free .idx, .free .st { color: var(--ghost); }
 
       /* `.atime` is the wrapper each row sits in. It carries no style of its
          own: it exists so `slotAt` can find a row by the index it draws, and so
@@ -2103,7 +2150,11 @@
 
         <!-- THE COLUMN HEADS. What makes this a table rather than a list: an
              index, a name, and a status, under a rule heavier than the ones
-             between rows. Hidden with the day it heads when there is no day. -->
+             between rows.
+
+             ALWAYS THERE, including on a day with nothing in it — where what
+             sits under them is a hatched row saying where the first block would
+             go, so they are never heading nothing. -->
         <div class="colhead" id="colhead">
           <div class="c-i cap8">#</div>
           <div class="c-n cap8">Block</div>
@@ -2112,11 +2163,14 @@
 
         <div id="builder"></div>
 
-        <!-- TWO WAYS INTO THE DAY, and the pair is the point: one with an hour
-             and one without. They sit together so the choice is legible, and
-             above the Anytime section rather than inside it because that
-             section is hidden until something is in it — a button you cannot
-             reach until you have already used it is not a way in.
+        <!-- + BLOCK, at the foot of the table it adds to. + Anytime sits at the
+             foot of ITS section for the same reason.
+
+             They were one row here for a while, on the argument that the choice
+             between an hour and no hour should be legible in one glance. That
+             was while the Anytime section was hidden until something was in it
+             and so could not hold its own control. It is always drawn now, and
+             a control belongs with the list it fills.
 
              A ONE-OFF NEVER TOUCHES THE THINGS LIST. Everything on the Anytime
              list used to have come from there, so a reminder — walk the dog,
@@ -2134,8 +2188,10 @@
              not in it, and above "Day ends" because they belong to it: the
              end time counts the blocks above and none of these.
 
-             Hidden when empty. A heading with nothing under it would be a
-             section of the day screen that is blank on almost every day. -->
+             ALWAYS DRAWN, heading and all. + Anytime lives at its foot, so
+             hiding it when empty would hide the only way to put the first one
+             in it — and an empty list gets the same hatched row the table above
+             does, so the heading is never over nothing. -->
         <div class="anytime" id="anytime">
           <div class="label" id="anytime-label">Anytime today</div>
           <div id="anytime-list"></div>
@@ -3134,10 +3190,10 @@
         // moment you choose and permanent afterwards. Offering it here is what
         // makes the difference cost nothing to get right.
         //
-        // Tasks only, for the reason the menu gives: a habit recurring is the
-        // point of a habit, and a project is not finished by one session. The
-        // server refuses either, so a button would be offering a refusal.
-        if (item.type === 'task') {
+        // Anything but a habit, for the reason the menu gives: a habit
+        // recurring is the point of a habit, so it has no end to offer. The
+        // server refuses one, so a button would be offering a refusal.
+        if (item.type !== 'habit') {
           const did = document.createElement('button');
           did.type = 'button';
           did.textContent = 'Done';
@@ -3428,9 +3484,9 @@
         const acts = document.createElement('div');
         acts.className = 'rowacts hidden';
 
-        // Tasks only. A habit recurring is the point of a habit, and a project
-        // is not finished by one session of work on it.
-        if (item.type === 'task') {
+        // Anything but a habit. A habit recurring is the point of a habit, so
+        // there is no end of it to offer.
+        if (item.type !== 'habit') {
           const done = document.createElement('button');
           done.type = 'button';
           done.textContent = 'Done';
@@ -3937,6 +3993,25 @@
           box.append(blockCard(b, i, { begun, past }));
         }
 
+        // WHERE THE FIRST BLOCK WOULD GO, when there is not one yet.
+        //
+        // A day with nothing in it drew three 1.5px section rules inside 350px
+        // with nothing between them — column heads over no rows, a heading
+        // counting to 00 — and read as a pile of empty boxes rather than as a
+        // day with room in it.
+        //
+        // TWO WAYS TO FIX THAT, and this is the second one. The first was to
+        // take the furniture away and say "Nothing planned yet" once: fewer
+        // rules, but it answered an empty day by removing the table instead of
+        // showing what goes in it. Filling the void says the same thing and
+        // leaves the shape of the day standing, so the heads and the heading
+        // still have something under them.
+        //
+        // NOT THE BLANK SPACER THIS ONCE HELD. That was a real block card with
+        // `visibility: hidden`, and blank room reads as a gap somebody forgot to
+        // fill. Hatched and dashed, it reads as a space meant to be there.
+        if (!timedBlocks().length) box.append(freeRow('block', 'nothing scheduled'));
+
         renderAnytime();
 
         // 0:00 on an empty day, not a dash. A dash reads as "we could not work
@@ -4008,19 +4083,70 @@
           .filter(({ b }) => untimed(b));
 
         // The heading and its way in stay whatever the list holds: a section you
-        // can only add to once it is not empty is not a way in.
+        // can only add to once it is not empty is not a way in. What fills the
+        // space under them when there is nothing on the list is the same hatched
+        // row the day above uses — see `freeRow`.
 
         // The heading follows the day on screen. "Anytime today" over
         // tomorrow's list would be a heading that is simply untrue every
         // evening, which is when this screen is most used.
         // THE COUNT BESIDE IT, the way a ledger heads a section it can total.
         // Two of these is a glance; ten is a fact about the day.
-        // THE COUNT BESIDE IT, the way a ledger heads a section it can total.
-        // Two of these is a glance; ten is a fact about the day.
         $('anytime-label').textContent =
           `${onToday() ? 'Anytime today' : 'Anytime tomorrow'}  ·  ${String(items.length).padStart(2, '0')}`;
 
+        if (!items.length) box.append(freeRow('anytime', 'nothing yet'));
+
         for (const { b, at } of items) box.append(anytimeRow(b, at));
+      }
+
+      /**
+       * Where a row would go, on a list that has none.
+       *
+       * DIAGONAL HATCHING IS THE DRAFTING CONVENTION FOR AN EMPTY REGION, and
+       * the dashed rule under it is the reference's third weight — 1.5px solid
+       * ends a section, a 1px hairline separates two rows, and 1px dashed marks
+       * a gap that is not a row at all. Both come from ledger.html, which draws
+       * exactly this for the unscheduled span between two blocks.
+       *
+       * It carries the columns of the list it stands in rather than a shape of
+       * its own, so the words start where that list's words start: the block
+       * table leads with a 22px index, the anytime list with a 15px tick.
+       *
+       * NOT A ROW. No index, no handle, no gestures, nothing to press — it is
+       * the absence of a row drawn where the row is missing. Everything that
+       * acts on a block finds it by `.slot` and its place in `blocks`, and this
+       * is neither, so nothing can reach it by accident.
+       */
+      function freeRow(kind, label) {
+        const row = document.createElement('div');
+        // WRITTEN OUT, not assembled from `free-${kind}`. A class name that only
+        // exists once the string is built cannot be found by searching for it,
+        // and the check that hunts styling nothing wears reported this one dead
+        // the moment it was interpolated.
+        row.className = kind === 'block' ? 'free free-block' : 'free free-anytime';
+
+        const lead = document.createElement('div');
+        // The real column class in the table, so the index gutter cannot drift
+        // between a row and the space where one would be.
+        lead.className = kind === 'block' ? 'idx' : 'freebox';
+
+        const nm = document.createElement('div');
+        nm.className = 'freenm';
+        nm.textContent = label;
+
+        row.append(lead, nm);
+
+        // The status column, so the dash lines up under STATUS the way every
+        // other row's does. The anytime list has no such column.
+        if (kind === 'block') {
+          const st = document.createElement('div');
+          st.className = 'st';
+          st.textContent = '—';
+          row.append(st);
+        }
+
+        return row;
       }
 
       /**

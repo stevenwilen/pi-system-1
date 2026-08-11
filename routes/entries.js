@@ -318,9 +318,18 @@ router.post('/entries/:id/pin', async (req, res) => {
 /**
  * Finished. Off the list, still in the data.
  *
- * Tasks only. A habit recurring is the whole point of a habit, and a project is
- * not finished by one session of work on it; offering Done on either would be
- * offering to retire something that has not ended.
+ * NOT HABITS. A habit recurring is the whole point of a habit, so it has no end
+ * to reach, and offering Done on one would be offering to retire something that
+ * cannot be over.
+ *
+ * PROJECTS CAN BE. This refused them too, on the grounds that a project is not
+ * finished by one session of work on it — which is a good reason not to INFER
+ * an ending from a ticked block, and no reason at all to refuse one you have
+ * said out loud. A project is the only type carrying a due date and a size: it
+ * is the thing on this list most likely to actually end, and while this refused
+ * it the only ways off were Delete — a row that should not have existed — and
+ * Later, which claims you still mean to do it. Both file a finished project as
+ * something it is not, which is the exact confusion `done` was added to end.
  *
  * `done` is a separate state from `deleted` because they mean opposite things:
  * one is work that happened, the other is a row that should not have existed.
@@ -340,8 +349,8 @@ router.post('/entries/:id/done', async (req, res) => {
   if (readErr) return res.status(400).json({ error: readErr.message });
   if (!entry) return res.status(404).json({ error: 'entry not found' });
 
-  if (entry.type !== 'task') {
-    return res.status(400).json({ error: `a ${entry.type} is not finished in one go` });
+  if (entry.type === 'habit') {
+    return res.status(400).json({ error: 'a habit is never finished' });
   }
 
   const row = await update_entry(db, userId, req.params.id, { status: 'done' });

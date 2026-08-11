@@ -208,7 +208,10 @@ console.log('\n0b. one gutter, and nothing wider than the phone');
   // past the margin so the line reaches the edge, then padding to put their
   // contents back on the gutter. A division that stops 18px short of the paper
   // reads as the top of a box rather than the end of a section.
-  const bleeders = ['.colhead', '.anytime', '.things-head'];
+  // `.free` is the space where a row would go, and it bleeds for the reason a
+  // row does rather than the reason a section rule does: hatching that stopped
+  // at the gutter would draw a box on the page instead of a band across it.
+  const bleeders = ['.colhead', '.anytime', '.things-head', '.free'];
   for (const sel of bleeders) {
     const r = rule(sel);
     check(sel + ' reaches the edge', /margin-left: -18px/.test(r), r.replace(/s+/g,' ').slice(0,70));
@@ -2035,6 +2038,75 @@ console.log('\n19. a sheet is inside its scrim');
     /function openSettings\(\) \{/.test(code), 'a parameter here is a way to be sent');
   check('and the opening sequence does not decide for you',
     !/needsSetup|firstRun|forcedSetup/.test(code));
+}
+
+console.log('\n20. an empty list shows where its first row would go');
+{
+  // A day with nothing in it drew three 1.5px rules inside 350px with nothing
+  // between them, and read as a pile of empty boxes. What fills the voids is the
+  // reference's own vocabulary for an empty region.
+  //
+  // Which rows appear when is driven and proved in builder-test. What cannot be
+  // driven is what they LOOK like — the hatching, the dashed weight, and the
+  // bleed to both edges are exactly the sort of thing that can be deleted while
+  // every behavioural check keeps passing.
+  const free = rule('.free');
+
+  // HATCHED. The drafting convention for an empty region, at the reference's
+  // angle: -45deg, in 5px bands.
+  check('the empty space is hatched',
+    /repeating-linear-gradient\(-45deg/.test(free), free.replace(/\s+/g, ' ').slice(0, 110));
+
+  // DASHED, which is this design's third rule weight and the one that means
+  // "not a row at all". A hairline here would claim it is one.
+  check('and closed by the weight that means it is not a row',
+    /border-bottom: 1px dashed/.test(free), free.replace(/\s+/g, ' ').slice(0, 110));
+  check('which is a different weight from the one between two real rows',
+    /border-bottom: 1px solid var\(--line\)/.test(rule('.block')) &&
+      !/dashed/.test(rule('.block')));
+  check('and from the one that ends a section',
+    /border-top: 1\.5px solid var\(--heavy\)/.test(rule('.ends')));
+
+  // FULL BLEED, LIKE EVERY ROW. Hatching that stopped at the gutter would draw a
+  // box on the page instead of a band across it.
+  check('it reaches both edges the way a row does',
+    /margin-left: -18px/.test(free) && /margin-right: -18px/.test(free));
+  check('and puts its words back on the gutter',
+    /padding-left: 18px/.test(free) && /padding-right: 18px/.test(free));
+
+  // SHORTER THAN A REAL ROW, so an empty day does not look like a full one. A
+  // block is 68px; this carries one word.
+  check('and stands shorter than the row it stands in for',
+    !/min-height/.test(free) && /padding-top: 13px/.test(free), free.replace(/\s+/g, ' '));
+  check('which is worth saying because a real block is not short',
+    /min-height: 68px/.test(rule('.block')));
+
+  // EACH LIST'S OWN COLUMNS. The words start where that list's words start —
+  // the table leads with a 22px index, the anytime list with a 15px tick — so
+  // the space where a row would be lines up with the rows around it.
+  check('the anytime list keeps its own gap', /gap: 12px/.test(rule('.free-anytime')));
+  check('and its own leading column', /width: 15px/.test(rule('.freebox')));
+  check('which is the width of the tick it stands in for',
+    /width: 15px/.test(rule('.atick')));
+  check('while the table reuses the real index column',
+    /freeRow\('block'/.test(code) && /lead\.className = kind === 'block' \? 'idx' : 'freebox'/.test(code));
+
+  // IN THE GREY THAT CARRIES NO WORDS AT A BODY SIZE, which is what this is for:
+  // it is the lightest thing on the page and it is not meant to be read twice.
+  check('the words are the lightest grey', /color: var\(--ghost\)/.test(rule('.freenm')));
+  check('at a size below the body', /font-size: 12px/.test(rule('.freenm')));
+
+  // NOT A ROW, and this is the one that matters. Everything that acts on a block
+  // finds it by `.slot` and by its place in `blocks`; a placeholder carrying
+  // either would be draggable, swipeable, and countable as part of the day.
+  const freeRow = (code.match(/function freeRow\(kind, label\) \{[\s\S]*?\n      \}/) || [''])[0];
+  check('the space where a row would be is not one', Boolean(freeRow) &&
+    !/'slot'/.test(freeRow) && !/dataset/.test(freeRow), freeRow.slice(0, 80));
+
+  // AND THE BLANK CARD DID NOT COME BACK. Held-open room that says nothing is
+  // what this replaced, twice over.
+  check('nothing holds room open without saying why',
+    !/visibility: hidden/.test(css) && !/ghostCard|spacerCard/.test(code));
 }
 
 console.log('\n17. the mockup still describes the page');

@@ -122,9 +122,17 @@ have existed.
 filter on `status = 'active'`, but they mean opposite things and are recorded
 apart.
 
-**Tasks only.** A habit recurring is the whole point of a habit, and a project is
-not finished by one session of work on it. Offering Done on either would be
-offering to retire something that has not ended.
+**Not habits.** A habit recurring is the whole point of a habit, so it has no end
+to reach; offering Done on one would be offering to retire something that cannot
+be over.
+
+Projects can be finished. They were refused for a while on the grounds that a
+project is not finished by one session of work on it — a good reason not to
+*infer* an ending from a ticked block, and no reason to refuse one stated
+outright. A project is the only type carrying a due date and a size, so it is
+the entry most likely to genuinely end, and while it was refused the only ways
+off the list were Delete and Later: one records it as a row that should not have
+existed, the other as something you still mean to get to.
 
 ### 2.4 A day is assumed to have gone as planned
 

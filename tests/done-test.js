@@ -198,19 +198,35 @@ async function cleanup() {
     check('the row is still there, marked done', data && data.status === 'done', JSON.stringify(data));
   }
 
-  console.log('\nonly a task can be done in one go');
+  console.log('\na project ends, and a habit does not');
   {
     const habit = await entry('habit', 'Spanish');
     const project = await entry('project', 'Thesis');
 
+    // A HABIT HAS NO END TO REACH. The recurring is the whole point of one.
     const h = await post(`/entries/${habit}/done`);
     check('a habit is refused', h.status === 400, JSON.stringify(h.body));
+    check('and told why, in the words that say it is not a limitation',
+      /never finished/.test(h.body.error || ''), JSON.stringify(h.body));
+
+    // A PROJECT DOES. This was refused too, on the grounds that a project is
+    // not finished by one session of work on it — which is a reason not to
+    // infer an ending from a ticked block, and no reason to refuse one said
+    // out loud. While it was refused, a finished project could only be Deleted
+    // (a row that should not have existed) or set aside (still meaning to),
+    // both of which record it as something it is not.
     const p = await post(`/entries/${project}/done`);
-    check('a project is refused', p.status === 400, JSON.stringify(p.body));
+    check('a project can be finished', p.status === 200, JSON.stringify(p.body));
 
     const list = await get('/entries');
-    check('and both are still on the list',
-      list.items.some((i) => i.id === habit) && list.items.some((i) => i.id === project));
+    check('the habit is still on the list', list.items.some((i) => i.id === habit));
+    check('and the project has left it', !list.items.some((i) => i.id === project));
+
+    // Marked done, not deleted — the distinction is the whole reason this
+    // route exists rather than pointing Done at /delete.
+    const { data } = await H.db.from('entries').select('status').eq('id', project).single();
+    check('kept, and marked as work that happened',
+      data && data.status === 'done', JSON.stringify(data));
   }
 
   console.log('\ndone is not delete, and a tombstone stays one');
@@ -317,7 +333,8 @@ async function cleanup() {
   {
     const fs = require('fs');
     const html = fs.readFileSync(ROOT + '/public/index.html', 'utf8');
-    check('only on a task', /item\.type === 'task'/.test(html));
+    check('on anything that can end', /item\.type !== 'habit'/.test(html));
+    check('and never on a habit, which cannot', !/item\.type === 'task'/.test(html));
     check('and it posts to the done route', /entries\/\$\{item\.id\}\$\{path\}/.test(html));
     check('which Done names', /takeOff\(item, 'Done', '\/done'\)/.test(html));
 
@@ -350,11 +367,11 @@ async function cleanup() {
       /did\.textContent = 'Done';/.test(html));
     check('and it goes through the same Done as the menu',
       /askOn = null;\s*finish\(item\);/.test(html));
-    // Tasks only. A habit recurring is the point of a habit and a project is
-    // not finished by one session — the server refuses both, so a button there
-    // would be offering a refusal.
-    check('offered on a task and nothing else',
-      /if \(item\.type === 'task'\) \{[\s\S]{0,400}did\.textContent = 'Done';/.test(html));
+    // Not habits. A habit recurring is the point of a habit, so it has no end
+    // to offer — and the server refuses one, so a button there would be
+    // offering a refusal. A project does end, and is the entry most likely to.
+    check('offered on everything that can end, and nothing that cannot',
+      /if \(item\.type !== 'habit'\) \{[\s\S]{0,400}did\.textContent = 'Done';/.test(html));
 
     const remove = (html.match(/function remove\(item\) \{[\s\S]*?\n      \}/) || [''])[0];
     check('it offers no undo, because the question was the window',

@@ -192,17 +192,27 @@ const server = H.spawnServer(PORT);
 
   console.log('\nfinishing and deleting');
   {
+    // A habit has no end to reach — the recurring is the point of one — so this
+    // is the only type Done refuses.
     const habitDone = await call(`/entries/${h.data.entry.id}/done`, {});
     check('a habit cannot be finished', habitDone.status === 400, habitDone.data.error);
 
+    // A project can. It was refused too, on the grounds that a project is not
+    // finished by one session of work on it, which is a reason not to infer an
+    // ending from a ticked block rather than a reason to refuse one said out
+    // loud — and it left Delete as the only way a finished project came off the
+    // list, filing it as a row that should not have existed.
     const projectDone = await call(`/entries/${bareProject.data.entry.id}/done`, {});
-    check('nor a project', projectDone.status === 400, projectDone.data.error);
+    check('a project can be', projectDone.status === 200, JSON.stringify(projectDone.data));
 
     const taskDone = await call(`/entries/${id}/done`, {});
-    check('a task can be', taskDone.status === 200, JSON.stringify(taskDone.data));
+    check('and so can a task', taskDone.status === 200, JSON.stringify(taskDone.data));
 
     const after = (await call('/entries')).data;
     check('and it leaves the list', !after.items.some((i) => i.id === id));
+    check('as does the project', !after.items.some((i) => i.id === bareProject.data.entry.id));
+    check('while the habit stays on it',
+      after.items.some((i) => i.id === h.data.entry.id));
   }
 
   console.log('\ndelete is soft');
