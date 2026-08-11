@@ -1531,6 +1531,23 @@
          times in this file. */
       .free .idx, .free .st { color: var(--ghost); }
 
+      /* ONE LINE BOX, WHATEVER SITS IN THE ROW — which is what makes the two
+         lists the same height rather than nearly the same height.
+
+         The table's placeholder carries an index and a status column and the
+         anytime list's carries neither, and each of those brings its own face,
+         its own size and its own 2px of padding. So the row stood at whatever
+         its tallest child happened to be: 18px from the words in one list, and
+         in the other the greater of that and a 10px MONO line box, which came
+         out at 17. They matched by a single pixel, across two different faces,
+         one of which is fetched over the network — agreement by coincidence,
+         and it only had to round the other way once for the two lists to stand
+         at different heights. Stated here, neither column can push the row. */
+      .free > * {
+        padding-top: 0;
+        line-height: 19px;
+      }
+
       /* `.atime` is the wrapper each row sits in. It carries no style of its
          own: it exists so `slotAt` can find a row by the index it draws, and so
          the removal animation has something to collapse.

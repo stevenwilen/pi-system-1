@@ -252,6 +252,88 @@ if (require.main !== module) return;
   check('and ends at it', Math.max(...rights) - Math.min(...rights) <= 2, rights.join(', '));
   check('which is the 18px the reference uses', lefts[0] === 18, String(lefts[0]));
 
+  // --- the day with nothing in it ------------------------------------------
+  //
+  // A SECOND PAGE, because the first one is a full day and the empty state is
+  // the one place two rows are drawn from the same rule with different contents
+  // in them. It was reported from a phone as "different sizes between the two
+  // lists" and measured identical here — 45.00 both — because `.st` is a 10px
+  // MONO line box that came out at 17 against the words' 18. One pixel of slack,
+  // across two faces, one fetched over the network. This is what says so.
+  const empty = await browser.newPage({ viewport: { width: PHONE, height: 900 }, deviceScaleFactor: 2 });
+  empty.on('pageerror', (e) => console.log('    page error:', e.message.slice(0, 140)));
+  await empty.route('**/*', async (route) => {
+    const u = new URL(route.request().url());
+    const p = u.pathname;
+    if (p === '/' || p.endsWith('.html')) return route.continue();
+    // The faces are allowed through HERE, unlike everywhere else in this file:
+    // the thing being measured is a line box, and the fallback face is not the
+    // one the phone renders.
+    if (u.hostname.includes('googleapis') || u.hostname.includes('gstatic')) return route.continue();
+    const body =
+      API[p] ||
+      (p.startsWith('/plan/') ? { plan: null, blocks: [] } : null) ||
+      (p.startsWith('/calendar/') ? { date: TODAY, items: [], failed: false, configured: true } : null) ||
+      {};
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await empty.addInitScript(() => {
+    localStorage.setItem('pi.session', JSON.stringify({
+      access_token: 'look', refresh_token: 'look', expires_at: 4102444800, email: 'look@example.test',
+    }));
+  });
+  await empty.goto(`http://127.0.0.1:${site.port}/index.html`);
+  await empty.waitForTimeout(900);
+  const pickTomorrow = await empty.$('#pick-tomorrow');
+  if (pickTomorrow) { await pickTomorrow.click(); await empty.waitForTimeout(400); }
+  await empty.screenshot({ path: path.join(OUT, 'empty.png'), fullPage: true });
+
+  const free = await empty.evaluate(() => {
+    const one = (sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { h: Math.round(r.height * 100) / 100, w: Math.round(r.width), left: Math.round(r.left) };
+    };
+    const words = (sel) => {
+      const el = document.querySelector(`${sel} .freenm`);
+      return el ? Math.round(el.getBoundingClientRect().left) : null;
+    };
+    return {
+      block: one('.free-block'),
+      anytime: one('.free-anytime'),
+      blockWords: words('.free-block'),
+      anytimeWords: words('.free-anytime'),
+      rows: document.querySelectorAll('.slot').length,
+    };
+  });
+
+  console.log('\nthe day with nothing in it');
+  check('an empty day still draws both lists',
+    Boolean(free.block) && Boolean(free.anytime),
+    `${free.block ? 'block' : 'no block'} / ${free.anytime ? 'anytime' : 'no anytime'}`);
+
+  if (free.block && free.anytime) {
+    // THE ONE THAT WAS REPORTED. Equal to the pixel, not equal to within one.
+    check('the two placeholders are the same height',
+      free.block.h === free.anytime.h, `${free.block.h} vs ${free.anytime.h}`);
+    check('and the same width', free.block.w === free.anytime.w,
+      `${free.block.w} vs ${free.anytime.w}`);
+    check('both reaching the screen edge',
+      free.block.left === 0 && free.block.w === PHONE, `${free.block.left}..${free.block.left + free.block.w}`);
+
+    // Each borrows its own list's leading column, so the words are NOT expected
+    // to start at the same place — the table leads with a 22px index and the
+    // anytime list with a 15px tick. Stated so the 5px is on purpose rather
+    // than something nobody looked at.
+    check('the table\'s words clear its index column', free.blockWords === 50,
+      String(free.blockWords));
+    check('and the anytime list\'s clear its tick', free.anytimeWords === 45,
+      String(free.anytimeWords));
+  }
+
+  check('and nothing in either is a real row', free.rows === 0, `${free.rows} slots`);
+
   // --- the drawing it is meant to be ---------------------------------------
   const ref = await browser.newPage({ viewport: { width: FRAME + 40, height: 900 }, deviceScaleFactor: 2 });
   await ref.route('**/fonts.googleapis.com/**', (r) => r.abort());

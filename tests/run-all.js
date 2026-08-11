@@ -124,6 +124,13 @@ const SUITES = [
   ['fence-test.js', 60],
   ['builder-test.js', 120],
   ['plan-layout-check.js', 120],
+  // THE ONE THAT ACTUALLY LOOKS. It was run by hand — `npm run look` — which
+  // meant the only check in this project that can see layout was the only one
+  // not in this list. Every bug it exists for has been invisible to the text
+  // checks by definition: STATUS clipped off the edge, the missing left margin,
+  // an invisible full-screen layer over the whole app, and the two empty-state
+  // rows standing at different heights.
+  ['look.js', 240],
   ['icons-check.js', 60],
   ['service-key-check.js', 60],
   ['request-scope-check.js', 60],
