@@ -1685,21 +1685,26 @@ console.log('\n16. the shape of the day');
 
   // AND A THIRD, WHICH BUILDS THE DAY RATHER THAN ADDING TO IT.
   {
-    // IN THE SPACE WHERE THE DAY WOULD BE, not beside + Block. It stood there
-    // once and read as a third way to add one thing, competing with the two
-    // that are. Drawn into the empty row instead, it costs no room of its own
-    // and is only on screen when it has something to do.
-    check('the fill is not a control in the markup at all',
-      !/id="fill-day"/.test(body) && !/Fill day</.test(body));
-    check('it is drawn into the empty row', /empty\.append\(fillNow\(\)\)/.test(code));
-    check('and only when there is something to fill with',
-      /if \(fillable\(\)\.length\) empty\.append/.test(code));
+    // AT THE FOOT OF THE DAY, ABOVE CONFIRM, which is the order it is used in:
+    // build the day, look at it, commit it. It sat beside + Block first, where
+    // it read as a third way to add one thing; then inside the empty row, where
+    // it cost no room but went away with the first block, so a half-built day
+    // could never be topped up.
+    check('a Fill day control', /id="fill-day"/.test(body));
+    check('below the day it fills', body.indexOf('id="fill-day"') > body.indexOf('id="ends"'));
+    check('and above the button it precedes',
+      body.indexOf('id="fill-day"') < body.indexOf('id="confirm"'));
+    check('it is not in the row of ways in',
+      body.indexOf('id="fill-day"') > body.indexOf('id="anytime"'));
 
-    // BUILT WITH THE ROW, on every render. A handler wired once at startup
-    // would be a handler on an element the next render throws away.
-    const btn = (code.match(/function fillNow\(\)[\s\S]*?\n      \}/) || [''])[0];
-    check('the press is built with the row it lives in',
-      /b\.onclick = /.test(btn) && /fillDay\(\)/.test(btn), btn.slice(0, 60));
+    // HIDDEN, NOT GREYED, when there is nothing to fill with. A list with
+    // nothing pinned and nothing running out of room is the ordinary state of a
+    // well-kept list, and a control that spends most of its life dead is
+    // furniture.
+    check('withdrawn rather than greyed when it would do nothing',
+      /\$\('fillrow'\)\.classList\.toggle\('hidden', fillable\(\)\.length === 0\)/.test(code));
+    check('and it starts withdrawn, before anything is known',
+      /class="fillrow hidden"/.test(body));
 
     // ITS OWN ANCHOR. `.atime` was missing exactly this once, and its invisible
     // full-bleed child lay over the whole screen and killed every gesture.

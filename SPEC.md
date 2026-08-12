@@ -1223,21 +1223,22 @@ document holds **no standing touch listener** at rest.
 
 #### Fill day
 
-**Drawn into the empty row**, at its right edge under `STATUS`. One press builds
-the day out of the list: **pinned things first, then whatever is running out of
-room**, six half-hour blocks, flowing from the wake time like any other block.
+**At the foot of the day, above Confirm** — the order it is used in: build the
+day, look at it, commit it. One press builds it out of the list: **pinned things
+first, then whatever is running out of room**, six half-hour blocks, flowing
+from the wake time like any other block.
 
-It stood beside **+ Block** first, where it read as a third way to add one thing
-and competed with the two that are. In the space where the day would be it costs
-no room of its own, it is only on screen when it has something to do, and it is
-attached to the emptiness it answers. The cost of that placement is real and
-worth naming: **it goes with the row**, so a day with one block in it has no
-fill. This builds a day; **+ Block** tops one up.
+It sat beside **+ Block** first, where it read as a third way to add one thing
+and competed with the two that are. Then inside the empty row, which cost no
+room of its own but went away with the first block, so a half-built day could
+never be topped up. Here it can: it is offered whenever the day has room and the
+list has something for it.
 
-**Not shown when it would do nothing** — a list with nothing pinned and nothing
-running out of room, which is the ordinary state of a well-kept list. An empty
-day is not by itself a reason to offer a fill; there has to be something worth
-filling it with.
+**Hidden rather than greyed when it would do nothing** — a full day, or a list
+with nothing pinned and nothing running out of room, which is the ordinary state
+of a well-kept list rather than an edge case. A control that spends most of its
+life dead is furniture. An empty day is not by itself a reason to offer a fill;
+there has to be something worth filling it with.
 
 **It invents no order.** That sequence is not a rule this feature has of its
 own — it is the order the Things list is already sorted in, by the server and
@@ -1260,10 +1261,9 @@ moving the day later would quietly take work off it. `FILL_TO` is one constant
 in one place.
 
 **It fills to a total, so a second press is not a second helping.** Anything
-already in the shown day is not a candidate. There is no second press to make in
-practice — the row the button lives in gives way to the blocks it just made —
-but the guard stays, because it is what the rule rests on rather than the
-placement. Leftovers are not lost; they stay on the list.
+already in the shown day is not a candidate, so once everything qualifying is in
+the day the control withdraws itself. Leftovers are not lost; they stay on the
+list, and the next day's fill can pick them up.
 
 **Nothing is written.** It fills the builder and stops. The day is still yours
 to reorder, restretch and remove from, **Confirm** still commits it, and that is

@@ -1871,11 +1871,16 @@
         font-family: inherit;
         cursor: pointer;
       }
-      /* THE PRESS INSIDE THE EMPTY ROW. It takes the column the status used to
-         hold — right edge, under STATUS — so it sits opposite the words rather
-         than beside them, and it is the one blue thing in a row that is
-         otherwise the lightest grey on the page. Small: it is an offer, not the
-         way you are expected to build a day. */
+      /* THE LAST THING BEFORE CONFIRM, which is the order it is used in: build
+         the day, look at it, commit it. Centred over the button it precedes so
+         the two read as one sequence rather than as two unrelated controls, and
+         set in the small mono caps the page uses for anything that is a label
+         on the day rather than part of it. */
+      .fillrow {
+        display: flex;
+        justify-content: center;
+        margin-top: 2px;
+      }
       .fillnow {
         /* ITS OWN ANCHOR. The hit area below is absolute, and an absolute with
            no positioned ancestor anchors to the page — which is not a subtle
@@ -1884,9 +1889,6 @@
            the app. Stated on the element that needs it rather than trusted to
            a parent, so no rule elsewhere can take it away. */
         position: relative;
-        width: 64px;
-        flex: none;
-        text-align: right;
         font-family: var(--mono);
         font-size: 10px;
         letter-spacing: 0.14em;
@@ -2280,6 +2282,19 @@
         <div class="ends" id="ends">
           <span>Day ends</span>
           <b class="tnum" id="end-time">—</b>
+        </div>
+
+        <!-- BUILD THE DAY FROM THE LIST, at the foot of the day rather than in
+             the row of ways in. It sat beside + Block first, where it read as a
+             third way to add one thing; then inside the empty row, where it
+             cost no room but went with that row — a day with one block in it
+             had no fill at all. Here it is the last thing before Confirm, which
+             is the order it is used in: build, look at it, commit.
+
+             Hidden rather than greyed when there is nothing to fill with. See
+             `fillable`. -->
+        <div class="fillrow hidden" id="fillrow">
+          <button type="button" class="fillnow" id="fill-day">Fill day</button>
         </div>
 
         <button type="button" class="confirm" id="confirm">Confirm</button>
@@ -4040,28 +4055,6 @@
        * the thing that commits it. That is also the undo: this changed nothing
        * on the server, so leaving without confirming leaves no trace.
        */
-      /**
-       * The press that builds the day, drawn into the space where it would be.
-       *
-       * Built fresh on every render rather than wired once at startup, because
-       * it lives and dies with the row it sits in — a handler attached to an
-       * element the next render throws away is a handler on nothing.
-       *
-       * It takes the column the status used to hold, at the right edge of the
-       * row, so it lands under STATUS and away from the words on the left.
-       */
-      function fillNow() {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'fillnow';
-        b.textContent = 'Fill';
-        b.onclick = (e) => {
-          if (e && e.stopPropagation) e.stopPropagation();
-          fillDay();
-        };
-        return b;
-      }
-
       function fillDay() {
         // THE SCREEN'S OWN ORDER, asked for rather than assumed. The list
         // arrives sorted from the server, so reading `things` as it stands is
@@ -4191,27 +4184,17 @@
         // NOT THE BLANK SPACER THIS ONCE HELD. That was a real block card with
         // `visibility: hidden`, and blank room reads as a gap somebody forgot to
         // fill. Hatched and dashed, it reads as a space meant to be there.
-        if (!timedBlocks().length) {
-          const empty = freeRow('block', 'nothing scheduled');
+        if (!timedBlocks().length) box.append(freeRow('block', 'nothing scheduled'));
 
-          // THE SPACE WHERE THE DAY WOULD BE IS THE THING YOU PRESS TO BUILD
-          // IT. This stood beside + Block, where it read as a third way to add
-          // one thing and competed with the two that are. Here it costs no room
-          // of its own, it is only ever on screen when it has something to do,
-          // and it is attached to the emptiness it answers.
-          //
-          // NOT SHOWN WHEN IT WOULD DO NOTHING — a list with nothing pinned and
-          // nothing running out of room, which is the ordinary state of a
-          // well-kept list. That is why this asks rather than drawing a dead
-          // one: an empty day is not by itself a reason to offer a fill.
-          //
-          // It goes with the row, so a day with one block in it has no fill.
-          // That is the trade this placement makes: the button is for building
-          // a day rather than topping one up, and + Block is what tops up.
-          if (fillable().length) empty.append(fillNow());
-
-          box.append(empty);
-        }
+        // HIDDEN WHEN IT WOULD DO NOTHING, rather than greyed. A list with
+        // nothing pinned and nothing running out of room is the ordinary state
+        // of a well-kept list, not an edge case, and a control that spends most
+        // of its life dead is furniture. It also covers the full day and the
+        // day whose candidates are already in it.
+        //
+        // At the foot of the day rather than in the empty row, which is why it
+        // can top one up: it no longer goes away with the first block.
+        $('fillrow').classList.toggle('hidden', fillable().length === 0);
 
         renderAnytime();
 
@@ -5481,6 +5464,10 @@
 
       $('add-block').onclick = () => ask('block');
       $('add-anytime').onclick = () => ask('anytime');
+      // In the markup, so it is wired once. It was built per render while it
+      // lived inside the empty row, which is a row that is thrown away the
+      // moment it does its job.
+      $('fill-day').onclick = () => fillDay();
 
       function renderConfirm() {
         const button = $('confirm');

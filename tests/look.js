@@ -338,7 +338,7 @@ if (require.main !== module) return;
   // `.atime` was once missing the anchor for one of these and its invisible
   // child lay over the whole screen, killing every gesture in the app.
   const fill = await empty.evaluate(() => {
-    const b = document.querySelector('.free-block .fillnow');
+    const b = document.querySelector('.fillrow:not(.hidden) .fillnow');
     if (!b) return null;
     const r = b.getBoundingClientRect();
     // What is actually under the finger at the middle of the word, and at the
@@ -367,10 +367,24 @@ if (require.main !== module) return;
     check('and so does the space around it', /button/.test(fill.justOutside),
       fill.justOutside);
 
-    // AND IT DOES NOT COVER THE ROW. The failure mode is an invisible layer
-    // reaching back across the words, which looks identical and is not.
-    check('while the left of the row is still the row itself',
+    // AND IT DOES NOT COVER WHAT IT SITS BESIDE. The failure mode is an
+    // invisible layer reaching out across the page, which looks identical to a
+    // working one and is not — `.atime` shipped exactly that once and every
+    // gesture in the app stopped answering.
+    check('while the far side of the line is not the button',
       !/button/.test(fill.farLeft), fill.farLeft);
+
+    // IT PRECEDES CONFIRM, and that order is the whole reason it is here:
+    // build the day, look at it, commit it.
+    const order = await empty.evaluate(() => {
+      const f = document.querySelector('.fillrow:not(.hidden)');
+      const c = document.getElementById('confirm');
+      if (!f || !c) return null;
+      return { fill: Math.round(f.getBoundingClientRect().bottom), confirm: Math.round(c.getBoundingClientRect().top) };
+    });
+    check('and it sits above Confirm on the screen, not merely in the markup',
+      order && order.fill <= order.confirm,
+      order ? `fill ends ${order.fill}, confirm starts ${order.confirm}` : 'not found');
   }
 
   // --- the drawing it is meant to be ---------------------------------------
