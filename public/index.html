@@ -1876,28 +1876,12 @@
          the two read as one sequence rather than as two unrelated controls, and
          set in the small mono caps the page uses for anything that is a label
          on the day rather than part of it. */
-      .fillrow {
-        display: flex;
-        /* ON THE GUTTER, because everything on this page is on a column and a
-           centred mark is on none. It was centred over Confirm, and at x=165 it
-           was the only thing on the screen aligned to nothing — DAY ENDS, the
-           column heads, + Block and + Anytime all start at 18, and the figures
-           all end at 372. */
-        justify-content: flex-start;
-        margin-top: 0;
-      }
-      /* BOUND TO THE BUTTON IT PRECEDES. Floating with equal air above and
-         below — 25px and 22px — it belonged to neither neighbour and read as a
-         line dropped between two finished things. Twenty above and twelve below
-         makes the two actions a pair, and the day's total the thing they are
-         separated from.
-
-         The adjacent selector rather than a class the script maintains: when
-         the fill is hidden there is no pair to bind, and Confirm takes its full
-         gap from the day above it, which is what it had before any of this. */
-      .fillrow:not(.hidden) + .confirm {
-        margin-top: 12px;
-      }
+      /* THE MARK IN THE EMPTY ROW. It takes the column the status would hold —
+         the right edge, under STATUS — so it sits opposite the words rather
+         than beside them, and it is the one blue thing in a row that is
+         otherwise the lightest grey on the page. That is what earns it the
+         colour: everything else in the row says there is nothing here, and this
+         is the only part of it you can act on. */
       .fillnow {
         /* ITS OWN ANCHOR. The hit area below is absolute, and an absolute with
            no positioned ancestor anchors to the page — which is not a subtle
@@ -1906,21 +1890,24 @@
            the app. Stated on the element that needs it rather than trusted to
            a parent, so no rule elsewhere can take it away. */
         position: relative;
-        /* THE SAME TYPE AS THE OTHER TWO TEXT CONTROLS, because it is the same
-           kind of thing: a word in the page's own face that does something when
-           pressed. It was set in the mono at 10px — the face this design keeps
-           for FIGURES — which made it read as a label about the day rather than
-           as something to press, sitting as it does under a column of them.
-           Matched to `.addblock` rather than merely near it. */
-        font-family: inherit;
-        font-size: 11px;
-        letter-spacing: 0.24em;
-        text-transform: uppercase;
+        /* The status column's width, so the mark's right edge lands on the same
+           372 every figure on this page ends at. */
+        width: 64px;
+        flex: none;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
         color: var(--accent);
         background: none;
         border: 0;
         padding: 0;
         cursor: pointer;
+      }
+      /* Drawn in the colour the button carries, so there is one place the blue
+         is stated. */
+      .fillnow svg {
+        display: block;
+        fill: currentColor;
       }
       /* Sized to be read, pressed larger. The word is 10px, which is nowhere
          near a finger, and the row it sits in is only 46px tall. */
@@ -2305,19 +2292,6 @@
         <div class="ends" id="ends">
           <span>Day ends</span>
           <b class="tnum" id="end-time">—</b>
-        </div>
-
-        <!-- BUILD THE DAY FROM THE LIST, at the foot of the day rather than in
-             the row of ways in. It sat beside + Block first, where it read as a
-             third way to add one thing; then inside the empty row, where it
-             cost no room but went with that row — a day with one block in it
-             had no fill at all. Here it is the last thing before Confirm, which
-             is the order it is used in: build, look at it, commit.
-
-             Hidden rather than greyed when there is nothing to fill with. See
-             `fillable`. -->
-        <div class="fillrow hidden" id="fillrow">
-          <button type="button" class="fillnow" id="fill-day">Fill day</button>
         </div>
 
         <button type="button" class="confirm" id="confirm">Confirm</button>
@@ -4078,6 +4052,49 @@
        * the thing that commits it. That is also the undo: this changed nothing
        * on the server, so leaving without confirming leaves no trace.
        */
+      /**
+       * The mark that builds the day, drawn into the space where it would be.
+       *
+       * THREE RULES, THE LAST OF THEM DASHED, which is this design's own
+       * vocabulary rather than a borrowed glyph: a solid rule is a row and a
+       * dashed one is the space where a row would be — the same distinction the
+       * hatched placeholder it sits in is drawing. So the mark reads as rows,
+       * with one still to come. Three equal bars would have been a hamburger,
+       * which is a menu everywhere else on a phone.
+       *
+       * It carried the word "Fill" once, and then "Fill day" at the foot of the
+       * page. A word there sat under a column of figures and had to argue for
+       * its own face and its own alignment; a mark in the row it fills has
+       * neither problem.
+       *
+       * Drawn rather than fetched, like every other mark on this page.
+       *
+       * Built fresh on every render rather than wired once, because it lives
+       * and dies with the row it sits in — a handler on an element the next
+       * render throws away is a handler on nothing.
+       */
+      function fillNow() {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'fillnow';
+        // The only name it has. The mark says "rows go here" to an eye that can
+        // see it and nothing at all to one that cannot.
+        b.setAttribute('aria-label', 'Fill the day from your list');
+        b.title = 'Fill the day from your list';
+        b.innerHTML =
+          '<svg viewBox="0 0 16 12" width="16" height="12" aria-hidden="true" focusable="false">' +
+          '<rect x="0" y="0" width="16" height="2" rx="1"></rect>' +
+          '<rect x="0" y="5" width="16" height="2" rx="1"></rect>' +
+          '<rect x="0" y="10" width="6" height="2" rx="1"></rect>' +
+          '<rect x="9" y="10" width="7" height="2" rx="1"></rect>' +
+          '</svg>';
+        b.onclick = (e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+          fillDay();
+        };
+        return b;
+      }
+
       function fillDay() {
         // THE SCREEN'S OWN ORDER, asked for rather than assumed. The list
         // arrives sorted from the server, so reading `things` as it stands is
@@ -4207,17 +4224,22 @@
         // NOT THE BLANK SPACER THIS ONCE HELD. That was a real block card with
         // `visibility: hidden`, and blank room reads as a gap somebody forgot to
         // fill. Hatched and dashed, it reads as a space meant to be there.
-        if (!timedBlocks().length) box.append(freeRow('block', 'nothing scheduled'));
+        if (!timedBlocks().length) {
+          const empty = freeRow('block', 'nothing scheduled');
 
-        // HIDDEN WHEN IT WOULD DO NOTHING, rather than greyed. A list with
-        // nothing pinned and nothing running out of room is the ordinary state
-        // of a well-kept list, not an edge case, and a control that spends most
-        // of its life dead is furniture. It also covers the full day and the
-        // day whose candidates are already in it.
-        //
-        // At the foot of the day rather than in the empty row, which is why it
-        // can top one up: it no longer goes away with the first block.
-        $('fillrow').classList.toggle('hidden', fillable().length === 0);
+          // THE MARK SITS IN THE SPACE IT FILLS, at the right of the row where
+          // the status column would be. Not shown when it would do nothing — a
+          // list with nothing pinned and nothing running out of room is the
+          // ordinary state of a well-kept list, and an empty day is not by
+          // itself a reason to offer a fill.
+          //
+          // It goes with the row, so a day with one block in it has no fill.
+          // That is what this placement costs: it builds a day, and + Block is
+          // what tops one up.
+          if (fillable().length) empty.append(fillNow());
+
+          box.append(empty);
+        }
 
         renderAnytime();
 
@@ -5487,10 +5509,6 @@
 
       $('add-block').onclick = () => ask('block');
       $('add-anytime').onclick = () => ask('anytime');
-      // In the markup, so it is wired once. It was built per render while it
-      // lived inside the empty row, which is a row that is thrown away the
-      // moment it does its job.
-      $('fill-day').onclick = () => fillDay();
 
       function renderConfirm() {
         const button = $('confirm');

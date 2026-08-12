@@ -338,7 +338,7 @@ if (require.main !== module) return;
   // `.atime` was once missing the anchor for one of these and its invisible
   // child lay over the whole screen, killing every gesture in the app.
   const fill = await empty.evaluate(() => {
-    const b = document.querySelector('.fillrow:not(.hidden) .fillnow');
+    const b = document.querySelector('.free-block .fillnow');
     if (!b) return null;
     const r = b.getBoundingClientRect();
     // What is actually under the finger at the middle of the word, and at the
@@ -350,11 +350,16 @@ if (require.main !== module) return;
     return {
       box: { w: Math.round(r.width), h: Math.round(r.height), right: Math.round(r.right) },
       middle: at(r.left + r.width / 2, r.top + r.height / 2),
-      justOutside: at(r.right + 8, r.top + r.height / 2),
-      // The far side of the same line. Sampled relative to the button rather
-      // than at a fixed x, which is what made this probe wrong the moment the
-      // control moved from the middle of the line to the gutter.
-      farSide: at(window.innerWidth - 30, r.top + r.height / 2),
+      justOutside: at(r.left - 8, r.top + r.height / 2),
+      // THE FAR SIDE OF THE SAME LINE, worked out from where the control
+      // actually is rather than from a number typed here. This probe has now
+      // been wrong twice, once each time the control crossed the line — a fixed
+      // x that was safely outside it became a point inside it, and the check
+      // failed for a reason that had nothing to do with what it was asking.
+      farSide: at(
+        (r.left + r.right) / 2 > window.innerWidth / 2 ? 30 : window.innerWidth - 30,
+        r.top + r.height / 2
+      ),
     };
   });
 
@@ -377,49 +382,40 @@ if (require.main !== module) return;
     check('while the far side of the line is not the button',
       !/button/.test(fill.farSide), fill.farSide);
 
-    // IT PRECEDES CONFIRM, and that order is the whole reason it is here:
-    // build the day, look at it, commit it.
-    const foot = await empty.evaluate(() => {
-      const one = (sel) => {
-        const el = document.querySelector(sel);
-        if (!el) return null;
-        const r = el.getBoundingClientRect();
-        return { left: Math.round(r.left), top: Math.round(r.top), bottom: Math.round(r.bottom) };
-      };
-      const label = one('.ends span');
-      return {
-        fill: one('.fillrow:not(.hidden) .fillnow'),
-        confirm: one('#confirm'),
-        endsLabel: label,
-        addblock: one('#add-block'),
-      };
+    // THE MARK IS ACTUALLY DRAWN. The stub DOM the behaviour suite runs against
+    // has no innerHTML, so it can see that the button exists and not that
+    // anything is inside it. This is the half of the job only a browser can do.
+    const drawn = await empty.evaluate(() => {
+      const svg = document.querySelector('.free-block .fillnow svg');
+      if (!svg) return null;
+      const r = svg.getBoundingClientRect();
+      const bars = [...svg.querySelectorAll('rect')].map((x) => Math.round(x.getBoundingClientRect().width));
+      return { w: Math.round(r.width), h: Math.round(r.height), bars, colour: getComputedStyle(svg).fill };
     });
+    check('the mark is drawn, not an empty button',
+      drawn && drawn.bars.length === 4, drawn ? `${drawn.bars.length} bars` : 'no svg');
+    check('and has size on the screen', drawn && drawn.w > 0 && drawn.h > 0,
+      drawn ? `${drawn.w}x${drawn.h}` : 'nothing');
+    // Two full rules and a broken one: a solid rule is a row, a dashed rule is
+    // the space where a row would be, and the mark says "rows, one still to
+    // come" in the same vocabulary the placeholder around it is drawing.
+    check('as two whole rules and one broken into two',
+      drawn && drawn.bars[0] === drawn.bars[1] && drawn.bars[2] < drawn.bars[0] &&
+        drawn.bars[3] < drawn.bars[0], drawn ? drawn.bars.join(', ') : '');
 
-    check('and it sits above Confirm on the screen, not merely in the markup',
-      foot.fill && foot.confirm && foot.fill.bottom <= foot.confirm.top,
-      foot.fill ? `fill ends ${foot.fill.bottom}, confirm starts ${foot.confirm.top}` : 'not found');
-
-    // ON THE GRID. It was centred once, at x=165 — the only thing on the screen
-    // aligned to nothing, on a page where every mark sits on a column. This is
-    // the check that could not be made by reading the stylesheet: `center` and
-    // `flex-start` are both perfectly good declarations and only one of them
-    // lands on the gutter.
-    check('it starts on the page gutter, like every other control',
-      foot.fill.left === 18, String(foot.fill.left));
-    check('which is where + Block starts too',
-      foot.fill.left === foot.addblock.left,
-      `${foot.fill.left} vs ${foot.addblock.left}`);
-    check('and where the day\'s own label starts',
-      foot.fill.left === foot.endsLabel.left,
-      `${foot.fill.left} vs ${foot.endsLabel.left}`);
-
-    // BOUND TO CONFIRM RATHER THAN FLOATING. With equal air on both sides it
-    // belonged to neither neighbour and read as a line dropped between two
-    // finished things.
-    const above = foot.fill.top - foot.endsLabel.bottom;
-    const below = foot.confirm.top - foot.fill.bottom;
-    check('it sits nearer the button it precedes than the day above it',
-      below < above, `${above}px above, ${below}px below`);
+    // ITS RIGHT EDGE ON THE COLUMN EVERY FIGURE ENDS AT. It takes the width the
+    // status column would have, so the mark lands under STATUS.
+    const cols = await empty.evaluate(() => {
+      const right = (sel) => {
+        const el = document.querySelector(sel);
+        return el ? Math.round(el.getBoundingClientRect().right) : null;
+      };
+      return { fill: right('.free-block .fillnow'), head: right('.colhead .c-s'), ends: right('.ends b') };
+    });
+    check('the mark ends where the column heads end', cols.fill === cols.head,
+      `${cols.fill} vs ${cols.head}`);
+    check('which is where the day\'s own figure ends', cols.fill === cols.ends,
+      `${cols.fill} vs ${cols.ends}`);
   }
 
   // --- the drawing it is meant to be ---------------------------------------

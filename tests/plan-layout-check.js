@@ -1690,43 +1690,41 @@ console.log('\n16. the shape of the day');
     // it read as a third way to add one thing; then inside the empty row, where
     // it cost no room but went away with the first block, so a half-built day
     // could never be topped up.
-    check('a Fill day control', /id="fill-day"/.test(body));
-    check('below the day it fills', body.indexOf('id="fill-day"') > body.indexOf('id="ends"'));
-    check('and above the button it precedes',
-      body.indexOf('id="fill-day"') < body.indexOf('id="confirm"'));
-    check('it is not in the row of ways in',
-      body.indexOf('id="fill-day"') > body.indexOf('id="anytime"'));
+    // IN THE ROW IT FILLS, as a mark. It is not in the markup at all: it lives
+    // and dies with the empty row, so a control sitting in the page waiting for
+    // a class would be a control that is usually furniture.
+    check('the fill is not a standing control in the markup',
+      !/id="fill-day"/.test(body) && !/class="fillrow/.test(body));
+    check('it is drawn into the empty row', /empty\.append\(fillNow\(\)\)/.test(code));
+    check('and only when there is something to fill with',
+      /if \(fillable\(\)\.length\) empty\.append/.test(code));
 
-    // HIDDEN, NOT GREYED, when there is nothing to fill with. A list with
-    // nothing pinned and nothing running out of room is the ordinary state of a
-    // well-kept list, and a control that spends most of its life dead is
-    // furniture.
-    check('withdrawn rather than greyed when it would do nothing',
-      /\$\('fillrow'\)\.classList\.toggle\('hidden', fillable\(\)\.length === 0\)/.test(code));
-    check('and it starts withdrawn, before anything is known',
-      /class="fillrow hidden"/.test(body));
+    // BUILT WITH THE ROW, on every render. A handler wired once at startup
+    // would be a handler on an element the next render throws away.
+    const btn = (code.match(/function fillNow\(\)[\s\S]*?\n      \}/) || [''])[0];
+    check('the press is built with the row it lives in',
+      /b\.onclick = /.test(btn) && /fillDay\(\)/.test(btn), btn.slice(0, 60));
 
-    // ON THE GUTTER, not centred. Every mark on this page sits on a column —
-    // the labels and controls at 18, the figures ending at 372 — and a centred
-    // one sits on none. It was centred over Confirm at x=165, aligned to
-    // nothing. The rendered check in look.js is the one with teeth; this is
-    // here so the declaration cannot quietly go back.
-    check('the fill sits on the gutter rather than centred',
-      /justify-content: flex-start/.test(rule('.fillrow')), rule('.fillrow'));
+    // A MARK, NOT A WORD — which is the whole reason it is here rather than at
+    // the foot of the page. A word under a column of figures had to argue for
+    // its own face and its own alignment; a mark in the row it fills does not.
+    check('it is a drawn mark rather than a label', /<svg /.test(btn) && !/Fill day/.test(btn));
+    check('drawn, like every other mark on this page', /<rect /.test(btn));
+    // THREE RULES, THE LAST DASHED, which is this design's own vocabulary: a
+    // solid rule is a row and a dashed one is the space where a row would be.
+    // Three equal bars would be a hamburger, which is a menu everywhere else.
+    check('as three rules, the last of them broken',
+      (btn.match(/<rect /g) || []).length === 4, `${(btn.match(/<rect /g) || []).length} rects`);
+    check('and it carries a name for anything that cannot see it',
+      /aria-label', 'Fill the day from your list'/.test(btn));
 
-    // THE SAME TYPE AS THE OTHER TEXT CONTROLS, because it is the same kind of
-    // thing. It was mono at 10px — the face this design keeps for FIGURES —
-    // which read as a label about the day rather than as something to press.
-    const fillType = rule('.fillnow');
-    const addType = rule('.addblock');
-    for (const prop of ['font-size: 11px', 'letter-spacing: 0.24em', 'font-family: inherit']) {
-      check(`  and carries the same ${prop.split(':')[0]} as + Block`,
-        fillType.includes(prop) && addType.includes(prop), prop);
-    }
-
-    // BOUND TO THE BUTTON IT PRECEDES rather than floating between two things.
-    check('and is tied to Confirm rather than left floating',
-      /\.fillrow:not\(\.hidden\) \+ \.confirm/.test(css));
+    // THE STATUS COLUMN'S WIDTH, so its right edge lands on the 372 every
+    // figure on this page ends at.
+    check('it takes the column the status would hold',
+      /width: 64px/.test(rule('.fillnow')) && /justify-content: flex-end/.test(rule('.fillnow')),
+      rule('.fillnow').replace(/\s+/g, ' ').slice(0, 90));
+    check('and the blue is stated once, on the button',
+      /color: var\(--accent\)/.test(rule('.fillnow')) && /fill: currentColor/.test(rule('.fillnow svg')));
 
     // ITS OWN ANCHOR. `.atime` was missing exactly this once, and its invisible
     // full-bleed child lay over the whole screen and killed every gesture.

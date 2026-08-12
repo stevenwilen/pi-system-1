@@ -3837,18 +3837,25 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     });
     await ctx.load();
 
-    // THE PRESS SITS AT THE FOOT OF THE DAY, above Confirm — the order it is
-    // used in: build, look at it, commit. It was beside + Block first, where it
-    // competed with the two real ways in, then inside the empty row, where it
-    // went away with the first block and could never top a day up.
-    const offered = () => !byId.fillrow._class.has('hidden');
+    // THE MARK SITS IN THE ROW IT FILLS, at the right where the status column
+    // would be. It was beside + Block first, where it competed with the two
+    // real ways in, then a word at the foot of the day above Confirm.
+    const offer = () => {
+      const row = [...byId.builder.children].find((c) => c._class.has('free'));
+      return row && [...row.children].find((c) => c._class.has('fillnow'));
+    };
 
     check('the day starts empty', slots().length === 0, String(slots().length));
-    check('and the foot of the day offers to build it', offered());
+    check('and the space where it would be offers to build it', Boolean(offer()));
+    check('as a mark rather than a word', !/\w/.test(offer().text()),
+      JSON.stringify(offer().text()));
+    check('which says what it is to anything that cannot see it',
+      offer()._attrs['aria-label'] === 'Fill the day from your list',
+      String(offer()._attrs['aria-label']));
 
     // Through the button, so the wiring is under test and not just the function
     // behind it.
-    await byId['fill-day'].onclick();
+    await offer().onclick({});
 
     // PINNED ABOVE EVERYTHING, including a deadline that has already run out —
     // a pin is someone saying "this one" outright, and the arithmetic does not
@@ -3879,10 +3886,9 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     ctx.fillDay();
     check('a second press changes nothing', titles().join(' | ') === before,
       titles().join(' | '));
-    // AND THE OFFER WITHDRAWS ITSELF once everything that qualifies is in the
-    // day. Hidden rather than greyed: a control that spends most of its life
-    // dead is furniture.
-    check('the offer withdraws once there is nothing left to place', !offered());
+    // AND THERE IS NOTHING LEFT TO PRESS. The row it lived in gave way to the
+    // blocks it made, and the mark went with it.
+    check('the offer is gone with the empty row it sat in', !offer());
   }
 
   console.log('\nfill day stops at a full day, and skips what is already in it');
@@ -3901,27 +3907,30 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('nine candidates do not make a nine-block day', slots().length === 6,
       String(slots().length));
 
-    // A FULL DAY TURNS IT OFF even though three candidates are left over, and
-    // that is the honest reading: the button fills the day, the day is full,
-    // there is nothing for a press to do. The leftovers are not lost — they are
-    // where they always were, on the list, waiting to be put in by hand or to
-    // be picked up by the next day's fill.
-    check('a full day withdraws the offer', byId.fillrow._class.has('hidden'));
+    const freeRows = () => [...byId.builder.children].filter((c) => c._class.has('free')).length;
+
     check('and what did not fit was left on the list, not dropped',
       !titles().some((t) => ['Thing 7', 'Thing 8', 'Thing 9'].includes(t)),
       titles().join(' | '));
 
-    // A DAY WITH ROOM FOR ONE MORE takes exactly one more — and this is the
-    // thing the placement bought back. While the press lived inside the empty
-    // row it went away with the first block, so a half-built day could not be
-    // topped up at all.
+    // WHAT THIS PLACEMENT COSTS, stated rather than discovered later. The mark
+    // lives in the empty row, so a day with anything in it makes no offer at
+    // all — not the full day, and not the half-built one either. Three
+    // candidates are left over and there is nowhere to press.
+    check('a day with blocks in it has no empty row', freeRows() === 0);
+
     ctx.removeBlock(0);
     await wait(400);
-    check('taking one out leaves room for one', slots().length === 5, String(slots().length));
-    check('and the offer comes back for a day with room in it',
-      !byId.fillrow._class.has('hidden'));
-    await byId['fill-day'].onclick();
-    check('which the fill takes, and only that', slots().length === 6, String(slots().length));
+    check('and taking one out does not bring one back', freeRows() === 0,
+      String(freeRows()));
+    check('so a half-built day is topped up by hand', slots().length === 5,
+      String(slots().length));
+
+    // The cap itself is a fact about the fill rather than about where the mark
+    // sits, so it is still asked directly.
+    ctx.fillDay();
+    check('the fill still takes exactly the room that is left', slots().length === 6,
+      String(slots().length));
 
     // ALREADY IN THE DAY IS NOT A CANDIDATE. Without this the fill would put a
     // second copy of everything it had just placed into the day.
@@ -3945,9 +3954,10 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // THE EMPTY ROW IS STILL THERE — the day has nothing in it — but no offer
     // is made, because an empty day is not by itself a reason to offer a fill.
     // There has to be something worth filling it with.
-    check('the empty day still says it is empty',
-      [...byId.builder.children].some((c) => c._class.has('free')));
-    check('and makes no offer it cannot keep', byId.fillrow._class.has('hidden'));
+    const row = [...byId.builder.children].find((c) => c._class.has('free'));
+    check('the empty day still says it is empty', Boolean(row));
+    check('and makes no offer it cannot keep',
+      !row.children.some((c) => c._class.has('fillnow')));
 
     ctx.fillDay();
     check('and calling it anyway does nothing', slots().length === 0, String(slots().length));
