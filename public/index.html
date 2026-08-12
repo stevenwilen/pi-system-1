@@ -1503,6 +1503,15 @@
         padding-right: 18px;
         padding-top: 13px;
         padding-bottom: 13px;
+        /* STATED, NOT DERIVED — which is what makes the two lists match rather
+           than nearly match. Every other row on this page takes its height from
+           what is in it, and that is right for a row whose contents vary. These
+           two hold different things by design: the table's placeholder carries
+           an index and a status column, the anytime list's carries neither. Any
+           height read off the contents is a height that can differ between the
+           two, and it did. border-box, so this is the outside edge including the
+           dashed rule: 13 + 19 + 13 + 1. */
+        height: 46px;
         display: flex;
         align-items: center;
         gap: 10px;
