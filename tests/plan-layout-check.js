@@ -1677,6 +1677,41 @@ console.log('\n16. the shape of the day');
   // choice is legible.
   check('and a + Anytime beside it', /id="add-anytime"/.test(body));
   check('they are one pair', /class="adds"/.test(body));
+
+  // AND A THIRD, WHICH BUILDS THE DAY RATHER THAN ADDING TO IT.
+  {
+    check('a Fill day control', /id="fill-day"/.test(body));
+    check('beside + Block, where an empty day is looked at',
+      body.indexOf('id="fill-day"') > body.indexOf('id="add-block"') &&
+        body.indexOf('id="fill-day"') < body.indexOf('id="anytime"'));
+    // NO PLUS. The other two add the one thing they name; this acts on several
+    // at once, and a + would promise a row you then have to fill in.
+    check('and it carries no +', /id="fill-day">Fill day</.test(body),
+      (body.match(/id="fill-day">[^<]*/) || [''])[0]);
+
+    // IT INVENTS NO ORDER OF ITS OWN. The list is already sorted pinned first,
+    // then whatever is running out of room, and a second opinion about that
+    // living in the fill is how the screen and the list start disagreeing about
+    // which thing is most urgent. Same comparator, asked for by name.
+    const fill = (code.match(/function fillDay\(\)[\s\S]*?\n      \}/) || [''])[0];
+    check('the fill sorts by the screen\'s own comparator',
+      /sortThings\(\);/.test(fill), fill.slice(0, 80));
+    check('and holds no comparator of its own',
+      !/\.sort\(/.test(fill) && !/localeCompare/.test(fill));
+
+    const able = (code.match(/function fillable\(\)[\s\S]*?\n      \}/) || [''])[0];
+    check('it takes the pinned and the marked, and nothing else',
+      /t\.pinned \|\| t\.mark/.test(able), able.slice(0, 120));
+    check('never a thing already in the day, so a second press is safe',
+      /!inShownPlan\(t\.id\)/.test(able));
+    check('and fills to a total rather than by a batch',
+      /FILL_TO - timedBlocks\(\)\.length/.test(able));
+
+    // NOTHING IS WRITTEN. It fills the builder and stops; Confirm still commits
+    // the day, which is also the undo.
+    check('the fill writes nothing to the server',
+      !/api\(/.test(fill) && !/fetch\(/.test(fill), fill.slice(0, 80));
+  }
   check('separated by space rather than a rule',
     /gap: \d+px/.test(rule('.adds')) && !/border/.test(rule('.adds')), rule('.adds'));
 

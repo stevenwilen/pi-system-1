@@ -3810,6 +3810,131 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('and says it may not be all of it',
       half.calSays().includes('may not be all of it'), half.calSays());
   }
+
+  // --- fill day ------------------------------------------------------------
+  //
+  // ONE PRESS BUILDS THE DAY from the list, and the whole of the design is that
+  // it invents no order of its own. The list is already sorted pinned first,
+  // then whatever is running out of room; this walks that order down and stops.
+  // A second opinion about what matters, living in the fill, is how the screen
+  // and the list start disagreeing about which thing is most urgent.
+
+  console.log('\nfill day takes the pinned first, then what is running out of room');
+  {
+    // Deliberately shuffled: what comes out has to be the list's order, not the
+    // order they were declared in.
+    const items = [
+      { id: 'e-cold', type: 'task', title: 'Cold thing', days: 90, mark: null, pinned: false, due: null, size: null, last_scheduled: null },
+      { id: 'e-mid', type: 'task', title: 'Due soonish', days: 2, mark: '!', pinned: false, due: null, size: null, last_scheduled: null },
+      { id: 'e-pin2', type: 'habit', title: 'Pinned habit', days: 4, mark: null, pinned: true, due: null, size: null, last_scheduled: null },
+      { id: 'e-hot', type: 'project', title: 'Overdue', days: 1, mark: '!!!', pinned: false, due: null, size: null, last_scheduled: null },
+      { id: 'e-stale', type: 'task', title: 'Older thing', days: 40, mark: null, pinned: false, due: null, size: null, last_scheduled: null },
+      { id: 'e-pin1', type: 'task', title: 'Pinned task', days: 1, mark: '!!', pinned: true, due: null, size: null, last_scheduled: null },
+      { id: 'e-warm', type: 'task', title: 'Due later', days: 3, mark: '!!', pinned: false, due: null, size: null, last_scheduled: null },
+    ];
+    const { ctx, byId, slots, titles } = boot({
+      entries: utcEntries({ items }), now: '07:30',
+    });
+    await ctx.load();
+
+    check('the day starts empty', slots().length === 0, String(slots().length));
+    check('and the button is offered', byId['fill-day'].disabled === false);
+
+    ctx.fillDay();
+
+    // PINNED ABOVE EVERYTHING, including a deadline that has already run out —
+    // a pin is someone saying "this one" outright, and the arithmetic does not
+    // get to argue with it. Inside each half, the list's own order.
+    check('the pinned come first, ordered among themselves',
+      titles().slice(0, 2).join(' | ') === 'Pinned task | Pinned habit',
+      titles().slice(0, 2).join(' | '));
+    check('then the marked, worst room first',
+      titles().slice(2).join(' | ') === 'Overdue | Due later | Due soonish',
+      titles().slice(2).join(' | '));
+
+    // OLD IS NOT A REASON TO SPEND TODAY ON IT. The bottom half of the list is
+    // there because nobody has touched it, which the arithmetic has no standing
+    // to turn into an appointment.
+    check('and nothing unmarked and unpinned is dragged in',
+      !titles().some((t) => t === 'Cold thing' || t === 'Older thing'),
+      titles().join(' | '));
+
+    check('every block is half an hour, the length a manual one gets',
+      slots().every((s) => s.text().includes('– 8:00 AM') || /\d:\d\d [AP]M – /.test(s.text())),
+      slots()[0] ? slots()[0].text().trim() : '');
+    check('flowing from the wake time', slots()[0].text().includes('8:00 AM – 8:30 AM'),
+      slots()[0].text().trim());
+
+    // PRESSING IT AGAIN IS NOT A SECOND HELPING. It fills to a total, so once
+    // everything that qualifies is in the day there is nothing left to find.
+    const before = titles().join(' | ');
+    ctx.fillDay();
+    check('a second press changes nothing', titles().join(' | ') === before,
+      titles().join(' | '));
+    check('and the button says so', byId['fill-day'].disabled === true);
+  }
+
+  console.log('\nfill day stops at a full day, and skips what is already in it');
+  {
+    const many = [];
+    for (let i = 1; i <= 9; i++) {
+      many.push({
+        id: `e-${i}`, type: 'task', title: `Thing ${i}`, days: i, mark: '!!!',
+        pinned: false, due: null, size: null, last_scheduled: null,
+      });
+    }
+    const { ctx, byId, slots, titles } = boot({ entries: utcEntries({ items: many }), now: '07:30' });
+    await ctx.load();
+
+    ctx.fillDay();
+    check('nine candidates do not make a nine-block day', slots().length === 6,
+      String(slots().length));
+
+    // A FULL DAY TURNS IT OFF even though three candidates are left over, and
+    // that is the honest reading: the button fills the day, the day is full,
+    // there is nothing for a press to do. The leftovers are not lost — they are
+    // where they always were, on the list, waiting to be put in by hand or to
+    // be picked up by the next day's fill.
+    check('a full day turns the button off', byId['fill-day'].disabled === true);
+    check('and what did not fit was left on the list, not dropped',
+      !titles().some((t) => ['Thing 7', 'Thing 8', 'Thing 9'].includes(t)),
+      titles().join(' | '));
+
+    // A DAY WITH ROOM FOR ONE MORE takes exactly one more.
+    ctx.removeBlock(0);
+    await wait(400);
+    check('taking one out leaves room for one', slots().length === 5, String(slots().length));
+    ctx.fillDay();
+    check('which the fill takes, and only that', slots().length === 6, String(slots().length));
+
+    // ALREADY IN THE DAY IS NOT A CANDIDATE. Without this the fill would put a
+    // second copy of everything it had just placed into the day.
+    const names = titles();
+    check('and nothing was placed twice',
+      new Set(names).size === names.length, names.join(' | '));
+  }
+
+  console.log('\nfill day has nothing to say when there is nothing to place');
+  {
+    // A list with things on it, none of them pinned and none of them running
+    // out of room. This is the ordinary state of a well-kept list, not an edge
+    // case, and the button has to be honest about it.
+    const quiet = [
+      { id: 'e-a', type: 'task', title: 'Someday', days: 20, mark: null, pinned: false, due: null, size: null, last_scheduled: null },
+      { id: 'e-b', type: 'habit', title: 'Stretching', days: 5, mark: null, pinned: false, due: null, size: null, last_scheduled: null },
+    ];
+    const { ctx, byId, slots } = boot({ entries: utcEntries({ items: quiet }), now: '07:30' });
+    await ctx.load();
+
+    check('the button is off', byId['fill-day'].disabled === true);
+    ctx.fillDay();
+    check('and pressing it anyway does nothing', slots().length === 0, String(slots().length));
+
+    // NOTHING WAS WRITTEN. The fill builds the day and stops; Confirm is still
+    // what commits it, which is also the undo — walk away and there is no trace.
+    check('the day is still unconfirmed either way',
+      byId.confirm.textContent !== 'Confirmed', byId.confirm.textContent);
+  }
 }
 
   console.log(bad === 0 ? '\nBuilder clean' : `\n${bad} FAILURE(S)`);

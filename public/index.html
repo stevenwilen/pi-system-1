@@ -1871,6 +1871,13 @@
         font-family: inherit;
         cursor: pointer;
       }
+      /* NO PLUS ON THIS ONE. The others add the single thing they name; this
+         one acts on several at once, and a + in front of it would promise a
+         seventh row you then have to fill in. */
+      .addblock.fill:disabled {
+        color: var(--ghost);
+        cursor: default;
+      }
 
       .ends {
         /* Out past the margin, so the rule that ends the day reaches both
@@ -2220,6 +2227,11 @@
              to neither: Things is what you are carrying, and this is not. -->
         <div class="adds" id="adds">
           <button type="button" class="addblock" id="add-block">+ Block</button>
+          <!-- THE DAY, BUILT FROM THE LIST'S OWN ORDER. Not a second opinion
+               about what matters: the Things list is already sorted pinned
+               first, then whatever is running out of room, and this walks that
+               order downward. See `fillDay`. -->
+          <button type="button" class="addblock fill" id="fill-day">Fill day</button>
         </div>
 
 
@@ -3946,6 +3958,88 @@
         renderBuilder();
       }
 
+      /**
+       * How many timed blocks a filled day holds.
+       *
+       * A count rather than a clock. The alternative was to keep adding until
+       * the day would run past some hour, which sounds better and is worse to
+       * live with: it makes how much you are asked to do depend on what time
+       * you set Starts to, so moving the day an hour later quietly takes work
+       * off it. Six half hours is three hours of named work, which is a day's
+       * worth of the things that need saying out loud — the rest of a day is
+       * not the sort of thing this list is holding.
+       *
+       * One number, one place. If it wants to be eight, this is the edit.
+       */
+      const FILL_TO = 6;
+
+      /**
+       * The things this would put in the day, in the order it would put them.
+       *
+       * PINNED FIRST, THEN WHAT IS RUNNING OUT OF ROOM, which is not a rule
+       * invented here — it is the order the list is already sorted in, by the
+       * server and again by `sortThings`. A second opinion about what matters,
+       * living in this function, is how the screen and the list start
+       * disagreeing about which thing is most urgent (§2.1). So this filters
+       * and never reorders.
+       *
+       * A pin is someone saying "this one" outright; a mark is the arithmetic
+       * saying the room has run out. Everything else is on the list because it
+       * is old, and old is not a reason to spend today on it — those stay where
+       * they are and you put them in by hand.
+       *
+       * ALREADY IN THE DAY IS NOT A CANDIDATE, which is what makes pressing
+       * this twice safe: the second press finds the first press's work sitting
+       * in `blocks` and skips it.
+       */
+      function fillable() {
+        const room = Math.max(0, FILL_TO - timedBlocks().length);
+        if (!room) return [];
+        return things
+          .filter((t) => t.pinned || t.mark)
+          .filter((t) => !inShownPlan(t.id))
+          .slice(0, room);
+      }
+
+      /**
+       * Build the day from the list.
+       *
+       * FILLS TO A TOTAL, not by a batch. Adding six every press would mean a
+       * second press doubles the day, and this is one button with no undo on
+       * it — pressing it again when nothing new qualifies does nothing at all,
+       * which is what a person expects from a button called Fill day.
+       *
+       * Half hours, because that is what a block added by hand gets. The length
+       * a thing carries is days of WORK against its deadline — 'a few days' is
+       * how long the whole of it takes, not how long you sit with it — so it
+       * cannot set this without inventing a number nobody supplied.
+       *
+       * NOTHING IS WRITTEN HERE. It fills the builder and stops; the day is
+       * still yours to reorder, restretch and remove from, and Confirm is still
+       * the thing that commits it. That is also the undo: this changed nothing
+       * on the server, so leaving without confirming leaves no trace.
+       */
+      function fillDay() {
+        // THE SCREEN'S OWN ORDER, asked for rather than assumed. The list
+        // arrives sorted from the server, so reading `things` as it stands is
+        // right almost always — and "almost" is the problem: a pin added since
+        // the last load has been re-sorted by `sortThings` on the screen, and a
+        // fill that read the array without asking would place things in an
+        // order the person is not looking at. Same comparator, so the two
+        // cannot disagree.
+        sortThings();
+
+        const take = fillable();
+        if (!take.length) return;
+
+        for (const item of take) {
+          blocks.push({ title: item.title, entryId: item.id, duration: STEP });
+        }
+
+        saved = false;
+        renderBuilder();
+      }
+
       function setWake(mins) {
         wake = mins;
         renderWake();
@@ -4055,6 +4149,14 @@
         // `visibility: hidden`, and blank room reads as a gap somebody forgot to
         // fill. Hatched and dashed, it reads as a space meant to be there.
         if (!timedBlocks().length) box.append(freeRow('block', 'nothing scheduled'));
+
+        // OFF WHEN THERE IS NOTHING TO FILL WITH, which is a real state and not
+        // an edge case: a day already holding six, a list with nothing pinned
+        // and nothing running out of room, or every candidate already in the
+        // day. A button that answers a press by doing nothing reads as broken,
+        // and this one has no other feedback to give — it either changes the
+        // list above it or it does not.
+        $('fill-day').disabled = fillable().length === 0;
 
         renderAnytime();
 
@@ -5324,6 +5426,9 @@
 
       $('add-block').onclick = () => ask('block');
       $('add-anytime').onclick = () => ask('anytime');
+      // No sheet and no question. The order it uses is the one already on the
+      // screen above it, so there is nothing left to ask.
+      $('fill-day').onclick = () => fillDay();
 
       function renderConfirm() {
         const button = $('confirm');

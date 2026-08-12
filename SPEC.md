@@ -1221,6 +1221,42 @@ document holds **no standing touch listener** at rest.
   second, and a seal that says nothing for that long reads as a tap that
   missed.
 
+#### Fill day
+
+Beside **+ Block**. One press builds the day out of the list: **pinned things
+first, then whatever is running out of room**, six half-hour blocks, flowing
+from the wake time like any other block.
+
+**It invents no order.** That sequence is not a rule this feature has of its
+own — it is the order the Things list is already sorted in, by the server and
+again by `sortThings` on the screen. The fill calls the same comparator and then
+filters. A second opinion about what matters, living here, is how the screen and
+the list start disagreeing about which thing is most urgent (§2.1).
+
+**Pinned or marked, nothing else.** A pin is someone saying *this one* outright;
+a mark is the arithmetic saying the room has run out. The rest of the list is
+there because it is old, and old is not a reason to spend today on it — those go
+in by hand.
+
+**Half hours**, the length a block added by hand gets. A thing's `size` is days
+of *work* against its deadline, not the length of one sitting, so it cannot set
+this without inventing a number nobody supplied.
+
+**Six, by count rather than by the clock.** Stopping at an hour instead would
+make how much you are asked to do depend on what time Starts is set to, so
+moving the day later would quietly take work off it. `FILL_TO` is one constant
+in one place.
+
+**It fills to a total, so a second press is not a second helping.** Anything
+already in the shown day is not a candidate, and a full day turns the button
+off — as does a list with nothing pinned and nothing running out of room, which
+is the ordinary state of a well-kept list rather than an edge case. Leftovers
+are not lost; they stay on the list.
+
+**Nothing is written.** It fills the builder and stops. The day is still yours
+to reorder, restretch and remove from, **Confirm** still commits it, and that is
+also the undo — leave without confirming and there is no trace.
+
 #### Anytime today
 
 Below the timed blocks and above **Day ends**: things committed to the day and
