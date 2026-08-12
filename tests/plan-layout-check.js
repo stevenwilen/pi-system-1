@@ -299,16 +299,25 @@ console.log('\n0c. a section rule, its label, and the rows under it');
   check(`a label sits ${LABEL_TO_ROW}px above its first row`,
     new RegExp(`margin-bottom: ${LABEL_TO_ROW}px`).test(rule('.label')), rule('.label'));
 
-  for (const [what, sel] of [['the anytime list', '.anytime'], ['the things list', '.things-head']]) {
-    const r = rule(sel);
-    // Things has no rule of its own: the one above Confirm already ends the
-    // day, and a second line under the button boxed it in.
-    if (sel !== '.things-head') {
-      check(`${what} is under a section rule`,
-        /border-top: 1\.5px solid var\(--heavy\)/.test(r), r.replace(/\s+/g, ' ').slice(0, 60));
-    }
-    check(`  and its label is ${RULE_TO_LABEL}px below it`,
-      new RegExp(`padding-top: ${RULE_TO_LABEL}px`).test(r), r.replace(/\s+/g, ' ').slice(0, 80));
+  // Things keeps the relationship: a rule, 14px, then its label.
+  check('the things list\'s label is 14px below its rule',
+    new RegExp(`padding-top: ${RULE_TO_LABEL}px`).test(rule('.things-head')),
+    rule('.things-head').replace(/\s+/g, ' ').slice(0, 80));
+
+  // THE ANYTIME LIST HAS NO LABEL, so it has no such gap to keep. It read
+  // "Anytime today · 00" — a name for a section already named by the + Anytime
+  // at its foot, and a count already given by the rows themselves. What the
+  // heading left behind was 14px of nothing above the first row, so the rule is
+  // now the row's top edge, exactly as it is under the column heads.
+  {
+    const r = rule('.anytime');
+    check('the anytime list is under a section rule',
+      /border-top: 1\.5px solid var\(--heavy\)/.test(r), r.replace(/\s+/g, ' ').slice(0, 60));
+    check('  and its first row sits flush against it',
+      /padding-top: 0;/.test(r), r.replace(/\s+/g, ' ').slice(0, 80));
+    check('  with no heading left to space away from',
+      !/id="anytime-label"/.test(body) && !/anytime-label/.test(code),
+      /anytime-label/.test(body + code) ? 'still referenced' : 'gone');
   }
 
   // THE COLUMN HEAD IS THE SAME RELATIONSHIP INVERTED: its label sits ABOVE its

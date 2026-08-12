@@ -1463,7 +1463,13 @@
         padding-left: 18px;
         padding-right: 18px;
         border-top: 1.5px solid var(--heavy);
-        padding-top: 14px;
+        /* FLUSH, because there is no longer a heading to hold off the rule. It
+           was 14px — the gap this design puts between a section rule and the
+           label under it — and with the label gone that became 14px of nothing
+           above the first row. The table above sets the precedent: its first row
+           sits directly against the heavy rule under the column heads, and the
+           rule is the row's top edge rather than the lid of a box. */
+        padding-top: 0;
         /* Longhand, for the reason the column head gives: a margin shorthand
            here resets the negative sides above it. */
         margin-top: var(--gap);
@@ -1479,9 +1485,6 @@
            from whichever child happened to be tallest, so centring moved
            against the title the moment the × grew by four pixels. */
         --aline: 20px;
-      }
-      .anytime .label {
-        margin-bottom: 6px;
       }
       /* WHERE A ROW WOULD GO. Diagonal 45° hatching is the drafting convention
          for an empty region, and the dashed rule is this design's third weight:
@@ -2214,12 +2217,16 @@
              not in it, and above "Day ends" because they belong to it: the
              end time counts the blocks above and none of these.
 
-             ALWAYS DRAWN, heading and all. + Anytime lives at its foot, so
-             hiding it when empty would hide the only way to put the first one
-             in it — and an empty list gets the same hatched row the table above
-             does, so the heading is never over nothing. -->
+             ALWAYS DRAWN. + Anytime lives at its foot, so hiding the section
+             when empty would hide the only way to put the first one in it.
+
+             NO HEADING. It read "Anytime today · 00", which is a name for the
+             section and a count of what is in it — and both are already on the
+             screen. The rule above says a section starts here, + Anytime at the
+             foot says which section, and the rows say how many. A heading that
+             announces a count of zero is the piled-up look this empty state was
+             opened to fix, and the last of it. -->
         <div class="anytime" id="anytime">
-          <div class="label" id="anytime-label">Anytime today</div>
           <div id="anytime-list"></div>
           <div class="adds">
             <button type="button" class="addblock" id="add-anytime">+ Anytime</button>
@@ -4108,18 +4115,10 @@
           .map((b, at) => ({ b, at }))
           .filter(({ b }) => untimed(b));
 
-        // The heading and its way in stay whatever the list holds: a section you
-        // can only add to once it is not empty is not a way in. What fills the
-        // space under them when there is nothing on the list is the same hatched
-        // row the day above uses — see `freeRow`.
-
-        // The heading follows the day on screen. "Anytime today" over
-        // tomorrow's list would be a heading that is simply untrue every
-        // evening, which is when this screen is most used.
-        // THE COUNT BESIDE IT, the way a ledger heads a section it can total.
-        // Two of these is a glance; ten is a fact about the day.
-        $('anytime-label').textContent =
-          `${onToday() ? 'Anytime today' : 'Anytime tomorrow'}  ·  ${String(items.length).padStart(2, '0')}`;
+        // THE WAY IN STAYS WHATEVER THE LIST HOLDS: a section you can only add
+        // to once it is not empty is not a way in. The heading that used to be
+        // written here is gone — see the markup — so there is nothing left to
+        // keep in step with the day on screen or with the count.
 
         if (!items.length) box.append(freeRow('anytime', 'nothing yet'));
 

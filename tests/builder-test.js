@@ -634,10 +634,14 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('so the day is still empty as far as the day is concerned',
       byId['end-time'].textContent === '0:00', byId['end-time'].textContent);
 
-    // THE FURNITURE STAYS, because it is now heading something.
+    // THE COLUMN HEADS STAY, because they are now heading something.
     check('the column heads stand over it', !byId.colhead._class.has('hidden'));
-    check('and the anytime heading over its own',
-      !byId['anytime-label']._class.has('hidden') && !byId.anytime._class.has('hidden'));
+    // The anytime section keeps its rule and its way in. Its heading is gone
+    // altogether — "Anytime today · 00" named a section that + Anytime already
+    // names and counted rows that count themselves.
+    check('and the anytime section is drawn', !byId.anytime._class.has('hidden'));
+    check('with no heading of its own', byId['anytime-label'] === undefined,
+      byId['anytime-label'] ? 'still in the markup' : 'gone');
 
     const loose = byId['anytime-list'].children;
     check('the anytime list shows one too', loose.length === 1, String(loose.length));

@@ -1329,9 +1329,15 @@ of it.
   The tick and the `×` both stop the press reaching the row, so the only way to
   land on this is a press on the row itself.
 
-The heading follows the day on screen — *Anytime tomorrow* while tomorrow is
-showing — and the whole section is hidden when empty, because a heading over an
-empty list would be blank on most days.
+The section has no heading. It read *Anytime today · 00* — a name for a section
+the `+ Anytime` at its foot already names, and a count the rows already give —
+and on an empty day it was a rule and a count of zero above a single button. The
+section rule is now the first row's top edge, exactly as it is under the column
+heads above.
+
+The section is always drawn, empty or not: `+ Anytime` lives at its foot, so
+hiding it when empty would hide the only way to put the first thing in it. An
+empty list shows the same hatched row the table above does.
 
 ##### Staleness is the part that matters
 

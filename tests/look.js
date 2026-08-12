@@ -135,7 +135,6 @@ async function measure(page, width) {
     for (const [name, first, last] of [
       ['column head', '.colhead .c-i', '.colhead .c-s'],
       ['a block row', '.block .idx', '.block .st, .block .dur'],
-      ['anytime label', '#anytime-label', '#anytime-label'],
       ['an anytime row', '.arow .atick', '.arow .atext'],
       ['things label', '.things-head .label', '.things-head .label'],
       ['day ends', '.ends span', '.ends b'],
@@ -369,7 +368,9 @@ if (require.main !== module) return;
     return out;
   };
 
-  const appType = await sizes(page, [['title', '.block .t'], ['time', '.block .time'], ['status', '.block .st'], ['index', '.idx'], ['label', '#anytime-label']]);
+  // The label sample is Things', not the anytime list's: that heading is gone,
+  // and both were the same `.label` type in any case.
+  const appType = await sizes(page, [['title', '.block .t'], ['time', '.block .time'], ['status', '.block .st'], ['index', '.idx'], ['label', '.things-head .label']]);
   const refType = await sizes(ref, [['title', '.nm'], ['time', '.tm'], ['status', '.st'], ['index', '.idx'], ['label', '.any .cap8']]);
 
   console.log('\ntype, as a share of the frame it is drawn in');
