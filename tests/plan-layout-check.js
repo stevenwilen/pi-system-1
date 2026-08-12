@@ -1706,6 +1706,28 @@ console.log('\n16. the shape of the day');
     check('and it starts withdrawn, before anything is known',
       /class="fillrow hidden"/.test(body));
 
+    // ON THE GUTTER, not centred. Every mark on this page sits on a column —
+    // the labels and controls at 18, the figures ending at 372 — and a centred
+    // one sits on none. It was centred over Confirm at x=165, aligned to
+    // nothing. The rendered check in look.js is the one with teeth; this is
+    // here so the declaration cannot quietly go back.
+    check('the fill sits on the gutter rather than centred',
+      /justify-content: flex-start/.test(rule('.fillrow')), rule('.fillrow'));
+
+    // THE SAME TYPE AS THE OTHER TEXT CONTROLS, because it is the same kind of
+    // thing. It was mono at 10px — the face this design keeps for FIGURES —
+    // which read as a label about the day rather than as something to press.
+    const fillType = rule('.fillnow');
+    const addType = rule('.addblock');
+    for (const prop of ['font-size: 11px', 'letter-spacing: 0.24em', 'font-family: inherit']) {
+      check(`  and carries the same ${prop.split(':')[0]} as + Block`,
+        fillType.includes(prop) && addType.includes(prop), prop);
+    }
+
+    // BOUND TO THE BUTTON IT PRECEDES rather than floating between two things.
+    check('and is tied to Confirm rather than left floating',
+      /\.fillrow:not\(\.hidden\) \+ \.confirm/.test(css));
+
     // ITS OWN ANCHOR. `.atime` was missing exactly this once, and its invisible
     // full-bleed child lay over the whole screen and killed every gesture.
     check('the press anchors its own hit area',

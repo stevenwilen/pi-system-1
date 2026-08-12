@@ -350,8 +350,11 @@ if (require.main !== module) return;
     return {
       box: { w: Math.round(r.width), h: Math.round(r.height), right: Math.round(r.right) },
       middle: at(r.left + r.width / 2, r.top + r.height / 2),
-      justOutside: at(r.left - 8, r.top + r.height / 2),
-      farLeft: at(30, r.top + r.height / 2),
+      justOutside: at(r.right + 8, r.top + r.height / 2),
+      // The far side of the same line. Sampled relative to the button rather
+      // than at a fixed x, which is what made this probe wrong the moment the
+      // control moved from the middle of the line to the gutter.
+      farSide: at(window.innerWidth - 30, r.top + r.height / 2),
     };
   });
 
@@ -372,19 +375,51 @@ if (require.main !== module) return;
     // working one and is not — `.atime` shipped exactly that once and every
     // gesture in the app stopped answering.
     check('while the far side of the line is not the button',
-      !/button/.test(fill.farLeft), fill.farLeft);
+      !/button/.test(fill.farSide), fill.farSide);
 
     // IT PRECEDES CONFIRM, and that order is the whole reason it is here:
     // build the day, look at it, commit it.
-    const order = await empty.evaluate(() => {
-      const f = document.querySelector('.fillrow:not(.hidden)');
-      const c = document.getElementById('confirm');
-      if (!f || !c) return null;
-      return { fill: Math.round(f.getBoundingClientRect().bottom), confirm: Math.round(c.getBoundingClientRect().top) };
+    const foot = await empty.evaluate(() => {
+      const one = (sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { left: Math.round(r.left), top: Math.round(r.top), bottom: Math.round(r.bottom) };
+      };
+      const label = one('.ends span');
+      return {
+        fill: one('.fillrow:not(.hidden) .fillnow'),
+        confirm: one('#confirm'),
+        endsLabel: label,
+        addblock: one('#add-block'),
+      };
     });
+
     check('and it sits above Confirm on the screen, not merely in the markup',
-      order && order.fill <= order.confirm,
-      order ? `fill ends ${order.fill}, confirm starts ${order.confirm}` : 'not found');
+      foot.fill && foot.confirm && foot.fill.bottom <= foot.confirm.top,
+      foot.fill ? `fill ends ${foot.fill.bottom}, confirm starts ${foot.confirm.top}` : 'not found');
+
+    // ON THE GRID. It was centred once, at x=165 — the only thing on the screen
+    // aligned to nothing, on a page where every mark sits on a column. This is
+    // the check that could not be made by reading the stylesheet: `center` and
+    // `flex-start` are both perfectly good declarations and only one of them
+    // lands on the gutter.
+    check('it starts on the page gutter, like every other control',
+      foot.fill.left === 18, String(foot.fill.left));
+    check('which is where + Block starts too',
+      foot.fill.left === foot.addblock.left,
+      `${foot.fill.left} vs ${foot.addblock.left}`);
+    check('and where the day\'s own label starts',
+      foot.fill.left === foot.endsLabel.left,
+      `${foot.fill.left} vs ${foot.endsLabel.left}`);
+
+    // BOUND TO CONFIRM RATHER THAN FLOATING. With equal air on both sides it
+    // belonged to neither neighbour and read as a line dropped between two
+    // finished things.
+    const above = foot.fill.top - foot.endsLabel.bottom;
+    const below = foot.confirm.top - foot.fill.bottom;
+    check('it sits nearer the button it precedes than the day above it',
+      below < above, `${above}px above, ${below}px below`);
   }
 
   // --- the drawing it is meant to be ---------------------------------------

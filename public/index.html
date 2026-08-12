@@ -1878,8 +1878,25 @@
          on the day rather than part of it. */
       .fillrow {
         display: flex;
-        justify-content: center;
-        margin-top: 2px;
+        /* ON THE GUTTER, because everything on this page is on a column and a
+           centred mark is on none. It was centred over Confirm, and at x=165 it
+           was the only thing on the screen aligned to nothing — DAY ENDS, the
+           column heads, + Block and + Anytime all start at 18, and the figures
+           all end at 372. */
+        justify-content: flex-start;
+        margin-top: 0;
+      }
+      /* BOUND TO THE BUTTON IT PRECEDES. Floating with equal air above and
+         below — 25px and 22px — it belonged to neither neighbour and read as a
+         line dropped between two finished things. Twenty above and twelve below
+         makes the two actions a pair, and the day's total the thing they are
+         separated from.
+
+         The adjacent selector rather than a class the script maintains: when
+         the fill is hidden there is no pair to bind, and Confirm takes its full
+         gap from the day above it, which is what it had before any of this. */
+      .fillrow:not(.hidden) + .confirm {
+        margin-top: 12px;
       }
       .fillnow {
         /* ITS OWN ANCHOR. The hit area below is absolute, and an absolute with
@@ -1889,9 +1906,15 @@
            the app. Stated on the element that needs it rather than trusted to
            a parent, so no rule elsewhere can take it away. */
         position: relative;
-        font-family: var(--mono);
-        font-size: 10px;
-        letter-spacing: 0.14em;
+        /* THE SAME TYPE AS THE OTHER TWO TEXT CONTROLS, because it is the same
+           kind of thing: a word in the page's own face that does something when
+           pressed. It was set in the mono at 10px — the face this design keeps
+           for FIGURES — which made it read as a label about the day rather than
+           as something to press, sitting as it does under a column of them.
+           Matched to `.addblock` rather than merely near it. */
+        font-family: inherit;
+        font-size: 11px;
+        letter-spacing: 0.24em;
         text-transform: uppercase;
         color: var(--accent);
         background: none;
