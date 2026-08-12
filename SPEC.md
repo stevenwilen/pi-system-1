@@ -1223,9 +1223,21 @@ document holds **no standing touch listener** at rest.
 
 #### Fill day
 
-Beside **+ Block**. One press builds the day out of the list: **pinned things
-first, then whatever is running out of room**, six half-hour blocks, flowing
-from the wake time like any other block.
+**Drawn into the empty row**, at its right edge under `STATUS`. One press builds
+the day out of the list: **pinned things first, then whatever is running out of
+room**, six half-hour blocks, flowing from the wake time like any other block.
+
+It stood beside **+ Block** first, where it read as a third way to add one thing
+and competed with the two that are. In the space where the day would be it costs
+no room of its own, it is only on screen when it has something to do, and it is
+attached to the emptiness it answers. The cost of that placement is real and
+worth naming: **it goes with the row**, so a day with one block in it has no
+fill. This builds a day; **+ Block** tops one up.
+
+**Not shown when it would do nothing** — a list with nothing pinned and nothing
+running out of room, which is the ordinary state of a well-kept list. An empty
+day is not by itself a reason to offer a fill; there has to be something worth
+filling it with.
 
 **It invents no order.** That sequence is not a rule this feature has of its
 own — it is the order the Things list is already sorted in, by the server and
@@ -1248,10 +1260,10 @@ moving the day later would quietly take work off it. `FILL_TO` is one constant
 in one place.
 
 **It fills to a total, so a second press is not a second helping.** Anything
-already in the shown day is not a candidate, and a full day turns the button
-off — as does a list with nothing pinned and nothing running out of room, which
-is the ordinary state of a well-kept list rather than an edge case. Leftovers
-are not lost; they stay on the list.
+already in the shown day is not a candidate. There is no second press to make in
+practice — the row the button lives in gives way to the blocks it just made —
+but the guard stays, because it is what the rule rests on rather than the
+placement. Leftovers are not lost; they stay on the list.
 
 **Nothing is written.** It fills the builder and stops. The day is still yours
 to reorder, restretch and remove from, **Confirm** still commits it, and that is

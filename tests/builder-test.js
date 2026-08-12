@@ -3837,10 +3837,23 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     });
     await ctx.load();
 
-    check('the day starts empty', slots().length === 0, String(slots().length));
-    check('and the button is offered', byId['fill-day'].disabled === false);
+    // THE PRESS LIVES IN THE EMPTY ROW, not beside + Block. It costs no room of
+    // its own, it is only on screen when it has something to do, and it is
+    // attached to the emptiness it answers.
+    const fillIn = () => {
+      const row = [...byId.builder.children].find((c) => c._class.has('free'));
+      return row && [...row.children].find((c) => c._class.has('fillnow'));
+    };
 
-    ctx.fillDay();
+    check('the day starts empty', slots().length === 0, String(slots().length));
+    check('and the space where it would be offers to build it', Boolean(fillIn()));
+    check('in the column the status used to hold', fillIn().text().trim() === 'Fill',
+      fillIn().text().trim());
+
+    // Through the button, not past it — the handler is built with the row on
+    // every render, and one wired once at startup would be a handler on an
+    // element that no longer exists.
+    await fillIn().onclick({});
 
     // PINNED ABOVE EVERYTHING, including a deadline that has already run out —
     // a pin is someone saying "this one" outright, and the arithmetic does not
@@ -3871,7 +3884,9 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     ctx.fillDay();
     check('a second press changes nothing', titles().join(' | ') === before,
       titles().join(' | '));
-    check('and the button says so', byId['fill-day'].disabled === true);
+    // AND THERE IS NOTHING LEFT TO PRESS. The row it lived in gave way to the
+    // blocks it made, and the button went with it.
+    check('the offer is gone with the empty row', !fillIn());
   }
 
   console.log('\nfill day stops at a full day, and skips what is already in it');
@@ -3895,7 +3910,8 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // there is nothing for a press to do. The leftovers are not lost — they are
     // where they always were, on the list, waiting to be put in by hand or to
     // be picked up by the next day's fill.
-    check('a full day turns the button off', byId['fill-day'].disabled === true);
+    check('a full day has no empty row left to offer it from',
+      ![...byId.builder.children].some((c) => c._class.has('free')));
     check('and what did not fit was left on the list, not dropped',
       !titles().some((t) => ['Thing 7', 'Thing 8', 'Thing 9'].includes(t)),
       titles().join(' | '));
@@ -3926,9 +3942,16 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     const { ctx, byId, slots } = boot({ entries: utcEntries({ items: quiet }), now: '07:30' });
     await ctx.load();
 
-    check('the button is off', byId['fill-day'].disabled === true);
+    // THE EMPTY ROW IS STILL THERE — the day has nothing in it — but it makes
+    // no offer, because an empty day is not by itself a reason to offer a fill.
+    // There has to be something worth filling it with.
+    const row = [...byId.builder.children].find((c) => c._class.has('free'));
+    check('the empty day still says it is empty', Boolean(row));
+    check('and makes no offer it cannot keep',
+      !row.children.some((c) => c._class.has('fillnow')));
+
     ctx.fillDay();
-    check('and pressing it anyway does nothing', slots().length === 0, String(slots().length));
+    check('and calling it anyway does nothing', slots().length === 0, String(slots().length));
 
     // NOTHING WAS WRITTEN. The fill builds the day and stops; Confirm is still
     // what commits it, which is also the undo — walk away and there is no trace.

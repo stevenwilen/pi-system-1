@@ -884,7 +884,12 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   const acts =
     // `.addfield:focus` is the same idiom as the two fields already here: the
     // rule under a caret goes blue to say which line is being typed on.
-    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.back|\.thingnote:focus|\.addfield:focus|\.confirm|\.running|\.block\.live::before/;
+    //
+    // `.fillnow` is the press inside the empty row. It is the one blue thing in
+    // a row that is otherwise the lightest grey on the page, which is exactly
+    // what earns it the colour: everything else in that row is a statement that
+    // there is nothing here, and this is the only part of it you can act on.
+    /\.step|\.dur|\.undo button|\.addblock|\.fillnow|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.back|\.thingnote:focus|\.addfield:focus|\.confirm|\.running|\.block\.live::before/;
   // The divider: the knot and the line it fastens. Both are indigo now, where
   // the dark build tinted the line with a separate near-blue that belonged to
   // nothing — one fewer colour on the page, and the two halves of one object
@@ -1680,14 +1685,28 @@ console.log('\n16. the shape of the day');
 
   // AND A THIRD, WHICH BUILDS THE DAY RATHER THAN ADDING TO IT.
   {
-    check('a Fill day control', /id="fill-day"/.test(body));
-    check('beside + Block, where an empty day is looked at',
-      body.indexOf('id="fill-day"') > body.indexOf('id="add-block"') &&
-        body.indexOf('id="fill-day"') < body.indexOf('id="anytime"'));
-    // NO PLUS. The other two add the one thing they name; this acts on several
-    // at once, and a + would promise a row you then have to fill in.
-    check('and it carries no +', /id="fill-day">Fill day</.test(body),
-      (body.match(/id="fill-day">[^<]*/) || [''])[0]);
+    // IN THE SPACE WHERE THE DAY WOULD BE, not beside + Block. It stood there
+    // once and read as a third way to add one thing, competing with the two
+    // that are. Drawn into the empty row instead, it costs no room of its own
+    // and is only on screen when it has something to do.
+    check('the fill is not a control in the markup at all',
+      !/id="fill-day"/.test(body) && !/Fill day</.test(body));
+    check('it is drawn into the empty row', /empty\.append\(fillNow\(\)\)/.test(code));
+    check('and only when there is something to fill with',
+      /if \(fillable\(\)\.length\) empty\.append/.test(code));
+
+    // BUILT WITH THE ROW, on every render. A handler wired once at startup
+    // would be a handler on an element the next render throws away.
+    const btn = (code.match(/function fillNow\(\)[\s\S]*?\n      \}/) || [''])[0];
+    check('the press is built with the row it lives in',
+      /b\.onclick = /.test(btn) && /fillDay\(\)/.test(btn), btn.slice(0, 60));
+
+    // ITS OWN ANCHOR. `.atime` was missing exactly this once, and its invisible
+    // full-bleed child lay over the whole screen and killed every gesture.
+    check('the press anchors its own hit area',
+      /position: relative/.test(rule('.fillnow')), rule('.fillnow').slice(0, 60));
+    check('which it needs, because that area is absolute',
+      /position: absolute/.test(rule('.fillnow::after')));
 
     // IT INVENTS NO ORDER OF ITS OWN. The list is already sorted pinned first,
     // then whatever is running out of room, and a second opinion about that

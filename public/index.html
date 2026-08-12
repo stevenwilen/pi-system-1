@@ -1871,12 +1871,38 @@
         font-family: inherit;
         cursor: pointer;
       }
-      /* NO PLUS ON THIS ONE. The others add the single thing they name; this
-         one acts on several at once, and a + in front of it would promise a
-         seventh row you then have to fill in. */
-      .addblock.fill:disabled {
-        color: var(--ghost);
-        cursor: default;
+      /* THE PRESS INSIDE THE EMPTY ROW. It takes the column the status used to
+         hold — right edge, under STATUS — so it sits opposite the words rather
+         than beside them, and it is the one blue thing in a row that is
+         otherwise the lightest grey on the page. Small: it is an offer, not the
+         way you are expected to build a day. */
+      .fillnow {
+        /* ITS OWN ANCHOR. The hit area below is absolute, and an absolute with
+           no positioned ancestor anchors to the page — which is not a subtle
+           bug here: `.atime` was missing exactly this once and its invisible
+           full-bleed child lay over the whole screen, killing every gesture in
+           the app. Stated on the element that needs it rather than trusted to
+           a parent, so no rule elsewhere can take it away. */
+        position: relative;
+        width: 64px;
+        flex: none;
+        text-align: right;
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--accent);
+        background: none;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+      }
+      /* Sized to be read, pressed larger. The word is 10px, which is nowhere
+         near a finger, and the row it sits in is only 46px tall. */
+      .fillnow::after {
+        content: '';
+        position: absolute;
+        inset: -14px;
       }
 
       .ends {
@@ -2227,11 +2253,6 @@
              to neither: Things is what you are carrying, and this is not. -->
         <div class="adds" id="adds">
           <button type="button" class="addblock" id="add-block">+ Block</button>
-          <!-- THE DAY, BUILT FROM THE LIST'S OWN ORDER. Not a second opinion
-               about what matters: the Things list is already sorted pinned
-               first, then whatever is running out of room, and this walks that
-               order downward. See `fillDay`. -->
-          <button type="button" class="addblock fill" id="fill-day">Fill day</button>
         </div>
 
 
@@ -4019,6 +4040,28 @@
        * the thing that commits it. That is also the undo: this changed nothing
        * on the server, so leaving without confirming leaves no trace.
        */
+      /**
+       * The press that builds the day, drawn into the space where it would be.
+       *
+       * Built fresh on every render rather than wired once at startup, because
+       * it lives and dies with the row it sits in — a handler attached to an
+       * element the next render throws away is a handler on nothing.
+       *
+       * It takes the column the status used to hold, at the right edge of the
+       * row, so it lands under STATUS and away from the words on the left.
+       */
+      function fillNow() {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'fillnow';
+        b.textContent = 'Fill';
+        b.onclick = (e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+          fillDay();
+        };
+        return b;
+      }
+
       function fillDay() {
         // THE SCREEN'S OWN ORDER, asked for rather than assumed. The list
         // arrives sorted from the server, so reading `things` as it stands is
@@ -4148,15 +4191,27 @@
         // NOT THE BLANK SPACER THIS ONCE HELD. That was a real block card with
         // `visibility: hidden`, and blank room reads as a gap somebody forgot to
         // fill. Hatched and dashed, it reads as a space meant to be there.
-        if (!timedBlocks().length) box.append(freeRow('block', 'nothing scheduled'));
+        if (!timedBlocks().length) {
+          const empty = freeRow('block', 'nothing scheduled');
 
-        // OFF WHEN THERE IS NOTHING TO FILL WITH, which is a real state and not
-        // an edge case: a day already holding six, a list with nothing pinned
-        // and nothing running out of room, or every candidate already in the
-        // day. A button that answers a press by doing nothing reads as broken,
-        // and this one has no other feedback to give — it either changes the
-        // list above it or it does not.
-        $('fill-day').disabled = fillable().length === 0;
+          // THE SPACE WHERE THE DAY WOULD BE IS THE THING YOU PRESS TO BUILD
+          // IT. This stood beside + Block, where it read as a third way to add
+          // one thing and competed with the two that are. Here it costs no room
+          // of its own, it is only ever on screen when it has something to do,
+          // and it is attached to the emptiness it answers.
+          //
+          // NOT SHOWN WHEN IT WOULD DO NOTHING — a list with nothing pinned and
+          // nothing running out of room, which is the ordinary state of a
+          // well-kept list. That is why this asks rather than drawing a dead
+          // one: an empty day is not by itself a reason to offer a fill.
+          //
+          // It goes with the row, so a day with one block in it has no fill.
+          // That is the trade this placement makes: the button is for building
+          // a day rather than topping one up, and + Block is what tops up.
+          if (fillable().length) empty.append(fillNow());
+
+          box.append(empty);
+        }
 
         renderAnytime();
 
@@ -5426,9 +5481,6 @@
 
       $('add-block').onclick = () => ask('block');
       $('add-anytime').onclick = () => ask('anytime');
-      // No sheet and no question. The order it uses is the one already on the
-      // screen above it, so there is nothing left to ask.
-      $('fill-day').onclick = () => fillDay();
 
       function renderConfirm() {
         const button = $('confirm');

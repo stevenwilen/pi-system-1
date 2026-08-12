@@ -333,6 +333,46 @@ if (require.main !== module) return;
 
   check('and nothing in either is a real row', free.rows === 0, `${free.rows} slots`);
 
+  // THE PRESS INSIDE THE EMPTY ROW, driven rather than read. Its hit area is an
+  // absolute pseudo-element, which is the shape of bug this file exists for:
+  // `.atime` was once missing the anchor for one of these and its invisible
+  // child lay over the whole screen, killing every gesture in the app.
+  const fill = await empty.evaluate(() => {
+    const b = document.querySelector('.free-block .fillnow');
+    if (!b) return null;
+    const r = b.getBoundingClientRect();
+    // What is actually under the finger at the middle of the word, and at the
+    // corners of the area the ::after claims.
+    const at = (x, y) => {
+      const el = document.elementFromPoint(x, y);
+      return el ? `${el.tagName.toLowerCase()}.${el.className || ''}`.trim() : 'nothing';
+    };
+    return {
+      box: { w: Math.round(r.width), h: Math.round(r.height), right: Math.round(r.right) },
+      middle: at(r.left + r.width / 2, r.top + r.height / 2),
+      justOutside: at(r.left - 8, r.top + r.height / 2),
+      farLeft: at(30, r.top + r.height / 2),
+    };
+  });
+
+  console.log('\nthe press that builds the day');
+  if (!fill) {
+    check('the empty day offers to fill itself', false, 'no .fillnow found');
+  } else {
+    check('the empty day offers to fill itself', true, `${fill.box.w}x${fill.box.h}`);
+    check('the word itself answers a press', /button/.test(fill.middle), fill.middle);
+
+    // REACHABLE WITHOUT BEING BIGGER: the word is 10px, nowhere near a finger,
+    // so the area around it answers too.
+    check('and so does the space around it', /button/.test(fill.justOutside),
+      fill.justOutside);
+
+    // AND IT DOES NOT COVER THE ROW. The failure mode is an invisible layer
+    // reaching back across the words, which looks identical and is not.
+    check('while the left of the row is still the row itself',
+      !/button/.test(fill.farLeft), fill.farLeft);
+  }
+
   // --- the drawing it is meant to be ---------------------------------------
   const ref = await browser.newPage({ viewport: { width: FRAME + 40, height: 900 }, deviceScaleFactor: 2 });
   await ref.route('**/fonts.googleapis.com/**', (r) => r.abort());
