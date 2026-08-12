@@ -7,9 +7,18 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
     />
     <meta name="theme-color" content="#FFFFFF" />
-    <!-- TWO FACES, SPLIT BY JOB. Every figure is IBM Plex Mono with tabular
+    <!-- TWO FACES, SPLIT BY JOB. Every figure is Roboto Mono with tabular
          numerals, so times and durations fall into real columns down the page;
          every name is Inter. Nothing crosses over.
+
+         THE ZERO IS EMPTY, which is why this is Roboto Mono and not IBM Plex
+         Mono, which drew the design and carried a dot inside every 0. A page
+         whose largest figure is "0:00" shows that dot more than anything else
+         on it. Of fourteen monospaced faces compared side by side, exactly two
+         leave the zero plain — this and Azeret Mono — the rest putting either a
+         dot or a slash through it. Azeret is the wider of the two, and width is
+         not free here: STATUS sits in a fixed 64px column that has been clipped
+         before. This one keeps Plex's proportions.
 
          FETCHED, which this page has refused to do before now and for a good
          reason: a round trip on a cold load of an app whose whole point is
@@ -20,7 +29,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap"
       rel="stylesheet"
     />
     <title>Schedule</title>
@@ -114,7 +123,9 @@
            has, so a failed fetch degrades rather than breaks. */
         --face: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
           'Helvetica Neue', Arial, sans-serif;
-        --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas,
+        /* Roboto Mono for the empty zero — see the head. The fallbacks behind it
+           are the device's own, and every one of those draws a plain zero too. */
+        --mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas,
           monospace;
       }
 
@@ -1538,10 +1549,10 @@
         letter-spacing: 0.02em;
         color: var(--ghost);
       }
-      /* On ONE line: a group listed down the page ends on a line reading
-         `.free .st {`, and a lookup by name has been shadowed by that four
-         times in this file. */
-      .free .idx, .free .st { color: var(--ghost); }
+      /* The index column stands empty here rather than absent, so the words
+         start where the table's words start. It is the only column this row
+         keeps — the status column went with the dash that was in it. */
+      .free .idx { color: var(--ghost); }
 
       /* ONE LINE BOX, WHATEVER SITS IN THE ROW — which is what makes the two
          lists the same height rather than nearly the same height.
@@ -4160,16 +4171,13 @@
         nm.className = 'freenm';
         nm.textContent = label;
 
+        // NO STATUS COLUMN. It carried an em dash under STATUS, on the reasoning
+        // that the space where a row would be should hold that row's columns.
+        // But a status is a fact about a block — over, running, still to come —
+        // and there is no block here to be in any of those states. The dash was
+        // a value in a column reporting on nothing, which is the same thing the
+        // heading counting to 00 was doing.
         row.append(lead, nm);
-
-        // The status column, so the dash lines up under STATUS the way every
-        // other row's does. The anytime list has no such column.
-        if (kind === 'block') {
-          const st = document.createElement('div');
-          st.className = 'st';
-          st.textContent = '—';
-          row.append(st);
-        }
 
         return row;
       }

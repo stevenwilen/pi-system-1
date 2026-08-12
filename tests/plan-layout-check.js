@@ -2100,6 +2100,17 @@ console.log('\n20. an empty list shows where its first row would go');
   check('while the table reuses the real index column',
     /freeRow\('block'/.test(code) && /lead\.className = kind === 'block' \? 'idx' : 'freebox'/.test(code));
 
+  // AND NO STATUS COLUMN. It held an em dash, on the reasoning that the space
+  // where a row would be should carry that row's columns. A status is a fact
+  // about a block — over, running, still to come — and there is no block here to
+  // be in any of them, so the dash was a value in a column reporting on nothing.
+  {
+    const fr = (code.match(/function freeRow\(kind, label\) \{[\s\S]*?\n      \}/) || [''])[0];
+    check('the space where a row would be carries no status',
+      Boolean(fr) && !/'st'/.test(fr) && !/—/.test(fr), fr.slice(0, 100));
+    check('and no rule is left styling one', !/\.free \.st/.test(css));
+  }
+
   // IN THE GREY THAT CARRIES NO WORDS AT A BODY SIZE, which is what this is for:
   // it is the lightest thing on the page and it is not meant to be read twice.
   check('the words are the lightest grey', /color: var\(--ghost\)/.test(rule('.freenm')));
