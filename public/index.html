@@ -2075,6 +2075,19 @@
         flex-wrap: wrap;
         gap: 8px;
       }
+      /* THE LENGTHS, THREE AND TWO. Five pills of five different widths wrapped
+         wherever they happened to run out of room, which put four on the first
+         line and one stranded on the second. A three-column grid decides the
+         break instead of leaving it to the text, and the columns are equal, so
+         the pills line up down the sheet rather than only along it.
+
+         Only this one. The other choosers are two, three and four options wide
+         and all sit on a single line, where a grid would stretch them into
+         something much wider than the words they carry. */
+      #size-seg {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+      }
       .choices button {
         font-size: 13px;
         color: var(--muted);
@@ -5915,7 +5928,20 @@
         $('f-freq-field').classList.toggle('hidden', formType !== 'habit');
         $('f-due-field').classList.toggle('hidden', !dated);
         $('f-size-field').classList.toggle('hidden', !dated || !hasDue);
-        $('f-once-field').classList.toggle('hidden', formType !== 'task');
+        // NOT WHEN THE LENGTH ALREADY SAYS OTHERWISE. A task declared as taking
+        // a week is not over after one day in the day, so offering to make it
+        // vanish would be offering to lose work somebody said was still to do.
+        //
+        // A missing length is not a contradiction: it is only asked for once
+        // there is a due date, so an undated task has none — and "call my
+        // doctor" is exactly that, which is the case this was built for.
+        const length = dated && hasDue ? formSize : null;
+        const canBeOnce = formType === 'task' && (!length || length === 'a day');
+
+        // Cleared with the field, so a flag set on a short task cannot survive
+        // being made a long one and go out with the save.
+        if (!canBeOnce) formOnce = false;
+        $('f-once-field').classList.toggle('hidden', !canBeOnce);
 
         // WORDED AS WHAT HAPPENS, not as what it is called. "One off" is the
         // name of the flag and says nothing to somebody meeting it for the

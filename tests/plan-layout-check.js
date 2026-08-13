@@ -1691,6 +1691,25 @@ console.log('\n16. the shape of the day');
   check('and a + Anytime beside it', /id="add-anytime"/.test(body));
   check('they are one pair', /class="adds"/.test(body));
 
+  // THE LENGTHS, THREE AND TWO. Five pills of five different widths wrapped
+  // wherever they ran out of room, which put four on one line and stranded one
+  // on the next. A three-column grid decides the break instead of leaving it to
+  // the text, and equal columns line the pills up down the sheet as well as
+  // along it. Only this chooser: the others are two, three and four options
+  // wide and sit on one line, where a grid would stretch them well past the
+  // words they carry.
+  check('the lengths are laid out three and two',
+    /grid-template-columns: repeat\(3, 1fr\)/.test(rule('#size-seg')), rule('#size-seg'));
+  check('and the other choosers are left to wrap',
+    /flex-wrap: wrap/.test(rule('.choices')) && !/grid/.test(rule('.choices')), rule('.choices'));
+
+  // THE ONE-OFF OFFER IS WITHDRAWN WHEN THE LENGTH CONTRADICTS IT. A task
+  // declared as taking a week is not over after one day in the day.
+  check('a length past a day takes the one-off choice away',
+    /const canBeOnce = formType === 'task' && \(!length \|\| length === 'a day'\)/.test(code));
+  check('and clears the flag with it, so a stale one cannot be saved',
+    /if \(!canBeOnce\) formOnce = false;/.test(code));
+
   // AND A THIRD, WHICH BUILDS THE DAY RATHER THAN ADDING TO IT.
   {
     // AT THE FOOT OF THE DAY, ABOVE CONFIRM, which is the order it is used in:

@@ -202,6 +202,19 @@ sitting — that is the difference between a project and a task — and a habit
 recurs, which is the opposite of happening once. Accepting the flag and quietly
 dropping it would leave someone believing a project would take itself off.
 
+**And not when the length says otherwise.** A task declared as taking *a week* is
+not over after one day in the day, so letting it vanish would lose work somebody
+said was still to do. Both fields are declarations and this is the one
+combination where they contradict, so it is refused on the way in and the choice
+is withdrawn from the sheet the moment a longer length is picked — with the flag
+cleared, so a stale one cannot survive the change and go out with the save.
+
+**A missing length is not a contradiction.** The length is only asked for once
+there is a due date, so an undated task has none — and *call my doctor* is
+exactly that, which is the case this was built for. Gating on *length is a day*
+alone would have taken the option away from the rows that want it most. The rule
+is therefore **no length, or a length of a day**.
+
 It was briefly a fourth habit *frequency*, which was the wrong home: a habit is a
 rhythm by definition, so "a habit that happens once" is a contradiction wearing
 the wrong type. **Habit frequencies are untouched**, `monthly` included.

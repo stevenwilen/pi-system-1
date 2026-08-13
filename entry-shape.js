@@ -77,6 +77,21 @@ function validate({ type, title, frequency, due, size, one_off }) {
     if (one_off && type !== 'task') {
       return `only a task can be a one off. A ${type} is not finished in one sitting.`;
     }
+
+    // AND NOT WHEN THE LENGTH SAYS OTHERWISE. A task declared as taking a week
+    // is not over after one day in the day, so scheduling it once and having it
+    // vanish would lose work somebody said was still to do. The two fields are
+    // both declarations, and this is the one combination where they contradict.
+    //
+    // A MISSING LENGTH IS NOT A CONTRADICTION. The length is only asked for
+    // once there is a due date, so an undated task has none — and "call my
+    // doctor" is exactly that, which is the case this feature was built for.
+    // Nothing has been said about how long it takes, so nothing is being
+    // argued with.
+    const length = orNull(size);
+    if (one_off && length && length !== 'a day') {
+      return `a task of ${length} is not finished in one sitting. Only a task with no length, or a length of a day, can take itself off the list.`;
+    }
   }
 
   const hasDue = Boolean(orNull(due));

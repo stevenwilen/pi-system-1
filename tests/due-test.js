@@ -584,6 +584,40 @@ const get = async (path) => {
     check('and it is really off',
       (after.body.items || []).find((i) => i.id === task.body.entry.id).one_off === false);
 
+    // AND NOT WHEN THE LENGTH SAYS OTHERWISE. A task declared as taking a week
+    // is not over after one day in the day, so letting it vanish would lose
+    // work somebody said was still to do. Both fields are declarations, and
+    // this is the one combination where they contradict each other.
+    const long = await post('/entries', {
+      type: 'task', title: 'Rewire the lamp', due: day(20), size: 'a week', one_off: true,
+    });
+    check('a week-long task is refused the flag', long.status === 400,
+      `${long.status} ${long.body.error || ''}`);
+    check('and told which two answers disagree',
+      /a week.*one sitting/.test(long.body.error || ''), String(long.body.error));
+
+    const short = await post('/entries', {
+      type: 'task', title: 'Post the form', due: day(20), size: 'a day', one_off: true,
+    });
+    check('a day-long one is allowed', short.status === 200,
+      `${short.status} ${short.body.error || ''}`);
+
+    // NO LENGTH IS NOT A CONTRADICTION. The length is only asked for once there
+    // is a due date, so an undated task has none — and "call my doctor" is
+    // exactly that, which is the case this feature was built for. Gating on
+    // "length is a day" alone would have taken the option away from it.
+    const undated = await post('/entries', {
+      type: 'task', title: 'Call the vet', one_off: true,
+    });
+    check('and a task with no length at all is allowed', undated.status === 200,
+      `${undated.status} ${undated.body.error || ''}`);
+
+    // GROWING INTO ONE IS REFUSED TOO, so the contradiction cannot be reached
+    // by two edits that are each fine on their own.
+    const grew = await post(`/entries/${short.body.entry.id}/update`, { size: 'a few weeks' });
+    check('and an existing one off cannot be lengthened past a day',
+      grew.status === 400, `${grew.status} ${grew.body.error || ''}`);
+
     // A ONE-OFF TASK KEEPS ITS DEADLINE MARK. The flag lives in a column the
     // cadence arithmetic also reads, so this is the end-to-end half of the
     // regression the unit tests pin.
