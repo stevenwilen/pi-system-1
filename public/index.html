@@ -2580,6 +2580,15 @@
           <div class="choices" id="size-seg"></div>
         </div>
 
+        <!-- TASKS ONLY. A habit recurs, which is the opposite of happening
+             once, and a project is not finished by one sitting. The server
+             refuses the flag on either, so offering it there would be offering
+             a refusal. See §2.6. -->
+        <div class="field hidden" id="f-once-field">
+          <label>Once it is done</label>
+          <div class="choices" id="once-seg"></div>
+        </div>
+
         <div class="problem hidden" id="f-problem"></div>
 
         <div class="sheet-actions">
@@ -2788,7 +2797,17 @@
       const WAKE_MAX = 12 * 60;
 
       const SIZES = ['a day', 'a few days', 'a week', 'a few weeks', 'months'];
+      // A HABIT'S CADENCE, and nothing else's. 'one off' was briefly the fourth
+      // of these and did not belong: a habit is a rhythm by definition, so "a
+      // habit that happens once" is a contradiction wearing the wrong type.
+      // What wanted the idea was the task — see the one-off toggle below.
       const FREQUENCIES = ['daily', 'few times a week', 'weekly', 'monthly'];
+
+      // The two answers to what happens to a task after it has been in a day.
+      // Kept as words rather than a checkbox so the choice reads the same way
+      // every other choice on this sheet does.
+      const ONCE_KEEP = 'stays on the list';
+      const ONCE_GONE = 'takes itself off';
 
       // A due date belongs to these two. A habit has a cadence instead.
       const DATED = ['project', 'task'];
@@ -4670,6 +4689,28 @@
         if (body.error) {
           b.done = !next;
           renderBuilder();
+          return;
+        }
+
+        // A ONE-OFF LEAVES THE LIST ON THE TICK THAT FINISHED IT, and comes
+        // back on the tick that undid it. The server decides which — it holds
+        // the frequency and it has just written the status — and says so by
+        // naming the entry it moved. Reading `body.entry` rather than deciding
+        // here is what keeps the two from disagreeing about a row that is
+        // already off the screen.
+        if (body.entry) {
+          const at = things.findIndex((t) => t.id === body.entry.id);
+          if (body.entry.status === 'done') {
+            if (at !== -1) {
+              things.splice(at, 1);
+              renderThings();
+            }
+          } else if (at === -1) {
+            // Unticked. The row is on the server again, and the shape of it
+            // lives there rather than here — the next load is what fetches it,
+            // and until then the day still shows the block it came from.
+            load();
+          }
         }
       }
 
@@ -5830,6 +5871,8 @@
       let formType = 'task';
       let formFreq = null;
       let formSize = null;
+      // A task that takes itself off the list once it has been in a day (§2.6).
+      let formOnce = false;
 
       // The id being edited, or null when adding. The sheet is one sheet: the
       // fields and the rules between them are identical either way, and two
@@ -5872,6 +5915,15 @@
         $('f-freq-field').classList.toggle('hidden', formType !== 'habit');
         $('f-due-field').classList.toggle('hidden', !dated);
         $('f-size-field').classList.toggle('hidden', !dated || !hasDue);
+        $('f-once-field').classList.toggle('hidden', formType !== 'task');
+
+        // WORDED AS WHAT HAPPENS, not as what it is called. "One off" is the
+        // name of the flag and says nothing to somebody meeting it for the
+        // first time; what they need to know is that the row leaves by itself.
+        chooser($('once-seg'), [ONCE_KEEP, ONCE_GONE], formOnce ? ONCE_GONE : ONCE_KEEP, (v) => {
+          formOnce = v === ONCE_GONE;
+          renderForm();
+        });
 
         chooser($('freq-seg'), FREQUENCIES, formFreq, (v) => {
           formFreq = v;
@@ -5899,6 +5951,7 @@
         formType = item ? item.type : 'task';
         formFreq = item ? item.frequency : null;
         formSize = item ? item.size : null;
+        formOnce = Boolean(item && item.one_off);
         $('f-title').value = item ? item.title : '';
         $('f-due').value = item && item.due ? item.due : '';
 
@@ -5927,6 +5980,9 @@
         const body = { type: formType, title: $('f-title').value.trim() };
 
         if (formType === 'habit') body.frequency = formFreq;
+        // Sent on every save rather than only when true, so turning it off
+        // clears it. The server writes the column from this either way.
+        if (formType === 'task') body.one_off = formOnce;
         if (DATED.includes(formType)) {
           body.due = $('f-due').value || '';
           // Sent even when empty, so clearing the date clears the size with

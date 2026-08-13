@@ -14,6 +14,7 @@ const { service: supabase } = require('./db');
 const { toMinutes, tomorrowOf } = require('./clock');
 const { sendTelegram } = require('./telegram');
 const { composeMessage } = require('./messages');
+const { ONE_OFF } = require('./entry-shape');
 
 // The tick interval, in minutes.
 //
@@ -557,6 +558,88 @@ function dayEnds(blocks) {
 //
 // ONCE. One message is a reminder and a second is nagging, which this system
 // does not do.
+/**
+ * One-offs whose day is behind them.
+ *
+ * THE OTHER HALF OF THE TICK, and the half that cannot be done from the page.
+ * An untimed one-off is finished the moment it is ticked, but a timed block has
+ * no tick at all — taking it out of the day is how you say it did not happen,
+ * which means a block still sitting in a day that is over is a block that did.
+ * That is not a rule invented here: it is how this system reads every day it
+ * has ever read (§2.4), and it is the same reasoning `staleness.js` uses to
+ * decide when something was last done.
+ *
+ * SENDS NOTHING. Every other lane exists to put a message on a phone; this one
+ * only tidies, and it is here because it needs the same daily sweep across
+ * every account and the same service key to do it with.
+ *
+ * STRICTLY BEFORE TODAY. A one-off scheduled for this afternoon is not finished
+ * because the sweep ran this morning, and one confirmed for tomorrow is not
+ * finished at all. The date comparison is the whole guard.
+ */
+async function finishOneOffs(profile, now) {
+  // Every one-off still being carried. Small by nature — a one-off that is
+  // working leaves within a day of being scheduled — so this is a short list
+  // even on an account that has been running for years.
+  const { data: entries, error: entryErr } = await supabase
+    .from('entries')
+    .select('id')
+    .eq('user_id', profile.user_id)
+    // A task. The column is shared with a habit's cadence, so the type is what
+    // keeps a weekly habit from being swept off the list as though it were a
+    // thing that happens once.
+    .eq('type', 'task')
+    .eq('frequency', ONE_OFF)
+    .eq('status', 'active');
+
+  if (entryErr) throw new Error(`could not read one-offs: ${entryErr.message}`);
+  if (!entries || !entries.length) return [];
+
+  // The days that are over, and only the ones that were agreed to. A day built
+  // and never confirmed is a draft, and finishing something off the back of a
+  // draft would be the system deciding what happened.
+  const { data: plans, error: planErr } = await supabase
+    .from('plans')
+    .select('id')
+    .eq('user_id', profile.user_id)
+    .eq('status', 'confirmed')
+    .lt('date', now.date);
+
+  if (planErr) throw new Error(`could not read past plans: ${planErr.message}`);
+  if (!plans || !plans.length) return [];
+
+  const { data: blocks, error: blockErr } = await supabase
+    .from('blocks')
+    .select('entry_id')
+    .eq('user_id', profile.user_id)
+    .in('plan_id', plans.map((p) => p.id))
+    .in('entry_id', entries.map((e) => e.id));
+
+  if (blockErr) throw new Error(`could not read past blocks: ${blockErr.message}`);
+
+  const over = [...new Set((blocks || []).map((b) => b.entry_id).filter(Boolean))];
+  if (!over.length) return [];
+
+  // `done`, not `deleted`: this is work that happened, and the two are recorded
+  // apart on purpose (§2.3). The status filter is what makes a second sweep
+  // over the same day a no-op rather than a second write.
+  const { data: moved, error } = await supabase
+    .from('entries')
+    .update({ status: 'done' })
+    .eq('user_id', profile.user_id)
+    .eq('status', 'active')
+    .in('id', over)
+    .select('id, title');
+
+  if (error) throw new Error(`could not finish one-offs: ${error.message}`);
+
+  for (const row of moved || []) {
+    console.log(`[ONEOFF] ${profile.user_id}: finished ${JSON.stringify(row.title)}`);
+  }
+
+  return moved || [];
+}
+
 async function sendAnytime(profile, now, { force = false } = {}) {
   const { data: plan, error: planErr } = await supabase
     .from('plans')
@@ -676,6 +759,14 @@ async function tick() {
     } catch (err) {
       console.error(`[LOOSE] ${profile.user_id}: ${err.message}`);
     }
+
+    // Sends nothing. It is here because it needs the same daily sweep across
+    // every account that the lanes above it need.
+    try {
+      await finishOneOffs(profile, now);
+    } catch (err) {
+      console.error(`[ONEOFF] ${profile.user_id}: ${err.message}`);
+    }
   }
 }
 
@@ -699,6 +790,7 @@ module.exports = {
   savedText, //   its wording, so a test reads the real thing
   LATER_DAY, //   and when it goes, so a test cannot drift from the job
   LATER_HOUR,
+  finishOneOffs, // the sweep that takes a done one-off off the list
 };
 
 // ---------------------------------------------------------------------------
@@ -721,6 +813,7 @@ const JOBS = {
   nudge: sendNudge,
   later: sendSavedForLater,
   loose: sendAnytime,
+  oneoff: finishOneOffs,
 };
 
 async function runOnce(name) {

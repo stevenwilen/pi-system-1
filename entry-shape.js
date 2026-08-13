@@ -8,7 +8,30 @@
 const { SIZES } = require('./warning');
 
 const TYPES = ['habit', 'project', 'task'];
+// A HABIT'S CADENCE, and nothing else's. Untouched: 'one off' was briefly the
+// fourth of these and it did not belong — a habit is a rhythm by definition, so
+// "a habit that happens once" is a contradiction wearing the wrong type. What
+// wanted the idea was the task.
 const FREQUENCIES = ['daily', 'few times a week', 'weekly', 'monthly'];
+
+// A TASK THAT TAKES ITSELF OFF THE LIST once it has been in a day.
+//
+// The answer to a real problem: "call my doctor", "pay Albie" — a thing you
+// want in a day and then gone. An ordinary task stays on the list after it is
+// done until you remember to finish it by hand, and being asked to finish
+// something you have already done is the chore that teaches people to stop
+// keeping the list.
+//
+// NOT EVERY TASK, which is the whole reason this is a flag rather than a rule:
+// some take several sittings, and that is what the length is for. This says the
+// opposite — one sitting, then done.
+//
+// STORED IN `frequency`, which needs a word of defence. The column is already
+// on every row and every task has it empty, so this cost no migration and no
+// DDL. It is not a stretch of the meaning either: the field says how often this
+// comes round, and the answer here is once. Habits keep the column's other
+// values; nothing else in the system writes it.
+const ONE_OFF = 'one off';
 
 // How long a note may be, on a thing and on a block alike.
 //
@@ -36,12 +59,24 @@ const orNull = (value) => (String(value || '').trim() ? String(value).trim() : n
  * size cannot produce a warning mark, so the pair is required together or not
  * at all.
  */
-function validate({ type, title, frequency, due, size }) {
+function validate({ type, title, frequency, due, size, one_off }) {
   if (!TYPES.includes(type)) return `type must be one of ${TYPES.join(', ')}`;
   if (!String(title || '').trim()) return 'a title is required';
 
   if (type === 'habit' && !FREQUENCIES.includes(frequency)) {
     return `a habit needs a frequency: ${FREQUENCIES.join(', ')}`;
+  }
+
+  // TASKS ONLY, and refused rather than ignored. A project is not finished by
+  // one sitting — that is the whole difference between a project and a task —
+  // and a habit recurs, which is the opposite of happening once. Accepting the
+  // flag and quietly dropping it would leave someone believing a project would
+  // take itself off the list.
+  if (one_off !== undefined && one_off !== null) {
+    if (typeof one_off !== 'boolean') return 'one_off must be true or false';
+    if (one_off && type !== 'task') {
+      return `only a task can be a one off. A ${type} is not finished in one sitting.`;
+    }
   }
 
   const hasDue = Boolean(orNull(due));
@@ -86,9 +121,14 @@ function toRow(body) {
   } else {
     fields.due = orNull(body.due);
     fields.size = fields.due ? body.size : null;
+    // A task's one-off flag lives in the same column a habit's cadence does,
+    // which is why this is written on every save rather than only when set:
+    // turning the flag off has to clear the column, and a row that kept a stale
+    // 'one off' would take itself off the list after somebody said not to.
+    fields.frequency = body.type === 'task' && body.one_off === true ? ONE_OFF : null;
   }
 
   return fields;
 }
 
-module.exports = { TYPES, FREQUENCIES, DATED, SIZES, NOTE_MAX, orNull, validate, toRow };
+module.exports = { TYPES, FREQUENCIES, ONE_OFF, DATED, SIZES, NOTE_MAX, orNull, validate, toRow };

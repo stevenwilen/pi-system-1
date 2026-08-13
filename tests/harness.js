@@ -140,18 +140,53 @@ const db = {
 
 let ready = null;
 
+/**
+ * Try something that talks to the auth API, and give it a few goes.
+ *
+ * THE AUTH ENDPOINT 502s, occasionally and at random, and the shape of that
+ * failure was doing real damage to this suite's credibility: every account call
+ * happens before the first check runs, so a suite that hit one died at line one
+ * with `Bad Gateway` and reported as a failure of the thing it was testing. It
+ * was a different suite each run, which is exactly what an intermittent upstream
+ * looks like and exactly what a real bug does not.
+ *
+ * Bounded and slow enough to outlast a blip, and it re-throws in the end rather
+ * than swallowing — a suite that cannot reach auth must still fail loudly. What
+ * it must not do is fail in a way that reads as a broken test.
+ */
+async function throughBlips(what, attempt) {
+  let last;
+  for (let go = 1; go <= 4; go++) {
+    try {
+      return await attempt();
+    } catch (err) {
+      last = err;
+      // Only the transient ones. A wrong password is not going to right itself,
+      // and retrying it four times would turn a clear failure into a slow one.
+      if (!/bad gateway|502|503|504|fetch failed|network|timeout|\{\}$/i.test(err.message)) throw err;
+      if (go < 4) {
+        console.log(`  (${what} — ${err.message.slice(0, 60)}; retrying ${go}/3)`);
+        await new Promise((r) => setTimeout(r, go * 1500));
+      }
+    }
+  }
+  throw last;
+}
+
 /** Sign in, and hand back what the browser would have held. */
 async function signIn(email, password) {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: anonKey },
-    body: JSON.stringify({ email, password }),
+  return throughBlips(`sign in as ${email}`, async () => {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: anonKey },
+      body: JSON.stringify({ email, password }),
+    });
+    const body = await res.json();
+    if (!body.access_token) {
+      throw new Error(`could not sign in as ${email}: ${body.error_description || body.msg || JSON.stringify(body)}`);
+    }
+    return body.access_token;
   });
-  const body = await res.json();
-  if (!body.access_token) {
-    throw new Error(`could not sign in as ${email}: ${body.error_description || body.msg || JSON.stringify(body)}`);
-  }
-  return body.access_token;
 }
 
 /**
@@ -162,13 +197,17 @@ async function signIn(email, password) {
  * the ones it left behind would own rows nothing would ever clean up.
  */
 async function ensureAccount({ email, password }) {
-  const made = await service.auth.admin.createUser({
+  // Through the same retry as the sign-in: the admin API is the same service
+  // that 502s, and `listUsers` failing there reports as `could not list users:
+  // {}` — an empty error object, which is what an upstream blip looks like
+  // through this client.
+  const made = await throughBlips(`create ${email}`, () => service.auth.admin.createUser({
     email,
     password,
     // Set here so the suite does not depend on the project's confirmation
     // setting, which is a toggle someone may reasonably change later.
     email_confirm: true,
-  });
+  }));
 
   if (made.data && made.data.user) return made.data.user.id;
 
@@ -180,7 +219,13 @@ async function ensureAccount({ email, password }) {
   }
 
   for (let page = 1; page <= 20; page++) {
-    const { data, error } = await service.auth.admin.listUsers({ page, perPage: 200 });
+    const { data, error } = await throughBlips('list users',
+      () => service.auth.admin.listUsers({ page, perPage: 200 }).then((r) => {
+        // Raised rather than returned, so the retry above can see it. The
+        // message is often empty, which is the signature of the 502.
+        if (r.error) throw new Error(`could not list users: ${r.error.message || '{}'}`);
+        return r;
+      }));
     if (error) throw new Error(`could not list users: ${error.message}`);
     const found = (data.users || []).find((u) => u.email === email);
     if (found) return found.id;

@@ -10,7 +10,7 @@ const { todayIn, DEFAULT_ZONE } = require('../clock');
 const { create_entry, update_entry } = require('../tools');
 const { lastScheduled, daysBetween } = require('../staleness');
 const { markFor, slackFor, daysUntil } = require('../warning');
-const { TYPES, NOTE_MAX, orNull, validate, toRow } = require('../entry-shape');
+const { TYPES, NOTE_MAX, ONE_OFF, orNull, validate, toRow } = require('../entry-shape');
 
 const router = express.Router();
 
@@ -68,17 +68,22 @@ router.get('/entries', async (req, res) => {
         type: r.type,
         title: r.title,
         frequency: r.frequency,
+        // A task that takes itself off the list once it has been in a day
+        // (§2.6). Sent as the flag it is rather than as the column it lives in,
+        // so the page never has to know that one-off and cadence share a
+        // column — and so a habit can never read as one by accident.
+        one_off: r.type === 'task' && r.frequency === ONE_OFF,
         due,
         size: r.size,
         days_until_due: due ? daysUntil(today, due) : null,
         // '!!!', '!!', '!' or null. Arithmetic and nothing else — see
         // warning.js. A dated row is judged on the due date against the size; a
         // habit on how far it has drifted past its own cadence.
-        mark: markFor({ due, size: r.size, today, frequency: r.frequency, days }),
+        mark: markFor({ type: r.type, due, size: r.size, today, frequency: r.frequency, days }),
         // Room left, which is what the order above is made of. Not sent: the
         // screen shows the mark, and a number nothing renders is a field to
         // keep in step with for no one's benefit.
-        slack: slackFor({ due, size: r.size, today, frequency: r.frequency, days }),
+        slack: slackFor({ type: r.type, due, size: r.size, today, frequency: r.frequency, days }),
         // The message waiting for the next time this is scheduled, or null.
         //
         // Sent in full rather than as a "there is one" flag, because swiping
@@ -223,6 +228,12 @@ router.post('/entries/:id/update', async (req, res) => {
     frequency: body.frequency !== undefined ? body.frequency : current.frequency,
     due: body.due !== undefined ? orNull(body.due) : current.due,
     size: body.size !== undefined ? orNull(body.size) : current.size,
+    // Read off the column it is stored in, so an edit that says nothing about
+    // the flag leaves it as it was. `toRow` writes the column from this on
+    // every save — which is what lets turning it off actually clear it.
+    one_off: body.one_off !== undefined
+      ? body.one_off
+      : current.type === 'task' && current.frequency === ONE_OFF,
   };
 
   // Clearing the date clears the size with it, so nothing is left holding a

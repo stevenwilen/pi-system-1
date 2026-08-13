@@ -539,6 +539,65 @@ const get = async (path) => {
       firstUnmarked === -1 || lastMarked < firstUnmarked, `${lastMarked} then ${firstUnmarked}`);
   }
 
+  console.log('\nonly a task can be a one off');
+  {
+    // TASKS ONLY, and refused rather than ignored. A project is not finished by
+    // one sitting — that is the difference between a project and a task — and a
+    // habit recurs, which is the opposite of happening once. Accepting the flag
+    // and quietly dropping it would leave someone believing a project would
+    // take itself off the list.
+    const task = await post('/entries', { type: 'task', title: 'Pay Albie', one_off: true });
+    check('a task takes the flag', task.status === 200, JSON.stringify(task.body).slice(0, 120));
+
+    const proj = await post('/entries', { type: 'project', title: 'Thesis two', one_off: true });
+    check('a project is refused', proj.status === 400, `${proj.status} ${proj.body.error || ''}`);
+    check('and told why', /not finished in one sitting/.test(proj.body.error || ''),
+      String(proj.body.error));
+
+    const hab = await post('/entries', {
+      type: 'habit', title: 'Stretching two', frequency: 'weekly', one_off: true,
+    });
+    check('a habit is refused too', hab.status === 400, `${hab.status} ${hab.body.error || ''}`);
+
+    // AND A HABIT'S CADENCE IS NOT A ONE-OFF FLAG. They share a column, so this
+    // is the check that the two cannot be confused for each other.
+    const weekly = await post('/entries', {
+      type: 'habit', title: 'Stretching three', frequency: 'weekly',
+    });
+    check('an ordinary habit is created', weekly.status === 200,
+      JSON.stringify(weekly.body).slice(0, 120));
+
+    const list = await get('/entries');
+    const row = (id) => (list.body.items || []).find((i) => i.id === id);
+    check('the task reports the flag', row(task.body.entry.id).one_off === true,
+      JSON.stringify(row(task.body.entry.id).one_off));
+    check('and the weekly habit does not', row(weekly.body.entry.id).one_off === false,
+      JSON.stringify(row(weekly.body.entry.id).one_off));
+    check('while keeping its cadence', row(weekly.body.entry.id).frequency === 'weekly',
+      String(row(weekly.body.entry.id).frequency));
+
+    // TURNING IT OFF CLEARS IT, which is why the column is written on every
+    // save rather than only when the flag is set.
+    const off = await post(`/entries/${task.body.entry.id}/update`, { one_off: false });
+    check('the flag can be turned off', off.status === 200, JSON.stringify(off.body).slice(0, 120));
+    const after = await get('/entries');
+    check('and it is really off',
+      (after.body.items || []).find((i) => i.id === task.body.entry.id).one_off === false);
+
+    // A ONE-OFF TASK KEEPS ITS DEADLINE MARK. The flag lives in a column the
+    // cadence arithmetic also reads, so this is the end-to-end half of the
+    // regression the unit tests pin.
+    const dated = await post('/entries', {
+      type: 'task', title: 'Renew the passport', due: day(0), size: 'a day', one_off: true,
+    });
+    check('a dated one off is created', dated.status === 200,
+      JSON.stringify(dated.body).slice(0, 120));
+    const marked = await get('/entries');
+    const it = (marked.body.items || []).find((i) => i.id === dated.body.entry.id);
+    check('and it still carries its deadline mark', it && it.mark === '!!!',
+      it ? String(it.mark) : 'not on the list');
+  }
+
   console.log('\ncleanup');
   server.kill();
   await H.cleanup();

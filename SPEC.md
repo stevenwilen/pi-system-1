@@ -189,7 +189,65 @@ true. The filter is inert and kept on purpose: if anything ever sets that column
 again the query already means the right thing, and removing it would be a second
 change to make later, in the place hardest to notice it was needed.
 
-### 2.6 Wiping personal rows returns the system to factory state
+### 2.6 A one off leaves once it has been in a day
+
+**A task, flagged.** It is the answer to a thing with no rhythm that you want in
+a day and then gone — *call my doctor*, *pay Albie*. An ordinary task sits on the
+list after it is done until you remember to finish it by hand, and **being asked
+to finish something you have already done is the chore that teaches people to
+stop keeping the list**.
+
+**Tasks only, and refused rather than ignored.** A project is not finished by one
+sitting — that is the difference between a project and a task — and a habit
+recurs, which is the opposite of happening once. Accepting the flag and quietly
+dropping it would leave someone believing a project would take itself off.
+
+It was briefly a fourth habit *frequency*, which was the wrong home: a habit is a
+rhythm by definition, so "a habit that happens once" is a contradiction wearing
+the wrong type. **Habit frequencies are untouched**, `monthly` included.
+
+**Stored in `frequency`**, which needs a word of defence. The column is already
+on every row and every task has it empty, so this cost no migration and no DDL.
+It is not a stretch of the meaning either: the field says how often this comes
+round, and the answer here is once.
+
+The cost is that one column now answers two questions, so **every read of it is
+gated on the type** — the sweep, the tick, and the mark arithmetic. The
+arithmetic one is a real trap rather than a tidiness point: `slackFor` branches
+on *"is this a habit"* and not on *"is frequency set"*, because a one-off task
+carries a frequency too. Branching on the column would send it down the cadence
+path, find `one off` missing from the table, return null, and silently strip the
+deadline mark it had the day before the box was ticked. Pinned in both the unit
+tests and end to end.
+
+It ends two ways, because only untimed blocks can be ticked:
+
+- **Ticked**, if it was put in the day without an hour. The tick route finishes
+  the entry and names it in the reply, so the page can drop the row without
+  waiting for a reload. **Unticking brings it back** — a tick is a statement,
+  not a transaction, and it is reachable by a thumb aimed at the row under it.
+- **Its day passing**, which is the only route open to a timed block. A block
+  still sitting in a day that is over is a block that happened (§2.4), and
+  taking it out is how you say otherwise (§2.5). Swept by `finishOneOffs` in the
+  scheduler — the one lane that sends nothing and only tidies.
+
+**Strictly before today**, and **confirmed plans only**. One scheduled for this
+afternoon is not finished because the sweep ran this morning, and finishing
+something off the back of a day nobody agreed to would be the system deciding
+what happened.
+
+**`done`, never `deleted`.** This is work that happened, and the two are recorded
+apart (§2.3). The status filter in the update is what makes a second sweep over
+the same day a no-op rather than a second write.
+
+**It keeps its deadline mark like any other task** (§3.1.1). The flag changes
+what happens once it is done, not how it is judged before that.
+
+**On the sheet it is worded as what happens**, not as what it is called: *stays
+on the list* against *takes itself off*. "One off" is the name of the flag and
+says nothing to somebody meeting it for the first time.
+
+### 2.6.1 Wiping personal rows returns the system to factory state
 
 Nothing about how the system behaves lives outside the database.
 

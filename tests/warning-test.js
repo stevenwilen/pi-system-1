@@ -113,11 +113,54 @@ const atSlack = (size, slack) =>
 
   console.log('\na habit inside its rhythm says nothing');
   {
-    const quiet = (frequency, days) => markFor({ frequency, days });
+    const quiet = (frequency, days) => markFor({ type: 'habit', frequency, days });
     check('a daily one done today', quiet('daily', 0) === null, String(quiet('daily', 0)));
     check('a weekly one done yesterday', quiet('weekly', 1) === null, String(quiet('weekly', 1)));
     check('a weekly one six days on', quiet('weekly', 6) === null, String(quiet('weekly', 6)));
-    check('a monthly one three weeks on', quiet('monthly', 21) === null, String(quiet('monthly', 21)));
+    check('a few-times-a-week one two days on', quiet('few times a week', 2) === null,
+      String(quiet('few times a week', 2)));
+  }
+
+  console.log('\na one off task is still judged on its deadline');
+  {
+    // THE REGRESSION THIS EXISTS TO CATCH, and it is a quiet one. A one-off
+    // task carries a `frequency` — the flag is stored in that column, which was
+    // already on the row and empty — so a branch asking "is frequency set?"
+    // instead of "is this a habit?" would send it down the cadence path, find
+    // 'one off' missing from the table, and return null. The task would lose
+    // the deadline mark it had the day before somebody ticked the box, and
+    // nothing on screen would look broken.
+    const plain = { type: 'task', due: day(0), size: 'a day', today: TODAY };
+    const flagged = { ...plain, frequency: 'one off' };
+
+    check('an ordinary task out of room marks', markFor(plain) === '!!!', String(markFor(plain)));
+    check('and the same task as a one off marks identically',
+      markFor(flagged) === markFor(plain), `${markFor(flagged)} vs ${markFor(plain)}`);
+    check('with the same room left', slackFor(flagged) === slackFor(plain),
+      `${slackFor(flagged)} vs ${slackFor(plain)}`);
+
+    // Further out, so this is not just checking that both ends say '!!!'.
+    const easy = { type: 'task', due: day(20), size: 'a day', today: TODAY, frequency: 'one off' };
+    check('a comfortable one off says nothing, like any comfortable task',
+      markFor(easy) === null, String(markFor(easy)));
+  }
+
+  console.log('\nthe cadence table is the one the shape rules offer');
+  {
+    // The two lists have to agree: a frequency the form can produce and this
+    // file does not know would show no mark for ever, silently.
+    const { FREQUENCIES, ONE_OFF } = require(ROOT + '/entry-shape.js');
+    check('every frequency a habit can be given has a cadence',
+      FREQUENCIES.every((f) => CADENCE_DAYS[f]), FREQUENCIES.join(', '));
+    check('and there are no cadences the form cannot produce',
+      Object.keys(CADENCE_DAYS).length === FREQUENCIES.length,
+      Object.keys(CADENCE_DAYS).join(', '));
+    check('habits keep monthly', FREQUENCIES.includes('monthly') && CADENCE_DAYS.monthly === 30);
+
+    // ONE OFF IS NOT A CADENCE, and must never be offered as one: a habit is a
+    // rhythm by definition, so a habit that happens once is a contradiction.
+    check('and one off is not among them', !FREQUENCIES.includes(ONE_OFF));
+    check('nor in the cadence table', !CADENCE_DAYS[ONE_OFF]);
   }
 
   console.log('\nand gets louder in multiples of it');
@@ -125,7 +168,7 @@ const atSlack = (size, slack) =>
     // ONE CADENCE PAST IS '!', TWO IS '!!', THREE IS '!!!' — so a daily habit
     // missed three days is exactly as loud as a monthly one missed three
     // months. Each is judged against the rhythm it was given.
-    const at = (frequency, days) => markFor({ frequency, days });
+    const at = (frequency, days) => markFor({ type: 'habit', frequency, days });
 
     for (const [frequency, unit] of [['daily', 1], ['few times a week', 3], ['weekly', 7], ['monthly', 30]]) {
       check(`${frequency}: inside the rhythm, nothing`, at(frequency, unit - 1) === null,
@@ -140,26 +183,28 @@ const atSlack = (size, slack) =>
 
   console.log('\nthe two clocks order together, which is the whole reason for slack');
   {
-    // THE CASE THAT DECIDED THE UNIT. Judged in DAYS of room, a monthly habit a
-    // month late has thirty days gone and a daily one four days late has three
-    // — so the monthly would sort first while carrying the quieter mark, and
-    // the screen would show '!!' above '!!!'. A mark is a bucket of the number
-    // the list is ordered by, and the two are not allowed to disagree.
-    const daily = { frequency: 'daily', days: 4 };
-    const monthly = { frequency: 'monthly', days: 61 };
+    // THE CASE THAT DECIDED THE UNIT. Judged in DAYS of room, a weekly habit a
+    // fortnight late has eight days gone and a daily one four days late has
+    // three — so the weekly would sort first while carrying the quieter mark,
+    // and the screen would show '!!' above '!!!'. A mark is a bucket of the
+    // number the list is ordered by, and the two are not allowed to disagree.
+    const daily = { type: 'habit', frequency: 'daily', days: 4 };
+    const weekly = { type: 'habit', frequency: 'weekly', days: 15 };
 
-    check('the daily one is three rhythms gone', markFor(daily) === '!!!', String(markFor(daily)));
-    check('and the monthly barely two', markFor(monthly) === '!!', String(markFor(monthly)));
-    check('so the daily one has the less room of the two',
-      slackFor(daily) < slackFor(monthly), `${slackFor(daily)} vs ${slackFor(monthly)}`);
+    check('the daily one is four rhythms gone', markFor(daily) === '!!!', String(markFor(daily)));
+    check('and the weekly barely two', markFor(weekly) === '!!', String(markFor(weekly)));
+    check('in days the weekly one would look worse',
+      (7 - 15) < (1 - 4), `${7 - 15} against ${1 - 4}`);
+    check('but in cadences the daily one has the less room, which is the order shown',
+      slackFor(daily) < slackFor(weekly), `${slackFor(daily)} vs ${slackFor(weekly)}`);
   }
 
   console.log('\nand a habit with nothing to say is silent rather than fine');
   {
-    check('a frequency nobody recognises', markFor({ frequency: 'hourly', days: 99 }) === null,
-      String(markFor({ frequency: 'hourly', days: 99 })));
-    check('a habit whose age is unknown', markFor({ frequency: 'daily' }) === null,
-      String(markFor({ frequency: 'daily' })));
+    check('a frequency nobody recognises', markFor({ type: 'habit', frequency: 'hourly', days: 99 }) === null,
+      String(markFor({ type: 'habit', frequency: 'hourly', days: 99 })));
+    check('a habit whose age is unknown', markFor({ type: 'habit', frequency: 'daily' }) === null,
+      String(markFor({ type: 'habit', frequency: 'daily' })));
     check('and a dated row is still judged on its date, not on a cadence',
       markFor({ due: '2026-01-01', size: 'a day', today: '2026-06-01' }) === '!!!');
   }

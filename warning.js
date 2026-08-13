@@ -89,11 +89,19 @@ const daysUntil = (from, to) =>
  * Both numbers still mean the same thing — how far past the point where this
  * needed doing — each measured on its own row's clock.
  */
-function slackFor({ due, size, today, frequency, days }) {
+function slackFor({ type, due, size, today, frequency, days }) {
   // A HABIT, whose clock is its frequency. Asked first because a habit has no
   // due date and no size at all, so the deadline branch below would only ever
   // answer null for one.
-  if (frequency) {
+  //
+  // ON THE TYPE, NOT ON THE COLUMN, and the difference is a real bug rather
+  // than a nicety. A one-off task carries a `frequency` too — the flag is
+  // stored there, since the column was already on the row and empty — so a
+  // branch that asked "is frequency set?" would send every one-off task down
+  // the cadence path, find 'one off' missing from the table above, and return
+  // null. The task would silently lose the deadline mark it had the day before
+  // somebody ticked the box.
+  if (type === 'habit') {
     const allowed = CADENCE_DAYS[frequency];
     if (!allowed || !Number.isFinite(days)) return null;
     return (allowed - days) / allowed;
@@ -127,7 +135,7 @@ function markFor(item) {
   // dates weeks out, and a daily habit has one day of room at its very best —
   // done this morning it would have landed inside the '!!' band and stayed
   // there for ever, which is a mark that says nothing because it never moves.
-  if (item.frequency) {
+  if (item.type === 'habit') {
     if (slack <= -2) return '!!!';
     if (slack <= -1) return '!!';
     if (slack <= 0) return '!';

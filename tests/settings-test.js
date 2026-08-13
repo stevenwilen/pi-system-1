@@ -320,11 +320,15 @@ async function rowOf(which) {
       // A PAIR THE TWO POSSIBLE SORTS DISAGREE ABOUT, which the others are not:
       // Call home, Abs and Reading happen to fall in the same order whether
       // you sort by raw days or by days past the cadence, so on their own they
-      // pin nothing. This one is twenty days old, never scheduled, and monthly
-      // — so it is the STALEST of the lot and the least overdue.
+      // pin nothing. This one is five days old, never scheduled, and weekly —
+      // so it has gone longer untouched than Reading and is the least overdue
+      // thing here, with two days still in hand.
+      //
+      // It was twenty days old and monthly, which said the same thing with more
+      // room to spare. 'monthly' is not a cadence any more.
       const clean = await mk('habit', 'Deep clean', {
-        frequency: 'monthly',
-        created_at: new Date(`${back(20)}T12:00:00Z`).toISOString(),
+        frequency: 'weekly',
+        created_at: new Date(`${back(5)}T12:00:00Z`).toISOString(),
       });
 
       // TWELVE DAYS PLANNED, so the window is not thin and the habits are
@@ -381,9 +385,9 @@ async function rowOf(which) {
         mine.habits.map((h) => h.title).join());
 
       // THE SORT IS DAYS PAST THE CADENCE, NOT DAYS SINCE, and this is the pair
-      // that says so: Deep clean has gone longest untouched (20 days) and is
-      // the least overdue of anything here (monthly, so ten days still in
-      // hand). Sorting on raw days would put it at the top.
+      // that says so: Deep clean has gone five days untouched against Reading's
+      // two, and is the least overdue of anything here (weekly, so two days
+      // still in hand). Sorting on raw days would put it above Reading.
       check('the stalest habit is NOT first when it is the least overdue',
         mine.habits.map((h) => h.title).indexOf('Deep clean') >
         mine.habits.map((h) => h.title).indexOf('Reading'),

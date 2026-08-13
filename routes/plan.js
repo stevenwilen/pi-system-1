@@ -16,6 +16,7 @@ const express = require('express');
 
 const { minutesOfDay, toMinutes, hhmmss, DEFAULT_ZONE } = require('../clock');
 const { readCalendar } = require('../tools');
+const { ONE_OFF } = require('../entry-shape');
 // The same ceiling the Things list applies, and deliberately the same number:
 // a note written on a thing is carried onto a block by the confirm below, so
 // two ceilings would let this route refuse text the field that wrote it
@@ -588,7 +589,7 @@ router.post('/plan/block/:id/done', async (req, res) => {
 
   const { data: block, error: readErr } = await db
     .from('blocks')
-    .select('id, start_time')
+    .select('id, start_time, entry_id')
     .eq('id', req.params.id)
     .eq('user_id', userId)
     .maybeSingle();
@@ -613,7 +614,71 @@ router.post('/plan/block/:id/done', async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
   if (!data) return res.status(404).json({ error: 'block not found for this user' });
 
-  res.json({ id: data.id, done: Boolean(data.completed) });
+  // A ONE-OFF IS OVER THE MOMENT IT IS TICKED, and this is the whole of what
+  // that frequency buys. Anything else on the list is still on it after a
+  // session — a habit recurs, a project takes more than one sitting — so the
+  // thing behind the block outlives the block. A one-off has nothing left to
+  // come back for, and being asked to finish it a second time by hand, on a
+  // list, after already doing it, is the chore that teaches people to stop
+  // keeping the list.
+  //
+  // AND UNTICKING BRINGS IT BACK. A tick is a statement, not a transaction, and
+  // this one is reachable by a thumb on a row — the row it was aimed at is the
+  // one directly under it half the time. `done` rather than `deleted` all the
+  // way through, so the row is never destroyed by either direction (§2.3).
+  const finished = await settleOneOff(db, userId, block.entry_id, done);
+
+  res.json({
+    id: data.id,
+    done: Boolean(data.completed),
+    // Named only when it moved, so the page can take the row off the list
+    // without waiting for the next load.
+    ...(finished ? { entry: finished } : {}),
+  });
 });
+
+/**
+ * Finish the thing behind a ticked block, or bring it back.
+ *
+ * Only ever a one-off, and only ever between 'active' and 'done' — the two
+ * states that mean "still carrying it" and "work that happened". A tombstone
+ * stays a tombstone: `deleted` is not in either filter, so a row someone
+ * removed cannot be resurrected by a tick on a block that outlived it.
+ *
+ * Its own failures are swallowed on purpose. The tick itself has already been
+ * written and answered; a list that is one row out of date is corrected by the
+ * next load, and a 500 here would report a successful tick as a failure and
+ * invite a second press.
+ */
+async function settleOneOff(db, userId, entryId, done) {
+  if (!entryId) return null;
+
+  const { data: entry } = await db
+    .from('entries')
+    .select('id, type, frequency, status')
+    .eq('id', entryId)
+    .eq('user_id', userId)
+    .in('status', ['active', 'done'])
+    .maybeSingle();
+
+  // A TASK, AND ONLY A TASK. A habit recurs, which is the opposite of happening
+  // once, and a project is not finished by one sitting — the type check is what
+  // stops a habit's cadence being read as a one-off flag, since the two share
+  // the column.
+  if (!entry || entry.type !== 'task' || entry.frequency !== ONE_OFF) return null;
+
+  const want = done ? 'done' : 'active';
+  if (entry.status === want) return null;
+
+  const { data: moved } = await db
+    .from('entries')
+    .update({ status: want })
+    .eq('id', entry.id)
+    .eq('user_id', userId)
+    .select('id, status')
+    .maybeSingle();
+
+  return moved ? { id: moved.id, status: moved.status } : null;
+}
 
 module.exports = router;

@@ -24,6 +24,7 @@ const express = require('express');
 
 const { todayIn, DEFAULT_ZONE } = require('../clock');
 const { daysBetween } = require('../staleness');
+const { CADENCE_DAYS } = require('../warning');
 
 const router = express.Router();
 
@@ -38,13 +39,21 @@ const WINDOW_DAYS = 30;
  */
 const THIN_DAYS = 10;
 
-/** How many days a cadence allows to pass before it has been missed. */
-const EVERY = {
-  daily: 1,
-  'few times a week': 3,
-  weekly: 7,
-  monthly: 30,
-};
+/**
+ * How many days a cadence allows to pass before it has been missed.
+ *
+ * THE SAME TABLE THE MARKS ARE MADE OF, imported rather than repeated. It was
+ * written out again here, which is the kind of second copy this codebase warns
+ * about everywhere else: the two agreed for as long as nobody touched either,
+ * and the moment 'monthly' was retired from one they would have disagreed about
+ * what a monthly habit even is — this panel still ranking rows by a cadence the
+ * rest of the system no longer offers.
+ *
+ * A ONE-OFF IS ABSENT FROM IT, and the filter below turns that into the right
+ * behaviour for free: this panel is about rhythms being kept, and a thing that
+ * happens once has no rhythm to keep.
+ */
+const EVERY = CADENCE_DAYS;
 
 const backFrom = (date, days) => {
   const d = new Date(`${date}T12:00:00Z`);

@@ -33,6 +33,12 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..').split(path.sep).join('/');
 process.chdir(ROOT);
 
+// BEFORE scheduler.js is required, further down, for the one-off sweep. It
+// starts its cron on require — server.js depends on that — so without this the
+// suite would fire real ticks at the real database and then never exit. The
+// runner sets it for every suite; this is for running this one on its own.
+process.env.SCHEDULER_DISABLED = '1';
+
 const { lastScheduled } = require(ROOT + '/staleness.js');
 
 let bad = 0;
@@ -395,6 +401,137 @@ async function cleanup() {
       !/offerUndo\([\s\S]{0,700}[^w]api\(`\/entries\/\$\{item\.id\}\$\{path\}`/.test(html));
     check('which is what keeps it alive past a closed tab',
       /keepalive: true/.test(html));
+  }
+
+  // --- a one off takes itself off the list ---------------------------------
+  //
+  // THE PROBLEM IT SOLVES. "Call my doctor", "Pay Albie" — a thing with no
+  // rhythm that you want in a day and then gone. Filed as a task it sits on the
+  // list after it is done until you remember to finish it by hand, and being
+  // asked to finish something you have already done is the chore that teaches
+  // people to stop keeping the list.
+
+  const oneOff = async (title) => {
+    const { data, error } = await H.db
+      .from('entries')
+      .insert({ user_id: U, type: 'task', title, frequency: 'one off' })
+      .select('id')
+      .single();
+    if (error) throw new Error(error.message);
+    made.entries.push(data.id);
+    return data.id;
+  };
+
+  const statusOf = async (id) => {
+    const { data } = await H.db.from('entries').select('status').eq('id', id).maybeSingle();
+    return data ? data.status : 'gone';
+  };
+
+  console.log('\nticking a one off finishes the thing behind it');
+  {
+    const DAY = '2031-06-01';
+    const id = await oneOff('Call the doctor');
+    const keeps = await oneOff('Pay Albie');
+    const daily = await entry('habit', 'Stretch');
+
+    const day = await post('/plan', {
+      date: DAY, wake_minutes: 480,
+      blocks: [
+        { title: 'Call the doctor', entryId: id, start_minutes: null, duration_minutes: null },
+        { title: 'Stretch', entryId: daily, start_minutes: null, duration_minutes: null },
+      ],
+    });
+    check('the day confirms', day.status === 200, JSON.stringify(day.body));
+    const { data: plan } = await H.db
+      .from('plans').select('id').eq('user_id', U).eq('date', DAY).single();
+    made.plans.push(plan.id);
+
+    check('scheduling it alone does not finish it', (await statusOf(id)) === 'active',
+      await statusOf(id));
+
+    const ticked = await post(`/plan/block/${day.body.ids[0]}/done`, { done: true });
+    check('the tick is accepted', ticked.status === 200, JSON.stringify(ticked.body));
+    check('and it says which entry it moved',
+      ticked.body.entry && ticked.body.entry.id === id, JSON.stringify(ticked.body));
+    check('the one off is finished', (await statusOf(id)) === 'done', await statusOf(id));
+
+    // DONE, NOT DELETED. They mean opposite things and are recorded apart
+    // (§2.3) — this is work that happened.
+    check('and it is off the list', !(await get('/entries')).items.some((i) => i.id === id));
+
+    // A HABIT IS NOT TOUCHED BY THIS, and the check matters more than it looks:
+    // the flag is stored in the same column a habit's cadence lives in, so
+    // anything that read the column without the type would sweep a weekly habit
+    // off the list as though it happened once.
+    const other = await post(`/plan/block/${day.body.ids[1]}/done`, { done: true });
+    check('ticking an ordinary habit finishes nothing', other.body.entry === undefined,
+      JSON.stringify(other.body));
+    check('and it is still on the list', (await statusOf(daily)) === 'active', await statusOf(daily));
+
+    // UNTICKING BRINGS IT BACK. A tick is a statement, not a transaction, and
+    // this one is reachable by a thumb aimed at the row under it.
+    const undone = await post(`/plan/block/${day.body.ids[0]}/done`, { done: false });
+    check('unticking says so too',
+      undone.body.entry && undone.body.entry.status === 'active', JSON.stringify(undone.body));
+    check('and the one off is back', (await statusOf(id)) === 'active', await statusOf(id));
+    check('a one off nobody scheduled is untouched throughout',
+      (await statusOf(keeps)) === 'active', await statusOf(keeps));
+  }
+
+  console.log('\nand a day that is over finishes the ones nobody ticked');
+  {
+    // THE OTHER HALF, and the half the page cannot do: a TIMED block has no
+    // tick at all — taking it out of the day is how you say it did not happen —
+    // so a block still sitting in a day that is over is a block that did (§2.4).
+    const { finishOneOffs } = require(ROOT + '/scheduler.js');
+
+    const past = await oneOff('Post the letter');
+    const today = await oneOff('Ring the bank');
+    const draft = await oneOff('Book the car in');
+
+    // `false` on purpose: these are TIMED blocks, which cannot be ticked at
+    // all, and the sweep must finish them anyway. A block left in a day that is
+    // over is a block that happened — taking it out is how you say otherwise.
+    await planWith('2031-06-02', [[past, false]]);
+    await planWith('2031-06-03', [[today, false]]);
+
+    // A day built and never agreed to. Finishing something off the back of a
+    // draft would be the system deciding what happened.
+    // 'pending', which is the only status the plans table allows besides
+    // 'confirmed' — the column carries a check constraint, and 'draft' is a
+    // word this schema has never used.
+    //
+    // Its own date, too: plans are unique on (user_id, date), and 2031-06-01 is
+    // already the confirmed day the tick case above built.
+    const { data: unconfirmed, error: draftErr } = await H.db.from('plans')
+      .insert({ user_id: U, date: '2031-05-31', wake_time: '08:00:00', status: 'pending' })
+      .select('id').single();
+    if (draftErr) throw new Error(`unconfirmed plan: ${draftErr.message}`);
+    made.plans.push(unconfirmed.id);
+    await H.db.from('blocks').insert({
+      user_id: U, plan_id: unconfirmed.id, sort_order: 0, title: 'Book the car in',
+      entry_id: draft, start_time: '09:00:00', duration_minutes: 30,
+    });
+
+    // Driven at a date that is after the first plan and ON the second, so the
+    // "strictly before today" guard is the thing under test rather than a
+    // sweep that finishes everything it can see.
+    const moved = await finishOneOffs({ user_id: U, timezone: 'UTC' }, { date: '2031-06-03' });
+
+    check('the one whose day has passed is finished', (await statusOf(past)) === 'done',
+      await statusOf(past));
+    check('and it was reported', (moved || []).some((m) => m.id === past),
+      JSON.stringify(moved));
+    check('the one scheduled for today is left alone', (await statusOf(today)) === 'active',
+      await statusOf(today));
+    check('and one in a day nobody confirmed is left alone too',
+      (await statusOf(draft)) === 'active', await statusOf(draft));
+
+    // A SECOND SWEEP IS A NO-OP rather than a second write, which is what the
+    // status filter in the update is for.
+    const again = await finishOneOffs({ user_id: U, timezone: 'UTC' }, { date: '2031-06-03' });
+    check('sweeping again finishes nothing twice', (again || []).length === 0,
+      JSON.stringify(again));
   }
 
   console.log('\ncleanup');
