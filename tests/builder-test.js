@@ -3967,16 +3967,23 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // PINNED ABOVE EVERYTHING, including a deadline that has already run out —
     // a pin is someone saying "this one" outright, and the arithmetic does not
     // get to argue with it. Inside each half, the list's own order.
-    check('the pinned come first, ordered among themselves',
-      titles().slice(0, 2).join(' | ') === 'Pinned task | Pinned habit',
-      titles().slice(0, 2).join(' | '));
-    check('then the marked, worst room first',
-      titles().slice(2).join(' | ') === 'Overdue | Due later | Due soonish',
-      titles().slice(2).join(' | '));
+    // WHAT IS RUNNING OUT OF ROOM COMES FIRST, worst room leading, and the
+    // pinned are not among them — they have slots of their own further down.
+    check('the marked lead, worst room first',
+      titles().slice(0, 3).join(' | ') === 'Overdue | Due later | Due soonish',
+      titles().slice(0, 3).join(' | '));
 
-    // OLD IS NOT A REASON TO SPEND TODAY ON IT. The bottom half of the list is
-    // there because nobody has touched it, which the arithmetic has no standing
-    // to turn into an appointment.
+    // AND THE LAST SLOTS ARE HELD FOR THE PINS. Read out of the list's order a
+    // pin outranks everything, including a deadline that has already run out,
+    // so four of them filled half the day before the arithmetic got a word in.
+    // Held apart, each gets a fixed share.
+    check('and the pinned come after, in their own slots',
+      titles().slice(3).sort().join(' | ') === 'Pinned habit | Pinned task',
+      titles().slice(3).join(' | '));
+
+    // OLD IS NOT A REASON TO SPEND TODAY ON IT. The bottom of the list is there
+    // because nobody has touched it, which is not something the fill has any
+    // standing to turn into an appointment.
     check('and nothing unmarked and unpinned is dragged in',
       !titles().some((t) => t === 'Cold thing' || t === 'Older thing'),
       titles().join(' | '));
@@ -4000,24 +4007,29 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
   console.log('\nfill day stops at a full day, and skips what is already in it');
   {
+    // TWELVE MARKED AND NOTHING PINNED, so the three held-back slots have
+    // nothing to hold and go back to the order — eight by urgency, not five and
+    // a short day. A held-back slot with nothing to put in it is just a slot.
     const many = [];
-    for (let i = 1; i <= 9; i++) {
+    for (let i = 1; i <= 12; i++) {
       many.push({
-        id: `e-${i}`, type: 'task', title: `Thing ${i}`, days: i, mark: '!!!',
-        pinned: false, due: null, size: null, last_scheduled: null,
+        id: `e-${String(i).padStart(2, '0')}`, type: 'task', title: `Thing ${String(i).padStart(2, '0')}`,
+        days: i, mark: '!!!', pinned: false, due: null, size: null, last_scheduled: null,
       });
     }
     const { ctx, byId, slots, titles } = boot({ entries: utcEntries({ items: many }), now: '07:30' });
     await ctx.load();
 
     ctx.fillDay();
-    check('nine candidates do not make a nine-block day', slots().length === 6,
+    check('twelve candidates do not make a twelve-block day', slots().length === 8,
       String(slots().length));
 
     const freeRows = () => [...byId.builder.children].filter((c) => c._class.has('free')).length;
 
+    check('with the pins\' slots going back to the order, not going unused',
+      titles().length === 8, titles().join(' | '));
     check('and what did not fit was left on the list, not dropped',
-      !titles().some((t) => ['Thing 7', 'Thing 8', 'Thing 9'].includes(t)),
+      !titles().some((t) => ['Thing 09', 'Thing 10', 'Thing 11', 'Thing 12'].includes(t)),
       titles().join(' | '));
 
     // WHAT THIS PLACEMENT COSTS, stated rather than discovered later. The mark
@@ -4030,13 +4042,13 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     await wait(400);
     check('and taking one out does not bring one back', freeRows() === 0,
       String(freeRows()));
-    check('so a half-built day is topped up by hand', slots().length === 5,
+    check('so a half-built day is topped up by hand', slots().length === 7,
       String(slots().length));
 
     // The cap itself is a fact about the fill rather than about where the mark
     // sits, so it is still asked directly.
     ctx.fillDay();
-    check('the fill still takes exactly the room that is left', slots().length === 6,
+    check('the fill still takes exactly the room that is left', slots().length === 8,
       String(slots().length));
 
     // ALREADY IN THE DAY IS NOT A CANDIDATE. Without this the fill would put a
@@ -4044,6 +4056,49 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     const names = titles();
     check('and nothing was placed twice',
       new Set(names).size === names.length, names.join(' | '));
+  }
+
+  console.log('\nthe pins get three slots, and no more than three');
+  {
+    // FIVE PINS AND FIVE MARKED. Read straight out of the list's order every
+    // pin would come first and fill five of the eight before the arithmetic got
+    // a word in, which is what holding them apart is for. It is a cap as much
+    // as a floor.
+    const items = [];
+    for (let i = 1; i <= 5; i++) {
+      items.push({ id: `p-${i}`, type: 'task', title: `Pinned ${i}`, days: i, mark: null, pinned: true, due: null, size: null, last_scheduled: null });
+      items.push({ id: `u-${i}`, type: 'task', title: `Urgent ${i}`, days: i, mark: '!!!', pinned: false, due: null, size: null, last_scheduled: null });
+    }
+    const { ctx, slots, titles } = boot({ entries: utcEntries({ items }), now: '07:30' });
+    await ctx.load();
+
+    ctx.fillDay();
+    check('the day fills to eight', slots().length === 8, String(slots().length));
+
+    const pinned = titles().filter((t) => t.startsWith('Pinned'));
+    const urgent = titles().filter((t) => t.startsWith('Urgent'));
+    check('three of them are pinned, not five', pinned.length === 3, pinned.join(' | '));
+    check('and five are what is running out of room', urgent.length === 5, urgent.join(' | '));
+    check('with the pins last, in the slots held for them',
+      titles().slice(5).every((t) => t.startsWith('Pinned')), titles().join(' | '));
+  }
+
+  console.log('\nand a thing both pinned and running out of room takes one slot, not two');
+  {
+    // It would otherwise sit in both halves. The cost is not cosmetic: the day
+    // would hold seven things in eight blocks, one of them twice.
+    const items = [
+      { id: 'b-1', type: 'task', title: 'Both', days: 1, mark: '!!!', pinned: true, due: null, size: null, last_scheduled: null },
+      { id: 'u-1', type: 'task', title: 'Urgent only', days: 2, mark: '!!', pinned: false, due: null, size: null, last_scheduled: null },
+    ];
+    const { ctx, slots, titles } = boot({ entries: utcEntries({ items }), now: '07:30' });
+    await ctx.load();
+
+    ctx.fillDay();
+    check('both rows are in the day', slots().length === 2, titles().join(' | '));
+    check('and neither is in it twice',
+      new Set(titles()).size === titles().length, titles().join(' | '));
+    check('the pinned one sitting in a pin slot', titles()[1] === 'Both', titles().join(' | '));
   }
 
   console.log('\nfill day has nothing to say when there is nothing to place');

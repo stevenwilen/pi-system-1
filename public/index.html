@@ -4046,40 +4046,74 @@
        * the day would run past some hour, which sounds better and is worse to
        * live with: it makes how much you are asked to do depend on what time
        * you set Starts to, so moving the day an hour later quietly takes work
-       * off it. Six half hours is three hours of named work, which is a day's
+       * off it. Eight half hours is four hours of named work, which is a day's
        * worth of the things that need saying out loud — the rest of a day is
        * not the sort of thing this list is holding.
        *
-       * One number, one place. If it wants to be eight, this is the edit.
+       * One number, one place — and this is the edit it was written for.
        */
-      const FILL_TO = 6;
+      const FILL_TO = 8;
+
+      /**
+       * How many of those eight are kept for the things you pinned.
+       *
+       * THE LAST THREE, HELD BACK. A pin outranks everything in the list's own
+       * order, including a deadline that has already run out, and letting that
+       * order simply run down the page meant four pins filled half the day
+       * before the arithmetic got a word in. Reserving three does the opposite
+       * of what it looks like: it is a CAP on pins as much as a floor under
+       * them, so what you said matters and what is running out of room each get
+       * a fixed share of the day rather than one crowding out the other.
+       *
+       * THE SLOTS GO BACK IF THERE ARE NO PINS TO FILL THEM. Two pins means
+       * six by the order and two pinned, not six and a short day — an empty
+       * held-back slot would be the fill deciding to do less on the grounds
+       * that nothing was pinned, which is not a reason.
+       */
+      const BY_PIN = 3;
 
       /**
        * The things this would put in the day, in the order it would put them.
        *
-       * PINNED FIRST, THEN WHAT IS RUNNING OUT OF ROOM, which is not a rule
-       * invented here — it is the order the list is already sorted in, by the
-       * server and again by `sortThings`. A second opinion about what matters,
-       * living in this function, is how the screen and the list start
-       * disagreeing about which thing is most urgent (§2.1). So this filters
-       * and never reorders.
+       * TWO HALVES, EACH ANSWERING A DIFFERENT QUESTION, and each with a share
+       * of the day that the other cannot take.
        *
-       * A pin is someone saying "this one" outright; a mark is the arithmetic
-       * saying the room has run out. Everything else is on the list because it
-       * is old, and old is not a reason to spend today on it — those stay where
-       * they are and you put them in by hand.
+       * The first five are what is running out of room, in the order the list
+       * already puts them in. That order is not a rule invented here: it is how
+       * the list is sorted, by the server and again by `sortThings`. A second
+       * opinion about what matters, living in this function, is how the screen
+       * and the list start disagreeing about which thing is most urgent (§2.1).
+       * So this half filters and never reorders.
        *
-       * ALREADY IN THE DAY IS NOT A CANDIDATE, which is what makes pressing
-       * this twice safe: the second press finds the first press's work sitting
-       * in `blocks` and skips it.
+       * The last three are the things you pinned. They are held apart from the
+       * order rather than read out of it, and the reason is that a pin outranks
+       * everything there — four pins used to fill half the day before the
+       * arithmetic got a word in. See `BY_PIN`.
+       *
+       * A PINNED THING IS NEVER ALSO AN URGENT ONE HERE. It would otherwise sit
+       * in both halves and take two slots for one row, so the first half asks
+       * for a mark AND no pin.
+       *
+       * ALREADY IN THE DAY IS NOT A CANDIDATE, in either half, which is what
+       * makes pressing this twice safe: the second press finds the first
+       * press's work sitting in `blocks` and skips it.
        */
       function fillable() {
         const room = Math.max(0, FILL_TO - timedBlocks().length);
         if (!room) return [];
-        return things
-          .filter((t) => t.pinned || t.mark)
-          .filter((t) => !inShownPlan(t.id))
-          .slice(0, room);
+
+        const free = things.filter((t) => !inShownPlan(t.id));
+
+        const pins = free.filter((t) => t.pinned).slice(0, BY_PIN);
+
+        // Whatever the pins did not use. With three pins this is five; with
+        // none it is the whole day, which is what "it goes to another priority"
+        // means — a held-back slot with nothing to hold is just a slot.
+        const urgent = free
+          .filter((t) => !t.pinned && t.mark)
+          .slice(0, FILL_TO - pins.length);
+
+        return [...urgent, ...pins].slice(0, room);
       }
 
       /**
@@ -4130,14 +4164,17 @@
         b.setAttribute('aria-label', 'Fill the day from your list');
         b.title = 'Fill the day from your list';
         b.innerHTML =
-          // 1.5 rather than 2: at 2px the bars were as heavy as the day's own
-          // figures, in a row that is meant to be the quietest thing on the
-          // screen. This is nearer the weight of the hairline between rows.
-          '<svg viewBox="0 0 16 11.5" width="16" height="11.5" aria-hidden="true" focusable="false">' +
-          '<rect x="0" y="0" width="16" height="1.5" rx="0.75"></rect>' +
-          '<rect x="0" y="5" width="16" height="1.5" rx="0.75"></rect>' +
-          '<rect x="0" y="10" width="6" height="1.5" rx="0.75"></rect>' +
-          '<rect x="9" y="10" width="7" height="1.5" rx="0.75"></rect>' +
+          // BULKY, and the colour is what keeps it quiet. It went from 2px to
+          // 1.5 when it was still the accent, because a saturated mark that
+          // heavy was pointing at the emptiest part of the screen — but weight
+          // and colour were two complaints and only one of them was the loud
+          // one. In grey it can be solid without shouting: 3px bars on a wider
+          // box, which reads as a stack of rows rather than as three hairlines.
+          '<svg viewBox="0 0 20 15" width="20" height="15" aria-hidden="true" focusable="false">' +
+          '<rect x="0" y="0" width="20" height="3" rx="1.5"></rect>' +
+          '<rect x="0" y="6" width="20" height="3" rx="1.5"></rect>' +
+          '<rect x="0" y="12" width="8" height="3" rx="1.5"></rect>' +
+          '<rect x="11" y="12" width="9" height="3" rx="1.5"></rect>' +
           '</svg>';
         b.onclick = (e) => {
           if (e && e.stopPropagation) e.stopPropagation();

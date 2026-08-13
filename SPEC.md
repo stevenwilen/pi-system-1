@@ -1249,9 +1249,9 @@ document holds **no standing touch listener** at rest.
 
 **A mark at the right of the empty row**, in the column the status would hold,
 so its edge lands on the same margin every figure on the page ends at. One press
-builds the day out of the list: **pinned things first, then whatever is running
-out of room**, six half-hour blocks, flowing from the wake time like any other
-block.
+builds the day out of the list: **eight half-hour blocks, five by what is
+running out of room and three held for what you pinned**, flowing from the wake
+time like any other block.
 
 **Three rules, the last of them broken** — the design's own vocabulary rather
 than a borrowed glyph. A solid rule is a row and a dashed one is the space where
@@ -1259,14 +1259,18 @@ a row would be, which is the same distinction the hatched placeholder around it
 is drawing, so the mark reads as *rows, with one still to come*. Three equal
 bars would have been a hamburger, which is a menu everywhere else on a phone.
 
-**Grey, and at hairline weight.** It was the accent at 2px, on the general rule
-that blue is what this page uses for anything you can act on. That rule is right
-about buttons carrying words in a row of other controls and wrong here: the mark
-sits inside a row whose entire content is the lightest grey on the page saying
-there is nothing yet, and the one saturated thing in it drew the eye to the
-emptiest part of the screen. One step darker than those words — `--faint`
-against their `--ghost` — is enough to say it is a thing rather than decoration,
-and the hatching does the rest.
+**Grey, and solid.** It was the accent at 2px, on the general rule that blue is
+what this page uses for anything you can act on. That rule is right about
+buttons carrying words in a row of other controls and wrong here: the mark sits
+inside a row whose entire content is the lightest grey on the page saying there
+is nothing yet, and the one saturated thing in it drew the eye to the emptiest
+part of the screen. One step darker than those words — `--faint` against their
+`--ghost` — is enough to say it is a thing rather than decoration.
+
+Weight and colour were two complaints and only one of them was the loud one:
+thinning the bars to hairline answered the wrong half, and three hairlines read
+as a scratch rather than as rows. In grey it can be **3px on a wider box**
+without shouting.
 
 It sat beside **+ Block** first, where it read as a third way to add one thing
 and competed with the two that are; then as the words *Fill day* at the foot of
@@ -1282,11 +1286,31 @@ to be something worth filling it with.
 not a full day, and not a half-built one either. That is what this placement
 costs: it builds a day, and **+ Block** is what tops one up.
 
-**It invents no order.** That sequence is not a rule this feature has of its
-own — it is the order the Things list is already sorted in, by the server and
-again by `sortThings` on the screen. The fill calls the same comparator and then
-filters. A second opinion about what matters, living here, is how the screen and
-the list start disagreeing about which thing is most urgent (§2.1).
+**Two halves, each with a share the other cannot take.** The first five are what
+is running out of room, in the order the list already puts them in. The last
+three are held for the things you pinned.
+
+**Holding the pins apart is a cap as much as a floor.** Read straight out of the
+list's order a pin outranks everything, including a deadline that has already
+run out — so four pins filled half the day before the arithmetic got a word in.
+Three slots means what you said matters and what is running out of room each get
+a fixed share, rather than one crowding out the other.
+
+**Unused pin slots go back to the order.** Two pins gives six by urgency and two
+pinned, not six and a short day: a held-back slot with nothing to hold is just a
+slot, and leaving it empty would be the fill deciding to do less on the grounds
+that nothing was pinned.
+
+**A pinned thing is never also an urgent one here**, or it would sit in both
+halves and take two slots for one row. The urgent half asks for a mark *and* no
+pin.
+
+**It invents no order within a half.** That sequence is not a rule this feature
+has of its own — it is the order the Things list is already sorted in, by the
+server and again by `sortThings` on the screen. The fill calls the same
+comparator and then filters. A second opinion about what matters, living here,
+is how the screen and the list start disagreeing about which thing is most
+urgent (§2.1).
 
 **Pinned or marked, nothing else.** A pin is someone saying *this one* outright;
 a mark is the arithmetic saying the room has run out. The rest of the list is
@@ -1297,10 +1321,10 @@ in by hand.
 of *work* against its deadline, not the length of one sitting, so it cannot set
 this without inventing a number nobody supplied.
 
-**Six, by count rather than by the clock.** Stopping at an hour instead would
+**Eight, by count rather than by the clock.** Stopping at an hour instead would
 make how much you are asked to do depend on what time Starts is set to, so
-moving the day later would quietly take work off it. `FILL_TO` is one constant
-in one place.
+moving the day later would quietly take work off it. `FILL_TO` and `BY_PIN` are
+one constant each, in one place each.
 
 **It fills to a total, so a second press is not a second helping.** Anything
 already in the shown day is not a candidate. There is no second press to make in

@@ -1735,8 +1735,12 @@ console.log('\n16. the shape of the day');
       /color: var\(--ghost\)/.test(rule('.freenm')));
     check('and drawn in whatever the button carries, so the colour is stated once',
       /fill: currentColor/.test(rule('.fillnow svg')));
-    check('its rules are hairline weight, not the weight of a figure',
-      /height="1\.5"/.test(code) && !/height="2"/.test(code));
+    // BULKY, and the colour is what keeps it quiet. It was 2px and the accent,
+    // which was two complaints at once; thinning it to 1.5 answered the wrong
+    // one. In grey it can be solid without shouting, and a stack of hairlines
+    // read as a scratch rather than as rows.
+    check('its rules are solid rather than hairline',
+      /height="3"/.test(code) && !/height="1\.5"/.test(code));
 
     // ITS OWN ANCHOR. `.atime` was missing exactly this once, and its invisible
     // full-bleed child lay over the whole screen and killed every gesture.
@@ -1756,8 +1760,20 @@ console.log('\n16. the shape of the day');
       !/\.sort\(/.test(fill) && !/localeCompare/.test(fill));
 
     const able = (code.match(/function fillable\(\)[\s\S]*?\n      \}/) || [''])[0];
-    check('it takes the pinned and the marked, and nothing else',
-      /t\.pinned \|\| t\.mark/.test(able), able.slice(0, 120));
+    // TWO HALVES WITH A SHARE EACH. Read straight out of the list's order a pin
+    // outranks everything, including a deadline that has already run out, so
+    // four pins filled half the day before the arithmetic got a word in.
+    check('the pins get slots of their own', /free\.filter\(\(t\) => t\.pinned\)\.slice\(0, BY_PIN\)/.test(able),
+      able.slice(0, 140));
+    check('and are capped at that many, not merely floored',
+      /const BY_PIN = 3;/.test(code));
+    // A pinned thing must not sit in both halves and take two slots for one row.
+    check('what is urgent excludes what is pinned', /!t\.pinned && t\.mark/.test(able), able.slice(0, 200));
+    // "If there isn't enough pins then it goes to another priority" — an empty
+    // held-back slot would be the fill deciding to do less because nothing was
+    // pinned, which is not a reason.
+    check('unused pin slots go back to the order', /FILL_TO - pins\.length/.test(able), able.slice(0, 220));
+
     check('never a thing already in the day, so a second press is safe',
       /!inShownPlan\(t\.id\)/.test(able));
     check('and fills to a total rather than by a batch',
