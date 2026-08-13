@@ -1076,10 +1076,16 @@ refusing the statement precisely when there was something to state.
   title, and carries **nothing** where the chip would be. It used to ask
   **didn't happen?** there; the outline and the faint title were always what
   marked it as done, and they still are.
-- A block that has **begun but not ended** is still a card, and says **active**
+- A block that has **begun but not ended** is still a card, and says **NOW**
   where the chip would be. The slot cannot be left empty on this one: unlike a
   past block it is a filled card like every other, so a gap there reads as a chip
   that failed to render rather than one deliberately withheld.
+
+  **The word and nothing else.** It read `NOW · 4H`, and the length was already
+  on the row — the line under the title gives both ends in full, which is where
+  a length is read from on every other block. Every other entry in this column
+  is a single word, and the one row you are actually in was the only one
+  carrying two facts, in a column whose whole job is to be read straight down.
 
   The label is **muted, not the accent colour**, and this is the point worth
   keeping. That slot holds a tappable blue pill on every block above it, so a

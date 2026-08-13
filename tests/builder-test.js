@@ -2327,8 +2327,13 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // It says what it is instead. The slot the chip vacated was reading as a
     // block that had failed to render one.
     const actIn = (s) => rowOf(s).children.find((c) => c._class.has('running'));
-    check('it says it is active', actIn(slots()[1]) && actIn(slots()[1]).textContent === 'NOW · 1H',
+    // The word and nothing else. It read "NOW · 1H" and the hours are already
+    // on the row, in the line under the title, which is where a length is read
+    // from on every other block.
+    check('it says it is active', actIn(slots()[1]) && actIn(slots()[1]).textContent === 'NOW',
       actIn(slots()[1]) && actIn(slots()[1]).textContent);
+    check('and does not restate a length the row already gives',
+      slots()[1].text().includes('9:00 AM – 10:00 AM'), slots()[1].text().trim());
     check('the one that is over does not', !actIn(slots()[0]));
     check('nor does the one still to come', !actIn(slots()[2]));
 

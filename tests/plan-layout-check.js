@@ -792,8 +792,11 @@ console.log('\n3. everything is a row, and nothing is a card');
   check('there is a status column of one width', /width: 64px/.test(st), st);
   check('read from the right', /text-align: right/.test(st), st);
   check('a finished row says so', /textContent = 'DONE'/.test(code));
-  check('and the one you are in says how long it runs',
-    /NOW · \$\{span\(b\.duration\)\.toUpperCase\(\)\}/.test(code));
+  // ONE FACT EACH. Every other entry in this column is a single word, and the
+  // row you are in was the only one carrying two — "NOW · 4H", where the hours
+  // are already on the row in the line under the title.
+  check('and the one you are in says only that',
+    /textContent = 'NOW';/.test(code) && !/NOW · /.test(code));
 
   // A row states its WHOLE SPAN. Both ends, from the block's own start and
   // length — not the day's arithmetic restated.
@@ -933,7 +936,7 @@ console.log('\n6. blue is actionable, and nothing else is blue');
   check('the start steppers are blue', /color: var\(--accent\)/.test(rule('.step')));
   // THE CHIP IS A FIGURE IN A COLUMN, and it stopped being blue when it moved
   // into one. It was the one control on a block, so it wore the action colour —
-  // in the status column it sits under DONE and beside NOW · 4H, and a blue
+  // in the status column it sits under DONE and beside NOW, and a blue
   // figure there was the loudest thing on the row you are NOT in.
   //
   // It is still pressed to cycle the length; what says so is that it is the
@@ -1217,10 +1220,13 @@ console.log('\n7b. the right edge of a block says one thing per state');
   // only to keep out of the title's way.
   check('it takes no more room than its word', /white-space: nowrap/.test(act), act);
 
-  check('it says NOW and how long it runs',
-    /NOW · \$\{span\(b\.duration\)\.toUpperCase\(\)\}/.test(code));
+  check('it says NOW, and only NOW', /textContent = 'NOW';/.test(code));
+  // The length went with the argument that carried it, so a call still passing
+  // a block would be a call passing something nothing reads.
+  check('and needs nothing about the block to say it',
+    /function activeLabel\(\) \{/.test(code));
   check('a block that has begun gets it',
-    /\} else if \(begun\) \{\s*row\.append\(idx, left, activeLabel\(b\)\);/.test(code));
+    /\} else if \(begun\) \{\s*row\.append\(idx, left, activeLabel\(\)\);/.test(code));
   check('and one that is over says DONE in the same column',
     /if \(past\) \{\s*row\.append\(idx, left, doneLabel\(\)\);/.test(code));
 }

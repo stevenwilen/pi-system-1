@@ -5236,7 +5236,7 @@
         if (past) {
           row.append(idx, left, doneLabel());
         } else if (begun) {
-          row.append(idx, left, activeLabel(b));
+          row.append(idx, left, activeLabel());
         } else {
           const dur = document.createElement('button');
           dur.type = 'button';
@@ -5282,12 +5282,19 @@
        * that does nothing.
        */
       /* THE STATUS COLUMN. Three states and one column: what is over says DONE,
-         what is happening says NOW and how long it runs, and what is still to
-         come carries the chip that sets its length. One place to read down. */
-      function activeLabel(b) {
+         what is happening says NOW, and what is still to come carries the chip
+         that sets its length. One place to read down.
+
+         JUST THE WORD. It read "NOW · 4H", and the 4H was already on the row —
+         the line under the title gives the hours in full, 11:00 AM – 3:00 PM,
+         which is where a length is read from on every other block too. Saying
+         it twice made the one row you are actually in the noisiest thing in a
+         column whose whole job is to be read straight down, and it was the only
+         entry in that column carrying two facts. */
+      function activeLabel() {
         const tag = document.createElement('div');
         tag.className = 'st running';
-        tag.textContent = `NOW · ${span(b.duration).toUpperCase()}`;
+        tag.textContent = 'NOW';
         return tag;
       }
 
