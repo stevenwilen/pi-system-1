@@ -1235,6 +1235,15 @@ a row would be, which is the same distinction the hatched placeholder around it
 is drawing, so the mark reads as *rows, with one still to come*. Three equal
 bars would have been a hamburger, which is a menu everywhere else on a phone.
 
+**Grey, and at hairline weight.** It was the accent at 2px, on the general rule
+that blue is what this page uses for anything you can act on. That rule is right
+about buttons carrying words in a row of other controls and wrong here: the mark
+sits inside a row whose entire content is the lightest grey on the page saying
+there is nothing yet, and the one saturated thing in it drew the eye to the
+emptiest part of the screen. One step darker than those words — `--faint`
+against their `--ghost` — is enough to say it is a thing rather than decoration,
+and the hatching does the rest.
+
 It sat beside **+ Block** first, where it read as a third way to add one thing
 and competed with the two that are; then as the words *Fill day* at the foot of
 the page, where sitting under a column of figures meant arguing for its own face

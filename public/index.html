@@ -1878,10 +1878,16 @@
          on the day rather than part of it. */
       /* THE MARK IN THE EMPTY ROW. It takes the column the status would hold —
          the right edge, under STATUS — so it sits opposite the words rather
-         than beside them, and it is the one blue thing in a row that is
-         otherwise the lightest grey on the page. That is what earns it the
-         colour: everything else in the row says there is nothing here, and this
-         is the only part of it you can act on. */
+         than beside them.
+
+         GREY, NOT BLUE. It was the accent, on the argument that blue is what
+         this page uses for anything you can act on, and that argument is right
+         about buttons carrying words in a row of other controls. It is wrong
+         here: this sits inside a row whose whole content is the lightest grey
+         on the page saying there is nothing yet, and the one saturated mark in
+         it drew the eye to the emptiest part of the screen. One step darker
+         than those words is enough to say it is a thing rather than decoration,
+         and the hatching behind it is doing the rest of the work. */
       .fillnow {
         /* ITS OWN ANCHOR. The hit area below is absolute, and an absolute with
            no positioned ancestor anchors to the page — which is not a subtle
@@ -1897,7 +1903,7 @@
         display: flex;
         justify-content: flex-end;
         align-items: center;
-        color: var(--accent);
+        color: var(--faint);
         background: none;
         border: 0;
         padding: 0;
@@ -4082,11 +4088,14 @@
         b.setAttribute('aria-label', 'Fill the day from your list');
         b.title = 'Fill the day from your list';
         b.innerHTML =
-          '<svg viewBox="0 0 16 12" width="16" height="12" aria-hidden="true" focusable="false">' +
-          '<rect x="0" y="0" width="16" height="2" rx="1"></rect>' +
-          '<rect x="0" y="5" width="16" height="2" rx="1"></rect>' +
-          '<rect x="0" y="10" width="6" height="2" rx="1"></rect>' +
-          '<rect x="9" y="10" width="7" height="2" rx="1"></rect>' +
+          // 1.5 rather than 2: at 2px the bars were as heavy as the day's own
+          // figures, in a row that is meant to be the quietest thing on the
+          // screen. This is nearer the weight of the hairline between rows.
+          '<svg viewBox="0 0 16 11.5" width="16" height="11.5" aria-hidden="true" focusable="false">' +
+          '<rect x="0" y="0" width="16" height="1.5" rx="0.75"></rect>' +
+          '<rect x="0" y="5" width="16" height="1.5" rx="0.75"></rect>' +
+          '<rect x="0" y="10" width="6" height="1.5" rx="0.75"></rect>' +
+          '<rect x="9" y="10" width="7" height="1.5" rx="0.75"></rect>' +
           '</svg>';
         b.onclick = (e) => {
           if (e && e.stopPropagation) e.stopPropagation();

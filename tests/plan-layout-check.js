@@ -885,11 +885,13 @@ console.log('\n6. blue is actionable, and nothing else is blue');
     // `.addfield:focus` is the same idiom as the two fields already here: the
     // rule under a caret goes blue to say which line is being typed on.
     //
-    // `.fillnow` is the press inside the empty row. It is the one blue thing in
-    // a row that is otherwise the lightest grey on the page, which is exactly
-    // what earns it the colour: everything else in that row is a statement that
-    // there is nothing here, and this is the only part of it you can act on.
-    /\.step|\.dur|\.undo button|\.addblock|\.fillnow|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.back|\.thingnote:focus|\.addfield:focus|\.confirm|\.running|\.block\.live::before/;
+    // `.fillnow` was on this list and came off it. The rule holds — blue is for
+    // what can be acted on — but it is a rule about a page, and that mark sits
+    // inside a row whose whole content is the lightest grey on the screen
+    // saying there is nothing here yet. The one saturated thing in it drew the
+    // eye to the emptiest part of the page. Off the list rather than left on it
+    // dead, so putting the accent back has to be argued for here again.
+    /\.step|\.dur|\.undo button|\.addblock|\.label \.act|\.sheet-actions \.save|\.gate-swap|\.gate-field input:focus|\.row-actions \.minor|\.said\.good|\.back|\.thingnote:focus|\.addfield:focus|\.confirm|\.running|\.block\.live::before/;
   // The divider: the knot and the line it fastens. Both are indigo now, where
   // the dark build tinted the line with a separate near-blue that belonged to
   // nothing — one fewer colour on the page, and the two halves of one object
@@ -1723,8 +1725,18 @@ console.log('\n16. the shape of the day');
     check('it takes the column the status would hold',
       /width: 64px/.test(rule('.fillnow')) && /justify-content: flex-end/.test(rule('.fillnow')),
       rule('.fillnow').replace(/\s+/g, ' ').slice(0, 90));
-    check('and the blue is stated once, on the button',
-      /color: var\(--accent\)/.test(rule('.fillnow')) && /fill: currentColor/.test(rule('.fillnow svg')));
+    // QUIET. One step darker than the row's own words and no more: the mark had
+    // the accent and 2px bars, and the one saturated thing on the screen was
+    // pointing at the emptiest part of it.
+    check('the mark is grey rather than the accent',
+      /color: var\(--faint\)/.test(rule('.fillnow')) &&
+        !/var\(--accent\)/.test(rule('.fillnow')), rule('.fillnow').replace(/\s+/g, ' ').slice(0, 70));
+    check('a step darker than the words beside it, which are the lightest grey',
+      /color: var\(--ghost\)/.test(rule('.freenm')));
+    check('and drawn in whatever the button carries, so the colour is stated once',
+      /fill: currentColor/.test(rule('.fillnow svg')));
+    check('its rules are hairline weight, not the weight of a figure',
+      /height="1\.5"/.test(code) && !/height="2"/.test(code));
 
     // ITS OWN ANCHOR. `.atime` was missing exactly this once, and its invisible
     // full-bleed child lay over the whole screen and killed every gesture.
