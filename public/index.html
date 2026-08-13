@@ -4163,20 +4163,30 @@
           .slice(0, FILL_TO - pins.length);
 
         const chosen = [...urgent, ...pins];
-        const taken = new Set(chosen.map((t) => t.id));
 
-        // AND THE SAME COURTESY THE OTHER WAY. The rule was written for a
-        // shortage of pins and said nothing about a shortage of urgency, so the
-        // give was one-directional and the fourth pin fell down the gap: it was
-        // over the cap of three, and the urgent half would not have it either,
-        // because that half asks for a mark AND NO PIN. Six pinned things and
-        // two urgent ones made a five-block day with three empty slots and
-        // three pinned rows sitting on the list unused.
+        // AND THE REST OF THE DAY GOES TO WHATEVER HAS WAITED LONGEST.
         //
-        // The cap is still a cap while there is urgent work to protect from it.
-        // What it is not is a reason to do less.
-        const rest = free.filter((t) => (t.pinned || t.mark) && !taken.has(t.id));
-        chosen.push(...rest.slice(0, FILL_TO - chosen.length));
+        // One pass down the list in the order it is already in, which is doing
+        // three jobs at once because that order was built for exactly this:
+        // pins over the cap of three come first, then anything marked the
+        // urgent half had no room for, then the tail — longest untouched
+        // leading. Nothing here re-decides what matters.
+        //
+        // A held-back slot with nothing to hold is just a slot, and an empty
+        // one is the fill deciding to do less. The give used to run one way
+        // only — the rule was written for a shortage of pins and said nothing
+        // about a shortage of urgency — so the fourth pin fell down the gap
+        // between the two halves: over the cap, and refused by the urgent half
+        // as well, because that half asks for a mark AND NO PIN.
+        //
+        // OLD IS STILL NOT A REASON TO SPEND TODAY ON SOMETHING. It is a good
+        // enough reason to spend the part of today nothing better has claimed,
+        // which is what these slots are: the deadlines and the pins have
+        // already taken everything they can carry.
+        for (const t of free) {
+          if (chosen.length >= FILL_TO) break;
+          if (!chosen.some((c) => c.id === t.id)) chosen.push(t);
+        }
 
         return chosen.slice(0, room);
       }

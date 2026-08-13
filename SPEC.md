@@ -1278,10 +1278,9 @@ and competed with the two that are; then as the words *Fill day* at the foot of
 the page, where sitting under a column of figures meant arguing for its own face
 and its own alignment. A mark in the row it fills has neither problem.
 
-**Not drawn when it would do nothing** — a list with nothing pinned and nothing
-running out of room, which is the ordinary state of a well-kept list rather than
-an edge case. An empty day is not by itself a reason to offer a fill; there has
-to be something worth filling it with.
+**Not drawn when it would do nothing** — an empty list, or a day that already
+holds everything on it. An empty day is not by itself a reason to offer a fill;
+there has to be something to fill it with.
 
 **It goes with the row**, so a day with anything in it makes no offer at all —
 not a full day, and not a half-built one either. That is what this placement
@@ -1333,10 +1332,21 @@ comparator and then filters. A second opinion about what matters, living here,
 is how the screen and the list start disagreeing about which thing is most
 urgent (§2.1).
 
-**Pinned or marked, nothing else.** A pin is someone saying *this one* outright;
-a mark is the arithmetic saying the room has run out. The rest of the list is
-there because it is old, and old is not a reason to spend today on it — those go
-in by hand.
+**Then the slots nothing better claimed go to whatever has waited longest.** One
+pass down the list in the order it is already in, which does three jobs at once
+because that order was built for exactly this: pins over the cap first, then
+anything marked the urgent half had no room for, then the tail — longest
+untouched leading.
+
+A pin is someone saying *this one* outright and a mark is the arithmetic saying
+the room has run out; both take everything they can carry before this runs. Old
+is still not a reason to spend today on something. It is reason enough to spend
+**the part of today nothing better has claimed**, which is all these slots are.
+
+The consequence is that the mark is on screen far more often than it was. It
+used to withdraw whenever nothing was pinned and nothing was running out of room
+— the ordinary state of a well-kept list — and now the only ways to have nothing
+to offer are an empty list or a day that already holds everything.
 
 **Half hours**, the length a block added by hand gets. A thing's `size` is days
 of *work* against its deadline, not the length of one sitting, so it cannot set

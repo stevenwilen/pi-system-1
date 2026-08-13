@@ -3982,12 +3982,16 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       ['Pinned task', 'Pinned habit'].every((t) => titles().includes(t)),
       titles().join(' | '));
 
-    // OLD IS NOT A REASON TO SPEND TODAY ON IT. The bottom of the list is there
-    // because nobody has touched it, which is not something the fill has any
-    // standing to turn into an appointment.
-    check('and nothing unmarked and unpinned is dragged in',
-      !titles().some((t) => t === 'Cold thing' || t === 'Older thing'),
+    // AND THE SLOTS NOTHING BETTER CLAIMED GO TO WHAT HAS WAITED LONGEST. Five
+    // things are pinned or running out of room, so three slots are left, and
+    // the two nobody has touched take two of them. Old is not a reason to spend
+    // today on something; it is reason enough to spend the part of today that
+    // the deadlines and the pins could not fill.
+    check('what has waited longest takes the slots nothing else claimed',
+      ['Cold thing', 'Older thing'].every((t) => titles().includes(t)),
       titles().join(' | '));
+    check('and the day is as full as the list can make it',
+      titles().length === 7, `${titles().length}: ${titles().join(' | ')}`);
 
     check('every block is half an hour, the length a manual one gets',
       slots().every((s) => s.text().includes('– 8:00 AM') || /\d:\d\d [AP]M – /.test(s.text())),
@@ -4135,6 +4139,37 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       titles().filter((t) => t.startsWith('Urgent')).join(' | '));
   }
 
+  console.log('\nthe neglected fill up the day, longest waiting first');
+  {
+    // ONE URGENT THING AND A LONG COLD TAIL. Without the last pass this is a
+    // one-block day: a fill that looks broken on exactly the list it would be
+    // most useful on.
+    const items = [
+      { id: 'u-1', type: 'task', title: 'Urgent', days: 1, mark: '!!!', pinned: false, due: null, size: null, last_scheduled: null },
+    ];
+    // Declared youngest-first so the order coming out cannot be the order going
+    // in. 90 days is the longest wait, so it should lead the cold ones.
+    for (const days of [5, 10, 20, 40, 60, 90, 75, 30, 120]) {
+      items.push({ id: `c-${days}`, type: 'task', title: `Cold ${days}`, days, mark: null, pinned: false, due: null, size: null, last_scheduled: null });
+    }
+    const { ctx, slots, titles } = boot({ entries: utcEntries({ items }), now: '07:30' });
+    await ctx.load();
+
+    ctx.fillDay();
+    check('the day fills to eight', slots().length === 8, String(slots().length));
+    check('the urgent one is in it', titles().includes('Urgent'), titles().join(' | '));
+
+    // WHICH SEVEN, not in what order — the order is shuffled on the way in.
+    // Longest waiting first is a rule about who gets in, and 5 is the one left
+    // out because six others have waited longer.
+    check('the seven longest-waiting take the rest',
+      [120, 90, 75, 60, 40, 30, 20].every((d) => titles().includes(`Cold ${d}`)),
+      titles().join(' | '));
+    check('and the two freshest are the ones left out',
+      !titles().includes('Cold 5') && !titles().includes('Cold 10'),
+      titles().join(' | '));
+  }
+
   console.log('\nand a thing both pinned and running out of room takes one slot, not two');
   {
     // It would otherwise sit in both halves. The cost is not cosmetic: the day
@@ -4209,14 +4244,13 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
   console.log('\nfill day has nothing to say when there is nothing to place');
   {
-    // A list with things on it, none of them pinned and none of them running
-    // out of room. This is the ordinary state of a well-kept list, not an edge
-    // case, and the button has to be honest about it.
-    const quiet = [
-      { id: 'e-a', type: 'task', title: 'Someday', days: 20, mark: null, pinned: false, due: null, size: null, last_scheduled: null },
-      { id: 'e-b', type: 'habit', title: 'Stretching', days: 5, mark: null, pinned: false, due: null, size: null, last_scheduled: null },
-    ];
-    const { ctx, byId, slots } = boot({ entries: utcEntries({ items: quiet }), now: '07:30' });
+    // A LIST WITH NOTHING ON IT, which is now the only way to get here. It used
+    // to be enough that nothing was pinned and nothing was running out of room
+    // — the ordinary state of a well-kept list — and that case is gone: the
+    // slots nothing better claims go to whatever has waited longest, so a list
+    // with anything unscheduled on it has something to offer. The mark is on
+    // screen far more often than it was, which was the point.
+    const { ctx, byId, slots } = boot({ entries: utcEntries({ items: [] }), now: '07:30' });
     await ctx.load();
 
     // THE EMPTY ROW IS STILL THERE — the day has nothing in it — but no offer
