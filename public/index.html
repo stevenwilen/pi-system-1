@@ -1909,11 +1909,19 @@
         padding: 0;
         cursor: pointer;
       }
-      /* Drawn in the colour the button carries, so there is one place the blue
-         is stated. */
+      /* STROKED, NOT FILLED, at the weight of the tick's border — which is this
+         design's fine line, and the reason the mark sits in the ruling rather
+         than on top of it. Filled shapes are the heaviest kind of mark there is
+         on a page made of hairlines.
+
+         The colour comes from the button, so there is one place it is stated. */
       .fillnow svg {
         display: block;
-        fill: currentColor;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.25;
+        stroke-linecap: round;
+        stroke-linejoin: round;
       }
       /* Sized to be read, pressed larger. The word is 10px, which is nowhere
          near a finger, and the row it sits in is only 46px tall. */
@@ -4178,12 +4186,18 @@
       /**
        * The mark that builds the day, drawn into the space where it would be.
        *
-       * THREE RULES, THE LAST OF THEM DASHED, which is this design's own
-       * vocabulary rather than a borrowed glyph: a solid rule is a row and a
-       * dashed one is the space where a row would be — the same distinction the
-       * hatched placeholder it sits in is drawing. So the mark reads as rows,
-       * with one still to come. Three equal bars would have been a hamburger,
-       * which is a menu everywhere else on a phone.
+       * AN ARROW ONTO A RULE — the drafting mark for putting something into a
+       * table, and the only thing on this page that has a direction. It was
+       * three stacked bars before, which had two problems: filled bars are the
+       * heaviest kind of mark there is on a page built from hairlines, and
+       * three of them is a hamburger, which means "menu" everywhere else on a
+       * phone.
+       *
+       * DRAWN IN STROKE, NOT FILL, which is what makes it belong here. Every
+       * line on this page is a hairline — the rules between rows, the dashed
+       * edge of this very placeholder, the box around the tick — and a mark
+       * made of filled shapes sits on top of that rather than in it. At the
+       * same weight as the tick's border it reads as part of the ruling.
        *
        * It carried the word "Fill" once, and then "Fill day" at the foot of the
        * page. A word there sat under a column of figures and had to argue for
@@ -4205,17 +4219,12 @@
         b.setAttribute('aria-label', 'Fill the day from your list');
         b.title = 'Fill the day from your list';
         b.innerHTML =
-          // BULKY, and the colour is what keeps it quiet. It went from 2px to
-          // 1.5 when it was still the accent, because a saturated mark that
-          // heavy was pointing at the emptiest part of the screen — but weight
-          // and colour were two complaints and only one of them was the loud
-          // one. In grey it can be solid without shouting: 3px bars on a wider
-          // box, which reads as a stack of rows rather than as three hairlines.
-          '<svg viewBox="0 0 20 15" width="20" height="15" aria-hidden="true" focusable="false">' +
-          '<rect x="0" y="0" width="20" height="3" rx="1.5"></rect>' +
-          '<rect x="0" y="6" width="20" height="3" rx="1.5"></rect>' +
-          '<rect x="0" y="12" width="8" height="3" rx="1.5"></rect>' +
-          '<rect x="11" y="12" width="9" height="3" rx="1.5"></rect>' +
+          // The stem, its head, and the rule it lands on. 1.25 is the tick's
+          // border weight, which is this design's fine line.
+          '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">' +
+          '<path d="M8 2v8"></path>' +
+          '<path d="M4.6 6.9 8 10.3l3.4-3.4"></path>' +
+          '<path d="M2.25 13.9h11.5"></path>' +
           '</svg>';
         b.onclick = (e) => {
           if (e && e.stopPropagation) e.stopPropagation();

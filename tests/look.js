@@ -389,19 +389,28 @@ if (require.main !== module) return;
       const svg = document.querySelector('.free-block .fillnow svg');
       if (!svg) return null;
       const r = svg.getBoundingClientRect();
-      const bars = [...svg.querySelectorAll('rect')].map((x) => Math.round(x.getBoundingClientRect().width));
-      return { w: Math.round(r.width), h: Math.round(r.height), bars, colour: getComputedStyle(svg).fill };
+      const cs = getComputedStyle(svg);
+      const rule = document.querySelector('.free-block');
+      return {
+        w: Math.round(r.width), h: Math.round(r.height),
+        paths: svg.querySelectorAll('path').length,
+        fill: cs.fill, stroke: cs.stroke, weight: cs.strokeWidth,
+        // The hairline it is meant to sit in, read off the same screen.
+        hair: getComputedStyle(rule).borderBottomWidth,
+      };
     });
     check('the mark is drawn, not an empty button',
-      drawn && drawn.bars.length === 4, drawn ? `${drawn.bars.length} bars` : 'no svg');
+      drawn && drawn.paths === 3, drawn ? `${drawn.paths} paths` : 'no svg');
     check('and has size on the screen', drawn && drawn.w > 0 && drawn.h > 0,
       drawn ? `${drawn.w}x${drawn.h}` : 'nothing');
-    // Two full rules and a broken one: a solid rule is a row, a dashed rule is
-    // the space where a row would be, and the mark says "rows, one still to
-    // come" in the same vocabulary the placeholder around it is drawing.
-    check('as two whole rules and one broken into two',
-      drawn && drawn.bars[0] === drawn.bars[1] && drawn.bars[2] < drawn.bars[0] &&
-        drawn.bars[3] < drawn.bars[0], drawn ? drawn.bars.join(', ') : '');
+
+    // STROKED, NOT FILLED, and this is the half the stylesheet cannot settle:
+    // `fill: none` is a declaration, and what matters is that the browser is
+    // actually drawing lines rather than shapes.
+    check('in line rather than in solid', drawn && drawn.fill === 'none', drawn && drawn.fill);
+    check('at the fine weight the page rules itself with',
+      drawn && parseFloat(drawn.weight) <= parseFloat(drawn.hair) + 0.5,
+      drawn ? `${drawn.weight} against a ${drawn.hair} rule` : '');
 
     // ITS RIGHT EDGE ON THE COLUMN EVERY FIGURE ENDS AT. It takes the width the
     // status column would have, so the mark lands under STATUS.

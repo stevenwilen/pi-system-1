@@ -1253,24 +1253,25 @@ builds the day out of the list: **eight half-hour blocks, five by what is
 running out of room and three held for what you pinned**, flowing from the wake
 time like any other block.
 
-**Three rules, the last of them broken** — the design's own vocabulary rather
-than a borrowed glyph. A solid rule is a row and a dashed one is the space where
-a row would be, which is the same distinction the hatched placeholder around it
-is drawing, so the mark reads as *rows, with one still to come*. Three equal
-bars would have been a hamburger, which is a menu everywhere else on a phone.
+**An arrow onto a rule** — the drafting mark for putting something into a table,
+and the only thing on this page with a direction. It was three stacked bars
+first, which had two faults: three equal bars is a hamburger, meaning *menu*
+everywhere else on a phone, and filled shapes are the heaviest kind of mark
+there is on a page built from hairlines.
 
-**Grey, and solid.** It was the accent at 2px, on the general rule that blue is
-what this page uses for anything you can act on. That rule is right about
-buttons carrying words in a row of other controls and wrong here: the mark sits
-inside a row whose entire content is the lightest grey on the page saying there
-is nothing yet, and the one saturated thing in it drew the eye to the emptiest
-part of the screen. One step darker than those words — `--faint` against their
-`--ghost` — is enough to say it is a thing rather than decoration.
+**Stroked, not filled**, at `1.25px` — the tick's border weight, which is this
+design's fine line. Every line on this page is a hairline: the rules between
+rows, the dashed edge of the placeholder it sits in, the box around the tick. A
+mark made of solid shapes sits *on top of* that ruling; one made of strokes sits
+*in* it.
 
-Weight and colour were two complaints and only one of them was the loud one:
-thinning the bars to hairline answered the wrong half, and three hairlines read
-as a scratch rather than as rows. In grey it can be **3px on a wider box**
-without shouting.
+**Grey.** It was the accent, on the general rule that blue is what this page uses
+for anything you can act on. That rule is right about buttons carrying words in a
+row of other controls and wrong here: the mark sits inside a row whose entire
+content is the lightest grey on the page saying there is nothing yet, and the one
+saturated thing in it drew the eye to the emptiest part of the screen. One step
+darker than those words — `--faint` against their `--ghost` — is enough to say it
+is a thing rather than decoration.
 
 It sat beside **+ Block** first, where it read as a third way to add one thing
 and competed with the two that are; then as the words *Fill day* at the foot of

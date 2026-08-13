@@ -1711,12 +1711,13 @@ console.log('\n16. the shape of the day');
     // the foot of the page. A word under a column of figures had to argue for
     // its own face and its own alignment; a mark in the row it fills does not.
     check('it is a drawn mark rather than a label', /<svg /.test(btn) && !/Fill day/.test(btn));
-    check('drawn, like every other mark on this page', /<rect /.test(btn));
-    // THREE RULES, THE LAST DASHED, which is this design's own vocabulary: a
-    // solid rule is a row and a dashed one is the space where a row would be.
-    // Three equal bars would be a hamburger, which is a menu everywhere else.
-    check('as three rules, the last of them broken',
-      (btn.match(/<rect /g) || []).length === 4, `${(btn.match(/<rect /g) || []).length} rects`);
+    // AN ARROW ONTO A RULE: the drafting mark for putting something into a
+    // table. It was three stacked bars, which is a hamburger — a menu
+    // everywhere else on a phone — and made of the heaviest kind of mark there
+    // is on a page built from hairlines.
+    check('drawn as strokes, like every line on this page',
+      (btn.match(/<path /g) || []).length === 3 && !/<rect /.test(btn),
+      `${(btn.match(/<path /g) || []).length} paths`);
     check('and it carries a name for anything that cannot see it',
       /aria-label', 'Fill the day from your list'/.test(btn));
 
@@ -1734,13 +1735,17 @@ console.log('\n16. the shape of the day');
     check('a step darker than the words beside it, which are the lightest grey',
       /color: var\(--ghost\)/.test(rule('.freenm')));
     check('and drawn in whatever the button carries, so the colour is stated once',
-      /fill: currentColor/.test(rule('.fillnow svg')));
-    // BULKY, and the colour is what keeps it quiet. It was 2px and the accent,
-    // which was two complaints at once; thinning it to 1.5 answered the wrong
-    // one. In grey it can be solid without shouting, and a stack of hairlines
-    // read as a scratch rather than as rows.
-    check('its rules are solid rather than hairline',
-      /height="3"/.test(code) && !/height="1\.5"/.test(code));
+      /stroke: currentColor/.test(rule('.fillnow svg')));
+
+    // STROKED AT THE FINE LINE, not filled. Every line on this page is a
+    // hairline — the rules between rows, the dashed edge of the placeholder it
+    // sits in, the box around the tick — and a mark made of filled shapes sits
+    // on top of that ruling rather than in it.
+    const ink = rule('.fillnow svg');
+    check('the mark is stroked rather than filled',
+      /fill: none/.test(ink) && !/fill: currentColor/.test(ink), ink.replace(/\s+/g, ' ').slice(0, 80));
+    check('at the weight of the tick\'s border, which is this design\'s fine line',
+      /stroke-width: 1\.25/.test(ink) && /border: 1\.25px/.test(rule('.atick')));
 
     // ITS OWN ANCHOR. `.atime` was missing exactly this once, and its invisible
     // full-bleed child lay over the whole screen and killed every gesture.
