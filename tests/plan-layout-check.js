@@ -1774,6 +1774,26 @@ console.log('\n16. the shape of the day');
     // pinned, which is not a reason.
     check('unused pin slots go back to the order', /FILL_TO - pins\.length/.test(able), able.slice(0, 220));
 
+    // WHICH THINGS AND IN WHAT ORDER ARE TWO QUESTIONS. The choosing is on the
+    // merits; the running order is not part of that judgement, because a day
+    // built by deadline puts the same thing at 9am every morning.
+    check('the order is thrown away on the way into the day',
+      /shuffled\(fillable\(\)\)/.test(fill), fill.slice(0, 90));
+    // Only there. `fillable` also answers the render's question of whether to
+    // draw the mark, which is about how many there are and not their order — a
+    // shuffle in it would restir the day on every redraw.
+    check('and not on every render', !/shuffled/.test(able), able.slice(0, 80));
+
+    const stir = (code.match(/function shuffled\(list\)[\s\S]*?\n      \}/) || [''])[0];
+    // NOT `sort(() => chance() - 0.5)`, which is how this usually gets written
+    // and is not a shuffle: a comparison sort assumes a consistent comparator,
+    // and given an inconsistent one it returns something that merely looks
+    // stirred, with some positions far likelier than others.
+    check('it is a real shuffle rather than a sort with a coin in it',
+      /for \(let i = out\.length - 1/.test(stir) && !/\.sort\(/.test(stir), stir.slice(0, 80));
+    check('and chance is behind a name, so a test can hold it still',
+      /function chance\(\)/.test(code) && /chance\(\)/.test(stir));
+
     check('never a thing already in the day, so a second press is safe',
       /!inShownPlan\(t\.id\)/.test(able));
     check('and fills to a total rather than by a batch',

@@ -1286,9 +1286,29 @@ to be something worth filling it with.
 not a full day, and not a half-built one either. That is what this placement
 costs: it builds a day, and **+ Block** is what tops one up.
 
+**Which things and in what order are two questions**, and the fill answers them
+separately. What gets in is chosen on the merits; the running order is then
+thrown away and drawn fresh, because a day built by deadline puts the same thing
+at 9am every morning. Two fills of the same list are not the same day.
+
+A full Fisher–Yates, so every permutation is equally likely — **not**
+`sort(() => chance() - 0.5)`, which is how this usually gets written and is not a
+shuffle at all: a comparison sort assumes a consistent comparator, and given an
+inconsistent one it returns something that merely looks stirred, with some
+positions far likelier than others.
+
+The stir happens **on the way into the day and nowhere else**. `fillable` also
+answers whether to draw the mark at all, which is a question about how many
+candidates there are rather than their order — stirring there would reorder the
+day on every redraw.
+
+`chance` is behind a name so a test can hold it still. Randomness is the one
+thing a suite cannot check by running it: same input, different answer.
+
 **Two halves, each with a share the other cannot take.** The first five are what
 is running out of room, in the order the list already puts them in. The last
-three are held for the things you pinned.
+three are held for the things you pinned. That split governs *selection*; it
+does not survive into the day as a running order.
 
 **Holding the pins apart is a cap as much as a floor.** Read straight out of the
 list's order a pin outranks everything, including a deadline that has already

@@ -3967,19 +3967,20 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // PINNED ABOVE EVERYTHING, including a deadline that has already run out —
     // a pin is someone saying "this one" outright, and the arithmetic does not
     // get to argue with it. Inside each half, the list's own order.
-    // WHAT IS RUNNING OUT OF ROOM COMES FIRST, worst room leading, and the
-    // pinned are not among them — they have slots of their own further down.
-    check('the marked lead, worst room first',
-      titles().slice(0, 3).join(' | ') === 'Overdue | Due later | Due soonish',
-      titles().slice(0, 3).join(' | '));
+    // WHICH THINGS AND IN WHAT ORDER ARE TWO QUESTIONS. This case asks the
+    // first one only, so it compares the SET — the order is thrown away on the
+    // way into the day, and asserting on it here would be asserting on a
+    // shuffle. The order has its own cases below.
+    check('what is running out of room gets in',
+      ['Overdue', 'Due later', 'Due soonish'].every((t) => titles().includes(t)),
+      titles().join(' | '));
 
-    // AND THE LAST SLOTS ARE HELD FOR THE PINS. Read out of the list's order a
-    // pin outranks everything, including a deadline that has already run out,
-    // so four of them filled half the day before the arithmetic got a word in.
-    // Held apart, each gets a fixed share.
-    check('and the pinned come after, in their own slots',
-      titles().slice(3).sort().join(' | ') === 'Pinned habit | Pinned task',
-      titles().slice(3).join(' | '));
+    // AND THE PINS HAVE SLOTS OF THEIR OWN. Read out of the list's order a pin
+    // outranks everything, including a deadline that has already run out, so
+    // four of them filled half the day before the arithmetic got a word in.
+    check('and so do the pinned, in the slots held for them',
+      ['Pinned task', 'Pinned habit'].every((t) => titles().includes(t)),
+      titles().join(' | '));
 
     // OLD IS NOT A REASON TO SPEND TODAY ON IT. The bottom of the list is there
     // because nobody has touched it, which is not something the fill has any
@@ -4079,8 +4080,6 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     const urgent = titles().filter((t) => t.startsWith('Urgent'));
     check('three of them are pinned, not five', pinned.length === 3, pinned.join(' | '));
     check('and five are what is running out of room', urgent.length === 5, urgent.join(' | '));
-    check('with the pins last, in the slots held for them',
-      titles().slice(5).every((t) => t.startsWith('Pinned')), titles().join(' | '));
   }
 
   console.log('\nand a thing both pinned and running out of room takes one slot, not two');
@@ -4098,7 +4097,61 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('both rows are in the day', slots().length === 2, titles().join(' | '));
     check('and neither is in it twice',
       new Set(titles()).size === titles().length, titles().join(' | '));
-    check('the pinned one sitting in a pin slot', titles()[1] === 'Both', titles().join(' | '));
+  }
+
+  console.log('\nthe order is thrown away on the way in, and is different each fill');
+  {
+    const items = [];
+    for (let i = 1; i <= 8; i++) {
+      items.push({
+        id: `t-${i}`, type: 'task', title: `T${i}`, days: i, mark: '!!!',
+        pinned: false, due: null, size: null, last_scheduled: null,
+      });
+    }
+
+    // A DAY BUILT BY DEADLINE PUTS THE SAME THING AT 9AM EVERY MORNING, which
+    // is what this answers. What gets in is still chosen on the merits; the
+    // running order is not part of that judgement.
+    const fillWith = async (rolls) => {
+      const { ctx, titles } = boot({ entries: utcEntries({ items }), now: '07:30' });
+      await ctx.load();
+      // Chance held still. Randomness is the one thing a suite cannot check by
+      // running it — same input, different answer — so it is replaced with
+      // something that counts.
+      let n = 0;
+      ctx.chance = () => rolls[n++ % rolls.length];
+      ctx.fillDay();
+      return titles();
+    };
+
+    const inOrder = items.map((i) => i.title);
+
+    // Every swap takes the lowest index, which reverses nothing and moves
+    // everything: a permutation this suite can write down.
+    const a = await fillWith([0]);
+    const b = await fillWith([0.999]);
+
+    check('a fill is a permutation, losing nothing',
+      a.length === 8 && a.slice().sort().join() === inOrder.slice().sort().join(),
+      a.join(' | '));
+    check('and duplicating nothing', new Set(a).size === 8, a.join(' | '));
+
+    // THE POINT OF THE WHOLE THING: two fills of the same list are not the
+    // same day. Different rolls, different order.
+    check('two fills of the same list run in different orders',
+      a.join(' | ') !== b.join(' | '), `${a.join(' ')}   vs   ${b.join(' ')}`);
+
+    // AND IT IS NOT THE LIST'S ORDER WEARING A HAT. A shuffle that returned
+    // its input would pass every check above except this one.
+    check('and neither is simply the order they were chosen in',
+      a.join(' | ') !== inOrder.join(' | ') || b.join(' | ') !== inOrder.join(' | '),
+      `${a.join(' ')}   vs   ${inOrder.join(' ')}`);
+
+    // Real chance, twice, on a bigger list than the shuffle has positions for
+    // repetition to be plausible: 8! is 40320, so two identical draws is a
+    // 1-in-40320 coincidence rather than a bug. Left out deliberately — a case
+    // that fails once a year is worse than no case at all. The two above use
+    // held rolls and say the same thing without the dice.
   }
 
   console.log('\nfill day has nothing to say when there is nothing to place');

@@ -4073,6 +4073,47 @@
       const BY_PIN = 3;
 
       /**
+       * Chance, named so a test can hold it still.
+       *
+       * Randomness is the one thing a suite cannot check by running it: the
+       * same input gives a different answer every time, which is the definition
+       * of the feature and the death of an assertion. Behind a name it can be
+       * replaced with something that counts, and what it feeds becomes as
+       * testable as anything else.
+       */
+      function chance() {
+        return Math.random();
+      }
+
+      /**
+       * The same things, in a different order.
+       *
+       * WHICH THINGS AND IN WHAT ORDER ARE TWO QUESTIONS, and only the second
+       * one is answered here. What gets into the day is chosen on the merits —
+       * five by what is running out of room, three held for the pins — and then
+       * the order is thrown away, because a day built by deadline puts the same
+       * thing at 9am every morning. The urgent half is still the urgent half;
+       * it is simply not also a running order.
+       *
+       * A full Fisher-Yates, walked from the end: each position swaps with a
+       * random one at or below it, so every permutation is equally likely. Not
+       * `sort(() => chance() - 0.5)`, which is the usual way this gets written
+       * and is not a shuffle at all — a comparison sort assumes a consistent
+       * comparator, and given an inconsistent one it returns something that
+       * merely looks stirred, with some positions far likelier than others.
+       */
+      function shuffled(list) {
+        const out = [...list];
+        for (let i = out.length - 1; i > 0; i--) {
+          const j = Math.floor(chance() * (i + 1));
+          const held = out[i];
+          out[i] = out[j];
+          out[j] = held;
+        }
+        return out;
+      }
+
+      /**
        * The things this would put in the day, in the order it would put them.
        *
        * TWO HALVES, EACH ANSWERING A DIFFERENT QUESTION, and each with a share
@@ -4193,7 +4234,12 @@
         // cannot disagree.
         sortThings();
 
-        const take = fillable();
+        // SHUFFLED ON THE WAY IN, and only here. `fillable` also answers the
+        // render's question of whether to draw the mark at all, and that
+        // question is about how many there are rather than what order they are
+        // in — stirring them on every render would be work nobody asked for and
+        // a different day every time the screen redrew.
+        const take = shuffled(fillable());
         if (!take.length) return;
 
         for (const item of take) {
