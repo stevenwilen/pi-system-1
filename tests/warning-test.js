@@ -7,7 +7,7 @@
 const path = require('path');
 const ROOT = path.join(__dirname, '..').split(path.sep).join('/');
 
-const { markFor, daysUntil, DAYS_NEEDED, SIZES } = require(ROOT + '/warning.js');
+const { markFor, slackFor, daysUntil, DAYS_NEEDED, SIZES, CADENCE_DAYS } = require(ROOT + '/warning.js');
 
 let bad = 0;
 const check = (label, ok, detail = '') => {
@@ -101,6 +101,67 @@ const atSlack = (size, slack) =>
       String(daysUntil('2026-10-31', '2026-11-02')));
     check('across a year end', daysUntil('2026-12-30', '2027-01-02') === 3,
       String(daysUntil('2026-12-30', '2027-01-02')));
+  }
+
+  // --- habits, judged against their own rhythm ------------------------------
+  //
+  // A habit has no date to run out of room against, so for a long time it could
+  // carry no mark at all — the arithmetic asks for a due date and a size, and a
+  // habit is refused both by the shape rules. What it has instead is a cadence,
+  // which says how long may pass between one doing and the next, and how long
+  // it has ACTUALLY been is already on the row.
+
+  console.log('\na habit inside its rhythm says nothing');
+  {
+    const quiet = (frequency, days) => markFor({ frequency, days });
+    check('a daily one done today', quiet('daily', 0) === null, String(quiet('daily', 0)));
+    check('a weekly one done yesterday', quiet('weekly', 1) === null, String(quiet('weekly', 1)));
+    check('a weekly one six days on', quiet('weekly', 6) === null, String(quiet('weekly', 6)));
+    check('a monthly one three weeks on', quiet('monthly', 21) === null, String(quiet('monthly', 21)));
+  }
+
+  console.log('\nand gets louder in multiples of it');
+  {
+    // ONE CADENCE PAST IS '!', TWO IS '!!', THREE IS '!!!' — so a daily habit
+    // missed three days is exactly as loud as a monthly one missed three
+    // months. Each is judged against the rhythm it was given.
+    const at = (frequency, days) => markFor({ frequency, days });
+
+    for (const [frequency, unit] of [['daily', 1], ['few times a week', 3], ['weekly', 7], ['monthly', 30]]) {
+      check(`${frequency}: inside the rhythm, nothing`, at(frequency, unit - 1) === null,
+        String(at(frequency, unit - 1)));
+      check(`${frequency}: one cadence past is !`, at(frequency, unit) === '!', String(at(frequency, unit)));
+      check(`${frequency}: two is !!`, at(frequency, unit * 2) === '!!', String(at(frequency, unit * 2)));
+      check(`${frequency}: three is !!!`, at(frequency, unit * 3) === '!!!', String(at(frequency, unit * 3)));
+      check(`${frequency}: and it cannot get louder`, at(frequency, unit * 40) === '!!!',
+        String(at(frequency, unit * 40)));
+    }
+  }
+
+  console.log('\nthe two clocks order together, which is the whole reason for slack');
+  {
+    // THE CASE THAT DECIDED THE UNIT. Judged in DAYS of room, a monthly habit a
+    // month late has thirty days gone and a daily one four days late has three
+    // — so the monthly would sort first while carrying the quieter mark, and
+    // the screen would show '!!' above '!!!'. A mark is a bucket of the number
+    // the list is ordered by, and the two are not allowed to disagree.
+    const daily = { frequency: 'daily', days: 4 };
+    const monthly = { frequency: 'monthly', days: 61 };
+
+    check('the daily one is three rhythms gone', markFor(daily) === '!!!', String(markFor(daily)));
+    check('and the monthly barely two', markFor(monthly) === '!!', String(markFor(monthly)));
+    check('so the daily one has the less room of the two',
+      slackFor(daily) < slackFor(monthly), `${slackFor(daily)} vs ${slackFor(monthly)}`);
+  }
+
+  console.log('\nand a habit with nothing to say is silent rather than fine');
+  {
+    check('a frequency nobody recognises', markFor({ frequency: 'hourly', days: 99 }) === null,
+      String(markFor({ frequency: 'hourly', days: 99 })));
+    check('a habit whose age is unknown', markFor({ frequency: 'daily' }) === null,
+      String(markFor({ frequency: 'daily' })));
+    check('and a dated row is still judged on its date, not on a cadence',
+      markFor({ due: '2026-01-01', size: 'a day', today: '2026-06-01' }) === '!!!');
   }
 
   console.log('\nthe mark does not model anything');

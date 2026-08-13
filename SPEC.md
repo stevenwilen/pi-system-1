@@ -664,8 +664,11 @@ The second column to come back this way, after `completed` for untimed items;
 
 Anything carrying a mark sits above everything without one, ordered by the least
 room left — so an overdue thing beats a thing due Friday, and both beat a habit
-nobody has done in a fortnight. Below the marks the rule is unchanged: longest
-untouched first, across all three types.
+still inside its rhythm. Below the marks the rule is unchanged: longest untouched
+first, across all three types.
+
+A habit can carry a mark now (§3.1.1), which it could not when this was written,
+so the marked half is no longer the dated half.
 
 The break between the halves is the mark itself, **not a blended score**. A
 single number mixing "days since" with "days of room" would be a judgement this
@@ -946,7 +949,12 @@ the switch: a thing in tomorrow is not greyed while you are looking at today.
 
 Arithmetic, and only arithmetic (`warning.js`).
 
+**Two clocks, because the two kinds of row keep two kinds of time.** A dated row
+runs out of room against a deadline; a habit drifts past a rhythm.
+
 ```
+A DEADLINE — projects and tasks
+
 length → days needed
   a day = 1    a few days = 3    a week = 6    a few weeks = 15    months = 40
 
@@ -956,10 +964,43 @@ slack = days_until_due − days_needed
   slack 1–3     →  !!
   slack 4–10    →  !
   slack > 10    →  no mark
+
+
+A CADENCE — habits
+
+frequency → days allowed
+  daily = 1    few times a week = 3    weekly = 7    monthly = 30
+
+slack = (days_allowed − days_since) / days_allowed        (in cadences)
+
+  slack <= -2   →  !!!    three rhythms gone
+  slack <= -1   →  !!     two
+  slack <= 0    →  !      one
+  slack > 0     →  no mark — still inside the rhythm
 ```
 
 A due date in the past gives a negative slack and therefore `!!!`, which is
 correct: overdue is the most urgent thing the scale can express.
+
+**A habit is judged in multiples of its own rhythm**, so a daily one missed three
+days is exactly as loud as a monthly one missed three months. The deadline
+thresholds could not be borrowed: they are tuned for dates weeks out, and a daily
+habit has one day of room at its very best — done this morning it would have
+landed inside the `!!` band and stayed there for ever, which is a mark that says
+nothing because it never moves.
+
+**A habit's room is counted in cadences, not days**, and it is the one place the
+two kinds of row are not measured with the same ruler. It has to be, for the mark
+and the order to keep agreeing: judged in days, a monthly habit a month late
+(thirty days gone) would sort above a daily one four days gone (three days gone)
+while carrying the quieter mark, and the screen would show `!!` above `!!!`. Both
+numbers still mean the same thing — *how far past the point where this needed
+doing* — each measured on its own row's clock.
+
+**Habits could not be marked at all before this**, so the marked half was the
+dated half. That is no longer true, and two things follow from it: a habit can
+sit above an unmarked task, and **Fill day** can take a drifting habit into its
+urgent five rather than only through a pin or the neglected pass.
 
 **A mark is static.** It does not decay as work happens, because the system is
 not told when work happens — the only thing it knows is that a block was

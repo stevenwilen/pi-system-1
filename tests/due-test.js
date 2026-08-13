@@ -476,6 +476,69 @@ const get = async (path) => {
     check('and nothing reports a paused list', list.body.paused === undefined);
   }
 
+  // --- habits are marked against their own rhythm --------------------------
+  //
+  // END TO END, because the arithmetic passing in isolation says nothing about
+  // whether the route hands it what it needs. `warning.js` wants a frequency
+  // and a count of days; the route has a frequency column and a date it works
+  // that count out from, and the wiring between them is the thing that breaks.
+
+  console.log('\na habit is marked by how far it has drifted past its cadence');
+  {
+    // AGED ON PURPOSE. A habit created a moment ago is nought days old and says
+    // nothing, correctly — so a case built on a fresh row would pass against a
+    // null mark and prove only that nothing happened. Backdating `created_at`
+    // is what the route measures from when a habit has never been scheduled.
+    const age = async (title, frequency, days) => {
+      const made = await post('/entries', { type: 'habit', title, frequency });
+      if (made.status !== 200) return { error: `${made.status} ${made.body.error || ''}` };
+      const when = new Date(Date.now() - days * 86400000).toISOString();
+      const { error } = await H.service
+        .from('entries').update({ created_at: when }).eq('id', made.body.entry.id);
+      return error ? { error: error.message } : { id: made.body.entry.id };
+    };
+
+    const fresh = await age('Stretch today', 'daily', 0);
+    const oneOver = await age('Stretch one over', 'daily', 1);
+    const twoOver = await age('Stretch two over', 'daily', 2);
+    const longGone = await age('Stretch long gone', 'daily', 9);
+    const weekly = await age('Weekly six days on', 'weekly', 6);
+    const weeklyGone = await age('Weekly three weeks', 'weekly', 21);
+
+    for (const [what, made] of Object.entries({ fresh, oneOver, twoOver, longGone, weekly, weeklyGone })) {
+      if (made.error) check(`${what} was created`, false, made.error);
+    }
+
+    const list = await get('/entries');
+    const markOf = (id) => {
+      const row = (list.body.items || []).find((i) => i.id === id);
+      return row ? row.mark : 'not on the list';
+    };
+
+    check('a daily habit done today says nothing', markOf(fresh.id) === null, String(markOf(fresh.id)));
+    check('one day past its rhythm says !', markOf(oneOver.id) === '!', String(markOf(oneOver.id)));
+    check('two days past says !!', markOf(twoOver.id) === '!!', String(markOf(twoOver.id)));
+    check('and well gone says !!!', markOf(longGone.id) === '!!!', String(markOf(longGone.id)));
+
+    // THE SAME NUMBER OF DAYS, A DIFFERENT ANSWER, which is the whole point of
+    // judging each against its own rhythm rather than against the calendar.
+    check('six days is nothing to a weekly habit', markOf(weekly.id) === null,
+      String(markOf(weekly.id)));
+    check('while six days is !!! to a daily one', markOf(longGone.id) === '!!!');
+    check('and three weeks is !!! to the weekly one', markOf(weeklyGone.id) === '!!!',
+      String(markOf(weeklyGone.id)));
+
+    // AND IT JOINS THE MARKED HALF OF THE LIST. Habits used to be unmarkable by
+    // construction, so the marked half was the dated half; it is not any more.
+    const marked = (list.body.items || []).filter((i) => i.mark);
+    const firstUnmarked = (list.body.items || []).findIndex((i) => !i.mark);
+    const lastMarked = (list.body.items || []).map((i) => Boolean(i.mark)).lastIndexOf(true);
+    check('the marked habits are on the list at all',
+      marked.some((i) => i.type === 'habit'), `${marked.length} marked`);
+    check('and everything marked still sits above everything unmarked',
+      firstUnmarked === -1 || lastMarked < firstUnmarked, `${lastMarked} then ${firstUnmarked}`);
+  }
+
   console.log('\ncleanup');
   server.kill();
   await H.cleanup();

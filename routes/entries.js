@@ -53,6 +53,11 @@ router.get('/entries', async (req, res) => {
       const seen = latest.get(r.id) || null;
       const since = seen || String(r.created_at).slice(0, 10);
 
+      // HOISTED, because a habit's mark is made of it. How long it has actually
+      // been is one half of the cadence question — the frequency is the other —
+      // and both have to be in hand before the mark is asked for.
+      const days = Math.max(0, daysBetween(since, today));
+
       // Date only. Postgres hands a `date` back as YYYY-MM-DD already, but
       // slicing means a driver that ever decides to widen it to a timestamp
       // cannot shift the day by a timezone on the way through.
@@ -66,13 +71,14 @@ router.get('/entries', async (req, res) => {
         due,
         size: r.size,
         days_until_due: due ? daysUntil(today, due) : null,
-        // '!!!', '!!', '!' or null. Arithmetic on the due date and the size,
-        // and nothing else — see warning.js.
-        mark: markFor({ due, size: r.size, today }),
-        // Days of room left, which is what the order above is made of. Not
-        // sent: the screen shows the mark, and a number nothing renders is a
-        // field to keep in step with for no one's benefit.
-        slack: slackFor({ due, size: r.size, today }),
+        // '!!!', '!!', '!' or null. Arithmetic and nothing else — see
+        // warning.js. A dated row is judged on the due date against the size; a
+        // habit on how far it has drifted past its own cadence.
+        mark: markFor({ due, size: r.size, today, frequency: r.frequency, days }),
+        // Room left, which is what the order above is made of. Not sent: the
+        // screen shows the mark, and a number nothing renders is a field to
+        // keep in step with for no one's benefit.
+        slack: slackFor({ due, size: r.size, today, frequency: r.frequency, days }),
         // The message waiting for the next time this is scheduled, or null.
         //
         // Sent in full rather than as a "there is one" flag, because swiping
@@ -91,7 +97,7 @@ router.get('/entries', async (req, res) => {
         // screen say "since added" instead of claiming a scheduling that
         // never happened.
         last_scheduled: seen,
-        days: Math.max(0, daysBetween(since, today)),
+        days,
       };
     });
 
@@ -99,8 +105,12 @@ router.get('/entries', async (req, res) => {
     //
     // Anything carrying a mark sits above everything without one, ordered by
     // the least room left — so an overdue thing beats a thing due Friday, and
-    // both beat a habit nobody has done in a fortnight. Below the marks it is
-    // the old order: longest untouched first, across all three types.
+    // both beat a habit still inside its rhythm. Below the marks it is the old
+    // order: longest untouched first, across all three types.
+    //
+    // A HABIT CAN CARRY A MARK NOW, which it could not when this was written:
+    // a daily one three days gone is three rhythms past due and says '!!!'. It
+    // stops being true that the marked half is the dated half.
     //
     // The break between them is the mark, not a blended score. A single number
     // mixing "days since" with "days of room" would be a judgement this system
