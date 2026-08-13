@@ -1589,6 +1589,9 @@ of it.
   that does not move. The `×` is faint and at the far edge, like the `···` on a
   Things row, because it repeats down the list and is the rarer of the two
   things you do here.
+- **Dragging carries it into the day**, to the row the finger stopped on, and a
+  block dragged the other way leaves the day and becomes one of these. See
+  *One ladder, two sections* below.
 - **Tapping it promotes it** to a timed block at the end of the day, keeping its
   id, its note and its thing. One row changing shape, not a new one appearing.
   The tick and the `×` both stop the press reaching the row, so the only way to
@@ -1645,6 +1648,49 @@ message is the kind worth writing twice.
 They are **not** left out of **How the month has gone** (§2.8) — that section
 stopped counting hours partly because of them. A ticked untimed item counts
 there exactly as a timed block does.
+
+#### One ladder, two sections
+
+A drag counts **rows down the screen**, and the screen puts the timed rows first
+with the untimed ones under them. So the day and the anytime list are one column
+to a finger, and the boundary between them — `split`, the number of timed rows —
+is just an index in that ladder. **A drop on the far side of it is a change of
+kind, not only of place.**
+
+- **Carried below the day**, a block loses its length and becomes an anytime
+  item. Having no length is the only thing that makes one, which is exactly what
+  `untimed` asks.
+- **Carried up into the day**, an anytime item is given the length a new block
+  gets — the same one tapping it hands out. There is no earlier length to
+  restore, because it never had one.
+- The **start is dropped in both directions** rather than carried. `reflow`
+  recomputes it from the order on the next render, and a stale one is how a
+  block gets drawn at an hour the day no longer puts it at.
+
+Two refusals stay exactly as they were: a block that has **begun** cannot be
+picked up, and nothing can be dropped above `firstFreeRow` — into a part of the
+day that has already happened.
+
+**Reaching a row's middle means passing it**, going down. Inside one list the
+pair of splices says that by itself, because removing the carried row first
+shifts everything below it up by one; across two lists nothing shifts, so the
+same intent is stated outright. It is only ever downward that crosses into the
+anytime list and only ever upward that crosses out, so there is one adjustment
+and it has one direction.
+
+`moveTimed` still owns a move that begins and ends inside the day. It takes
+trouble to leave the untimed items in the array slots they held, which is right
+when they are bystanders to a reorder above them — and impossible when one of
+them is the subject, which is what `moveRow` is for.
+
+**The stub had to learn about layout for this.** Every element in it was built
+alone, so each list measured from zero and the first block of the day and the
+first anytime row both reported a top of `0`. Harmless while a drag could only
+move within one list, and fatal to testing one that cannot: the ladder was out
+of order, so a block carried one place down landed among the untimed items and
+the suite could not tell that from the feature working. The two lists are now
+parented in the order the page puts them, and `tests/touch.js` drives the whole
+gesture in a real browser where it is simply true.
 
 #### A block is worked by gesture
 

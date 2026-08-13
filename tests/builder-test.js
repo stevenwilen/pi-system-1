@@ -87,12 +87,39 @@ class El {
     // zero is the whole point.
     return 40 + (this._find('note').length ? 26 : 0);
   }
+  // What this occupies in its parent: its own line, or the stack of rows it
+  // holds. A container reporting one row's height was harmless while every
+  // measurement stayed inside one list, and wrong the moment two lists had to
+  // be compared — see below.
+  get _blockHeight() {
+    // Only a LIST OF ROWS is a stack. A row is one line however much it holds —
+    // it contains its own backing and card, and summing those would make every
+    // row three deep and every top wrong by more than the drag it is measuring.
+    const rows = this.children.filter(
+      (c) => c._class.has('slot') || c._class.has('atime') || c._class.has('free')
+    );
+    if (!rows.length) return this._selfHeight;
+    return rows.reduce((h, c, i) => h + c._selfHeight + (i ? 12 : 0), 0);
+  }
+  // ABSOLUTE, THE WAY A BROWSER REPORTS IT, and it was relative to the parent.
+  //
+  // Every row measured only against its own siblings, so the first row of any
+  // list sat at 0 — the first block of the day and the first thing in the
+  // anytime list reported the same top. Nothing minded while a drag could only
+  // move within one list. Once a drag could carry a block from one to the
+  // other, the ladder it counts rows down was no longer in order, and a block
+  // carried one place down the day landed among the untimed items.
+  //
+  // The bug was in this model rather than in the page: on a screen the anytime
+  // list is BELOW the day and its rows have larger tops, which is the whole
+  // basis of the gesture. A stub that cannot express that cannot test it.
   getBoundingClientRect() {
-    const kin = this._parent ? this._parent.children : [this];
     let top = 0;
-    for (const c of kin) {
-      if (c === this) break;
-      top += c._selfHeight + 12;
+    for (let node = this; node && node._parent; node = node._parent) {
+      for (const c of node._parent.children) {
+        if (c === node) break;
+        top += c._blockHeight + 12;
+      }
     }
     return { top, height: this._selfHeight };
   }
@@ -256,6 +283,23 @@ function boot({
     b.dataset.type = t;
     byId['type-seg'].append(b);
   }
+
+  // THE TWO ROW LISTS, IN THE ORDER THE PAGE PUTS THEM.
+  //
+  // Every element above is built on its own, with no parent and no document, so
+  // each of them measured from zero — the first block of the day and the first
+  // thing in the anytime list both reported a top of 0. That was harmless while
+  // a drag could only move a block within the day, and it made the drag that
+  // carries a block OUT of the day untestable: the ladder it counts rows down
+  // was not in order, so a block carried one place down landed among the
+  // untimed items and the suite could not tell that from the feature working.
+  //
+  // Only these two, and only their order. The rest of the page is genuinely
+  // irrelevant to the maths, and parenting all of it would be inventing a
+  // layout this stub has no way to get right.
+  const column = new El('div');
+  column.append(byId.builder);
+  column.append(byId['anytime-list']);
 
   // Every document-level listener, recorded with the options it was given.
   // The reorder bug was a missing one of these, and "it is registered, and it
@@ -1226,9 +1270,16 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     }
 
     {
-      // PAST THE END. The clamp used to be `blocks.length`, which counts the
-      // loose ones — so a block could be carried to a row that does not exist
-      // and the day quietly rearranged itself around the miss.
+      // PAST THE END OF THE DAY IS NOT PAST THE END OF THE LADDER any more.
+      //
+      // Carrying a block below the last timed row used to clamp it there: the
+      // day was the whole ladder, and there was nowhere else for it to go. The
+      // anytime list is part of that ladder now, so the same gesture carries it
+      // out of the hours and into the things with no hour — which is the point
+      // of the gesture and not an overshoot.
+      //
+      // The old clamp is still under test one case down, where the day is the
+      // whole ladder because nothing is loose.
       const d = await day((ctx) => {
         ctx.addBlock({ title: 'A' });
         ctx.addBlock({ title: 'B' });
@@ -1236,13 +1287,36 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
         ctx.addAnytime({ title: 'L2' });
         ctx.addAnytime({ title: 'L3' });
       });
-      await drag(d, 0, 4); // four rows down, in a day two rows long
-      check('carried past the last row, it stops at the last row',
-        order(d) === 'B A', order(d));
-      check('with the loose items still loose',
-        anytimeTitles(d.byId).join() === 'L1,L2,L3', anytimeTitles(d.byId).join());
-      check('exactly where they were',
-        anytimeAt(d.byId) === '2,3,4', anytimeAt(d.byId));
+      await drag(d, 0, 4); // two rows of day, then two into the loose list
+      check('carried past the day, it leaves the day', order(d) === 'B', order(d));
+      // WHICH IS ALSO THE PROOF IT LOST ITS HOUR. The anytime list is built by
+      // filtering `blocks` on `untimed` — having no length is the only thing
+      // that puts a row in it — so arriving there and still having a duration
+      // are not states that can both be true.
+      // FOUR ROWS DOWN A FIVE-ROW LADDER is the last row of it, and reaching a
+      // row's middle means passing it — the same rule a drag inside the day
+      // obeys, where carrying a block one place down lands it after the one it
+      // was carried over.
+      check('and arrives at the place the finger stopped on',
+        anytimeTitles(d.byId).join() === 'L1,L2,L3,A', anytimeTitles(d.byId).join());
+      check('and the day is one block shorter for it', order(d).split(' ').length === 1,
+        order(d));
+    }
+
+    {
+      // AND PAST THE END OF THE LADDER STILL CLAMPS. The clamp used to be
+      // `blocks.length`, which counts the loose ones — so a block could be
+      // carried to a row that does not exist and the day quietly rearranged
+      // itself around the miss.
+      const d = await day((ctx) => {
+        ctx.addBlock({ title: 'A' });
+        ctx.addBlock({ title: 'B' });
+        ctx.addAnytime({ title: 'L1' });
+      });
+      await drag(d, 0, 9); // nine rows down, in a ladder three rows long
+      check('it stops at the last row there is', order(d) === 'B', order(d));
+      check('at the foot of the anytime list',
+        anytimeTitles(d.byId).join() === 'L1,A', anytimeTitles(d.byId).join());
     }
 
     {
@@ -1256,6 +1330,87 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       await drag(d, 2, -1);
       check('a day with nothing loose in it is unchanged by all this',
         order(d) === 'A C B', order(d));
+    }
+  }
+
+  console.log('\nand the same carry runs the other way, out of the anytime list');
+  {
+    // THE RETURN JOURNEY. Dragging up out of the anytime list is the same
+    // gesture read backwards, and it was refused for a different reason than it
+    // was refused downward: the hold asked `rowOfBlock`, which answers -1 for
+    // anything untimed, so an anytime row could never be picked up at all.
+    //
+    // Tapping one still promotes it to the end of the day. This is how it goes
+    // somewhere in particular.
+    const day = async (build) => {
+      const { ctx, slots, cardOf, byId, titleOf } = boot();
+      await ctx.load();
+      build(ctx);
+      return { ctx, slots, cardOf, byId, titleOf };
+    };
+    const order = (d) => d.slots().map((s) => d.titleOf(s)).join(' ');
+    const looseCard = (byId, at) => anytimeRows(byId)[at];
+
+    // Carried up from the anytime list into the middle of the day.
+    const dragLoose = async (d, at, rows) => {
+      const card = looseCard(d.byId, at);
+      down(card, 100, 300);
+      await wait(HELD);
+      move(card, 100, 300 + rows * SLOT);
+      up(card, 100, 300 + rows * SLOT);
+      await wait(SETTLED);
+    };
+
+    {
+      const d = await day((ctx) => {
+        ctx.addBlock({ title: 'A' });
+        ctx.addBlock({ title: 'B' });
+        ctx.addBlock({ title: 'C' });
+        ctx.addAnytime({ title: 'L1' });
+      });
+      check('it starts outside the day', order(d) === 'A B C', order(d));
+      check('and in the anytime list', anytimeTitles(d.byId).join() === 'L1');
+
+      // Three rows up from row 3 is row 0: the top of the day.
+      await dragLoose(d, 0, -3);
+      check('carried up into the day, it joins it', order(d) === 'L1 A B C', order(d));
+      check('and leaves the anytime list', anytimeTitles(d.byId).join() === '',
+        anytimeTitles(d.byId).join());
+      check('with an hour, so the day is a block longer',
+        d.slots().length === 4, String(d.slots().length));
+      check('and it is a real block, drawn with a time',
+        /\d:\d\d/.test(d.slots()[0].text()), d.slots()[0].text().trim());
+    }
+
+    {
+      // INTO THE MIDDLE, not just the top — the place the finger stopped on.
+      const d = await day((ctx) => {
+        ctx.addBlock({ title: 'A' });
+        ctx.addBlock({ title: 'B' });
+        ctx.addBlock({ title: 'C' });
+        ctx.addAnytime({ title: 'L1' });
+        ctx.addAnytime({ title: 'L2' });
+      });
+      await dragLoose(d, 1, -3); // L2 is ladder row 4; three up is row 1
+      check('it lands where it was carried to', order(d) === 'A L2 B C', order(d));
+      check('and the other loose one is untouched',
+        anytimeTitles(d.byId).join() === 'L1', anytimeTitles(d.byId).join());
+    }
+
+    {
+      // AND A CARRY THAT STAYS INSIDE THE ANYTIME LIST IS A REORDER OF IT, not
+      // a promotion. Nothing about it should reach the day.
+      const d = await day((ctx) => {
+        ctx.addBlock({ title: 'A' });
+        ctx.addAnytime({ title: 'L1' });
+        ctx.addAnytime({ title: 'L2' });
+        ctx.addAnytime({ title: 'L3' });
+      });
+      await dragLoose(d, 0, 2); // L1 down two, still inside the loose list
+      check('the anytime list reorders', anytimeTitles(d.byId).join() === 'L2,L3,L1',
+        anytimeTitles(d.byId).join());
+      check('and the day is untouched', order(d) === 'A', order(d));
+      check('with nothing promoted into it', d.slots().length === 1, String(d.slots().length));
     }
   }
 

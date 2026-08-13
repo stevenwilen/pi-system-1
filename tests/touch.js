@@ -153,6 +153,80 @@ const boxOf = async (page, sel, n = 0) =>
     }
   }
 
+  // --- carried out of the day, and back -------------------------------------
+  //
+  // A REAL BROWSER, because the stub cannot see layout. The whole gesture rests
+  // on the anytime list sitting BELOW the day on the screen — that is what makes
+  // the two lists one column to a finger — and the stub had to be taught the
+  // ordering by hand before it could test any of this. Here it is simply true.
+  console.log('\na block can be carried out of the day into the anytime list');
+  {
+    const HOLD = 420; // longer than HOLD_MS, so the hold fires
+
+    const held = async (from, to) => {
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.waitForTimeout(HOLD);
+      for (let i = 1; i <= 8; i++) {
+        await page.mouse.move(from.x, from.y + ((to.y - from.y) * i) / 8);
+        await page.waitForTimeout(20);
+      }
+      await page.mouse.up();
+      await page.waitForTimeout(400);
+    };
+
+    const shape = () => page.evaluate(() => ({
+      timed: [...document.querySelectorAll('.slot .t')].map((e) => e.textContent),
+      loose: [...document.querySelectorAll('.atime .atitle')].map((e) => e.textContent),
+    }));
+
+    const before = await shape();
+    check('the day has blocks to carry', before.timed.length >= 2, before.timed.join(' | '));
+    check('and the anytime list has a row', before.loose.length >= 1, before.loose.join(' | '));
+
+    if (before.timed.length >= 2 && before.loose.length >= 1) {
+      // THE LAST BLOCK, because the first ones have already begun and a begun
+      // block refuses to be picked up at all — the day it would be carried out
+      // of has happened. Choosing one of those tests the refusal, not the drag.
+      const last = before.timed.length - 1;
+      const moving = before.timed[last];
+      const from = await boxOf(page, '.slot', last);
+      const target = await boxOf(page, '.atime', before.loose.length - 1);
+
+      await held({ x: from.x, y: from.y }, { x: from.x, y: target.y + target.h / 2 + 4 });
+
+      const after = await shape();
+      check('the block left the day', after.timed.length === before.timed.length - 1,
+        `${before.timed.length} -> ${after.timed.length}`);
+      check('and arrived in the anytime list',
+        after.loose.length === before.loose.length + 1 && after.loose.includes(moving),
+        after.loose.join(' | '));
+
+      // AND BACK. The same gesture read upward, which was refused for its own
+      // reason: the hold asked rowOfBlock, and that answers -1 for anything
+      // without an hour.
+      const carried = moving;
+      const at = (await shape()).loose.indexOf(carried);
+      const looseBox = await boxOf(page, '.atime', at);
+      // The last row of the day, not the first: a block cannot be carried up
+      // into a part of the day that has already happened, and the floor that
+      // enforces that would refuse the drop.
+      const intoDay = await boxOf(page, '.slot', (await shape()).timed.length - 1);
+
+      if (looseBox && intoDay) {
+        await held({ x: looseBox.x, y: looseBox.y }, { x: looseBox.x, y: intoDay.y - 4 });
+      }
+
+      const back = await shape();
+      check('carried back up, it rejoins the day', back.timed.includes(carried),
+        back.timed.join(' | '));
+      check('and leaves the anytime list', !back.loose.includes(carried),
+        back.loose.join(' | '));
+      check('with an hour on it again',
+        await page.evaluate(() => Boolean(document.querySelector('.slot .time'))));
+    }
+  }
+
   console.log('\nand nothing is scrolling sideways under it');
   check('no horizontal scroll after all that',
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));

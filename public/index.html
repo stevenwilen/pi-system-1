@@ -4929,6 +4929,83 @@
         });
       }
 
+      /**
+       * Move a row that crosses between the day and the anytime list.
+       *
+       * ONE LADDER, TWO SECTIONS. A drag is counted in rows down the screen,
+       * and the screen puts the timed rows first and the untimed ones under
+       * them — so `split` is simply where one becomes the other, and a
+       * destination on the far side of it is a change of kind rather than a
+       * change of place. Nothing here has to know about pixels or which list an
+       * element belongs to; both facts were settled when the ladder was read.
+       *
+       * TIMED BECOMES UNTIMED BY LOSING ITS LENGTH, which is the only thing
+       * that distinguishes them — `untimed` asks exactly that question. Untimed
+       * becomes timed by being given the length a new block gets, the same one
+       * `promote` hands out, because there is no earlier length to restore: it
+       * never had one.
+       *
+       * The start is dropped in both directions rather than carried. It is
+       * recomputed from the order by `reflow` on the next render, and a stale
+       * one is how a block ends up drawn at an hour the day no longer puts it.
+       *
+       * `moveTimed` still owns a move that stays inside the day. It goes to
+       * some trouble to leave the untimed items in the array slots they were
+       * in, which is right when they are bystanders — and impossible here,
+       * where the whole point is that one of them is not.
+       */
+      function moveRow(from, to, split) {
+        if (from === to) return;
+
+        const timed = [];
+        const loose = [];
+        for (const b of blocks) (untimed(b) ? loose : timed).push(b);
+
+        const fromLoose = from >= split;
+        const toLoose = to >= split;
+
+        const carried = fromLoose
+          ? loose.splice(from - split, 1)[0]
+          : timed.splice(from, 1)[0];
+        if (!carried) return;
+
+        // PAST THE ROW, NOT ONTO IT, when the carry is downward.
+        //
+        // `rowUnder` answers in the ladder's own terms: going down, `to` is the
+        // last row whose middle the finger has reached, and reaching a row's
+        // middle means taking its place and pushing it up — a block carried one
+        // place down lands AFTER the row it was carried over. Inside one list
+        // the pair of splices expresses that by itself, because removing the
+        // carried row first shifts everything below it up by one. Across two
+        // lists nothing shifts, so the same intent has to be said out loud.
+        //
+        // It is only ever downward that crosses into the loose list, and only
+        // ever upward that crosses out of it, so this is the one adjustment
+        // and it has one direction.
+        const after = from < to ? 1 : 0;
+
+        if (toLoose) {
+          carried.duration = null;
+          carried.start = undefined;
+          // Only if it is arriving. A row that was already untimed keeps
+          // whatever it was ticked to, because moving it has not undone that.
+          if (!fromLoose) carried.done = false;
+          const at = fromLoose ? to - split : to - split + after;
+          loose.splice(Math.max(0, Math.min(loose.length, at)), 0, carried);
+        } else {
+          carried.duration = STEP;
+          carried.start = undefined;
+          timed.splice(Math.max(0, Math.min(timed.length, to)), 0, carried);
+        }
+
+        // Rebuilt rather than written back slot by slot: one list is a row
+        // longer than it was and the other a row shorter, so there is no
+        // arrangement of the old slots left to preserve. Order WITHIN each list
+        // is what the day and the anytime list are made of, and both survive.
+        blocks.length = 0;
+        blocks.push(...timed, ...loose);
+      }
+
       function cycleDuration(i) {
         if (!blocks[i]) return;
 
@@ -5387,6 +5464,22 @@
         const siblings = () =>
           [...$('builder').children].filter((c) => c.classList.contains('slot'));
 
+        /**
+         * Every row a carried block can be dropped on, top to bottom.
+         *
+         * THE DAY AND THE ANYTIME LIST AS ONE LADDER, which is what lets a
+         * block be dragged out of the hours and into the things with no hour,
+         * and back. They are two elements on the screen and one column to a
+         * finger, and the drag counts rows down that column.
+         *
+         * The order is the order on screen — timed first, untimed under them —
+         * so the boundary between them is a single index. See `moveRow`.
+         */
+        const carriage = () => [
+          ...siblings(),
+          ...[...$('anytime-list').children].filter((c) => c.classList.contains('atime')),
+        ];
+
         // Asked at the moment of the gesture, not at the moment of the render.
         //
         // The lock used to be a boolean handed in when the card was drawn, and
@@ -5407,7 +5500,9 @@
           slot.classList.toggle('lifted', on);
           if (on && !still) card.style.transform = 'scale(1.03)';
 
-          for (const other of siblings()) {
+          // Both lists dim, because both are places this can land. Dimming only
+          // the day would say the anytime rows were not part of the gesture.
+          for (const other of carriage()) {
             if (other === slot) continue;
             other.classList.toggle('dimmed', on);
             other.style.transition = on && !still ? `transform ${SETTLE_MS}ms ease-out` : '';
@@ -5415,10 +5510,12 @@
           }
         };
 
-        // The blocks between where it came from and where it is going step out
+        // The rows between where it came from and where it is going step out
         // of the way, so the gap it will drop into is visible before release.
+        // Across both lists: the gap has to open in the anytime list when that
+        // is where the finger is, or the drop is a surprise.
         const part = (from, to, step) => {
-          siblings().forEach((el, at) => {
+          carriage().forEach((el, at) => {
             if (at === from) return;
             let shift = 0;
             if (to > from && at > from && at <= to) shift = -step;
@@ -5441,13 +5538,23 @@
           // THE ROW, not the place in `blocks`. Everything below this line — the
           // pitch measured off the next row, the rows that step aside, where the
           // finger says it is going — is counted in rows on the screen, and it
-          // is converted back exactly once, on release. See rowOfBlock.
-          const row = rowOfBlock(index);
+          // is converted back exactly once, on release. See moveRow.
+          //
+          // FOUND BY THE ELEMENT rather than counted. It was `rowOfBlock`,
+          // which answers -1 for anything untimed and so refused to pick one
+          // up at all — that refusal was the only thing stopping an anytime row
+          // being dragged. Asking the ladder where this slot is answers for
+          // both kinds without either having to know about the other.
+          const strip = carriage();
+          const row = strip.indexOf(slot);
           if (row === -1) return;
 
           gesture.mode = 'reorder';
           gesture.from = row;
           gesture.to = row;
+          // Where the day stops and the things with no hour begin. A drop on
+          // the far side of it changes what the block IS, not just where.
+          gesture.split = siblings().length;
 
           // THE WHOLE LAYOUT, read once, here.
           //
@@ -5460,7 +5567,7 @@
           // hardcoded 9, then the distance to the next slot. Both are a ladder
           // with equal rungs, and a block carrying a note is a line taller than
           // one without.
-          gesture.rows = siblings().map((el) => {
+          gesture.rows = strip.map((el) => {
             const r = el.getBoundingClientRect
               ? el.getBoundingClientRect()
               : { top: 0, height: 64 };
@@ -5625,7 +5732,7 @@
           if (!gesture || gesture.id !== e.pointerId) return;
           clearTimeout(gesture.hold);
 
-          const { mode, dx, from, to, rows } = gesture;
+          const { mode, dx, from, to, rows, split } = gesture;
           gesture = null;
 
           // A tap. Only the chip does anything with one, and it does it on
@@ -5658,10 +5765,16 @@
             const settle = () => {
               lift(false);
               if (from !== to) {
-                // THE ONE CONVERSION. `from` and `to` are rows of the day; this
-                // is where they become places in `blocks`, and the untimed
-                // items keep the places they had.
-                moveTimed(from, to);
+                // THE ONE CONVERSION. `from` and `to` are rows of the ladder;
+                // this is where they become places in `blocks`.
+                //
+                // A move that starts and ends inside the day is still
+                // `moveTimed`, untouched: it leaves the untimed items in the
+                // array slots they were in, which is right when they are
+                // bystanders to a reorder above them. Anything else has one of
+                // them as its subject, so it goes through `moveRow`.
+                if (from < split && to < split) moveTimed(from, to);
+                else moveRow(from, to, split);
                 saved = false;
               }
               // A full re-render, which is also what clears every inline
