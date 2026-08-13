@@ -116,6 +116,30 @@ does not already show. It reads what was typed and counts days.
 back as anything — not active, not done. A deleted row is a row that should not
 have existed.
 
+### 2.2a The saved list is a list, not a display
+
+The rows under **Saved for later** are drawn by the same component as the active
+list, so everything they offer — edit, pin, delete, done — is really offered.
+Anything acting on a row therefore has to ask **which list holds it** rather than
+assume the active one.
+
+Three faults came from assuming, and they are worth keeping written down because
+they are three different shapes of one mistake:
+
+- **Delete** found nothing, spliced nothing, and posted the delete anyway. The
+  entry was destroyed and the row stayed on screen until the next load — the
+  worst of the three, because the data changed and the screen said otherwise.
+- **Done** found nothing and returned. No write, no row leaving, no undo: a
+  button that did nothing at all.
+- **The saved list itself** was drawn only after the active list's rows, past an
+  early return for the empty case — so anyone who had set *everything* aside saw
+  `Nothing here yet.` and no saved section, with the rows sitting in memory and
+  nothing drawing them.
+
+An **undo** must also return the row to the list it left. Undoing into the active
+list would look like a repair while quietly promoting something out of the list
+it was deliberately set down in.
+
 ### 2.3 Finishing is not deleting
 
 `status = 'done'` is work that happened. Both drop out of every read, which all

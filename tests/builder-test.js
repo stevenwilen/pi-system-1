@@ -3811,6 +3811,113 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       half.calSays().includes('may not be all of it'), half.calSays());
   }
 
+  // --- the saved list is a list, not a display -----------------------------
+  //
+  // Reported: a thing set aside cannot be deleted. Three faults under it, and
+  // all three come from the same assumption — that the saved rows are a view of
+  // the things list rather than a second list of their own. They are drawn by
+  // the same `thingSlot`, so every action on them is offered and looks live.
+
+  console.log('\na thing set aside can be deleted, like any other');
+  {
+    const items = [
+      { id: 'e-keep', type: 'task', title: 'Still doing', days: 2, mark: null, pinned: false, later: false, due: null, size: null, last_scheduled: null },
+    ];
+    const saved = [
+      { id: 'e-put', type: 'task', title: 'Put down', days: 9, mark: null, pinned: false, later: true, due: null, size: null, last_scheduled: null },
+    ];
+    const { ctx, byId } = boot({ entries: utcEntries({ items, saved }), now: '09:00' });
+    await ctx.load();
+
+    const sent = [];
+    const real = ctx.fetch;
+    ctx.fetch = async (url, opts) => {
+      if ((opts || {}).method === 'POST') sent.push(url);
+      return real(url, opts);
+    };
+
+    const savedRows = () => byId['saved-list'].children
+      .map((t) => t.children.find((c) => c._class.has('row'))).filter(Boolean);
+
+    check('the saved list is drawn', savedRows().length === 1, String(savedRows().length));
+
+    ctx.remove(saved[0]);
+    await wait(50);
+
+    // THE ROW GOES. It was deleted on the server either way — `remove` looked
+    // for the row in `things`, did not find it, spliced nothing and posted the
+    // delete regardless — so the screen kept showing a thing that no longer
+    // existed until the next load.
+    check('deleting one takes it off the screen', savedRows().length === 0,
+      String(savedRows().length));
+    check('and the delete was written', sent.some((p) => /e-put\/delete/.test(p)),
+      sent.join(' | '));
+    check('while the active list is untouched', thingRows(byId).length === 1,
+      String(thingRows(byId).length));
+  }
+
+  console.log('\nand finished from there too, rather than silently doing nothing');
+  {
+    const saved = [
+      { id: 'e-fin', type: 'task', title: 'Set aside task', days: 9, mark: null, pinned: false, later: true, due: null, size: null, last_scheduled: null },
+    ];
+    const { ctx, byId } = boot({
+      entries: utcEntries({ items: [{ id: 'e-x', type: 'task', title: 'Other', days: 1, mark: null, pinned: false, later: false, due: null, size: null, last_scheduled: null }], saved }),
+      now: '09:00',
+    });
+    await ctx.load();
+
+    const savedRows = () => byId['saved-list'].children
+      .map((t) => t.children.find((c) => c._class.has('row'))).filter(Boolean);
+
+    check('it starts on the saved list', savedRows().length === 1);
+
+    // `takeOff` returned early when the row was not in `things`, so Done on a
+    // saved row did nothing at all — no write, no row leaving, no undo offered.
+    // Called by the same route the Done button takes; `finish` itself is a
+    // const arrow and so is not reachable on the context.
+    ctx.takeOff(saved[0], 'Done', '/done');
+    await wait(50);
+    check('finishing one takes it off the screen', savedRows().length === 0,
+      String(savedRows().length));
+
+    // AND THE UNDO PUTS IT BACK WHERE IT CAME FROM. Undoing into the active
+    // list is the same mistake wearing different clothes — the row would
+    // reappear, so the screen would look repaired, and the thing would have
+    // quietly climbed out of the list it was deliberately set down in.
+    const bar = byId['undo-host'].children[0];
+    check('with an undo offered', Boolean(bar) && bar._class.has('undo'));
+
+    bar.children.find((c) => c.tagName === 'button').onclick();
+    await wait(50);
+    check('undo returns it to the saved list', savedRows().length === 1,
+      String(savedRows().length));
+    check('and not to the list it was set down from',
+      thingRows(byId).length === 1 &&
+        !thingRows(byId).some((r) => r.text().includes('Set aside task')),
+      thingRows(byId).map((r) => r.text().trim()).join(' | '));
+  }
+
+  console.log('\nand the saved list draws even when the active list is empty');
+  {
+    // The one that hides the whole feature. `renderThings` returns early on an
+    // empty list to print "Nothing here yet", and the only call to
+    // `renderSaved` sat AFTER that return — so a person who had set everything
+    // aside saw an empty screen and no saved section at all.
+    const saved = [
+      { id: 'e-a', type: 'task', title: 'Only saved thing', days: 4, mark: null, pinned: false, later: true, due: null, size: null, last_scheduled: null },
+    ];
+    const { ctx, byId } = boot({ entries: utcEntries({ items: [], saved }), now: '09:00' });
+    await ctx.load();
+
+    check('the active list says it is empty',
+      byId.things.children.some((c) => c._class.has('empty')));
+    check('and the saved list is still drawn under it',
+      byId['saved-list'].children.length === 1,
+      String(byId['saved-list'].children.length));
+    check('with its heading showing', !byId.saved._class.has('hidden'));
+  }
+
   // --- fill day ------------------------------------------------------------
   //
   // ONE PRESS BUILDS THE DAY from the list, and the whole of the design is that

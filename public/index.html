@@ -3059,15 +3059,20 @@
           none.className = 'empty';
           none.textContent = 'Nothing here yet.';
           box.append(none);
-          return;
+        } else {
+          // ONE LIST. Pinned things are still first — the server sends them
+          // that way — but they are not a section of their own: a heading and a
+          // gap split a short list into two shorter ones, and what a pin needs
+          // to say is said on the row itself, beside the name.
+          for (const item of things) box.append(thingSlot(item));
         }
 
-        // ONE LIST. Pinned things are still first — the server sends them that
-        // way — but they are not a section of their own: a heading and a gap
-        // split a short list into two shorter ones, and what a pin needs to say
-        // is said on the row itself, beside the name.
-        for (const item of things) box.append(thingSlot(item));
-
+        // ALWAYS, because the saved list is a second list and not the tail of
+        // this one. This sat after a `return` in the empty case, so somebody who
+        // had set everything aside got "Nothing here yet" and no saved section
+        // at all — the rows were in `setAside` the whole time with nothing
+        // drawing them, and the only way to see them again was to add a thing
+        // to the list above.
         renderSaved();
       }
 
@@ -3181,6 +3186,36 @@
        * half this falls back to the mark itself, which is the same ordering at
        * one step's coarser grain and is only ever used between two renders.
        */
+      /**
+       * Which of the two lists a row is in, and where in it.
+       *
+       * THERE ARE TWO LISTS AND THEY ARE DRAWN BY THE SAME `thingSlot`, so
+       * every action a row offers is offered on both — edit, pin, delete, done.
+       * Everything that acted on one looked in `things` alone, and the two
+       * failures that produced were different shapes of the same mistake:
+       *
+       *   Delete  found nothing, spliced nothing, and posted the delete
+       *           anyway — so the row stayed on a screen that no longer
+       *           matched the database, and only a reload told the truth.
+       *   Done    found nothing and returned, so the button did nothing at
+       *           all. No write, no row leaving, no undo offered.
+       *
+       * One of those is worse than a dead button: the data changed and the
+       * screen said otherwise. Both are gone by asking where the row actually
+       * is instead of assuming.
+       *
+       * Null when it is in neither, which is a row that has already left.
+       */
+      function whichList(item) {
+        const active = things.findIndex((t) => t.id === item.id);
+        if (active !== -1) return { list: things, at: active };
+
+        const aside = setAside.findIndex((t) => t.id === item.id);
+        if (aside !== -1) return { list: setAside, at: aside };
+
+        return null;
+      }
+
       function sortThings() {
         const rank = (t) => (t.mark ? t.mark.length : 0);
         // Both lists, by the same rule. The saved one is ordered too — it is
@@ -3705,18 +3740,21 @@
        * carrying a new id.
        */
       function takeOff(item, what, path) {
-        const at = things.findIndex((t) => t.id === item.id);
-        if (at === -1) return;
+        const found = whichList(item);
+        if (!found) return;
+        const { list, at } = found;
 
-        things.splice(at, 1);
+        list.splice(at, 1);
         renderThings();
 
         offerUndo(
           what,
           () => {
-            // The same row, put back where it was. Nothing was written, so
-            // there is nothing to ask the server for.
-            things.splice(Math.min(at, things.length), 0, item);
+            // The same row, put back where it was — in the list it came out
+            // of, which is why `list` is captured rather than looked up again.
+            // A saved thing undone back into the active list would be a second
+            // bug wearing the first one's clothes.
+            list.splice(Math.min(at, list.length), 0, item);
             renderThings();
           },
           () => {
@@ -3750,8 +3788,12 @@
         // must finish that one rather than discard it.
         settleUndo();
 
-        const at = things.findIndex((t) => t.id === item.id);
-        if (at !== -1) things.splice(at, 1);
+        // Whichever list holds it. This looked in `things` alone: a saved row
+        // was never found, nothing was spliced, and the delete below was posted
+        // regardless — so the row sat on screen after the thing behind it had
+        // been destroyed.
+        const found = whichList(item);
+        if (found) found.list.splice(found.at, 1);
         renderThings();
 
         // keepalive, so a tab closed on the same breath as the press still
@@ -5611,8 +5653,11 @@
             blocks[i].note = note;
             arrived = true;
 
-            const thing = things.find((t) => t.id === blocks[i].entryId);
-            if (thing) thing.note = null;
+            // Either list. A thing can be set aside while a block it was
+            // scheduled into is still in the day, and looking only in the
+            // active list left that row wearing a note the block had taken.
+            const holder = whichList({ id: blocks[i].entryId });
+            if (holder) holder.list[holder.at].note = null;
           });
         }
 
