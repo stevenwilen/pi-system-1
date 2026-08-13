@@ -4082,6 +4082,59 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('and five are what is running out of room', urgent.length === 5, urgent.join(' | '));
   }
 
+  console.log('\na pin over the cap is not thrown away when the day has room');
+  {
+    // THE GAP THE FOURTH PIN FELL DOWN. The rule was written for a shortage of
+    // pins — "if there aren't enough pins it goes to another priority" — and
+    // said nothing about a shortage of urgency, so the give was one-directional.
+    // A pin over the cap of three was refused by its own half AND by the urgent
+    // half, which asks for a mark and NO PIN. Six pinned and two urgent made a
+    // five-block day with three empty slots and three pinned rows left on the
+    // list, which is what "why are there only 5 blocks" was.
+    const items = [];
+    for (let i = 1; i <= 6; i++) {
+      items.push({ id: `p-${i}`, type: 'task', title: `Pinned ${i}`, days: i, mark: '!!', pinned: true, due: null, size: null, last_scheduled: null });
+    }
+    for (let i = 1; i <= 2; i++) {
+      items.push({ id: `u-${i}`, type: 'task', title: `Urgent ${i}`, days: i, mark: '!!!', pinned: false, due: null, size: null, last_scheduled: null });
+    }
+    const { ctx, slots, titles } = boot({ entries: utcEntries({ items }), now: '07:30' });
+    await ctx.load();
+
+    ctx.fillDay();
+    check('the day fills to eight, not to five', slots().length === 8,
+      `${slots().length}: ${titles().join(' | ')}`);
+    check('both urgent rows are in it', ['Urgent 1', 'Urgent 2'].every((t) => titles().includes(t)),
+      titles().join(' | '));
+    check('and all six pins, because there was room for them',
+      [1, 2, 3, 4, 5, 6].every((i) => titles().includes(`Pinned ${i}`)), titles().join(' | '));
+    check('with nothing in twice', new Set(titles()).size === 8, titles().join(' | '));
+  }
+
+  console.log('\nbut the cap still holds while there is urgent work to protect');
+  {
+    // The same six pins against enough urgency to use the other five slots.
+    // Here the cap does its job: three pins, not six.
+    const items = [];
+    for (let i = 1; i <= 6; i++) {
+      items.push({ id: `p-${i}`, type: 'task', title: `Pinned ${i}`, days: i, mark: null, pinned: true, due: null, size: null, last_scheduled: null });
+    }
+    for (let i = 1; i <= 7; i++) {
+      items.push({ id: `u-${i}`, type: 'task', title: `Urgent ${i}`, days: i, mark: '!!!', pinned: false, due: null, size: null, last_scheduled: null });
+    }
+    const { ctx, slots, titles } = boot({ entries: utcEntries({ items }), now: '07:30' });
+    await ctx.load();
+
+    ctx.fillDay();
+    check('the day fills to eight', slots().length === 8, String(slots().length));
+    check('three of them pinned and no more',
+      titles().filter((t) => t.startsWith('Pinned')).length === 3,
+      titles().filter((t) => t.startsWith('Pinned')).join(' | '));
+    check('and five running out of room',
+      titles().filter((t) => t.startsWith('Urgent')).length === 5,
+      titles().filter((t) => t.startsWith('Urgent')).join(' | '));
+  }
+
   console.log('\nand a thing both pinned and running out of room takes one slot, not two');
   {
     // It would otherwise sit in both halves. The cost is not cosmetic: the day

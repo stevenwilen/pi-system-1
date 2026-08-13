@@ -4162,7 +4162,23 @@
           .filter((t) => !t.pinned && t.mark)
           .slice(0, FILL_TO - pins.length);
 
-        return [...urgent, ...pins].slice(0, room);
+        const chosen = [...urgent, ...pins];
+        const taken = new Set(chosen.map((t) => t.id));
+
+        // AND THE SAME COURTESY THE OTHER WAY. The rule was written for a
+        // shortage of pins and said nothing about a shortage of urgency, so the
+        // give was one-directional and the fourth pin fell down the gap: it was
+        // over the cap of three, and the urgent half would not have it either,
+        // because that half asks for a mark AND NO PIN. Six pinned things and
+        // two urgent ones made a five-block day with three empty slots and
+        // three pinned rows sitting on the list unused.
+        //
+        // The cap is still a cap while there is urgent work to protect from it.
+        // What it is not is a reason to do less.
+        const rest = free.filter((t) => (t.pinned || t.mark) && !taken.has(t.id));
+        chosen.push(...rest.slice(0, FILL_TO - chosen.length));
+
+        return chosen.slice(0, room);
       }
 
       /**
