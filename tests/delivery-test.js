@@ -143,12 +143,20 @@ const statusOf = async (planId) => {
   sent.length = 0;
   await scheduler.deliverDue(profile, now);
 
-  const titles = sent.map((s) => s.text.match(/<b>(.*?)<\/b>/)[1]);
+  // HEADERS ONLY. A note now goes out as a message of its own and carries no
+  // title, so it has no <b> to match — which is what makes this the count of
+  // blocks that were delivered rather than of messages that left.
+  const titles = sent.filter((s) => /<b>/.test(s.text)).map((s) => s.text.match(/<b>(.*?)<\/b>/)[1]);
   check('sends the started block that has a note', titles.includes('Started with a note'));
   check('sends the started block without one', titles.includes('Started, no note'));
   check('does not send a block that has not started', !titles.includes('Not started yet'));
   check('does not send a block long past its time', !titles.includes('Long past'), titles.join(', '));
-  check('exactly two went out', sent.length === 2, `${sent.length}`);
+  check('exactly two blocks went out', titles.length === 2, `${titles.length}`);
+
+  // THREE MESSAGES FOR TWO BLOCKS, because one of them had a note. This is the
+  // check that would catch the note being composed and never sent.
+  check('and three messages, because one carried a note', sent.length === 3,
+    `${sent.length}: ${sent.map((s) => JSON.stringify(s.text.slice(0, 30))).join(', ')}`);
 
   // Twelve hour, the way it arrives on a phone. Built here rather than taken
   // from messages.js, so this is a second opinion on the format rather than
@@ -160,12 +168,27 @@ const statusOf = async (planId) => {
   };
 
   const withLine = sent.find((s) => s.text.includes('Started with a note'));
-  check('message carries header then note',
-    withLine.text === `<b>Started with a note</b>\n${ampm(nowMinutes - 5)} to ${ampm(nowMinutes + 55)}\n\ntwenty pages, no phone`,
+  check('the header is the header, and carries no note',
+    withLine.text === `<b>Started with a note</b>\n${ampm(nowMinutes - 5)} to ${ampm(nowMinutes + 55)}`,
     JSON.stringify(withLine.text));
 
+  // THE NOTE, ON ITS OWN, AND AFTER IT. Order matters and is not incidental —
+  // it is sent second on purpose, so the phone shows the block first.
+  const noteAt = sent.findIndex((s) => s.text === 'twenty pages, no phone');
+  const headerAt = sent.indexOf(withLine);
+  check('the note went out as a message of its own', noteAt !== -1,
+    sent.map((s) => JSON.stringify(s.text)).join(' | '));
+  check('with no title and no times on it',
+    noteAt !== -1 && !sent[noteAt].text.includes('<b>') && !sent[noteAt].text.includes('AM') &&
+      !sent[noteAt].text.includes('PM'), noteAt !== -1 ? JSON.stringify(sent[noteAt].text) : '');
+  check('and under the block it belongs to, not above it', noteAt > headerAt,
+    `header ${headerAt}, note ${noteAt}`);
+  check('to the same person', noteAt !== -1 && sent[noteAt].user_id === withLine.user_id);
+
   const bare = sent.find((s) => s.text.includes('no note'));
-  check('fallback is the header alone', !bare.text.includes('\n\n'), JSON.stringify(bare.text));
+  check('a block without one sends nothing after it',
+    !bare.text.includes('\n\n') && sent.filter((s) => s.user_id === bare.user_id &&
+      s.text.includes('Started, no note')).length === 1, JSON.stringify(bare.text));
 
   let state = await statusOf(planId);
   check('delivered blocks are marked sent', state[0].message_sent_at && state[1].message_sent_at);
@@ -193,8 +216,12 @@ const statusOf = async (planId) => {
     ]);
     sent.length = 0;
     await scheduler.deliverDue(profile, { ...now, date: '2031-06-02' });
-    check('it is sent on the first tick', sent.length === 1, `${sent.length} sent`);
-    check('with its note', sent[0].text.endsWith('twenty pages, no phone'), JSON.stringify(sent[0] && sent[0].text));
+    // Two messages, one block: the header, then the note under it.
+    check('it is sent on the first tick', sent.length === 2, `${sent.length} sent`);
+    check('the header first', sent[0] && /<b>Just confirmed<\/b>/.test(sent[0].text),
+      JSON.stringify(sent[0] && sent[0].text));
+    check('with its note under it', sent[1] && sent[1].text === 'twenty pages, no phone',
+      JSON.stringify(sent[1] && sent[1].text));
     check('and marked sent', (await statusOf(fresh))[0].message_sent_at !== null);
   }
 
@@ -230,9 +257,13 @@ const statusOf = async (planId) => {
     sent.length = 0;
     await scheduler.deliverDue(profile, { ...now, date: '2031-06-12' });
 
-    check('the timed block goes out', sent.length === 1, String(sent.length));
+    // One block with a note: its header and then the note. The untimed item is
+    // not delivered here at all — it goes out with the anytime lane.
+    check('the timed block goes out', sent.length === 2, String(sent.length));
     check('and it is the one with an hour',
       sent[0] && /Deep work/.test(sent[0].text), JSON.stringify(sent[0] && sent[0].text));
+    check('its note following on its own',
+      sent[1] && sent[1].text === 'the pricing page', JSON.stringify(sent[1] && sent[1].text));
     check('nothing anywhere says NaN',
       !sent.some((m) => /NaN/.test(m.text)), JSON.stringify(sent.map((m) => m.text)));
 

@@ -2011,21 +2011,43 @@ read."*
 
 ### 4.1 Block messages
 
-One message per block, at its start time.
+One message per block at its start time, and a second one under it if it carries
+a note.
 
 ```
 <b>UF application</b>
 09:00 to 11:00
-
+```
+```
 Finish the essay draft
 ```
 
-Two parts, both read straight off the block's own row:
+Two messages, both read straight off the block's own row:
 
 | | |
 |---|---|
 | the header | title and both times, always |
-| the note | what they said they were doing, verbatim. See 3.3 |
+| the note | what they said they were doing, verbatim, **on its own**. See 3.3 |
+
+**The note goes out as a message of its own**, carrying no title, no times and no
+label. It used to hang off the bottom of the header after a blank line — the same
+words in the same order, and it read differently: a notification is skimmed at
+its first line, and a second paragraph inside it is furniture around the header.
+Sent alone it is a message from you to you at the hour you meant it for, which is
+what a note is, and the phone gives it its own notification.
+
+**It cannot be retried on its own.** The claim is over the block, not over each
+message, so the one partial state — header delivered, note not — is a choice
+between sending the header a second time to get the note out, or losing the note.
+The duplicate is worse: a repeated notification at the top of the hour reads as
+the system malfunctioning, and lands during the block you are already in. The
+note is dropped and logged under `[NOTE]`, for the reason `[EXPIRED]` is logged —
+from the phone end, a note that never arrives looks like a note nobody wrote.
+
+**Nothing empty is ever sent.** A note of nothing but whitespace is not a note,
+and a second notification holding a blank line is worse than none. The ends are
+trimmed only to decide whether there is a message at all; what is sent between
+them is verbatim.
 
 **Nothing is composed.** There is no assembly step at confirm time, nothing
 stored for delivery to read back, and no arithmetic anywhere on this path. The

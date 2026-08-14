@@ -57,33 +57,56 @@ const made = [];
 
     // Twelve hour, because that is how the person reads a clock. Storage is
     // untouched: the row still says 08:00:00.
-    check('title and real times', m.composeMessage(bare) === '<b>Gym</b>\n8:00 AM to 9:00 AM',
-      JSON.stringify(m.composeMessage(bare)));
+    check('title and real times', m.composeMessages(bare)[0] === '<b>Gym</b>\n8:00 AM to 9:00 AM',
+      JSON.stringify(m.composeMessages(bare)));
     check('a block with nothing to add still sends something',
-      m.composeMessage(bare).length > 0);
+      m.composeMessages(bare).length === 1 && m.composeMessages(bare)[0].length > 0,
+      JSON.stringify(m.composeMessages(bare)));
 
     const past = { ...bare, start_time: '23:00:00', duration_minutes: 120 };
     check('an end past midnight wraps rather than reading 25:00',
-      m.composeMessage(past).includes('11:00 PM to 1:00 AM'), m.composeMessage(past));
+      m.composeMessages(past)[0].includes('11:00 PM to 1:00 AM'), m.composeMessages(past)[0]);
   }
 
-  console.log('\nthe note, verbatim, and nothing else');
+  console.log('\nthe note is a message of its own, verbatim, and nothing else');
   {
     const base = { title: 'UF application', start_time: '09:00:00', duration_minutes: 120 };
 
-    const noted = m.composeMessage({ ...base, note: 'Finish the essay draft' });
-    check('it follows the header',
-      noted === '<b>UF application</b>\n9:00 AM to 11:00 AM\n\nFinish the essay draft',
-      JSON.stringify(noted));
+    // ON ITS OWN, UNDER THE FIRST. It used to hang off the bottom of the same
+    // message after a blank line — the same words in the same order, reading
+    // differently: a notification is skimmed at its first line, and a second
+    // paragraph inside it is furniture around the header.
+    const noted = m.composeMessages({ ...base, note: 'Finish the essay draft' });
+    check('there are two of them', noted.length === 2, JSON.stringify(noted));
+    check('the header is the first, unchanged',
+      noted[0] === '<b>UF application</b>\n9:00 AM to 11:00 AM', JSON.stringify(noted[0]));
+    check('and the note is the second, carrying nothing else',
+      noted[1] === 'Finish the essay draft', JSON.stringify(noted[1]));
+    check('no title on it, and no times',
+      !noted[1].includes('UF application') && !noted[1].includes('AM'), JSON.stringify(noted[1]));
+    check('and nothing bolds it into a header of its own',
+      !noted[1].includes('<b>'), JSON.stringify(noted[1]));
+    check('the header no longer carries the note at all',
+      !noted[0].includes('Finish the essay draft'), JSON.stringify(noted[0]));
 
-    check('no note is no second part',
-      m.composeMessage({ ...base, note: null }) === '<b>UF application</b>\n9:00 AM to 11:00 AM');
-    check('an empty note is no second part either',
-      !m.composeMessage({ ...base, note: '' }).includes('\n\n'));
+    check('no note is one message',
+      m.composeMessages({ ...base, note: null }).length === 1 &&
+        m.composeMessages({ ...base, note: null })[0] === '<b>UF application</b>\n9:00 AM to 11:00 AM');
 
-    // Verbatim means verbatim. Nothing here trims, truncates or rewrites.
-    const odd = m.composeMessage({ ...base, note: '  a <b>bold</b> claim  ' });
-    check('it is not trimmed or escaped here', odd.includes('  a <b>bold</b> claim  '),
+    // NOTHING EMPTY IS EVER SENT. A second notification holding a blank line
+    // is worse than none, and a note of spaces is not a note.
+    check('an empty note is one message too',
+      m.composeMessages({ ...base, note: '' }).length === 1);
+    check('and so is a note of nothing but spaces',
+      m.composeMessages({ ...base, note: '   \n  ' }).length === 1,
+      JSON.stringify(m.composeMessages({ ...base, note: '   \n  ' })));
+
+    // Verbatim means verbatim: nothing here rewrites what they typed. The ends
+    // are taken off only to decide whether there is a message at all — what is
+    // sent is what was written, minus that surrounding whitespace, which a
+    // notification would render as a leading blank line.
+    const odd = m.composeMessages({ ...base, note: '  a <b>bold</b> claim  ' });
+    check('its middle is untouched, tags and all', odd[1] === 'a <b>bold</b> claim',
       JSON.stringify(odd));
     check("escaping is telegram.js's job, and it does it", (() => {
       const src = require('fs').readFileSync(ROOT + '/telegram.js', 'utf8');
@@ -103,13 +126,12 @@ const made = [];
       // Left over from an older build, and no longer read.
       message_text: '11 days since you last did this.',
     };
-    const out = m.composeMessage(withEverything);
+    const out = m.composeMessages(withEverything);
 
     check('a stored line from an older confirm is ignored',
-      !out.includes('11 days since'), JSON.stringify(out));
-    check('the note is still there', out.includes('Finish the essay draft'));
-    check('so the message is exactly two parts',
-      out.split('\n\n').length === 2, JSON.stringify(out));
+      !out.join('\n').includes('11 days since'), JSON.stringify(out));
+    check('the note is still there', out[1] === 'Finish the essay draft', JSON.stringify(out));
+    check('so the block sends exactly two messages', out.length === 2, JSON.stringify(out));
 
     const src = require('fs')
       .readFileSync(ROOT + '/messages.js', 'utf8')
@@ -127,7 +149,7 @@ const made = [];
   {
     const { toTelegramHtml } = require(ROOT + '/telegram.js');
 
-    const text = m.composeMessage({
+    const [text] = m.composeMessages({
       title: 'Read <Dune> & think',
       start_time: '09:00:00',
       duration_minutes: 60,
@@ -244,16 +266,25 @@ const made = [];
 
     console.log('\n    as Telegram would receive them:');
     for (const b of written) {
-      console.log('    ' + m.composeMessage(b).replace(/\n/g, '\n    ') + '\n');
+      for (const part of m.composeMessages(b)) {
+        console.log('    ' + part.replace(/\n/g, '\n    '));
+      }
+      console.log('');
     }
 
-    check('the block with a note sends it',
-      m.composeMessage(written[0]) ===
-        `<b>${habit.title}</b>\n8:00 AM to 9:00 AM\n\ntwenty pages, no phone`,
-      JSON.stringify(m.composeMessage(written[0])));
-    check('the one without sends the header alone',
-      m.composeMessage(written[1]) === `<b>${task.title}</b>\n9:00 AM to 10:00 AM`,
-      JSON.stringify(m.composeMessage(written[1])));
+    // END TO END, off rows the confirm actually wrote rather than off a literal
+    // built here: the note travels from the thing, onto the block, into the
+    // message, and this is the only case that watches the whole way.
+    const noted = m.composeMessages(written[0]);
+    check('the block with a note sends two messages', noted.length === 2, JSON.stringify(noted));
+    check('the first is the header alone',
+      noted[0] === `<b>${habit.title}</b>\n8:00 AM to 9:00 AM`, JSON.stringify(noted[0]));
+    check('and the note follows on its own, with no title',
+      noted[1] === 'twenty pages, no phone', JSON.stringify(noted[1]));
+
+    const plain = m.composeMessages(written[1]);
+    check('the one without sends the header alone', plain.length === 1 &&
+      plain[0] === `<b>${task.title}</b>\n9:00 AM to 10:00 AM`, JSON.stringify(plain));
 
     server.kill();
     await supabase.from('entries').delete().eq('user_id', U).in('id', [habit.id, task.id]);

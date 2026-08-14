@@ -13,7 +13,7 @@ const cron = require('node-cron');
 const { service: supabase } = require('./db');
 const { toMinutes, tomorrowOf } = require('./clock');
 const { sendTelegram } = require('./telegram');
-const { composeMessage } = require('./messages');
+const { composeMessages } = require('./messages');
 const { ONE_OFF } = require('./entry-shape');
 
 // The tick interval, in minutes.
@@ -331,9 +331,35 @@ async function deliverDue(profile, now) {
     // everyone else moves on without one.
     if (!(await claimBlock(block.id))) continue;
 
-    const result = await deliver(profile.user_id, composeMessage(block));
+    const [header, note] = composeMessages(block);
+    const result = await deliver(profile.user_id, header);
 
     if (result.sent) {
+      // THE NOTE FOLLOWS, on its own, and cannot be retried on its own.
+      //
+      // The claim is over the block, not over each message — one row, taken
+      // once, by whoever owns the delivery. So there is no state in which the
+      // header has gone and the note has not, other than this one, and the
+      // choice here is between two bad outcomes: release the block and the
+      // next tick sends the header a SECOND time to get the note out, or keep
+      // it and the note is lost.
+      //
+      // The duplicate is worse. A repeated notification at the top of the hour
+      // reads as the system malfunctioning, and it would land during the block
+      // the person is already in. A missing note is a message that says less
+      // than it should have, which is what it said before this change on every
+      // block that had one.
+      //
+      // Logged under its own tag for the same reason [EXPIRED] is: from the
+      // phone end a note that never arrives looks like a note nobody wrote.
+      if (note) {
+        const second = await deliver(profile.user_id, note);
+        if (!second.sent) {
+          console.error(
+            `[NOTE] "${block.title}": the header was delivered and the note was not. It will not be retried, because retrying would send the header again. ${JSON.stringify(second)}`
+          );
+        }
+      }
       console.log(`[SEND] ${block.title}`);
     } else if (result.skipped) {
       // NOT A FAILURE, and this is the third outcome rather than a flavour of

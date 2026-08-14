@@ -1,4 +1,5 @@
-// What Telegram sends for a block: three lines read straight off the row.
+// What Telegram sends for a block: two lines read straight off the row, and
+// the note under them as a message of its own.
 //
 // No model call, here or anywhere behind here, and now no composition either.
 // Every part of the message is a column — title, start, duration, note — so
@@ -33,10 +34,22 @@ function clock(mins) {
 }
 
 /**
- * What Telegram sends for a block.
+ * What Telegram sends for a block: one message, or two.
+ *
+ * THE NOTE GOES ON ITS OWN, under the first and carrying nothing but itself —
+ * no title, no times, no label. It used to hang off the bottom of the same
+ * message after a blank line, which is the same words in the same order and
+ * reads differently: a notification is skimmed at its first line, and a second
+ * paragraph inside it is furniture around the header. Sent on its own it is a
+ * message from you to you at the hour you meant it for, which is what a note
+ * is, and the phone gives it its own notification.
+ *
+ * An array rather than two functions, so there is one answer to "what does
+ * this block send" and no way to send the header while forgetting what was
+ * meant to follow it.
  *
  * The title, the two times, and whatever they wrote about the session. That
- * is the whole message.
+ * is the whole of it.
  *
  * There was a third part: a line composed at confirm time, naming the deadline
  * or how long the thing had been left. Both are gone, for one reason twice.
@@ -56,11 +69,16 @@ function clock(mins) {
  * note. It is escaped on the way out by telegram.js, along with everything
  * else, so a note containing a `<` renders as a `<`.
  */
-function composeMessage(block) {
+function composeMessages(block) {
   const start = toMinutes(block.start_time);
   const header = `<b>${block.title}</b>\n${clock(start)} to ${clock(start + block.duration_minutes)}`;
 
-  return block.note ? `${header}\n\n${block.note}` : header;
+  // A block with no note is one plain notification, exactly as before. Nothing
+  // empty is ever sent: a note of spaces is not a note, and a second message
+  // holding nothing but a blank line would be worse than none.
+  const note = typeof block.note === 'string' ? block.note.trim() : '';
+
+  return note ? [header, note] : [header];
 }
 
-module.exports = { composeMessage };
+module.exports = { composeMessages };
