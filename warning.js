@@ -199,12 +199,22 @@ function rottedDays(item) {
   return -slackFor(item);
 }
 
-// WARNED AT TWO OF ITS OWN UNITS, SET ASIDE AT THREE — each row against its own
+// WARNED AT ONE OF ITS OWN UNITS, SET ASIDE AT TWO — each row against its own
 // clock, so a task of a day and a project of months are not held to the same
-// calendar. A day-long task three days past its deadline is as far gone as a
-// months-long project a hundred and twenty days past its own.
-const WARN_UNITS = 2;
-const SWEEP_UNITS = 3;
+// calendar. A day-long task two days past its room running out is as far gone
+// as a months-long project eighty days past its own.
+//
+// It was three, which gave a monthly habit a hundred and eighty days before
+// anything happened to it. That is long enough that the rule stops being a
+// deadline and becomes a spring clean nobody remembers agreeing to.
+//
+// THE WARNING STILL COMES FIRST, and shortening the rope shortened the notice
+// with it: one unit rather than two. For a daily habit that is a single day
+// between hearing about it and it moving, which is the honest cost of a tight
+// rope on a short clock — the alternative is warning about something on the
+// same day it goes, which is not a warning.
+const WARN_UNITS = 1;
+const SWEEP_UNITS = 2;
 
 /** Days at '!!!' before this is warned about, and before it is set aside. */
 const warnAfter = (item) => {

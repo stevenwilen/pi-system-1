@@ -31,7 +31,25 @@ telegram.sendTelegram = async (db, user_id, text) => {
 };
 
 const scheduler = require(ROOT + '/scheduler.js');
-const { CADENCE_DAYS, DAYS_NEEDED } = require(ROOT + '/warning.js');
+const { CADENCE_DAYS, DAYS_NEEDED, WARN_UNITS, SWEEP_UNITS } = require(ROOT + '/warning.js');
+
+/**
+ * How old a habit must be to have rotted for `rotted` days.
+ *
+ * DERIVED, NOT WRITTEN DOWN. These fixtures sat on either side of a boundary
+ * that moved the first time the multiplier was tuned, and a fixture one day
+ * from a threshold is exactly the kind that passes for the wrong reason after
+ * a change like that. Read off the same constants the code uses and the two
+ * cannot drift apart.
+ *
+ * '!!!' begins at three cadences — see markFor — and everything past that is
+ * rot.
+ */
+const habitAged = (frequency, rotted) => 3 * CADENCE_DAYS[frequency] + rotted;
+
+/** Rot days that must be warned about, and rot days that must be swept. */
+const warnAt = (frequency) => CADENCE_DAYS[frequency] * WARN_UNITS;
+const sweepAt = (frequency) => CADENCE_DAYS[frequency] * SWEEP_UNITS;
 
 let bad = 0;
 const check = (label, ok, detail = '') => {
@@ -94,13 +112,15 @@ const stateOf = async (id) => {
 
   console.log('what is far gone is set aside, and what is nearly gone is warned about');
   {
-    // A daily habit is '!!!' at three days and swept at six. These two sit
-    // either side of that, one day apart, so nothing here passes by being
-    // vaguely old.
-    const gone = await make({ type: 'habit', title: 'Stretch', frequency: 'daily' }, 6);
-    const nearly = await make({ type: 'habit', title: 'Spanish', frequency: 'daily' }, 5);
-    // Loud, but nowhere near the end of its rope: '!!!' since yesterday.
-    const shouting = await make({ type: 'habit', title: 'Reading', frequency: 'daily' }, 4);
+    // Four daily habits, one in each state the sweep can be in, and each set
+    // exactly on its threshold rather than vaguely near it.
+    const gone = await make({ type: 'habit', title: 'Stretch', frequency: 'daily' },
+      habitAged('daily', sweepAt('daily')));
+    const nearly = await make({ type: 'habit', title: 'Spanish', frequency: 'daily' },
+      habitAged('daily', warnAt('daily')));
+    // Loud, and nowhere near the end of its rope: '!!!' as of today.
+    const shouting = await make({ type: 'habit', title: 'Reading', frequency: 'daily' },
+      habitAged('daily', 0));
     // Not even '!!!'.
     const fine = await make({ type: 'habit', title: 'Piano', frequency: 'daily' }, 1);
 
@@ -134,9 +154,14 @@ const stateOf = async (id) => {
     // The same number of days means different things to different rows, which
     // is the whole design. A weekly habit at 42 days is exactly as far gone as
     // a daily one at 6.
-    const weeklyGone = await make({ type: 'habit', title: 'Weekly gone', frequency: 'weekly' }, CADENCE_DAYS.weekly * 6);
-    const weeklySafe = await make({ type: 'habit', title: 'Weekly safe', frequency: 'weekly' }, CADENCE_DAYS.weekly * 6 - 1);
-    const monthlySafe = await make({ type: 'habit', title: 'Monthly safe', frequency: 'monthly' }, 100);
+    const weeklyGone = await make({ type: 'habit', title: 'Weekly gone', frequency: 'weekly' },
+      habitAged('weekly', sweepAt('weekly')));
+    const weeklySafe = await make({ type: 'habit', title: 'Weekly safe', frequency: 'weekly' },
+      habitAged('weekly', sweepAt('weekly') - 1));
+    // The same number of days that would sweep a weekly one, and nowhere near
+    // enough for a monthly: it is not even '!!!' until ninety.
+    const monthlySafe = await make({ type: 'habit', title: 'Monthly safe', frequency: 'monthly' },
+      habitAged('weekly', sweepAt('weekly')));
 
     // A task whose length is a day, well past its deadline.
     const taskGone = await make({
@@ -150,10 +175,12 @@ const stateOf = async (id) => {
 
     await scheduler.sweepRotting(profile(), at(11));
 
-    check('a weekly habit six cadences gone is set aside',
+    check('a weekly habit at its own sweep point is set aside',
       (await stateOf(weeklyGone.id)).paused_at !== null);
     check('one day short of it is not', (await stateOf(weeklySafe.id)).paused_at === null);
-    check('a monthly habit at a hundred days is not', (await stateOf(monthlySafe.id)).paused_at === null);
+    check('the same age is nothing at all to a monthly one',
+      (await stateOf(monthlySafe.id)).paused_at === null,
+      `${habitAged('weekly', sweepAt('weekly'))} days, and monthly is not !!! until ${3 * CADENCE_DAYS.monthly}`);
 
     check('a day-long task four days past its deadline is set aside',
       (await stateOf(taskGone.id)).paused_at !== null);
@@ -204,7 +231,7 @@ const stateOf = async (id) => {
 
   console.log('\nit runs once a day, and never moves the same row twice');
   {
-    const gone = await make({ type: 'habit', title: 'Stretch', frequency: 'daily' }, 6);
+    const gone = await make({ type: 'habit', title: 'Stretch', frequency: 'daily' }, habitAged('daily', sweepAt('daily')));
 
     await scheduler.sweepRotting(profile(), at(11));
     check('the first run moves it', (await stateOf(gone.id)).paused_at !== null);
@@ -222,7 +249,7 @@ const stateOf = async (id) => {
 
   console.log('\nit keeps to its hour');
   {
-    const gone = await make({ type: 'habit', title: 'Stretch', frequency: 'daily' }, 6);
+    const gone = await make({ type: 'habit', title: 'Stretch', frequency: 'daily' }, habitAged('daily', sweepAt('daily')));
 
     await scheduler.sweepRotting(profile(), at(3));
     check('nothing happens at three in the morning',
@@ -244,7 +271,7 @@ const stateOf = async (id) => {
     // Telegram linked still gets the tidying — they read about it on the list
     // instead of on a phone.
     sendSkips = true;
-    const gone = await make({ type: 'habit', title: 'Stretch', frequency: 'daily' }, 6);
+    const gone = await make({ type: 'habit', title: 'Stretch', frequency: 'daily' }, habitAged('daily', sweepAt('daily')));
 
     await scheduler.sweepRotting(profile(), at(11));
     check('it is still set aside with nowhere to send', (await stateOf(gone.id)).paused_at !== null);

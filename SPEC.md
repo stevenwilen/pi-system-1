@@ -2266,17 +2266,25 @@ Once a day at **11:00**, every row that is at `!!!` is measured against **its ow
 clock** — the length for a dated row, the cadence for a habit:
 
 ```
-warned   at 2 units past the point it turned !!!
-set aside at 3 units
+warned    at 1 unit  past the point it turned !!!
+set aside at 2 units
 
-task 'a day'       !!! -> warned day 2,  set aside day 3
-task 'a few days'  !!! -> warned day 6,  set aside day 9
-project 'months'   !!! -> warned day 80, set aside day 120
+task 'a day'       room out -> warned d1,  set aside d2
+task 'a few days'  room out -> warned d3,  set aside d6
+project 'months'   room out -> warned d40, set aside d80
 
-habit daily        !!! at 3d  -> set aside at 6d
-habit weekly       !!! at 21d -> set aside at 42d
-habit monthly      !!! at 90d -> set aside at 180d
+habit daily        !!! at 3d  -> warned 4d,   set aside 5d
+habit weekly       !!! at 21d -> warned 28d,  set aside 35d
+habit monthly      !!! at 90d -> warned 120d, set aside 150d
 ```
+
+It was three units, which gave a monthly habit a hundred and eighty days before
+anything happened to it — long enough that the rule stopped being a deadline and
+became a spring clean nobody remembers agreeing to. **Shortening the rope
+shortened the notice with it**: one unit rather than two. For a daily habit that
+is a single day between hearing about it and it moving, which is the honest cost
+of a tight rope on a short clock — the alternative is warning about something on
+the day it goes, which is not a warning.
 
 **Set aside, not deleted.** It moves to Saved for later (§4.4) — a place that
 already exists, already says these were put there on purpose, and already has
@@ -2331,7 +2339,7 @@ changed.
   no floor: a `!!!` that has said the same thing for a year is not a warning, it
   is furniture. What replaced the non-goal is narrower than what it forbade —
   nothing leaves the list for having *sat there*, only for having been at `!!!`
-  for three of its own units, and what it leaves for is Saved for later rather
+  for two of its own units, and what it leaves for is Saved for later rather
   than deletion.
 
 ---
