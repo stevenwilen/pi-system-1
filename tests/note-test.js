@@ -185,7 +185,12 @@ async function cleanup() {
       check('the block carries the note now',
         rows.length === 1 && rows[0].note === 'start with the pricing page',
         JSON.stringify(rows));
-      check('AND THE THING IS EMPTY', (await noteOf(study)) === null,
+      // AND THE THING KEEPS IT. It used to be emptied here — spent, so that a
+      // sentence about one morning could not become a standing instruction.
+      // That got the trade the wrong way round: you write on a thing in advance
+      // so the words are there when you schedule it, and a note spent the first
+      // time is one you have to write again every time.
+      check('AND THE THING KEEPS ITS NOTE', (await noteOf(study)) === 'start with the pricing page',
         JSON.stringify(await noteOf(study)));
 
       // The confirm says where it went, so the screen can show the arrival
@@ -195,7 +200,7 @@ async function cleanup() {
         JSON.stringify(done.body.notes));
 
       const listed = (await get(A, '/entries')).items.find((i) => i.id === study);
-      check('and the list no longer offers it', listed.note === null,
+      check('and the list still offers it', listed.note === 'start with the pricing page',
         JSON.stringify(listed.note));
 
       // SPENT MEANS SPENT. Re-confirming the same day must not hand it out
@@ -215,13 +220,15 @@ async function cleanup() {
         again.body.notes.every((n) => n === null), JSON.stringify(again.body.notes));
       check('and the block keeps the one it was given',
         after.some((b) => b.note === 'start with the pricing page'), JSON.stringify(after));
-      check('while the thing stays empty', (await noteOf(study)) === null,
+      check('while the thing still holds its own', (await noteOf(study)) === 'start with the pricing page',
         JSON.stringify(await noteOf(study)));
 
       // AND THE BLOCK RULE STILL HOLDS OVER IT. Once the words are on a block
       // they are that block's, so re-confirming without them clears them like
-      // any other field of the day — there is nowhere for them to go back to,
-      // because the thing has already given them up.
+      // any other field of the day. The copy on the thing is untouched by that
+      // — the two are separate now — and it does not creep back onto a block
+      // somebody has just cleared, because delivery only ever fills a block
+      // that does not exist yet.
       const stripped = await post(A, '/plan', {
         date: DAY, wake_minutes: 480,
         blocks: [{ id, ...block('Rewire the study', study, 540) }],
@@ -229,8 +236,57 @@ async function cleanup() {
       check('a confirm that omits the note clears it, like anything else',
         stripped.status === 200 && (await blocksOn(DAY))[0].note === null,
         JSON.stringify(await blocksOn(DAY)));
-      check('and it does not fall back onto the thing',
-        (await noteOf(study)) === null, JSON.stringify(await noteOf(study)));
+      check('and it does not creep back onto the block that was cleared',
+        (await blocksOn(DAY))[0].note === null, JSON.stringify(await blocksOn(DAY)));
+      check('while the thing keeps its own copy either way',
+        (await noteOf(study)) === 'start with the pricing page', JSON.stringify(await noteOf(study)));
+
+      await cleanup();
+    }
+
+    console.log('\n2b. and it is still there the next time the thing is scheduled');
+    {
+      // THE CASE THE CHANGE EXISTS FOR. A note written on a thing used to be
+      // spent the first time it was scheduled, so the second day it came up
+      // there was nothing waiting and you had to write it again. Writing it
+      // once is the whole reason for being able to write it in advance.
+      const rebuild = await thing('project', 'Rewire the study');
+      await post(A, `/entries/${rebuild}/note`, { note: 'start with the pricing page' });
+
+      const MON = '2031-03-16';
+      const TUE = '2031-03-17';
+
+      const first = await post(A, '/plan', {
+        date: MON, wake_minutes: 480, blocks: [block('Rewire the study', rebuild, 540)],
+      });
+      check('Monday takes it', first.status === 200 &&
+        (await blocksOn(MON))[0].note === 'start with the pricing page',
+        JSON.stringify(await blocksOn(MON)));
+
+      const second = await post(A, '/plan', {
+        date: TUE, wake_minutes: 480, blocks: [block('Rewire the study', rebuild, 540)],
+      });
+      check('and Tuesday takes it too, from the same thing',
+        second.status === 200 && (await blocksOn(TUE))[0].note === 'start with the pricing page',
+        JSON.stringify(await blocksOn(TUE)));
+
+      check('with the thing still holding it after both',
+        (await noteOf(rebuild)) === 'start with the pricing page',
+        JSON.stringify(await noteOf(rebuild)));
+
+      // AND THE TWO ARE SEPARATE. Editing the block says nothing about the
+      // thing, which is what makes the copy a copy rather than a shared field.
+      const blockId = (await blocksOn(TUE))[0].id;
+      await post(A, '/plan', {
+        date: TUE, wake_minutes: 480,
+        blocks: [{ id: blockId, ...block('Rewire the study', rebuild, 540, 'actually, the FAQ first') }],
+      });
+      check('editing the block does not touch the thing',
+        (await noteOf(rebuild)) === 'start with the pricing page',
+        JSON.stringify(await noteOf(rebuild)));
+      check('and the block keeps what was typed on it',
+        (await blocksOn(TUE))[0].note === 'actually, the FAQ first',
+        JSON.stringify(await blocksOn(TUE)));
 
       await cleanup();
     }
@@ -260,7 +316,7 @@ async function cleanup() {
       check('AND THE SECOND HAS NOTHING', rows[1].note === null, JSON.stringify(rows[1]));
       check('the answer names one position, not both',
         done.body.notes.filter(Boolean).length === 1, JSON.stringify(done.body.notes));
-      check('and the thing is empty either way', (await noteOf(study)) === null,
+      check('and the thing keeps its note either way', (await noteOf(study)) === 'bring the blue folder',
         JSON.stringify(await noteOf(study)));
 
       await cleanup();

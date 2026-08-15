@@ -898,26 +898,37 @@ talking at it. Leaving the field saves it; Enter saves it; clearing it removes i
 **It is not the note on a block, and the difference is the whole design.**
 `blocks.note` says what you are doing in that session: "finish the pricing page"
 is true of Tuesday morning and not of the project (§3.2). `entries.note` says
-what to remember **when you next schedule this** — and it is spent once
-delivered.
+what to remember **whenever you schedule this**.
 
-**Scheduling moves it.** Confirming a day writes the note onto the first new
-block for that thing and sets `entries.note` back to null. A note that stayed
-would be read again on every future scheduling, which is how a sentence about one
-morning becomes a standing instruction nobody meant to give.
+**Scheduling copies it.** Tapping a thing into the day puts the note on the block
+immediately, and confirming fills any new block that has none. `entries.note` is
+**left alone** — the row keeps its words until the thing itself leaves the list,
+which for a task or a project is when it is finished and for a habit is never,
+because a habit has no end to reach (§2.3). A standing note on a habit is exactly
+what a habit's note is.
 
-Four rules follow from that, and each one is a case in `note-test.js`:
+It used to be **spent**: the confirm moved it onto the block and set
+`entries.note` to null, so that a sentence about one morning could not become a
+standing instruction nobody meant to give. That describes a real risk and got the
+trade the wrong way round. What it cost was the thing the note was for — you
+write on a thing in advance so the words are there when you come to schedule it,
+and a note spent the first time is one you have to write again every time. It
+also meant a note written in advance was **invisible for the whole time you were
+building the day around it**, since a timed block only received it at the confirm.
 
-- **The confirm spends it, not the tap.** A block does not exist until `POST
-  /plan`, so a person who taps a row and then changes their mind has not spent
-  anything. The move is decided on the server for the same reason.
+Three rules follow, and each is a case in `note-test.js`:
+
+- **The tap copies, the confirm fills the gap.** Tapping puts the note on the
+  block there and then. The confirm still delivers to a new block that has none,
+  which covers a block made any other way.
 - **New blocks only, and the first one per thing.** Scheduling something twice in
   a day is two sessions of the same work, not the same message twice. A block
-  that already exists was given its note by whichever confirm created it.
-- **A block's own words win.** If the first new block already carries a note, the
-  thing keeps its own, undelivered, and nothing is overwritten. Someone who wrote
-  on the block has said something more recent about that session; the message on
-  the thing is still waiting for a scheduling with room for it.
+  that already exists was given its note by whichever confirm created it, and a
+  block whose note was cleared on purpose does not have it creep back.
+- **A block's own words win.** If the block already carries a note, nothing
+  overwrites it. Editing a block says nothing about the thing, and clearing one
+  says nothing either — the two are separate copies from the moment the block is
+  made.
 - **One ceiling, 500 characters, shared with `blocks.note` in `entry-shape.js`.**
   The text moves between them, so two ceilings would let the confirm refuse what
   the field that wrote it accepted — and the refusal would land on the day rather

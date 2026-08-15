@@ -2960,9 +2960,11 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
 
     {
-      // AND IT IS THE CONFIRM THAT SPENDS IT. The server decides — a block
-      // does not exist until then — and both ends of the move show without a
-      // reload: the block gains the line, the row loses the mark.
+      // IT IS ON THE BLOCK THE MOMENT THE BLOCK EXISTS, which is the point of
+      // being able to write on a thing before it is scheduled. It used to
+      // arrive only at the confirm — the server decided, because a block does
+      // not exist until then — so a note written in advance was invisible for
+      // the whole time you were building the day around it.
       const { ctx, byId, slots, noteOf } = fresh({
         planReply: {
           date: 'x', blocks: 1, status: 'confirmed', ids: ['b1'],
@@ -2973,16 +2975,24 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
       rows(byId)[1].onclick({});
       check('the thing is in the day', slots().length === 1, String(slots().length));
-      check('and the block has no note yet', !noteOf(slots()[0]));
+
+      const onTap = noteOf(slots()[0]);
+      check('and the block carries the note straight away', Boolean(onTap));
+      check('with the words that were written on the thing',
+        onTap && onTap.textContent === 'bring the blue folder', onTap && onTap.textContent);
 
       await byId['confirm'].onclick();
 
       const line = noteOf(slots()[0]);
-      check('the confirm brings it back onto the block', Boolean(line));
-      check('with the words that were waiting',
+      check('the confirm leaves it there', Boolean(line));
+      check('still with the same words',
         line && line.textContent === 'bring the blue folder', line && line.textContent);
-      check('and the row it came off has no mark left',
-        markOf(rows(byId)[1]) === null);
+
+      // COPIED, NOT MOVED. The thing keeps its note so it is there the next
+      // time this is scheduled — a note that is spent the first time is a note
+      // you have to write again every time.
+      check('and the row it came off keeps its mark',
+        markOf(rows(byId)[1]) !== null);
     }
   }
 

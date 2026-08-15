@@ -3765,7 +3765,13 @@
           // is the thing being removed, and it keeps its undo. The grey still
           // says "this is already in the day"; it no longer changes what
           // pressing the row does.
-          addBlock({ title: item.title, entryId: item.id });
+          // WITH WHATEVER IS WRITTEN ON IT, which is the whole point of being
+          // able to write on a thing before it is scheduled. The anytime list
+          // has always done this; a timed block did not, so a note written in
+          // advance was invisible until the day was confirmed — and confirming
+          // was also the moment it was taken off the thing, so the words
+          // appeared in one place and vanished from the other at once.
+          addBlock({ title: item.title, entryId: item.id, note: item.note || null });
         };
 
         return row;
@@ -4084,8 +4090,8 @@
       // Every new block starts at one step. It grows by tapping its duration,
       // which is one press per half hour and no presses at all for the common
       // case of a short thing.
-      function addBlock({ title, entryId = null, duration = STEP }) {
-        blocks.push({ title, entryId, duration });
+      function addBlock({ title, entryId = null, duration = STEP, note = null }) {
+        blocks.push({ title, entryId, duration, note });
         saved = false;
         renderBuilder();
       }
@@ -5861,11 +5867,11 @@
             blocks[i].note = note;
             arrived = true;
 
-            // Either list. A thing can be set aside while a block it was
-            // scheduled into is still in the day, and looking only in the
-            // active list left that row wearing a note the block had taken.
-            const holder = whichList({ id: blocks[i].entryId });
-            if (holder) holder.list[holder.at].note = null;
+            // THE ROW KEEPS ITS WORDS. It used to lose them here, because the
+            // confirm took the note off the thing at the same moment it put it
+            // on the block. Copied rather than moved now, so a note written in
+            // advance is still there the next time the thing is scheduled —
+            // see the confirm route.
           });
         }
 

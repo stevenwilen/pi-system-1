@@ -533,18 +533,23 @@ router.post('/plan', async (req, res) => {
       for (const i of freshAt) ids[i] = bySort.get(i) || null;
     }
 
-    // Cleared only once the blocks carrying them exist. Clearing first and
-    // failing on the insert would lose the note outright, with nothing on
-    // either side holding it.
-    if (delivered.size) {
-      const spent = [...delivered.keys()].map((i) => blocks[i].entryId);
-      const { error } = await db
-        .from('entries')
-        .update({ note: null })
-        .eq('user_id', userId)
-        .in('id', spent);
-      if (error) throw new Error(error.message);
-    }
+    // THE THING KEEPS ITS NOTE. It used to be cleared here — spent, on the
+    // reasoning that a sentence about one morning would otherwise be read again
+    // on every future scheduling and become a standing instruction nobody meant
+    // to give.
+    //
+    // That reasoning describes a real risk and got the trade the wrong way
+    // round. What it cost was the thing the note was for: you write on a thing
+    // in advance so the words are there when you come to schedule it, and a
+    // note that is spent the first time is a note you have to write again every
+    // time. The note now stays on the row until the thing itself leaves the
+    // list — which for a task or a project is when it is finished, and for a
+    // habit is never, because a habit has no end to reach (§2.3). A standing
+    // note on a habit is exactly what a habit's note is.
+    //
+    // Copying rather than moving, so both ends hold the words: the block has
+    // its own copy from the moment it is made and can be edited freely, and
+    // editing it says nothing about the thing.
 
     res.json({
       date,

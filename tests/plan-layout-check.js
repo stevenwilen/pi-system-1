@@ -2051,7 +2051,19 @@ console.log('\n17. today and tomorrow');
   // colour to know. Removal belongs to the block now, where what you are
   // pointing at is the thing being removed.
   check('a tap on a greyed row adds another', !/if \(locked\) return/.test(code));
-  check('there is one branch, not two', /addBlock\(\{ title: item\.title, entryId: item\.id \}\);/.test(code));
+  check('there is one branch, not two',
+    /addBlock\(\{ title: item\.title, entryId: item\.id, note: item\.note \|\| null \}\);/.test(code));
+
+  // AND IT BRINGS THE NOTE WITH IT, which is the point of being able to write
+  // on a thing before it is scheduled. The anytime list always did this; a
+  // timed block did not, so a note written in advance was invisible until the
+  // day was confirmed — and the confirm was also the moment it was taken off
+  // the thing, so it appeared in one place and vanished from the other at once.
+  check('a tapped thing brings its note onto the block at once',
+    /addBlock\(\{[^}]*note: item\.note \|\| null/.test(code));
+  check('and the anytime list still does the same',
+    /addAnytime\(\{[^}]*note: item\.note \|\| null/.test(code));
+  check('addBlock can carry one at all', /function addBlock\(\{[^}]*note = null/.test(code));
   check('and nothing is left that takes a thing back out of the day',
     !/unschedule/.test(code) && !/lastBlockFor/.test(code));
 
