@@ -144,6 +144,9 @@ const SUITES = [
   ['later-test.js', 180],
   ['loose-test.js', 180],
   ['done-test.js', 180],
+  // The only lane that moves a row nobody asked it to, so the cases that matter
+  // are the ones about what it refuses to touch.
+  ['rot-test.js', 240],
   ['step1-verify.js', 150],
   ['plan-test.js', 180],
   ['note-test.js', 180],

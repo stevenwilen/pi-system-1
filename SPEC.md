@@ -2255,6 +2255,66 @@ Stats skips saved habits (`.is('paused_at', null)`). A habit put down on purpose
 is not overdue, and reporting it as such would argue with a decision that was
 just made.
 
+### 4.5 What has been shouting for too long
+
+A `!!!` says the room has run out. It says it on the day the room ran out and it
+says exactly the same thing a year later, because the mark is three buckets and
+the bottom one **has no floor**. So a thing could sit at the loudest the system
+can shout for ever, and the shout stopped meaning anything in the second week.
+
+Once a day at **11:00**, every row that is at `!!!` is measured against **its own
+clock** — the length for a dated row, the cadence for a habit:
+
+```
+warned   at 2 units past the point it turned !!!
+set aside at 3 units
+
+task 'a day'       !!! -> warned day 2,  set aside day 3
+task 'a few days'  !!! -> warned day 6,  set aside day 9
+project 'months'   !!! -> warned day 80, set aside day 120
+
+habit daily        !!! at 3d  -> set aside at 6d
+habit weekly       !!! at 21d -> set aside at 42d
+habit monthly      !!! at 90d -> set aside at 180d
+```
+
+**Set aside, not deleted.** It moves to Saved for later (§4.4) — a place that
+already exists, already says these were put there on purpose, and already has
+its own Wednesday message. `status = 'deleted'` was the other reading of
+"removed" and is a tombstone this system cannot undo from any screen: an
+automatic, timer-driven, irreversible write against real rows, whose only notice
+is a Telegram message that may never arrive. Setting aside is one tap from back.
+
+**Nothing is said in the app.** The list shows exactly what it always showed.
+This speaks on the phone or not at all.
+
+**Two exemptions, and both are refusals rather than filters** — asked of the
+database, so an exempt row is never even read as a candidate:
+
+| | |
+|---|---|
+| **pinned** | a pin is someone saying *this one* outright. Overruling that on a timer is the system arguing with a decision it was told about. It also makes a pin the way to say "stop asking, I mean it". |
+| **already saved** | already where this would put it. |
+
+A row with **nothing to measure** is never touched however old it is — a task
+with no deadline is never `!!!` at all, because nothing about it is running out.
+That is not the same as fine, and it is the same as nothing to do.
+
+**Nothing is stored for any of this.** How long something has been at `!!!` is
+already implied by `slack`: for a dated row it is the days past the point the
+room ran out, and for a habit the days past three cadences. No column was added
+and nothing is remembered between runs.
+
+**The rows move before the message goes.** A message promising something is about
+to happen, sent before the thing that already should have happened, describes a
+list the person cannot check — and if the write then failed they would have been
+told about a move that never took place. It follows that the tidying happens for
+someone with no Telegram linked; they read about it on the list instead.
+
+Unlike every other lane, **the slot is not released on a failed send**. The rows
+have already moved, and a retry would say it again about a list that has already
+changed.
+
 ---
 
 ## 5. Non-goals
@@ -2265,7 +2325,14 @@ just made.
 - No finance. That lane existed and was removed whole.
 - No coldness verdicts, no cold flags, no temperature bars.
 - No setup interview. Things are added one at a time through the form.
-- No auto-archive. Nothing leaves the list because it has sat there a while.
+- ~~No auto-archive. Nothing leaves the list because it has sat there a while.~~
+  **Retired (§4.5).** It held for as long as the loudest thing the system could
+  say was a mark on a row, and stopped holding when that mark turned out to have
+  no floor: a `!!!` that has said the same thing for a year is not a warning, it
+  is furniture. What replaced the non-goal is narrower than what it forbade —
+  nothing leaves the list for having *sat there*, only for having been at `!!!`
+  for three of its own units, and what it leaves for is Saved for later rather
+  than deletion.
 
 ---
 

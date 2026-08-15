@@ -148,4 +148,109 @@ function markFor(item) {
   return null;
 }
 
-module.exports = { DAYS_NEEDED, SIZES, CADENCE_DAYS, FREQUENCIES_KNOWN, markFor, slackFor, daysUntil };
+// --- rot ---------------------------------------------------------------------
+//
+// A '!!!' says the room has run out. It says it on the day the room ran out and
+// it says exactly the same thing a year later, because it is three buckets and
+// the bottom one has no floor. So a thing could sit at the loudest the system
+// can shout, for ever, and the shout stopped meaning anything the second week.
+//
+// What follows is the answer to that, and it is the same arithmetic again:
+// nothing new is stored, nothing is remembered, and no column was added. How
+// long something has been at '!!!' is already implied by the numbers the person
+// supplied — `slack` counts the days past the point where the room ran out, and
+// for a habit the days past three cadences.
+
+/**
+ * How many days this row's own clock counts as one unit. Null if it has none.
+ *
+ * ON THE TYPE, NOT ON THE COLUMN, for the reason `slackFor` gives at length: a
+ * one-off task carries a `frequency` too, because the flag is stored in that
+ * column. Asking "is frequency set?" would send every one-off task down the
+ * cadence path, find 'one off' missing from the table, and answer null — so a
+ * one-off task could rot at '!!!' for ever and never be swept, silently, which
+ * is the one outcome this whole file exists to prevent.
+ */
+function unitDays(item) {
+  if (item.type === 'habit') return CADENCE_DAYS[item.frequency] || null;
+  return Object.prototype.hasOwnProperty.call(DAYS_NEEDED, item.size)
+    ? DAYS_NEEDED[item.size]
+    : null;
+}
+
+/**
+ * How many days this has been at '!!!'. Null when it is not at '!!!' at all.
+ *
+ * Zero is a real answer and not the same as null: it went bad today.
+ */
+function rottedDays(item) {
+  if (markFor(item) !== '!!!') return null;
+
+  const unit = unitDays(item);
+  if (!unit) return null;
+
+  // On the type, for the same reason unitDays is. See above.
+  if (item.type === 'habit') {
+    // '!!!' begins at three cadences, so everything past that is rot.
+    return item.days - 3 * unit;
+  }
+
+  // Dated: slack is days of room, and it went to zero on the day it turned.
+  return -slackFor(item);
+}
+
+// WARNED AT TWO OF ITS OWN UNITS, SET ASIDE AT THREE — each row against its own
+// clock, so a task of a day and a project of months are not held to the same
+// calendar. A day-long task three days past its deadline is as far gone as a
+// months-long project a hundred and twenty days past its own.
+const WARN_UNITS = 2;
+const SWEEP_UNITS = 3;
+
+/** Days at '!!!' before this is warned about, and before it is set aside. */
+const warnAfter = (item) => {
+  const unit = unitDays(item);
+  return unit ? unit * WARN_UNITS : null;
+};
+const sweepAfter = (item) => {
+  const unit = unitDays(item);
+  return unit ? unit * SWEEP_UNITS : null;
+};
+
+/**
+ * What should happen to this row today: 'sweep', 'warn', or null.
+ *
+ * Null covers every ordinary case — not at '!!!', no clock to measure against,
+ * or not yet far enough gone — and "nothing to say" is the answer this family
+ * of functions gives most of the time.
+ */
+function rotState(item) {
+  const rotted = rottedDays(item);
+  if (rotted === null) return null;
+
+  if (rotted >= sweepAfter(item)) return 'sweep';
+  if (rotted >= warnAfter(item)) return 'warn';
+  return null;
+}
+
+/** Days from now until it is set aside. Zero means today. Null if never. */
+function daysUntilSweep(item) {
+  const rotted = rottedDays(item);
+  if (rotted === null) return null;
+  return Math.max(0, sweepAfter(item) - rotted);
+}
+
+module.exports = {
+  DAYS_NEEDED,
+  SIZES,
+  CADENCE_DAYS,
+  FREQUENCIES_KNOWN,
+  WARN_UNITS,
+  SWEEP_UNITS,
+  markFor,
+  slackFor,
+  daysUntil,
+  unitDays,
+  rottedDays,
+  rotState,
+  daysUntilSweep,
+};

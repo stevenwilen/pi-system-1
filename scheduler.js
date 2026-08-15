@@ -15,6 +15,8 @@ const { toMinutes, tomorrowOf } = require('./clock');
 const { sendTelegram } = require('./telegram');
 const { composeMessages } = require('./messages');
 const { ONE_OFF } = require('./entry-shape');
+const { rotState, daysUntilSweep } = require('./warning');
+const { lastScheduled, daysBetween } = require('./staleness');
 
 // The tick interval, in minutes.
 //
@@ -666,6 +668,145 @@ async function finishOneOffs(profile, now) {
   return moved || [];
 }
 
+// --- what has been shouting for too long ------------------------------------
+
+// The hour it runs, once a day. Late morning rather than evening: something
+// being set aside is not news you want at bedtime, and the warning that
+// precedes it is worth a day you can still act in.
+const ROT_HOUR = 11;
+
+/**
+ * Warn about what is about to be set aside, and set aside what is past due.
+ *
+ * THE PROBLEM THIS ANSWERS. A '!!!' says the room has run out. It says it on
+ * the day the room ran out and says exactly the same thing a year later,
+ * because it is three buckets and the bottom one has no floor. So a thing could
+ * sit at the loudest the system can shout for ever, and the shout stopped
+ * meaning anything in the second week.
+ *
+ * SET ASIDE, NOT DELETED. It moves to Saved for later, which is a place that
+ * already exists, already has a heading saying these were put there on purpose,
+ * and already gets its own Wednesday message. Deleting would have been the
+ * other reading of "removed", and `status = 'deleted'` is a tombstone this
+ * system cannot undo from any screen — an automatic, timer-driven, irreversible
+ * write against real rows, whose only notice is a Telegram message that may
+ * never arrive. Setting aside is one tap from being back.
+ *
+ * NOTHING IS SAID IN THE APP, deliberately. The list shows what it always
+ * showed; this speaks on the phone or not at all.
+ *
+ * TWO EXEMPTIONS. A pin is someone saying "this one" outright, and overruling
+ * that with a timer would be the system arguing with a decision it was told
+ * about. Something already set aside is already where this would put it.
+ */
+async function sweepRotting(profile, now, { force = false } = {}) {
+  if (!force && !inWindow(minutesOf(now.hour, now.minute), minutesOf(ROT_HOUR, 0))) return;
+  if (!force && (await alreadySent(profile.user_id, 'rot', now.date))) return;
+
+  const { data: rows, error } = await supabase
+    .from('entries')
+    .select('id, type, title, frequency, due, size, priority, paused_at, created_at')
+    .eq('user_id', profile.user_id)
+    .eq('status', 'active')
+    // Exempt, both of them, and asked of the database rather than filtered
+    // afterwards so a row that should never be touched is never even read as a
+    // candidate.
+    .is('priority', null)
+    .is('paused_at', null);
+
+  if (error) throw new Error(`could not read what is rotting: ${error.message}`);
+  if (!rows || !rows.length) return;
+
+  // The same staleness the list is ordered by, and the same one a habit's mark
+  // is made of. Asked once for every row rather than per row.
+  const latest = await lastScheduled(supabase, profile.user_id);
+
+  const warn = [];
+  const sweep = [];
+
+  for (const r of rows) {
+    const since = latest.get(r.id) || String(r.created_at).slice(0, 10);
+    const item = {
+      type: r.type,
+      frequency: r.frequency,
+      due: r.due ? String(r.due).slice(0, 10) : null,
+      size: r.size,
+      today: now.date,
+      days: Math.max(0, daysBetween(since, now.date)),
+    };
+
+    const state = rotState(item);
+    if (state === 'sweep') sweep.push({ ...r, item });
+    else if (state === 'warn') warn.push({ ...r, item, inDays: daysUntilSweep(item) });
+  }
+
+  if (!warn.length && !sweep.length) return;
+
+  // THE WRITE FIRST, and the message after it. A message promising something is
+  // about to happen, sent before the thing that already should have happened,
+  // would describe a list the person cannot check — and if the update then
+  // failed they would be told about a move that never took place.
+  if (sweep.length) {
+    const { error: moveErr } = await supabase
+      .from('entries')
+      .update({ paused_at: new Date().toISOString() })
+      .eq('user_id', profile.user_id)
+      .eq('status', 'active')
+      .is('paused_at', null)
+      .in('id', sweep.map((s) => s.id));
+
+    if (moveErr) throw new Error(`could not set aside: ${moveErr.message}`);
+
+    for (const s of sweep) {
+      console.log(`[ROT] ${profile.user_id}: set aside ${JSON.stringify(s.title)}`);
+    }
+  }
+
+  if (!force && !(await claimSlot(profile.user_id, 'rot', now.date))) return;
+
+  const sent = await deliver(profile.user_id, rotText(warn, sweep));
+
+  if (sent.sent) {
+    console.log(`[ROT] warned about ${warn.length}, set aside ${sweep.length}`);
+  } else if (sent.skipped) {
+    // The rows still moved. Someone with no Telegram linked still gets the
+    // tidying — they simply read about it on the list rather than on a phone.
+    console.log('[ROT] no telegram linked, nothing to send');
+  } else {
+    // NO RELEASE, unlike every other lane. The rows have already been moved,
+    // and a retry would say it again about a list that has already changed.
+    console.error(`[ROT] rows moved but the message failed: ${JSON.stringify(sent)}`);
+  }
+}
+
+/**
+ * The message. What went, and what is about to.
+ *
+ * Plain, and it names the way back. Something set aside without being told how
+ * to retrieve it is indistinguishable from something lost.
+ */
+function rotText(warn, sweep) {
+  const parts = [];
+
+  if (sweep.length) {
+    const many = sweep.length === 1 ? 'One thing has' : `${sweep.length} things have`;
+    parts.push(
+      `<b>${many} been set aside</b>\n\n` +
+        sweep.map((s) => `• ${s.title}`).join('\n') +
+        '\n\nNothing is lost — they are under Saved for later, and one tap puts any of them back.'
+    );
+  }
+
+  if (warn.length) {
+    const lines = warn
+      .map((wRow) => `• ${wRow.title} — ${wRow.inDays === 1 ? 'tomorrow' : `in ${wRow.inDays} days`}`)
+      .join('\n');
+    parts.push(`<b>About to be set aside</b>\n\n${lines}`);
+  }
+
+  return parts.join('\n\n');
+}
+
 async function sendAnytime(profile, now, { force = false } = {}) {
   const { data: plan, error: planErr } = await supabase
     .from('plans')
@@ -786,6 +927,14 @@ async function tick() {
       console.error(`[LOOSE] ${profile.user_id}: ${err.message}`);
     }
 
+    // In its own try, like every other lane: this one WRITES, and a throw here
+    // must not take the rest of somebody's day down with it.
+    try {
+      await sweepRotting(profile, now);
+    } catch (err) {
+      console.error(`[ROT] ${profile.user_id}: ${err.message}`);
+    }
+
     // Sends nothing. It is here because it needs the same daily sweep across
     // every account that the lanes above it need.
     try {
@@ -817,6 +966,9 @@ module.exports = {
   LATER_DAY, //   and when it goes, so a test cannot drift from the job
   LATER_HOUR,
   finishOneOffs, // the sweep that takes a done one-off off the list
+  sweepRotting, // the one lane that moves a row nobody asked it to
+  rotText, //     its wording, so a test reads the real thing
+  ROT_HOUR, //    and its hour, so a test cannot drift from the job
 };
 
 // ---------------------------------------------------------------------------
@@ -840,6 +992,7 @@ const JOBS = {
   later: sendSavedForLater,
   loose: sendAnytime,
   oneoff: finishOneOffs,
+  rot: sweepRotting,
 };
 
 async function runOnce(name) {
