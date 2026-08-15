@@ -3540,10 +3540,21 @@
 
           if (mode !== 'swipe') return;
 
-          // Far enough to mean it. Both re-render the list, which is also what
-          // clears the transform this gesture left on the row.
+          // Far enough to mean it. Delete asks in the page and re-renders, which
+          // is also what clears the transform this gesture left on the row.
           if (dx <= -SWIPE_COMMIT) return askDelete(item);
-          if (dx >= SWIPE_COMMIT) return openThingNote(item);
+
+          // THE NOTE DOES NOT, and this row had the same bug the blocks did.
+          // The prompt is the browser's own, and cancelling it writes nothing
+          // and renders nothing — so the row stayed held open at the end of its
+          // swipe until something else happened to redraw the list. Put back
+          // here, where it does not depend on whether anything is written.
+          if (dx >= SWIPE_COMMIT) {
+            row.style.transition = '';
+            row.style.transform = '';
+            backing.style.opacity = '0';
+            return openThingNote(item);
+          }
 
           if (!reduceMotion()) row.style.transition = `transform ${SETTLE_MS}ms ease-out`;
           row.style.transform = '';
@@ -5636,9 +5647,27 @@
             // Any block, whatever the clock says. Taking it out of the day is
             // how you say it did not happen.
             if (dx <= -SWIPE_COMMIT) return removeBlock(index);
-            // Opens whether or not there is one already, so swiping a block
-            // that has a note is how you edit it.
-            if (dx >= SWIPE_COMMIT) return openNote(index);
+            // BACK TO REST BEFORE THE DIALOG, NOT AFTER IT. Opens whether or
+            // not there is one already, so swiping a block that has a note is
+            // how you edit it.
+            //
+            // The card used to be left where the finger dropped it, on the
+            // assumption that opening the note would re-render and clear the
+            // transform. It does — but only when a note is WRITTEN. Cancelling
+            // the prompt writes nothing and renders nothing, so the card stayed
+            // held open at the end of its swipe and the only way to put it back
+            // was to swipe it again. It settled by accident, on a render that
+            // happened for another reason.
+            //
+            // Instantly rather than with the settle animation: prompt() blocks
+            // the main thread, so a transition started on this line would never
+            // be painted — the dialog is already up.
+            if (dx >= SWIPE_COMMIT) {
+              card.style.transition = '';
+              card.style.transform = '';
+              backing.style.opacity = '0';
+              return openNote(index);
+            }
 
             // Short of it. Settle back and leave the day alone.
             if (!reduceMotion()) card.style.transition = `transform ${SETTLE_MS}ms ease-out`;

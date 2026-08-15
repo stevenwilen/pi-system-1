@@ -1533,7 +1533,43 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
     /dx <= -SWIPE_COMMIT\) return removeBlock\(index\);/.test(code));
   check('and the time never enters into it',
     !/toggleMissed/.test(code) && !/begun \?.*removeBlock/.test(code));
-  check('right opens a note', /dx >= SWIPE_COMMIT\) return openNote/.test(code));
+  check('right opens a note', /dx >= SWIPE_COMMIT\) \{[\s\S]{0,220}return openNote\(index\);/.test(code));
+
+  // AND PUTS THE CARD BACK FIRST. The note is asked for in the browser's own
+  // prompt, and cancelling one writes nothing and renders nothing — so a card
+  // left at its swiped transform stayed there until something else redrew the
+  // day. It settled by accident, on the render a saved note happened to cause.
+  // Reported from a phone as having to swipe the block a second time.
+  // A BOUNDED WINDOW BEFORE EACH CALL, rather than a lazy match from an opening
+  // brace. The two handlers are identically shaped and two thousand lines
+  // apart, so `\{[\s\S]*?return openNote` starts at the Things row's brace and
+  // runs all the way to the block's call, swallowing both — and then every
+  // assertion about either one passes by finding it in the other. This checker
+  // has been fooled by a lookup spanning two rules four times; that is five.
+  const just = (before) => {
+    const at = code.indexOf(before);
+    return at === -1 ? '' : code.slice(Math.max(0, at - 220), at);
+  };
+
+  {
+    const right = just('return openNote(index);');
+    check('  and settles the card before the dialog, not after it',
+      /card\.style\.transform = '';/.test(right) && /backing\.style\.opacity = '0';/.test(right),
+      right.replace(/\s+/g, ' ').slice(-90));
+    check('  without a transition, which a blocking prompt would never paint',
+      /card\.style\.transition = '';/.test(right));
+    check('  and it is the card being settled, not some other row',
+      !/row\.style\.transform/.test(right));
+  }
+
+  // The same on a Things row, which had the same bug and the same cause.
+  {
+    const right = just('return openThingNote(item);');
+    check('a things row settles before its note dialog too',
+      /row\.style\.transform = '';/.test(right) && /backing\.style\.opacity = '0';/.test(right),
+      right.replace(/\s+/g, ' ').slice(-90));
+    check('  and it is the row, not the card', !/card\.style\.transform/.test(right));
+  }
   check('the card follows the finger', /translateX\(\$\{dx\}px\)/.test(code));
   // Two meanings on one gesture, and the direction is which — so the backing
   // names it before the finger comes off, and there is no third label left.

@@ -12,7 +12,44 @@
 //   node tests/touch.js
 const { chromium } = require('playwright');
 const path = require('path');
-const { serve, stub, PHONE, ROOT } = require('./look');
+const { serve, stub, PLAN, PHONE, ROOT } = require('./look');
+
+/**
+ * The same day, started half an hour from now.
+ *
+ * A BLOCK THAT HAS BEGUN REFUSES THE RIGHT SWIPE on purpose — a note says what
+ * you are about to do, so it is fixed once the block starts. The shared fixture
+ * runs nine to five and its hours are fixed, because the screenshots are
+ * compared against a drawing; so from five in the afternoon onward every block
+ * in it has started and every note swipe here was refused. The suite reported
+ * that as the gesture being broken, which is the one thing this file exists to
+ * tell the truth about.
+ *
+ * THE STORED STARTS, not the wake time. Moving the wake time is the obvious
+ * fix and does nothing: `reflow` holds a block that has BEGUN at its stored
+ * start and flows only the rest, and `hasBegun` asks the stored start too — so
+ * a day whose stored hours are all in the past stays in the past however late
+ * it is told to wake up. Both have to move.
+ */
+const soon = () => {
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  // Half an hour from now, on the half hour the app itself steps in.
+  return Math.ceil((mins + 30) / 30) * 30;
+};
+
+const UNSTARTED = () => {
+  const base = soon();
+  let cursor = base;
+  const blocks = PLAN.blocks.map((b) => {
+    // Untimed items have no hour to move and must not take one.
+    if (b.start_minutes === null) return { ...b };
+    const moved = { ...b, start_minutes: cursor };
+    cursor += b.duration_minutes;
+    return moved;
+  });
+  return { ...PLAN, plan: { ...PLAN.plan, wake_minutes: base }, blocks };
+};
 
 let bad = 0;
 const check = (label, ok, detail = '') => {
@@ -45,7 +82,7 @@ const boxOf = async (page, sel, n = 0) =>
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: PHONE, height: 900 }, hasTouch: true });
   page.on('dialog', (d) => d.accept('written by a finger'));
-  await stub(page);
+  await stub(page, { plan: UNSTARTED() });
   await page.addInitScript(() =>
     localStorage.setItem(
       'pi.session',
@@ -103,14 +140,25 @@ const boxOf = async (page, sel, n = 0) =>
   }
 
   {
-    // THE LAST BLOCK, and the reason matters: a block that has BEGUN refuses
-    // the right swipe on purpose — a note says what you are about to do, so it
-    // is fixed once the block starts. The fixture's hours are fixed and the
-    // real clock is not, so picking the first block made this pass in the
-    // morning and fail in the evening. The last one is the one least likely to
-    // have started.
-    const n = await page.evaluate(() => document.querySelectorAll('.block').length);
-    const box = await boxOf(page, '.block', n - 1);
+    // A BLOCK THAT HAS NOT BEGUN, asked of the page rather than guessed at.
+    //
+    // A begun block refuses the right swipe on purpose — a note says what you
+    // are about to do, so it is fixed once the block starts. This used to take
+    // the LAST block on the grounds that it was the least likely to have
+    // started, which is a guess: the fixture's hours are fixed and the real
+    // clock is not, so it passed in the morning and failed in the evening, and
+    // it was failing at the moment this comment was written.
+    //
+    // The page already says which ones have begun — `.live` on the one running
+    // and `.past` on the ones over — so there is nothing to guess.
+    const at = await page.evaluate(() => {
+      const all = [...document.querySelectorAll('.block')];
+      return all.findIndex((b) => !b.classList.contains('live') && !b.classList.contains('past'));
+    });
+    check('the fixture still has a block that has not begun', at !== -1,
+      at === -1 ? 'every block has started — the fixture needs later hours' : `block ${at}`);
+    const box = at === -1 ? null : await boxOf(page, '.block', at);
+    if (!box) throw new Error('no unstarted block to swipe');
     await drag(page, { x: box.x - 90, y: box.y }, { x: box.x + 120, y: box.y });
     await page.waitForTimeout(300);
     // ANSWERED, NOT DISMISSED. A note is asked for in the browser's own dialog

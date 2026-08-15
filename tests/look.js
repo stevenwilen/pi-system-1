@@ -81,7 +81,18 @@ const PLAN = {
 const CALENDAR = { date: TODAY, items: [{ title: 'Dentist', start_minutes: 780, duration_minutes: 60 }], failed: false, configured: true };
 
 /** Answer every request the page makes, so nothing depends on a server. */
-async function stub(page) {
+/**
+ * @param page      the page to answer for
+ * @param overrides `{ plan }`, for a caller that needs a different day
+ *
+ * THE PLAN IS OVERRIDABLE and nothing else is. `PLAN` has fixed hours because
+ * the screenshots are compared against a drawing and a fixture that moved with
+ * the clock would compare a different picture every hour. That fixedness is
+ * wrong for the touch driver, which needs a block that has not STARTED — after
+ * five in the afternoon every block in this day has, and a gesture refused on
+ * purpose reads as a gesture that is broken.
+ */
+async function stub(page, { plan = PLAN } = {}) {
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
@@ -98,7 +109,7 @@ async function stub(page) {
 
     const body =
       API[p] ||
-      (p.startsWith('/plan/') ? PLAN : null) ||
+      (p.startsWith('/plan/') ? plan : null) ||
       (p.startsWith('/calendar/') ? CALENDAR : null) ||
       {};
 

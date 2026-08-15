@@ -850,6 +850,51 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       slots()[0].text().includes('8:00 AM'), slots()[0].text().trim());
   }
 
+  console.log('\nand a cancelled note puts the card back');
+  {
+    // THE BUG: the card was left where the finger dropped it, on the assumption
+    // that opening the note would re-render and clear the transform. It does —
+    // but only when a note is WRITTEN. Cancelling the prompt writes nothing and
+    // renders nothing, so the card stayed held open at the end of its swipe and
+    // the only way to put it back was to swipe it again.
+    //
+    // It settled by accident on every case above this one, because they all
+    // answer the prompt.
+    const { ctx, slots, cardOf, backingOf, noteOf, answerPrompt } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'A' });
+
+    // What the browser returns from a cancelled prompt, and the one value the
+    // note path treats as "leave it alone" rather than "clear it".
+    answerPrompt(null);
+
+    const card = cardOf(slots()[0]);
+    down(card, 100, 100);
+    move(card, 190, 100);
+    check('it travels with the finger', Boolean(card.style.transform), card.style.transform);
+
+    up(card, 190, 100);
+    await wait(SETTLED);
+
+    check('cancelling writes no note', !noteOf(slots()[0]),
+      noteOf(slots()[0]) ? noteOf(slots()[0]).textContent : '(none)');
+    check('and the card is back at rest', !card.style.transform,
+      JSON.stringify(card.style.transform));
+    check('with its backing hidden', backingOf(slots()[0]).style.opacity === '0',
+      backingOf(slots()[0]).style.opacity);
+
+    // AND THE ROW STILL WORKS AFTERWARDS. The complaint was having to swipe a
+    // second time, so the second swipe has to be an ordinary one rather than a
+    // press that clears a stuck card.
+    answerPrompt('written on the second go');
+    down(card, 100, 100);
+    move(card, 190, 100);
+    up(card, 190, 100);
+    check('a swipe straight after it opens a note as usual',
+      Boolean(noteOf(slots()[0])) && noteOf(slots()[0]).textContent === 'written on the second go',
+      noteOf(slots()[0]) ? noteOf(slots()[0]).textContent : '(none)');
+  }
+
   console.log('\nswiping a block that has a note reopens it');
   {
     const { ctx, slots, cardOf, noteOf, prompts, answerPrompt } = boot();
@@ -2882,11 +2927,20 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       posted.length = 0;
 
       answerPrompt(null);
-      swipe(rows(byId)[1], 80);
+      const backedOut = rows(byId)[1];
+      swipe(backedOut, 80);
       await wait(0);
       check('cancelling writes nothing', posted.length === 0,
         JSON.stringify(posted.map((p) => p.url)));
       check('and the note is still there', Boolean(markOf(rows(byId)[1])));
+
+      // AND THE ROW GOES BACK, which is the half this case did not ask about.
+      // It only ever settled because something else redrew the list: cancelling
+      // writes nothing and renders nothing, so a row left at the end of its
+      // swipe stayed there until the next render happened for another reason.
+      // The blocks had the same bug and it was reported from a phone.
+      check('and the row is back at rest', !backedOut.style.transform,
+        JSON.stringify(backedOut.style.transform));
     }
 
     {
