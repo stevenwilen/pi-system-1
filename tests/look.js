@@ -59,7 +59,10 @@ const API = {
     items: [
       { id: 'e1', type: 'project', title: 'UF application', size: 'a few days', due: '2031-06-20', mark: '!!!', days: 3, days_until_due: 6, last_scheduled: null, note: null, pinned: false, later: false },
       { id: 'e2', type: 'habit', title: 'Spanish call', frequency: 'daily', mark: null, days: 0, last_scheduled: TODAY, note: null, pinned: false, later: false },
-      { id: 'e3', type: 'task', title: 'Return the router', mark: '!', days: 11, last_scheduled: null, note: null, pinned: false, later: false },
+      // ONE ROW CARRIES A NOTE, so the mark that says so is on screen to be
+      // measured. It is drawn beside the pin and the asterisks, and whether
+      // those three sit on one line is a question only a render can answer.
+      { id: 'e3', type: 'task', title: 'Return the router', mark: '!', days: 11, last_scheduled: null, note: 'bring the blue folder', pinned: true, later: false },
     ],
     saved: [],
   },
@@ -373,6 +376,71 @@ if (require.main !== module) return;
       ),
     };
   });
+
+  // --- the marks on a things row --------------------------------------------
+  //
+  // A note mark, a pin and the asterisks share one cluster at the end of a row,
+  // and they are three different kinds of thing: a drawn page, a masked glyph
+  // and bold type. Whether they line up is not a question the stylesheet can
+  // answer — each is centred by a different mechanism, and the note mark was
+  // dropping onto the title's baseline because it was the one that had not been
+  // told to centre itself.
+  const marks = await page.evaluate(() => {
+    const mid = (sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { mid: r.top + r.height / 2, w: Math.round(r.width), h: Math.round(r.height) };
+    };
+    const note = document.querySelector('.notemark');
+    // THE TITLE ON THE SAME ROW, not the first title on the page. Only one row
+    // in the fixture carries a note, and it is not the first — so a bare
+    // `.row .title` measured a line 136px above the mark and called it
+    // off-centre. A check that reports a real fault for the wrong reason is one
+    // that will report a fake one just as confidently.
+    const row = note ? note.closest('.row') : null;
+    const title = row ? row.querySelector('.title') : null;
+    const box = (el) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { mid: r.top + r.height / 2, w: Math.round(r.width), h: Math.round(r.height) };
+    };
+    return {
+      note: mid('.notemark'),
+      pin: mid('.pinmark'),
+      title: box(title),
+      paths: note ? note.querySelectorAll('path').length : 0,
+      round: note ? getComputedStyle(note).borderRadius : '',
+      colour: note ? getComputedStyle(note).color : '',
+      faint: getComputedStyle(document.documentElement).getPropertyValue('--faint').trim(),
+    };
+  });
+
+  console.log('\nthe marks at the end of a things row');
+  check('the note mark is drawn', marks.note && marks.paths === 2,
+    marks.note ? `${marks.paths} paths` : 'not drawn');
+  check('as a page and a turned corner, not a dot',
+    !/50%/.test(marks.round), marks.round);
+  check('on the same square the pin sits on',
+    marks.note && marks.pin && marks.note.w === marks.pin.w && marks.note.h === marks.pin.h,
+    marks.note && marks.pin ? `${marks.note.w}x${marks.note.h} vs ${marks.pin.w}x${marks.pin.h}` : '');
+
+  // THE ONE THAT WAS WRONG. A shape with no letters in it has no baseline to
+  // sit on, and this one was sitting on the title's.
+  //
+  // THE PIN IS THE SENSITIVE COMPARISON of the two below, and it is worth
+  // knowing which. `.title` is a flex child that stretches to the whole line
+  // box, so its centre is the line's centre and a mark shoved to the top of
+  // that line still measures level with it — pushing this to `flex-start`
+  // reads 0.0px against the title and 4.8px against the pin. The title check
+  // stays because it is the claim a person would make; the pin check is the
+  // one that would fail.
+  check('centred on the line rather than dropped onto its baseline',
+    marks.note && marks.title && Math.abs(marks.note.mid - marks.title.mid) <= 1,
+    marks.note && marks.title ? `${Math.abs(marks.note.mid - marks.title.mid).toFixed(1)}px off` : '');
+  check('and level with the pin beside it',
+    marks.note && marks.pin && Math.abs(marks.note.mid - marks.pin.mid) <= 1,
+    marks.note && marks.pin ? `${Math.abs(marks.note.mid - marks.pin.mid).toFixed(1)}px apart` : '');
 
   console.log('\nthe press that builds the day');
   if (!fill) {

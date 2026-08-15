@@ -633,20 +633,40 @@
         line-height: 1.35;
       }
 
-      /* A note is waiting on this row, and that is all the mark says.
-         An ink dot rather than a word or a count. The list must not get
-         longer, and the note is a message to yourself for the next time you
-         schedule this — reading it is not what the list is for.
+      /* A note is waiting on this row, and that is all the mark says. The list
+         must not get longer, and the note is a message to yourself for the next
+         time you schedule this — reading it is not what the list is for.
 
-         Muted, and neither of the two coloured inks. Something waiting is not
-         something wrong, so not persimmon; and there is nothing here to press,
-         so not indigo. A quiet dot is the whole of what was asked for. */
+         A PAGE WITH ITS CORNER TURNED, which is what the thing being marked
+         actually is. It was an ink dot: a dot is a shape that has to be learned,
+         because nothing about a circle says "there are words attached to this".
+
+         Drawn in the same stroked hairline the rest of the page is ruled with,
+         and on the same 12px square the pin beside it occupies — two marks in
+         one cluster on one grid, rather than two sizes that happen to sit
+         together.
+
+         Faint, matching the pin, and neither of the two coloured inks.
+         Something waiting is not something wrong, so not persimmon; there is
+         nothing here to press, so not indigo. */
       .notemark {
-        width: 5px;
-        height: 5px;
-        background: var(--muted);
-        border-radius: 50%;
         flex: none;
+        /* CENTRED ON THE LINE, for the reason the pin gives: a shape with no
+           letters in it has no baseline to sit on, and this one was dropping
+           onto the title's — which is what made it look off next to a pin that
+           was doing this already. */
+        align-self: center;
+        width: 12px;
+        height: 12px;
+        color: var(--faint);
+      }
+      .notemark svg {
+        display: block;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.1;
+        stroke-linejoin: round;
+        stroke-linecap: round;
       }
 
 
@@ -3616,6 +3636,13 @@
           has.className = 'notemark';
           has.setAttribute('role', 'img');
           has.setAttribute('aria-label', 'has a note');
+          // The page and the turned corner, in two strokes: the outline with
+          // the corner cut off it, and the fold laid over the cut.
+          has.innerHTML =
+            '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">' +
+            '<path d="M2 1h4.4L10 4.6V11H2Z"></path>' +
+            '<path d="M6.4 1v3.6H10"></path>' +
+            '</svg>';
           top.append(has);
         }
 

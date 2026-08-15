@@ -709,7 +709,7 @@ came out bold on a laptop and thin on the phone (§3.1.1). An inline svg has no
 font to be missing from.
 
 **Stroked and tilted, not filled**, and that is most of why it is quiet: a solid
-shape at this size is a blob carrying as much ink as the note dot beside it,
+shape at this size is a blob carrying as much ink as the note mark beside it,
 while a 2px stroke in a 24 viewBox renders under a pixel wide. The turn is
 inside the svg, so the element stays square and nothing needs rotating in CSS.
 
@@ -934,14 +934,25 @@ Three rules follow, and each is a case in `note-test.js`:
   the field that wrote it accepted — and the refusal would land on the day rather
   than on the field.
 
-**The list never shows the words.** A row with a note carries a small muted dot
-and nothing else. The list must not get longer: a second line of prose on every
-row that has one turns a list you scan into a page you read, and the note is
-addressed to the person about to schedule this rather than to the person
-scanning. Swiping right again is how it is read, and how it is edited.
+**The list never shows the words.** A row with a note carries **a page with its
+corner turned** and nothing else. The list must not get longer: a second line of
+prose on every row that has one turns a list you scan into a page you read, and
+the note is addressed to the person about to schedule this rather than to the
+person scanning. Swiping right again is how it is read, and how it is edited.
 
-The dot is muted rather than either ink. Something waiting is not something
-wrong, so not persimmon; there is nothing to press on it, so not indigo.
+It was an ink dot, which is a shape that has to be learned — nothing about a
+circle says *there are words attached to this*. The mark is now the thing it
+marks. Drawn as two stroked paths in the same hairline the rest of the page is
+ruled with, on **the same 12px square the pin occupies**, so the two marks in one
+cluster sit on one grid rather than being two sizes that happen to be adjacent.
+
+It is `--faint`, matching the pin, and neither of the two inks. Something waiting
+is not something wrong, so not persimmon; there is nothing to press on it, so not
+indigo.
+
+**Centred with `align-self`, not left on the baseline.** A shape with no letters
+in it has no baseline to sit on, which is the reason the pin already did this and
+the reason the dot looked wrong beside it.
 
 The note reaches an entry through `POST /entries/:id/note` and **no other
 route**. `/update` re-validates the whole row — title, due date, and the length
@@ -953,7 +964,8 @@ no such thing to say about a row that does not exist yet.
 
 `POST /plan` answers with `notes`, an array parallel to `ids` holding the text of
 each note it moved and null everywhere else. That is what lets both ends of the
-move show without a reload — the block gains its line, the row loses its dot.
+move show without a reload — the block gains its line. The row keeps its mark:
+the note is copied rather than moved.
 
 #### Adding and editing
 
