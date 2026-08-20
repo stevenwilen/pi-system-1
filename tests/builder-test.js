@@ -2570,6 +2570,73 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('and it goes', titles().join() === 'Reading', titles().join());
   }
 
+  console.log('\na press on a block takes its hour away, and gives it back');
+  {
+    // ONE GESTURE, BOTH DIRECTIONS. Pressing an anytime row has always given
+    // it an hour; pressing a block now takes one away. The two lists are one
+    // press apart each way, which is what let the Anytime entry come out of
+    // the ··· menu — it was teaching a direction the day already shows.
+    const { ctx, byId, slots, titles, cardOf } = boot();
+    await ctx.load();
+    ctx.addBlock({ title: 'Deep work' });
+    ctx.addBlock({ title: 'Email' });
+
+    const anyTitles = () => [...byId['anytime-list'].children]
+      .filter((c) => c._class.has('atime'))
+      .map((c) => c.text().trim());
+
+    check('two blocks, nothing loose', slots().length === 2 && anyTitles().length === 0,
+      `${slots().length} / ${anyTitles().length}`);
+
+    cardOf(slots()[0]).onclick();
+
+    check('the block leaves the day', slots().length === 1, String(slots().length));
+    check('and the one below it stays', titles().join() === 'Email', titles().join());
+    check('it lands in the anytime list',
+      anyTitles().some((s) => s.includes('Deep work')), anyTitles().join(' | '));
+
+    // AT THE FOOT, like anything else newly placed. The place it held in the
+    // day is not a place in a list that has no hours in it.
+    ctx.addAnytime({ title: 'Bins' });
+    cardOf(slots()[0]).onclick();
+    check('and a later one lands after what was already there',
+      anyTitles().length === 3 && anyTitles()[2].includes('Email'),
+      anyTitles().join(' | '));
+
+    // AND BACK. The row keeps its identity through both moves, so this is one
+    // row changing shape rather than one disappearing and another arriving.
+    const loose = [...byId['anytime-list'].children].filter((c) => c._class.has('atime'))[0];
+    loose.children.find((c) => c._class.has('arow')).onclick();
+    check('pressing it again gives it an hour back',
+      titles().some((s) => s === 'Deep work'), titles().join());
+  }
+
+  console.log('\nand a block that has begun keeps its hour');
+  {
+    // The server refuses to resize or retime a delivered block, and taking
+    // its length away is a resize — so the press has to do nothing rather
+    // than offer something the confirm would turn down. Same line the drag
+    // holds.
+    const { ctx, byId, slots, cardOf } = boot({
+      plan: twoDays(), entries: utcEntries(), now: '11:30',
+    });
+    await ctx.load();
+
+    const begun = slots().find((s) =>
+      cardOf(s)._class.has('live') || cardOf(s)._class.has('past'));
+    check('the fixture has a block that has begun', Boolean(begun),
+      slots().map((s) => [...cardOf(s)._class].join('.')).join(' | '));
+
+    if (begun) {
+      const before = slots().length;
+      cardOf(begun).onclick();
+      check('pressing it does nothing', slots().length === before,
+        `${before} -> ${slots().length}`);
+      check('and nothing loose appeared',
+        [...byId['anytime-list'].children].filter((c) => c._class.has('atime')).length === 0);
+    }
+  }
+
   console.log('\nnothing anywhere still offers a miss');
   {
     const { ctx, slots, rowOf, posted } = boot({
@@ -2607,8 +2674,16 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // confirmation is; a Delete in the menu as well would be a second route to
     // the same write, two paces from the hint, reachable by a finger that only
     // meant to open the menu.
+    // AND NO ANYTIME EITHER, which left for the same reason Delete did: it was
+    // a second route to something a gesture already does. The long press on the
+    // row puts a thing in the day without an hour, and a block pressed in the
+    // day gives its hour up — see `demote` — so the menu no longer has to
+    // teach either direction.
     check('with everything that has no gesture, and no delete',
-      acts.children.map((c) => c.textContent).join() === 'Done,Anytime,Pin,Later,Edit',
+      acts.children.map((c) => c.textContent).join() === 'Done,Pin,Later,Edit',
+      acts.children.map((c) => c.textContent).join());
+    check('and no Anytime, which is a gesture in both directions now',
+      !acts.children.some((c) => c.textContent === 'Anytime'),
       acts.children.map((c) => c.textContent).join());
 
     const hint = row.children[0].children.find((c) => c._class.has('hint'));

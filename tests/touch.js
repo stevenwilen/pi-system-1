@@ -129,6 +129,7 @@ const boxOf = async (page, sel, n = 0) =>
   console.log('\nand what the press does');
   {
     const before = await page.evaluate(() => document.querySelectorAll('.slot').length);
+    const looseBefore = await page.evaluate(() => document.querySelectorAll('.atime').length);
     const box = await boxOf(page, '.block', 3);
     await drag(page, { x: box.x + 90, y: box.y }, { x: box.x - 120, y: box.y });
     await page.waitForTimeout(400);
@@ -137,6 +138,15 @@ const boxOf = async (page, sel, n = 0) =>
     check('swiping a block left takes it out of the day', after === before - 1, `${before} -> ${after}`);
     check('and offers the undo',
       await page.evaluate(() => Boolean(document.querySelector('.undo'))));
+
+    // AND DOES NOT ALSO DEMOTE IT ON THE WAY OUT. Letting go of a swipe fires
+    // a click on whatever was under the finger, and the card answers a click by
+    // taking the block's hour away — so a block swiped out of the day would
+    // land in the anytime list instead of leaving. The swallow is what stops
+    // it, and only a real browser fires that click.
+    check('and nothing lands in the anytime list on the way',
+      await page.evaluate(() => document.querySelectorAll('.atime').length) === looseBefore,
+      String(await page.evaluate(() => document.querySelectorAll('.atime').length)));
   }
 
   {
@@ -191,6 +201,11 @@ const boxOf = async (page, sel, n = 0) =>
     await page.reload();
     await page.waitForTimeout(900);
 
+    const after2 = await page.evaluate(() => ({
+      slots: document.querySelectorAll('.slot').length,
+      loose: document.querySelectorAll('.atime').length,
+    }));
+
     const chip = await boxOf(page, '.dur', 0);
     if (chip) {
       const was = await page.evaluate(() => document.querySelector('.dur').textContent);
@@ -198,6 +213,20 @@ const boxOf = async (page, sel, n = 0) =>
       await page.waitForTimeout(200);
       const now = await page.evaluate(() => document.querySelector('.dur').textContent);
       check('the duration chip cycles', was !== now, `${was} -> ${now}`);
+
+      // AND THE CARD BEHIND IT DOES NOT ALSO ANSWER. A press on the card takes
+      // the block's hour away, so without the chip stopping its own press,
+      // lengthening a block would demote it out of the day on the same tap.
+      // Only a real browser can catch this: it needs a click that bubbles, and
+      // the stub DOM has no bubbling to be stopped.
+      const stayed = await page.evaluate(() => ({
+        slots: document.querySelectorAll('.slot').length,
+        loose: document.querySelectorAll('.atime').length,
+      }));
+      check('and the block stays in the day', stayed.slots === after2.slots,
+        `${after2.slots} -> ${stayed.slots}`);
+      check('with nothing dropped into the anytime list',
+        stayed.loose === after2.loose, `${after2.loose} -> ${stayed.loose}`);
     }
   }
 

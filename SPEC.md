@@ -1527,11 +1527,27 @@ what `blocks` already does, kept in step by hand.
 does not advance its cursor past them, so nothing below shifts and the end time
 is the timed blocks alone.
 
-Adding one from the list: **long-press** a row in Things, or **Anytime** in its
-`···` menu. The menu carries it in words because a gesture with nothing on screen
-to suggest it is a feature only the person who built it knows about — the mistake
-the `···` was added to correct in the first place. A plain tap still schedules a
-timed block, as before.
+Adding one from the list: **long-press** a row in Things. A plain tap still
+schedules a timed block, as before.
+
+**A press moves a row between the two lists, in both directions.** Pressing an
+anytime row gives it an hour and puts it at the end of the day; pressing a block
+takes its hour away and puts it at the foot of the anytime list. The same row
+throughout — it keeps its id, its note and its thing, so a re-confirm updates it
+in place rather than replacing it.
+
+**A block that has begun keeps its hour.** The server refuses to resize or retime
+a delivered block, and taking its length away is a resize, so the press does
+nothing rather than offering something the confirm would turn down. It is the
+line the drag already holds.
+
+The `···` menu **used to carry Anytime in words**, because a gesture with nothing
+on screen to suggest it is a feature only the person who built it knows about —
+the mistake the `···` was added to correct in the first place. It came out once
+the day itself demonstrated the move both ways. That argument was not wrong, and
+this is the trade being made rather than the argument being answered: the long
+press is still the only *direct* route from a Things row, and the discoverable
+one is now two steps — put it in the day, then press the block.
 
 **Or `+ Anytime`, which never touches the list at all.** Type a line, it goes
 onto the day, tick it, done. The block carries **no `entry_id`**, exactly as

@@ -3714,19 +3714,19 @@
           acts.classList.add('hidden');
           openSheet(item);
         };
-        // Into the day without an hour. The long press does this too, and this
-        // is the half of it that can be seen: a gesture with nothing on screen
-        // to suggest it is a feature only the person who built it knows about,
-        // which is the mistake the ··· itself was added to correct.
-        const anytime = document.createElement('button');
-        anytime.type = 'button';
-        anytime.textContent = 'Anytime';
-        anytime.onclick = (e) => {
-          e.stopPropagation();
-          acts.classList.add('hidden');
-          addAnytime({ title: item.title, entryId: item.id, note: item.note || null });
-        };
-        acts.append(anytime);
+        // NO ANYTIME BUTTON. It was here as the visible half of the long press
+        // — a gesture with nothing on screen to suggest it exists is a feature
+        // only the person who built it knows about, which is the mistake the
+        // ··· itself was added to correct.
+        //
+        // It goes because the menu had two entries doing one job and the list
+        // is short enough that the cost of a long line is real. The long press
+        // is still the direct way in, and there is a second route now that does
+        // not depend on knowing about it: put the thing in the day and press
+        // the block, which takes its hour away. See `demote`.
+        //
+        // The discoverability argument above was not wrong, and this is the
+        // trade being made rather than the argument being answered.
 
         // HELD AT THE TOP, or let go of. The only thing on this screen that
         // changes the order by hand — everything else about it is arithmetic —
@@ -4797,6 +4797,46 @@
       }
 
       /**
+       * Take its hour away.
+       *
+       * The mirror of `promote`, and deliberately built the same way: it keeps
+       * its id, its note and its thing, so this is one row changing shape
+       * rather than one disappearing and another arriving. A re-confirm updates
+       * it in place.
+       *
+       * TO THE END, like anything else newly placed. It lands at the foot of
+       * the anytime list because that list is `blocks` read in order, and the
+       * place it held in the day is not a place in a list with no hours in it.
+       *
+       * A BLOCK THAT HAS BEGUN KEEPS ITS HOUR. The server refuses to resize or
+       * retime a delivered block, and taking its length away is a resize — so
+       * without this the press would offer something the confirm would then
+       * turn down, which is worse than the press doing nothing. It is the same
+       * line the drag holds.
+       *
+       * The stored start goes with the hour. It is what `hasBegun` reads, and
+       * an untimed row that still remembered one would be treated as begun by
+       * every gesture on it — the note swipe refused, on a row that has no hour
+       * to have started.
+       */
+      function demote(i) {
+        const b = blocks[i];
+        if (!b || untimed(b)) return;
+        if (blockBegun(b)) return;
+
+        blocks.splice(i, 1);
+        b.duration = null;
+        b.start = null;
+        b.storedStart = null;
+        // The tick is the only thing an anytime row has that a block does not.
+        if (b.done === undefined) b.done = false;
+        blocks.push(b);
+
+        saved = false;
+        renderBuilder();
+      }
+
+      /**
        * Put a thing in the day without an hour.
        *
        * Its note comes with it, and is spent the same way a timed block's is:
@@ -5345,7 +5385,12 @@
           // The tap lives on click rather than in the pointer handler below,
           // so the keyboard reaches it too: this is a real button and Enter
           // works.
-          dur.onclick = () => {
+          dur.onclick = (e) => {
+            // THE CARD TAKES A TAP NOW — it is how a block gives up its hour —
+            // so the chip has to keep its press to itself, the way the anytime
+            // row's tick already does. Without this, lengthening a block would
+            // also demote it out of the day on the same press.
+            if (e && e.stopPropagation) e.stopPropagation();
             if (swallowClick) {
               swallowClick = false;
               return;
@@ -5365,6 +5410,22 @@
         if (b.note && !past) card.append(noteLine(b.note));
 
         slot.append(backing, card);
+
+        // TAPPING IT TAKES ITS HOUR AWAY, which is the same gesture the anytime
+        // list uses to give one. The two lists are now one press apart in both
+        // directions, and neither direction is a thing you have to be told.
+        //
+        // Guarded against a swipe that has just committed, the same way the
+        // chip and the anytime row are: letting go of a swipe fires a click on
+        // whatever was under the finger, and without this a block swiped away
+        // would be demoted on its way out of the day.
+        card.onclick = () => {
+          if (swallowClick) {
+            swallowClick = false;
+            return;
+          }
+          demote(i);
+        };
 
         attach({ slot, card, backing, index: i });
         return slot;
