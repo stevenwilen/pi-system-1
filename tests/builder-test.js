@@ -2637,6 +2637,91 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     }
   }
 
+  console.log('\na block whose message has gone out is fixed, though it has not begun');
+  {
+    // THE FIFTEEN MINUTES THE CLOCK CANNOT SEE. The scheduler sends a block
+    // up to LEAD_MINUTES before it starts, so between the send and the start
+    // the server calls it delivered — and refuses to move or resize it —
+    // while `hasBegun` still calls it upcoming.
+    //
+    // The screen read the clock alone, so reflow re-timed it like any other
+    // upcoming block. Deleting something ELSE in the day was enough: the
+    // blocks below close up, this one moves with them, and the confirm comes
+    // back refused for a block nobody knowingly touched. Reported as being
+    // unable to delete a block.
+    const plan = {
+      [TODAY]: {
+        plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+        blocks: [
+          // Long enough that what follows it would be pushed past its hour.
+          { id: 'a1', title: 'Long morning', entryId: null, start_minutes: 480, duration_minutes: 150, sent: true },
+          // Its message has gone out; it starts in ten minutes.
+          { id: 'a2', title: 'Dentist', entryId: null, start_minutes: 600, duration_minutes: 30, sent: true },
+        ],
+      },
+    };
+
+    const { ctx, byId, slots, posted, chipOf } = boot({ plan, entries: utcEntries(), now: '09:50' });
+    await ctx.load();
+
+    const dentist = () => slots().find((s) => s.text().includes('Dentist'));
+    check('the sent block is on screen', Boolean(dentist()));
+
+    // NOT BEGUN, and the screen has to agree — this is the whole premise.
+    check('and it has not begun', !dentist().text().includes('NOW'), dentist().text().trim());
+
+    // AND NO CHIP, because the chip resizes and a resize is refused.
+    check('its length is stated, not offered',
+      chipOf(dentist()) === undefined, dentist().text().trim());
+    check('but the length is still shown', /30M/i.test(dentist().text()),
+      dentist().text().trim());
+
+    posted.length = 0;
+    await byId.confirm.onclick();
+
+    const day = posted.find((p) => p.url === '/plan');
+    check('the day was sent', Boolean(day), posted.map((p) => p.url).join());
+
+    // THE ONE THAT MATTERS. Its stored hour is 600; reflow would have put it
+    // at 630, behind a 150-minute block, and the server refuses that.
+    const sentBlock = day.body.blocks.find((b) => b.title === 'Dentist');
+    check('the delivered block keeps its stored hour',
+      sentBlock.start_minutes === 600, String(sentBlock.start_minutes));
+    check('and its stored length', sentBlock.duration_minutes === 30,
+      String(sentBlock.duration_minutes));
+  }
+
+  console.log('\nand taking another block out does not drag it off its hour');
+  {
+    // The report, exactly: delete something and the day is refused because a
+    // block that had been sent but not started moved with the rest.
+    const plan = {
+      [TODAY]: {
+        plan: { date: TODAY, status: 'confirmed', wake_minutes: 480 },
+        blocks: [
+          { id: 'b1', title: 'Long morning', entryId: null, start_minutes: 480, duration_minutes: 150, sent: true },
+          { id: 'b2', title: 'Dentist', entryId: null, start_minutes: 600, duration_minutes: 30, sent: true },
+        ],
+      },
+    };
+
+    const { ctx, byId, slots, posted } = boot({ plan, entries: utcEntries(), now: '09:50' });
+    await ctx.load();
+
+    // Take the long one out from under it.
+    ctx.removeBlock(0);
+    await wait(CLOSED);
+
+    check('one block left', slots().length === 1, String(slots().length));
+
+    posted.length = 0;
+    await byId.confirm.onclick();
+    const day = posted.find((p) => p.url === '/plan');
+    const sentBlock = day.body.blocks.find((b) => b.title === 'Dentist');
+    check('the delivered block still names its stored hour',
+      sentBlock.start_minutes === 600, String(sentBlock.start_minutes));
+  }
+
   console.log('\nnothing anywhere still offers a miss');
   {
     const { ctx, slots, rowOf, posted } = boot({

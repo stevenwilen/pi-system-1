@@ -2021,11 +2021,29 @@ block meant different things. They no longer do (§2.5), and the rule was drawin
 the line at whichever half hour the delivery job last ran: the same block was
 removable at 08:59 and not at 09:01.
 
-`GET /plan/:date` still returns a `sent` flag per block. **The screen no longer
-reads it.** It decided what to offer on a delivered block from that flag once,
-and now decides from the clock: a block that has begun keeps its hour and its
-length whether or not the job has run yet. That is the stricter of the two and
-never the wrong way round, because delivery happens at the start time.
+`GET /plan/:date` returns a `sent` flag per block, and **the screen reads it**.
+
+It stopped reading it once, on the reasoning that the clock answers the same
+question more strictly — a block that has begun keeps its hour and its length
+whether or not the delivery job has run — and that "delivery happens at the
+start time". **It does not.** The scheduler sends up to `LEAD_MINUTES` early
+(§4.1), so for fifteen minutes the server calls a block delivered, and refuses
+to move or resize it, while `hasBegun` still calls it upcoming.
+
+Everything the screen offered on an upcoming block was therefore offered on one
+the server had already locked, and `reflow` re-timed it like any other. The
+symptom was not the block itself: **deleting something else in the day was
+enough**, because the blocks below close up and this one moved with them, and
+the confirm came back refused naming a block nobody had knowingly touched.
+
+So the screen states the server's rule instead of approximating it:
+
+    blockFixed(b) = b.sent || blockBegun(b)
+
+which is what `reflow` holds in place, what the drag refuses to pick up, and
+what the note swipe clamps against. A block whose message has gone out also
+loses its duration chip — the chip is a resize, and a resize is refused — and
+shows its length as a figure rather than a control.
 
 The gesture decision is still made on the raw movement, not the clamped one —
 a finger dragging left on a delivered block has moved, and reading that as

@@ -1603,10 +1603,10 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
   // The clamp survives the simplification, pointing the other way. It used to
   // stop a delivered block being swiped away; removal is one rule now, and it
   // is the NOTE swipe that has nowhere to go on a block already under way.
-  check('a begun block clamps the note swipe',
-    /isBegun\(\) \? Math\.min\(0, raw\) : raw/.test(code));
+  check('a fixed block clamps the note swipe',
+    /isFixed\(\) \? Math\.min\(0, raw\) : raw/.test(code));
   check('and shows no backing when it does', /if \(!dx\) \{/.test(code));
-  check('the screen no longer keeps the sent flag', !/sent: Boolean\(b\.sent\)/.test(code));
+  check('the screen keeps the sent flag', /sent: Boolean\(b\.sent\)/.test(code));
 
   // The buffer insert is gone. Buffer is a title you type into + Block.
   check('nothing inserts a buffer on a swipe', !/insertBuffer/.test(code));
@@ -1973,7 +1973,7 @@ console.log('\n17. today and tomorrow');
     /const blockBegun = \(b\) => onToday\(\) && hasBegun\(b, nowMinutes\(\)\)/.test(code));
   check('and there is one definition of it', (code.match(/hasBegun\(/g) || []).length === 2,
     `${(code.match(/hasBegun\(/g) || []).length} uses`);
-  check('and a begun block cannot be picked up', /if \(isBegun\(\)\) return;/.test(code));
+  check('and a fixed block cannot be picked up', /if \(isFixed\(\)\) return;/.test(code));
 
   // WHAT A PRESS MAY DO IS ASKED OF THE CLOCK, NOT OF THE LAST RENDER.
   //
@@ -1983,7 +1983,7 @@ console.log('\n17. today and tomorrow');
   // that had begun — and the chip only grows, wrapping 4h back to 30m, so one
   // press could end a running block before the current time.
   check('the gesture handlers read it live',
-    /const isBegun = \(\) => blockBegun\(blocks\[index\]\)/.test(code));
+    /const isFixed = \(\) => blockFixed\(blocks\[index\]\)/.test(code));
   check('and none of them keep a captured copy',
     !/function attach\(\{[^}]*begun/.test(code),
     (code.match(/function attach\(\{[^}]*\}/) || [''])[0]);
@@ -2014,7 +2014,14 @@ console.log('\n17. today and tomorrow');
   check('the Starts control is hidden', /\$\('starts'\)\.classList\.toggle\('hidden', onToday\(\)\)/.test(code));
 
   console.log('   the past does not flow');
-  check('a block that has begun keeps its hour', /hasBegun\(b, now\) \? b\.storedStart/.test(code));
+  check('a block that has begun keeps its hour',
+    /hasBegun\(b, now\) || b\.sent/.test(code));
+  // AND ONE WHOSE MESSAGE HAS ONLY GONE OUT. The scheduler delivers up to
+  // fifteen minutes early, so the server locks a block before the clock says
+  // it has begun — and reflow moving it produced a day the confirm refused
+  // whole, over a block nobody had knowingly touched.
+  check('and one whose message has gone out keeps it too',
+    /const fixed = live && \(hasBegun\(b, now\) || b\.sent\)/.test(code));
   check('what is left starts at the next half hour', /Math\.max\(cursor, floor\)/.test(code));
   check('which is the boundary after now', /Math\.ceil\(nowMinutes\(\) \/ STEP\) \* STEP/.test(code));
   check('and a drifted day is not called confirmed', /if \(saved && drifted\(\)\) saved = false/.test(code));
