@@ -347,8 +347,18 @@ function boot({
   // be a suite that stopped.
   const reloads = [];
 
+  // Every repeating timer the page asks for, kept rather than started. The page
+  // saves itself on one now, and a suite that actually waited sixty seconds for
+  // it would be a suite nobody runs.
+  const intervals = [];
+
   const sandbox = {
     console, setTimeout, clearTimeout, Intl: localIntl, Math, JSON,
+    setInterval: (fn, ms) => {
+      intervals.push({ fn, ms });
+      return intervals.length;
+    },
+    clearInterval: () => {},
     location: {
       href: 'https://app.example/',
       // BOTH, so a case can say which one the page reached for. The page
@@ -498,6 +508,14 @@ function boot({
       promptAnswer = title;
     },
     reloads,
+    // A minute passing, without one. Returns how many timers it ran, so a case
+    // that expects the day to save itself can tell the difference between "it
+    // did nothing" and "there was no timer at all".
+    minutePasses: async () => {
+      for (const i of intervals) await i.fn();
+      return intervals.length;
+    },
+    intervals,
     // Every document listener of a kind, in order, so a case can drive the
     // page-level gestures the way the browser would.
     fire: (type, event) => listeners.filter((l) => l.type === type).forEach((l) => l.fn(event)),
@@ -962,12 +980,12 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     await ctx.load();
     ctx.addBlock({ title: 'A' });
     ctx.setSaved(true);
-    check('the day starts saved', byId['confirm'].textContent === 'Confirmed');
+    check('the day starts saved', byId.sealed.textContent === 'Saved');
 
     answerPrompt('a note');
     ctx.openNote(0);
-    check('writing one un-saves it', byId['confirm'].textContent === 'Confirm',
-      byId['confirm'].textContent);
+    check('writing one un-saves it', byId.sealed.textContent === 'Saving',
+      byId.sealed.textContent);
 
     // BACKING OUT IS NOT A CHANGE. It was "opened and closed without typing",
     // which the dialog expresses as a cancel — and a cancel must not mark the
@@ -976,7 +994,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     answerPrompt(null);
     ctx.openNote(0);
     check('but opening and backing out does not',
-      byId['confirm'].textContent === 'Confirmed', byId['confirm'].textContent);
+      byId.sealed.textContent === 'Saved', byId.sealed.textContent);
   }
 
   console.log('\na note survives a reload of a confirmed day');
@@ -1516,18 +1534,18 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
   {
     const { ctx, byId, slots } = boot();
     await ctx.load();
-    check('nothing to confirm on an empty day', byId['confirm'].disabled === true);
+    check('nothing to confirm on an empty day', byId.sealed.textContent === '');
     // A day with nothing in it has an answer, and the answer is nothing. The
     // dash belongs to the switch, which does not yet know.
     check('and the end time says nothing rather than a dash',
       byId['end-time'].textContent === '0:00', byId['end-time'].textContent);
 
     ctx.addBlock({ title: 'A' });
-    check('a block enables it', byId['confirm'].disabled === false);
+    check('a block enables it', byId.sealed.textContent !== '');
     ctx.setSaved(true);
-    check('once saved it reads Confirmed', byId['confirm'].textContent === 'Confirmed');
+    check('once saved it reads Confirmed', byId.sealed.textContent === 'Saved');
     ctx.addBlock({ title: 'B' });
-    check('adding a block un-saves it', byId['confirm'].textContent === 'Confirm');
+    check('adding a block un-saves it', byId.sealed.textContent === 'Saving');
 
     for (let i = 0; i < 16; i++) ctx.addBlock({ title: `x${i}`, duration: 60 });
     check('past midnight is spelled out', /next day/.test(byId['end-time'].textContent),
@@ -1691,13 +1709,13 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // was missing was the one field never asserted.
     const TOMORROW = new Date(Date.UTC(2026, 6, 28)).toISOString().slice(0, 10);
 
-    const { ctx, byId, posted } = boot({
+    const { ctx, byId, posted, minutePasses } = boot({
       plan: twoDays(), entries: utcEntries(), now: '11:00',
     });
     await ctx.load();
 
     posted.length = 0;
-    await byId['confirm'].onclick();
+    await ctx.saveDay();
     const body = posted.find((p) => p.url === '/plan').body;
 
     check('the date is there at all', 'date' in body, JSON.stringify(Object.keys(body)));
@@ -1712,83 +1730,107 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // day would save over the other.
     await byId['pick-tomorrow'].onclick();
     posted.length = 0;
-    await byId['confirm'].onclick();
+    await ctx.saveDay();
     const tomorrowBody = posted.find((p) => p.url === '/plan').body;
     check('switching to Tomorrow sends tomorrow instead', tomorrowBody.date === TOMORROW,
       `${tomorrowBody.date} vs ${TOMORROW}`);
   }
 
-  console.log('\nthe seal stays pressed for as long as the day is saving');
+  console.log('\nthe day writes itself, and only when it has changed');
   {
-    // WHAT THIS IS FOR. Saving is a round trip, and until it came back the
-    // button looked exactly as it had before it was touched — about a second
-    // of nothing, which reads as a tap that did not register.
-    const { ctx, byId } = boot({
+    // THE CONFIRM BUTTON IS GONE. What it did happens on a timer now, so the
+    // cases that matter are the ones about restraint: a day nobody has
+    // touched must cost nothing, and an empty one must not be written at all.
+    const { ctx, byId, posted, minutePasses } = boot({
       plan: twoDays(), entries: utcEntries(), now: '11:00',
     });
     await ctx.load();
 
-    const seal = byId['confirm'];
+    check('there is no button to press', byId.confirm === undefined,
+      byId.confirm ? "still there" : "gone");
+    check('and a line in its place', byId.sealed !== undefined);
+    check('which says the day is saved', byId.sealed.textContent === 'Saved',
+      byId.sealed.textContent);
+
+    // UNLESS THE SCHEDULE HAS NOT CHANGED. The whole guard: `saved` is false
+    // exactly when the screen holds something the database does not.
+    posted.length = 0;
+    const ran = await minutePasses();
+    check('a timer is running at all', ran > 0, `${ran} timers`);
+    check('but an unchanged day is not written', posted.length === 0,
+      posted.map((p) => p.url).join());
+
+    // AND WHEN IT HAS. One edit, one write, and the seal follows it.
+    ctx.addBlock({ title: 'Deep work' });
+    check('an edit un-saves the day', byId.sealed.textContent === 'Saving',
+      byId.sealed.textContent);
+
+    await minutePasses();
+    check('and the next minute writes it',
+      posted.some((p) => p.url === '/plan'), posted.map((p) => p.url).join());
+    check('the seal says so', byId.sealed.textContent === 'Saved',
+      byId.sealed.textContent);
+
+    // AND THEN STOPS. A second minute over a day that has not moved again is
+    // a request for nothing.
+    posted.length = 0;
+    await minutePasses();
+    check('a day already written is left alone', posted.length === 0,
+      posted.map((p) => p.url).join());
+  }
+
+  console.log('\nan empty day is never written on its own');
+  {
+    // The button refused an empty day too. A confirmed empty plan is a
+    // statement — "today is blank" — rather than an absence, and both the
+    // nudge and the one-off sweep read the difference.
+    const { ctx, byId, posted, minutePasses } = boot();
+    await ctx.load();
+
+    check('the day is empty', byId.builder.children.every((c) => !c._class.has('slot')));
+    check('and the seal says nothing at all', byId.sealed.textContent === '',
+      JSON.stringify(byId.sealed.textContent));
+
+    posted.length = 0;
+    await minutePasses();
+    check('a minute passing writes nothing', posted.length === 0,
+      posted.map((p) => p.url).join());
+  }
+
+  console.log('\na save that fails is held on the seal, not thrown at the screen');
+  {
+    // A PRESS COULD ALERT. A timer cannot: offline, that is a dialog a minute
+    // over a day nobody asked to save. The failure is shown instead, and the
+    // next minute tries again.
+    const { ctx, byId, posted, minutePasses } = boot({
+      plan: twoDays(), entries: utcEntries(), now: '11:00',
+    });
+    await ctx.load();
+
     const real = ctx.fetch;
-
-    // Read from inside the request rather than after it, because after it is
-    // exactly when the state is supposed to be gone.
-    let midFlight = null;
-    ctx.fetch = async (url, opts) => {
-      if (url === '/plan') midFlight = seal._class.has('pressing');
-      return real(url, opts);
-    };
-
-    await seal.onclick();
-    check('pressed while the request is out', midFlight === true);
-    check('and released once the day is saved', !seal._class.has('pressing'));
-
-    // The two ways a save is known to go wrong. Both give up early, and a seal
-    // left pressed after either is a button that has stopped answering.
     ctx.fetch = async (url, opts) => {
       if (url === '/plan') throw new Error('offline');
       return real(url, opts);
     };
-    await seal.onclick();
-    check('a request that never lands releases it', !seal._class.has('pressing'));
 
-    ctx.fetch = async (url, opts) => {
-      if (url === '/plan') return { ok: true, json: async () => ({ error: 'refused' }) };
-      return real(url, opts);
-    };
-    await seal.onclick();
-    check('and so does a refusal from the server', !seal._class.has('pressing'));
+    ctx.addBlock({ title: 'Deep work' });
+    await minutePasses();
 
-    // AND THE WAY THAT IS NOT KNOWN. Both cases above return rather than
-    // throw, so a release on the line after the save would have covered them
-    // and this case is the only one that says why it is a `finally` instead:
-    // the seal has to let go on every way out of the save, including one
-    // nobody anticipated. Stuck pressed, it stays stuck until a reload.
-    ctx.fetch = async (url, opts) => {
-      if (url === '/plan') {
-        return { ok: true, json: async () => ({ get error() { throw new Error('boom'); } }) };
-      }
-      return real(url, opts);
-    };
-    let threw = false;
-    try {
-      await seal.onclick();
-    } catch {
-      threw = true;
-    }
-    check('the unexpected still reaches the surface', threw);
-    check('and the seal lets go anyway', !seal._class.has('pressing'));
+    check('the day is still unsaved', byId.sealed.textContent !== 'Saved',
+      byId.sealed.textContent);
+    check('and the seal says it is trying',
+      /trying again/i.test(byId.sealed.textContent), byId.sealed.textContent);
+    check('in the warning ink', byId.sealed._class.has('failed'),
+      [...byId.sealed._class].join('.'));
 
-    // The press itself is the pointer's, not the click's: iOS fires `:active`
-    // only under conditions this button does not always meet, and it would end
-    // at the release anyway — which is where the waiting starts.
-    seal.onpointerdown();
-    check('a finger down presses it', seal._class.has('pressing'));
-    seal.onpointercancel();
-    check('a press stolen by a scroll lets go', !seal._class.has('pressing'));
-    seal.onpointerdown();
-    seal.onpointerleave();
-    check('and so does a finger slid off the button', !seal._class.has('pressing'));
+    // AND THE NEXT MINUTE PICKS IT UP. Nothing about the edit was lost.
+    ctx.fetch = real;
+    posted.length = 0;
+    await minutePasses();
+    check('the next minute writes it after all',
+      posted.some((p) => p.url === '/plan'), posted.map((p) => p.url).join());
+    check('and the seal clears', byId.sealed.textContent === 'Saved',
+      byId.sealed.textContent);
   }
 
   console.log('\na morning planner opens on today');
@@ -2111,7 +2153,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
     // Hidden, not lost. The confirm still carries it.
     posted.length = 0;
-    await byId['confirm'].onclick();
+    await ctx.saveDay();
     const sentBody = posted.find((p) => p.url === '/plan').body;
     check('the hidden note is still sent', sentBody.blocks[0].note === 'chapter four',
       String(sentBody.blocks[0].note));
@@ -2150,10 +2192,10 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('what is left moved up to the next half hour',
       slots()[1].text().includes('9:30 AM – 10:30 AM'), slots()[1].text().trim());
     check('so the day no longer matches what is stored, and says so',
-      byId['confirm'].textContent === 'Confirm', byId['confirm'].textContent);
+      byId.sealed.textContent === 'Saving', byId.sealed.textContent);
 
     posted.length = 0;
-    await byId['confirm'].onclick();
+    await ctx.saveDay();
 
     const sentBody = posted.find((p) => p.url === '/plan');
     check('confirm sent the day', Boolean(sentBody));
@@ -2203,7 +2245,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     check('and still reads as past', slots()[0].children[1]._class.has('past'));
 
     posted.length = 0;
-    await byId['confirm'].onclick();
+    await ctx.saveDay();
     const body = posted.find((p) => p.url === '/plan').body;
     check('and is sent unchanged', body.blocks[0].start_minutes === 480,
       String(body.blocks[0].start_minutes));
@@ -3056,7 +3098,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       check('with the words that were written on the thing',
         onTap && onTap.textContent === 'bring the blue folder', onTap && onTap.textContent);
 
-      await byId['confirm'].onclick();
+      await ctx.saveDay();
 
       const line = noteOf(slots()[0]);
       check('the confirm leaves it there', Boolean(line));
@@ -3466,7 +3508,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
 
     // Writes too, through the same wrapper.
     byId['pick-tomorrow'].onclick && (await byId['pick-tomorrow'].onclick());
-    await byId['confirm'].onclick();
+    await ctx.saveDay();
     const confirmCall = asked.filter((a) => a.url === '/plan').pop();
     check('a confirm says who it is', /^Bearer \S/.test((confirmCall || {}).auth || ''),
       JSON.stringify(confirmCall));
@@ -3531,20 +3573,22 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     });
     await ctx.load();
 
-    check('today opens confirmed', byId['confirm'].textContent === 'Confirmed',
-      byId['confirm'].textContent);
-    check('and is not pressable', byId['confirm'].disabled === true);
+    check('today opens saved', byId.sealed.textContent === 'Saved',
+      byId.sealed.textContent);
 
     await byId['pick-tomorrow'].onclick();
-    check('tomorrow has nothing to confirm', byId['confirm'].textContent === 'Confirm',
-      byId['confirm'].textContent);
+    // A DAY WITH NOTHING IN IT SAYS NOTHING. There is no button to grey out any
+    // more, and an empty tomorrow is not "unsaved" — there is nothing in it to
+    // write, and the timer leaves it alone for the same reason.
+    check('and an empty tomorrow says nothing at all',
+      byId.sealed.textContent === '', JSON.stringify(byId.sealed.textContent));
 
     await byId['pick-today'].onclick();
-    check('and today reads confirmed again', byId['confirm'].textContent === 'Confirmed',
-      byId['confirm'].textContent);
-    check('with nothing left over from the way back',
-      byId['confirm'].disabled === true && !byId['confirm']._class.has('pressing'),
-      `disabled=${byId['confirm'].disabled} classes=${byId['confirm'].className}`);
+    check('and today reads confirmed again', byId.sealed.textContent === 'Saved',
+      byId.sealed.textContent);
+    check('with neither transient state left over from the way back',
+      !byId.sealed._class.has('working') && !byId.sealed._class.has('failed'),
+      `"${byId.sealed.textContent}" ${[...byId.sealed._class].join('.')}`);
   }
 
   console.log('\nsetup is somewhere you go, never somewhere you are sent');
@@ -3696,7 +3740,7 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     // What the confirm sends: a block with no hour, no length, and nothing
     // behind it.
     posted.length = 0;
-    await byId['confirm'].onclick();
+    await ctx.saveDay();
     const body = posted.find((p) => p.url === '/plan').body;
     const sent = body.blocks.find((b) => b.title === 'Walk the dog');
     check('it is confirmed as part of the day', Boolean(sent), JSON.stringify(body.blocks));
@@ -4408,10 +4452,15 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
     ctx.fillDay();
     check('and calling it anyway does nothing', slots().length === 0, String(slots().length));
 
-    // NOTHING WAS WRITTEN. The fill builds the day and stops; Confirm is still
-    // what commits it, which is also the undo — walk away and there is no trace.
-    check('the day is still unconfirmed either way',
-      byId.confirm.textContent !== 'Confirmed', byId.confirm.textContent);
+    // THE FILL ITSELF WRITES NOTHING. It builds the day and stops.
+    //
+    // What it no longer is, is an undo. While the day was committed by hand,
+    // walking away from a fill left no trace; the day writes itself now, so a
+    // fill you do not want has to be undone by taking the blocks out rather
+    // than by leaving. That is the cost of the button going, and it is stated
+    // here because this is the case that used to rely on the opposite.
+    check('the fill leaves the day unsaved rather than committing it',
+      byId.sealed.textContent !== 'Saved', byId.sealed.textContent);
   }
 }
 

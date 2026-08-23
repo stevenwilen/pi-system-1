@@ -947,43 +947,34 @@ console.log('\n6. blue is actionable, and nothing else is blue');
     /font-family: var\(--mono\)/.test(rule('.dur')));
   check('and in the column, at its width',
     /width: 64px/.test(rule('.dur')), rule('.dur'));
-  // CONFIRM IS BLUE, and it is the one filled control on the page.
-  //
-  // It was the hanko: a persimmon seal drawn on a layer beneath the word, with
-  // a turbulence filter giving it an uneven bite. That cost two composited
-  // layers and two separate bugs — a word painted outside its own raster and
-  // coming back as ONFIRME, and a filter swap on the day switch that made the
-  // whole face invisible. A filled rectangle in the colour that already means
-  // "this can be pressed" says the same thing with one layer.
-  const confirm = rule('.confirm');
-  check('confirm is filled in the accent', /background: var\(--accent\)/.test(confirm), confirm);
-  check('and its word is the page colour, for contrast the other way',
-    /color: #fff/.test(confirm), confirm);
-  check('nothing is drawn beneath it any more', !/\.confirm::after/.test(css));
-  check('and nothing about it is filtered', !/filter/.test(confirm), confirm);
+  // THE SEAL, WITH NOTHING TO PRESS. The day writes itself on a timer now, so
+  // the button is gone and what stands at the foot of the day is a line that
+  // reports. Everything below used to be about a filled accent slab, its
+  // outline when confirmed, and the state it held while a finger was on it —
+  // three things that only mean something for a control you press.
+  const seal = rule('.sealed');
+  check('the seal is a line, not a slab',
+    !/background/.test(seal) && !/border-radius/.test(seal), seal);
+  check('set in the small mono caps every other label uses',
+    seal.includes('font-family: var(--mono)') && seal.includes('text-transform: uppercase'), seal);
+  check('and quiet by default', seal.includes('color: var(--faint)'), seal);
 
-  // CONFIRMED IS SETTLED, NOT REMOVED. It went to paper and grey once, which
-  // read as the button having been taken away rather than the day having been
-  // agreed to.
-  // AN OUTLINE, NOT A FILL. A day you have agreed to should still show its
-  // button — going to a grey slab reads as the control having been taken away —
-  // and it should stop being the loudest thing on a screen you are now reading
-  // rather than deciding on.
-  const done = rule('.confirm:disabled');
-  check('a confirmed day shows an outline, not a fill',
-    /background: none/.test(done) && /border-color: var\(--line\)/.test(done), done);
-  check('quieter, but not invisible', /color: var\(--muted\)/.test(done), done);
+  // IT KEEPS ITS HEIGHT WHEN IT SAYS NOTHING, so the foot of the day does not
+  // jump as the line changes under it.
+  check('it holds its height while empty', /min-height/.test(seal), seal);
 
-  // BEING PRESSED. The save is a round trip, and a control that answers a
-  // second late reads as one that missed.
-  check('the press is answered at once', /background/.test(rule('.confirm.pressing')),
-    rule('.confirm.pressing'));
-  check('and it is the button itself that darkens, not a layer under it',
-    !/\.confirm\.pressing::after/.test(css));
+  // THE ONE STATE THAT NEEDS READING. With no button left to refuse to go
+  // green, this is the only thing that can say a save is not landing.
+  check('a failing save is in the warn ink',
+    rule('.sealed.failed').includes('color: var(--warn)'), rule('.sealed.failed'));
+  check('and a write in the air is a shade darker, not a spinner',
+    rule('.sealed.working').includes('color: var(--muted)'), rule('.sealed.working'));
 
-  // The keyboard keeps its ring; the pointer does not.
-  check('a pointer press leaves no outline', /outline: none/.test(rule('.confirm:focus')));
-  check('but a keyboard keeps one', /outline: 2px solid/.test(rule('.confirm:focus-visible')));
+  // NOTHING IS LEFT OF THE BUTTON. The setup sheet has one of its own and
+  // keeps it; the day does not.
+  check('the day has no confirm button', !/id="confirm"/.test(body));
+  check('nor any rule styling one', rule('.confirm') === '', rule('.confirm'));
+  check('though the setup sheet keeps its own', css.includes('#gate .confirm'));
 }
 
 console.log('\n7. the warn colour warns; it does not narrate');
@@ -1907,7 +1898,8 @@ console.log('\n16. the shape of the day');
   check('the name is asked for in the browser\'s own dialog', /\bprompt\(/.test(code));
   check('and no field is left in the page', !/addfield/.test(body) && !/addfield/.test(css));
   check('a running day end', /id="end-time"/.test(body));
-  check('and one Confirm', (body.match(/id="confirm"/g) || []).length === 1);
+  check('and one seal, which is a line rather than a button',
+    (body.match(/id="sealed"/g) || []).length === 1 && !/id="confirm"/.test(body));
 
   check('the step is thirty minutes', /const STEP = 30;/.test(code));
 
