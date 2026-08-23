@@ -1991,40 +1991,51 @@
         color: var(--warn);
       }
 
-      /* THE SEAL, WITH NOTHING TO PRESS. The day writes itself now, so what
-         stood here is no longer a button — and a filled blue slab was right
-         for a control that committed the day on purpose and is wrong for a
-         line that only reports.
+      /* THE ONE BUTTON ON THE PAGE. A bar, edge to edge, in the one colour that
+         means "press this".
 
-         What is left is the same small mono caps every other label on this
-         page is set in, on the gutter with the rest of them. Quiet on
-         purpose: "Saved" is the state a well-behaved day is in nearly all of
-         the time, and a badge that says so permanently is one you stop seeing
-         by the second day.
+         IT WAS A FILLED PALE-BLUE CARD, which is the one thing this layout does
+         not have: everything else is a row with a rule under it. A card at the
+         foot of a table reads as a different kind of object arriving from
+         another design.
 
-         It keeps its height when it says nothing, so the foot of the day does
-         not jump as the line changes. */
-      .sealed {
+         CONFIRMED IS AN OUTLINE, not a fill. A day you have agreed to should
+         still show its button — going to a grey slab reads as the control
+         having been taken away — but it should stop being the loudest thing on
+         a screen you are now just reading. */
+      .confirm {
+        display: block;
+        width: 100%;
         margin-top: var(--gap);
-        min-height: 14px;
+        background: var(--accent);
+        color: #fff;
+        text-align: center;
+        padding: 14px;
         font-family: var(--mono);
-        font-size: 9.5px;
-        letter-spacing: 0.2em;
+        font-size: 12px;
+        letter-spacing: 0.16em;
         text-transform: uppercase;
         font-weight: 500;
-        color: var(--faint);
+        border: 1px solid var(--accent);
+        border-radius: 5px;
+        cursor: pointer;
       }
-      /* A write in the air. One step darker rather than a spinner: it is on
-         screen for about a second, and a thing that moves for a second is
-         harder to ignore than what it is reporting on. */
-      .sealed.working {
+      .confirm:focus {
+        outline: none;
+      }
+      .confirm:focus-visible {
+        outline: 2px solid var(--text);
+        outline-offset: 3px;
+      }
+      .confirm:disabled {
+        background: none;
+        border-color: var(--line);
         color: var(--muted);
+        cursor: default;
       }
-      /* THE ONE STATE THAT NEEDS READING. With no button left to refuse to go
-         green, this is the only thing that can say a save is not landing — so
-         it is the one place on this line allowed the warning ink. */
-      .sealed.failed {
-        color: var(--warn);
+      .confirm.pressing {
+        background: var(--accent);
+        opacity: 0.85;
       }
 
       /* --- the add sheet --------------------------------------------------- */
@@ -2330,11 +2341,7 @@
           <b class="tnum" id="end-time">—</b>
         </div>
 
-        <!-- THE SEAL, WITH NOTHING TO PRESS. The day saves itself, so what
-             stood here is no longer a button — but it still has to say whether
-             what is on screen is what is stored. A page that writes to a server
-             silently is one you cannot tell has failed. -->
-        <div class="sealed" id="sealed" role="status" aria-live="polite"></div>
+        <button type="button" class="confirm" id="confirm">Confirm</button>
       </section>
 
       <!-- 2. THINGS --------------------------------------------------------- -->
@@ -5856,53 +5863,33 @@
       $('add-block').onclick = () => ask('block');
       $('add-anytime').onclick = () => ask('anytime');
 
-      /**
-       * What the foot of the day says about itself.
-       *
-       * Four states, and the two quiet ones are the point: an empty day has
-       * nothing to say, and a saved one says so without asking for anything.
-       * The other two exist because this writes on its own now — if a save is
-       * failing there is no button left whose refusal to go green would tell
-       * you.
-       */
       function renderConfirm() {
-        const seal = $('sealed');
-        if (!blocks.length) {
-          seal.textContent = '';
-          seal.className = 'sealed';
-          return;
-        }
-        if (savingNow) {
-          seal.textContent = 'Saving';
-          seal.className = 'sealed working';
-          return;
-        }
-        if (saveFailed) {
-          seal.textContent = 'Not saved — trying again';
-          seal.className = 'sealed failed';
-          return;
-        }
-        seal.textContent = saved ? 'Saved' : 'Saving';
-        seal.className = saved ? 'sealed' : 'sealed working';
+        const button = $('confirm');
+        button.textContent = saved ? 'Confirmed' : 'Confirm';
+        button.disabled = saved || !blocks.length;
       }
 
-      // NOTHING TO PRESS, so nothing to answer a press. The block that stood
-      // here held the seal down for the length of the round trip, because a
-      // stamp that says nothing for a second reads as a press that did not
-      // register. A line that reports rather than commits has no such moment
-      // to cover — it says Saving while the write is out, which is the same
-      // reassurance without a finger involved.
-
       /**
-       * @param quiet     hold failures on the seal instead of alerting
-       * @param keepalive send it in a way a closing tab cannot cut off
-       * @returns whether the day is now written
+       * The seal, under the hand.
        *
-       * IT ANSWERS NOW, where it used to answer nothing. A press could tell you
-       * it had failed with an alert; a timer needs the outcome as a value, so
-       * it knows whether to say "not saved" and try again.
+       * A stamp answers the moment you lean on it, and this one took the round
+       * trip to the server before it said anything at all — about a second of a
+       * button that looked exactly as it had before it was touched, which reads
+       * as a press that did not register.
+       *
+       * Driven from the pointer rather than left to `:active`, which iOS only
+       * fires under conditions this button does not always meet, and which
+       * would end at the release anyway — the wait starts there.
+       *
+       * The release removes it and the click immediately puts it back, in the
+       * same turn of the loop, so there is nothing to see between them.
        */
-      async function saveDay({ quiet = false, keepalive = false } = {}) {
+      $('confirm').onpointerdown = () => $('confirm').classList.add('pressing');
+      $('confirm').onpointerup = () => $('confirm').classList.remove('pressing');
+      $('confirm').onpointercancel = () => $('confirm').classList.remove('pressing');
+      $('confirm').onpointerleave = () => $('confirm').classList.remove('pressing');
+
+      async function saveDay() {
         reflow();
 
         let res;
@@ -5910,7 +5897,6 @@
           res = await (
             await api('/plan', {
               method: 'POST',
-              keepalive,
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 date: planDate(),
@@ -5935,17 +5921,13 @@
             })
           ).json();
         } catch (err) {
-          if (!quiet) alert(`Could not save: ${err.message}`);
-          return false;
+          alert(`Could not save: ${err.message}`);
+          return;
         }
 
         if (res.error) {
-          // LOUD EVEN WHEN QUIET, because this is the server refusing the day
-          // rather than the network dropping it. A refusal does not fix itself
-          // on the next tick — something about the day is wrong and no amount
-          // of retrying will change it — so it has to be read.
           alert(res.error);
-          return false;
+          return;
         }
 
         // The ids of the day as it now stands, so a second confirm in the same
@@ -5998,65 +5980,27 @@
         // naming an id the plan does not have.
         settleUndo();
 
-        saveFailed = false;
         setSaved(true);
-        return true;
       }
 
-      // --- the day saves itself ------------------------------------------------
+      $('confirm').onclick = async () => {
+        if (!blocks.length) return;
 
-      /** How often the day is written, when it has changed and not before. */
-      const AUTOSAVE_MS = 60000;
-
-      // Whether a write is in the air, and whether the last one failed. Both
-      // are for the seal: with no button to refuse to go green, these are the
-      // only way a failing save can say so.
-      let savingNow = false;
-      let saveFailed = false;
-
-      /**
-       * Write the day if it is not already written.
-       *
-       * UNLESS NOTHING HAS CHANGED, which is the whole of the guard: `saved` is
-       * false exactly when the screen holds something the database does not, so
-       * a day nobody has touched costs no request at all. A timer that wrote
-       * every minute regardless would be a write per minute per open tab, for
-       * a day that has not moved since breakfast.
-       *
-       * AN EMPTY DAY IS NOT SAVED EITHER. The button refused one too — there is
-       * nothing to commit, and a confirmed empty plan is a statement ("today is
-       * blank") rather than an absence, which the nudge and the one-off sweep
-       * both read.
-       *
-       * QUIETLY. saveDay alerts on failure, which is right for a press and
-       * wrong for a timer: offline, that is a dialog a minute over a day nobody
-       * asked to save. The failure is held on the seal instead and the next
-       * tick tries again.
-       */
-      async function autoSave() {
-        if (savingNow) return;
-        if (saved || !blocks.length) return;
-
-        savingNow = true;
-        renderConfirm();
+        // Held down for as long as the day is being saved, so the wait belongs
+        // to the press instead of looking like nothing happened.
+        //
+        // Released in a finally rather than on the line after. saveDay's own
+        // failures return rather than throw, so either would do for those —
+        // but the release has to hold for every way out, including one nobody
+        // wrote down. A seal left pressed is a button that stopped answering,
+        // and it would be stuck until the page was reloaded.
+        $('confirm').classList.add('pressing');
         try {
-          const ok = await saveDay({ quiet: true });
-          saveFailed = !ok;
+          await saveDay();
         } finally {
-          savingNow = false;
-          renderConfirm();
+          $('confirm').classList.remove('pressing');
         }
-      }
-
-      setInterval(autoSave, AUTOSAVE_MS);
-
-      // AND ON THE WAY OUT. A minute is a long time to hold an edit that only a
-      // timer will ever write, and taking the button away took with it the one
-      // way to say "now". This is that, without a press.
-      window.addEventListener('pagehide', () => {
-        if (saved || !blocks.length) return;
-        saveDay({ quiet: true, keepalive: true });
-      });
+      };
 
       // --- the add sheet -------------------------------------------------------
 

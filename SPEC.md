@@ -1381,30 +1381,10 @@ document holds **no standing touch listener** at rest.
   switch, which shows one while it fetches — a different statement, and the old
   hour is no longer true by then. It counts **timed blocks only**, so a day of
   nothing but untimed items ends at `0:00` — the hours really are empty.
-- **The day saves itself.** There is no Confirm button. A timer writes the plan
-  once a minute **and only when it has changed** — `saved` is false exactly when
-  the screen holds something the database does not, so a day nobody has touched
-  costs no request at all. An **empty day is never written**: a confirmed empty
-  plan is a statement ("today is blank") rather than an absence, and both the
-  nudge and the one-off sweep read the difference.
-- **The seal reports; it does not commit.** Where the button stood is a line in
-  the same small mono caps as every other label: blank on an empty day, *Saving*
-  while a write is out, *Saved* when the screen and the database agree, and
-  *Not saved — trying again* in the warn ink when one fails. That last state is
-  the reason the line exists at all: with no button left to refuse to go green,
-  nothing else could say a save is not landing.
-- **A failure is held, not thrown.** `saveDay` alerts on a refusal from the
-  server, because that does not fix itself on the next tick. A dropped request
-  does — offline, an alert a minute over a day nobody asked to save is
-  unusable — so it goes on the seal and the next minute tries again.
-- **It also writes on `pagehide`.** A minute is a long time to hold an edit that
-  only a timer will ever write, and taking the button away took with it the one
-  way to say *now*.
-
-  **What this costs, stated rather than discovered:** leaving without confirming
-  used to be the undo. Fill day in particular relied on it — build a day, walk
-  away, no trace. A day that writes itself has no such escape, so an unwanted
-  fill has to be undone by taking the blocks out.
+- **Confirm** saves the plan. Any edit afterwards un-saves it. It stays visibly
+  pressed from the tap until the save answers — the round trip takes about a
+  second, and a seal that says nothing for that long reads as a tap that
+  missed.
 
 #### Fill day
 
@@ -2195,18 +2175,11 @@ is no longer what guarantees anything.
 
 Delivery is gated on `status = 'confirmed'`, and that gate is **defensive
 rather than descriptive**. `plans.status` allows `'pending'` and the column
-defaults to it, but nothing in this system writes that value: the builder holds
-the day in memory and every write it makes is a confirm. So a pending row can
-only arrive by hand, through SQL. The gate stays because a plan nobody agreed to
-must never generate messages, and the cheapest way to guarantee that is to check
-rather than to rely on no such row ever existing.
-
-**The day autosaves now, and that changes what the gate means in practice** even
-though it does not change the gate. A day used to become deliverable at the
-moment you agreed to it; it becomes deliverable about a minute after you put the
-first block in. The protection that remains is the one that was doing the work
-anyway — an empty day is never written, so a plan still only exists once there
-is something in it.
+defaults to it, but nothing in this system writes that value: there is no draft,
+no autosave, and the builder holds the whole day in memory until Confirm. So a
+pending row can only arrive by hand, through SQL. The gate stays because a plan
+nobody agreed to must never generate messages, and the cheapest way to guarantee
+that is to check rather than to rely on no such row ever existing.
 
 There is no grace window for a block whose text has not been written yet. The
 line is composed in code and inserted with the block, so a block that exists has
@@ -2644,13 +2617,12 @@ The rules, which hold everywhere and are pinned by `tests/plan-layout-check.js`:
   in that file rather than added quietly. Collapsing them into one would leave
   the day screen with no way to tell a control from a warning at a glance — a
   duration chip and a deadline mark would read alike.
-- **There is no filled control any more.** Confirm was the one — a blue
-  rectangle with a white word — and before that a hanko, a persimmon name seal
-  drawn on a layer beneath the text with a turbulence filter for an uneven bite,
-  which cost two composited layers and two separate bugs: a word painted outside
-  its own raster and coming back as `ONFIRME`, and a filter swap on the day
-  switch that made the whole face invisible. The day writes itself now, so what
-  stands at its foot is a line that reports rather than a slab you press.
+- **Confirm is the one filled control.** A blue rectangle, white word. It was a
+  hanko — a persimmon name seal drawn on a layer beneath the text with a
+  turbulence filter for an uneven bite — and it cost two composited layers and
+  two separate bugs: a word painted outside its own raster and coming back as
+  `ONFIRME`, and a filter swap on the day switch that made the whole face
+  invisible.
 
 - **Blue is actionable, plus two things that are not.** The Starts steppers, the
   duration chip, `+ Block`, Undo, Save, Back, Clear and a focused field are all

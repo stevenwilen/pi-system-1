@@ -103,12 +103,10 @@ const boxOf = async (page, sel, n = 0) =>
         ['a block', '.block'],
         ['an anytime row', '.arow'],
         ['a things row', '.row'],
-        // THE SEAL, which is where the confirm button used to be. It is a line
-        // that reports rather than a control, so what this asks is only that
-        // the foot of the day is reachable and not covered — the failure this
-        // file exists for is an invisible layer over the page, and the bottom
-        // of the day is exactly where such a thing would hide.
-        ['the seal', '#sealed'],
+        // By id: 'confirm' is also a class on the setup sheet's own button, which
+        // is inside a hidden panel and measures 0x0 — querySelector finds that
+        // one first and reports the visible button as unreachable.
+        ['the confirm button', '#confirm'],
         ['+ block', '#add-block'],
       ]) {
         const el = document.querySelector(sel);
