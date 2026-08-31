@@ -668,6 +668,112 @@ async function finishOneOffs(profile, now) {
   return moved || [];
 }
 
+
+// --- notes whose session has happened ---------------------------------------
+
+/**
+ * Notes that have been spent.
+ *
+ * A note on a thing is a first step for the next time it is scheduled. Once
+ * that session has been and gone the words are spent: they describe a morning
+ * that is over, and left on the row they get read again as though the work were
+ * still ahead.
+ *
+ * IT FALLS OUT OF TWO RULES THIS SYSTEM ALREADY HAS, so there is no new idea in
+ * it. A block still sitting in a day that has passed is a block that happened
+ * (SPEC 2.4), and taking a block out of the day is how you say it did not
+ * (SPEC 2.5). So a note clears only when the work actually happened, and one
+ * whose block was pulled out of the day survives untouched.
+ *
+ * NOT THE VERSION THAT WAS REVERTED, and the difference is the whole of it. The
+ * confirm used to spend the note at the moment the day was written, which is
+ * before anything has happened: scheduling something and then not doing it lost
+ * the words. See the history at routes/plan.js. That version asked whether a
+ * block had been MADE. This one asks whether the day it was in is OVER.
+ *
+ * HABITS ARE EXCLUDED. A habit's note is standing, read every time it is
+ * scheduled, so clearing it would destroy it rather than spend it. The filter is
+ * on the type rather than on the frequency column, because a one-off task
+ * carries a value there too and filtering on it would take habits and one-offs
+ * as the same kind of row.
+ *
+ * THE BLOCK KEEPS ITS OWN COPY. Nothing here touches blocks.note. That copy is
+ * the record of what the session was for, and it stays with the day it belongs
+ * to.
+ *
+ * SENDS NOTHING, like finishOneOffs above it, and it is here for the same
+ * reason: it needs one daily sweep across every account, and the service key to
+ * do it with.
+ *
+ * NOTHING IS STORED ABOUT WHETHER A NOTE WAS SPENT. There is no column and no
+ * migration. A row that still holds words is a row whose session has not been
+ * swept yet, and that is the whole of the bookkeeping.
+ *
+ * The `note is not null` filter is on both the read and the write, and the two
+ * are redundant on purpose: either one alone makes a second sweep over the same
+ * day a no-op, so neither the read nor the write can be the one that forgets.
+ * Taking both out is what makes it write twice.
+ *
+ * STRICTLY BEFORE TODAY, the same guard finishOneOffs uses. A block scheduled
+ * for this afternoon has not happened because the sweep ran this morning.
+ */
+async function clearSpentNotes(profile, now) {
+  // Only rows that still hold words, and only the two types whose notes are a
+  // next step rather than a standing one.
+  const { data: entries, error: entryErr } = await supabase
+    .from('entries')
+    .select('id')
+    .eq('user_id', profile.user_id)
+    .eq('status', 'active')
+    .in('type', ['task', 'project'])
+    .not('note', 'is', null);
+
+  if (entryErr) throw new Error(`could not read notes: ${entryErr.message}`);
+  if (!entries || !entries.length) return [];
+
+  // The days that are over, and only the ones that were agreed to. A day built
+  // and never confirmed is a draft, and spending a note off the back of a draft
+  // would be the system deciding what happened.
+  const { data: plans, error: planErr } = await supabase
+    .from('plans')
+    .select('id')
+    .eq('user_id', profile.user_id)
+    .eq('status', 'confirmed')
+    .lt('date', now.date);
+
+  if (planErr) throw new Error(`could not read past plans: ${planErr.message}`);
+  if (!plans || !plans.length) return [];
+
+  const { data: blocks, error: blockErr } = await supabase
+    .from('blocks')
+    .select('entry_id')
+    .eq('user_id', profile.user_id)
+    .in('plan_id', plans.map((p) => p.id))
+    .in('entry_id', entries.map((e) => e.id));
+
+  if (blockErr) throw new Error(`could not read past blocks: ${blockErr.message}`);
+
+  const spent = [...new Set((blocks || []).map((b) => b.entry_id).filter(Boolean))];
+  if (!spent.length) return [];
+
+  const { data: cleared, error } = await supabase
+    .from('entries')
+    .update({ note: null })
+    .eq('user_id', profile.user_id)
+    .eq('status', 'active')
+    .not('note', 'is', null)
+    .in('id', spent)
+    .select('id, title');
+
+  if (error) throw new Error(`could not clear spent notes: ${error.message}`);
+
+  for (const row of cleared || []) {
+    console.log(`[SPENT] ${profile.user_id}: cleared the note on ${JSON.stringify(row.title)}`);
+  }
+
+  return cleared || [];
+}
+
 // --- what has been shouting for too long ------------------------------------
 
 // The hour it runs, once a day. Late morning rather than evening: something
@@ -942,6 +1048,15 @@ async function tick() {
     } catch (err) {
       console.error(`[ONEOFF] ${profile.user_id}: ${err.message}`);
     }
+
+    // Sends nothing either. In its own try for the reason the two above it are:
+    // this one writes, and a throw here must not take the rest of somebody's
+    // day down with it.
+    try {
+      await clearSpentNotes(profile, now);
+    } catch (err) {
+      console.error(`[SPENT] ${profile.user_id}: ${err.message}`);
+    }
   }
 }
 
@@ -966,6 +1081,7 @@ module.exports = {
   LATER_DAY, //   and when it goes, so a test cannot drift from the job
   LATER_HOUR,
   finishOneOffs, // the sweep that takes a done one-off off the list
+  clearSpentNotes, // the sweep that clears a note whose session has happened
   sweepRotting, // the one lane that moves a row nobody asked it to
   rotText, //     its wording, so a test reads the real thing
   ROT_HOUR, //    and its hour, so a test cannot drift from the job
@@ -992,6 +1108,7 @@ const JOBS = {
   later: sendSavedForLater,
   loose: sendAnytime,
   oneoff: finishOneOffs,
+  spent: clearSpentNotes,
   rot: sweepRotting,
 };
 

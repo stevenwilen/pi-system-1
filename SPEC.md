@@ -2380,6 +2380,73 @@ Unlike every other lane, **the slot is not released on a failed send**. The rows
 have already moved, and a retry would say it again about a list that has already
 changed.
 
+### 4.6 Notes whose session has happened
+
+A note on a thing is a first step for the next time it is scheduled. Once that
+session has been and gone the words are spent: they describe a morning that is
+over, and left on the row they get read again as though the work were still
+ahead. Once a day, every one of them is cleared.
+
+A note is spent when **a block for that entry sits in a confirmed plan whose date
+is before today**.
+
+That rule introduces no new idea. It falls out of two the system already has:
+
+| | |
+|---|---|
+| §2.4 | a block still sitting in a day that has passed is a block that happened |
+| §2.5 | taking a block out of the day is how you say it did not |
+
+So a note clears only when the work actually happened, and a note whose block was
+pulled out of the day survives untouched, ready for the next attempt. The same
+two rules are what `staleness.js` reads to decide when something was last done,
+and what `finishOneOffs` reads to decide when a one-off is over.
+
+**Habits are never swept.** A habit's note is standing: it is read every time the
+habit is scheduled, so clearing it would destroy it rather than spend it. The
+filter is on the type, `task` and `project`, and deliberately **not** on the
+frequency column, because a one-off task carries a value there too and a filter
+on that column would read one as a habit and leave its note behind for ever.
+
+**The block keeps its own copy.** Nothing here touches `blocks.note`. That copy
+is the record of what the session was for, and it belongs to the day rather than
+to the thing.
+
+**Nothing is stored about whether a note was spent.** No column, no migration. A
+row that still holds words is a row that has not been swept, and that is the
+whole of the bookkeeping. The `note is not null` filter sits on both the read and
+the write, redundantly on purpose: either one alone makes a second sweep over the
+same day a no-op, so neither the read nor the write can be the one that forgets.
+
+**Strictly before today**, the guard `finishOneOffs` uses and for the same
+reason. A block scheduled for this afternoon has not happened because the sweep
+ran this morning.
+
+It sends nothing. Like `finishOneOffs` it is a lane only because it needs one
+daily pass across every account, and the service key to make it with. It logs
+under `[SPENT]`; `[NOTE]` was taken by block delivery, for a note that failed to
+follow its block out.
+
+#### What this replaced
+
+The confirm used to spend the note itself: it moved the words onto the block and
+set `entries.note` to null in the same request, so that a sentence about one
+morning could not become a standing instruction nobody meant to give.
+
+That was reverted, and the reason is the difference between the two rules. The
+confirm asks whether a block was **made**. This asks whether the day it was in is
+**over**. Those come apart exactly when it matters most: a day agreed to and then
+not followed spent the note on work that never happened, and the words were gone
+for the next attempt, which is the attempt they were written for.
+
+Copying at confirm and clearing after the fact keeps both halves. The words are
+on the block from the moment the block exists, so they arrive with the message
+fifteen minutes before the session (§4.1); and they stay on the thing until the
+session has actually been had.
+
+---
+
+
 ---
 
 ## 5. Non-goals

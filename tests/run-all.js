@@ -147,6 +147,9 @@ const SUITES = [
   // The only lane that moves a row nobody asked it to, so the cases that matter
   // are the ones about what it refuses to touch.
   ['rot-test.js', 240],
+  // The other lane that writes without being asked. Clearing a note cannot be
+  // undone, so most of that suite is about the rows it leaves alone.
+  ['spent-test.js', 240],
   ['step1-verify.js', 150],
   ['plan-test.js', 180],
   ['note-test.js', 180],

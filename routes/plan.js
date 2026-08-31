@@ -401,10 +401,15 @@ router.post('/plan', async (req, res) => {
     // --- the messages waiting on the things being scheduled ----------------
     //
     // A note on a thing is written for the next time it is put in a day, and
-    // this is that moment: it moves onto the block and is cleared from the
-    // thing, spent once delivered. A note that stayed behind would be read
-    // again on every future scheduling, which is how a sentence about one
-    // morning becomes a standing instruction nobody meant to give.
+    // this is that moment: it is COPIED onto the block. The thing keeps its
+    // own, because the work has not happened yet and the words are still what
+    // you will want to read when it does. See the long comment further down.
+    //
+    // IT IS CLEARED LATER, BY THE SWEEP, once a block for it sits in a day that
+    // has passed. That is the point at which the session actually happened, and
+    // the reason it is not done here: a day can be confirmed and then not
+    // followed, and spending the note at confirm time lost the words for work
+    // nobody did. See clearSpentNotes in scheduler.js.
     //
     // HERE AND NOT ON THE SCREEN, because a block does not exist until this
     // request. The tap that puts a thing in the day writes nothing, and a
