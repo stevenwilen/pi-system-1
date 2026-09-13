@@ -1617,7 +1617,17 @@ of it.
   through the day, hours after the last Confirm, and a person who ticked three
   things and closed the app would lose all three — along with the staleness
   those ticks were the only record of. A row built in this session has no id to
-  write against, so that one rides along with the next Confirm.
+  write against, so **ticking it saves the day first**, which gives it one, and
+  the tick is then written like any other.
+
+  It used to ride along with the next Confirm instead, and that lost ticks in
+  exactly the situation this rule was written against. Anything long-pressed
+  into a day that was already confirmed had no id, so ticking it changed the
+  screen and wrote nothing. The only sign was the button at the foot of the page
+  reading Confirm again, and closing the app lost the row and the tick together.
+  Found in real data: a daily habit ticked on the anytime list had no record on
+  five confirmed days in a row, and the rot sweep (§4.5) set it aside for going
+  untouched.
 - **A small `×` at the right edge takes it off**, with the undo, and not the
   Things list's confirmation: this is one day, taking it off is how you say it is
   not happening today, and there is no history to lose.

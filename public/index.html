@@ -4751,10 +4751,26 @@
         renderBuilder();
 
         if (!b.id) {
-          // Nothing to write to yet. The confirm carries it.
-          saved = false;
-          renderConfirm();
-          return;
+          // NOTHING TO WRITE TO YET, SO THE DAY IS WRITTEN FIRST.
+          //
+          // This used to leave the tick for the next Confirm. An item only has
+          // an id once its day has been confirmed, so anything added to a day
+          // that was already confirmed (a long press from Things in the
+          // afternoon) was ticked on screen and written nowhere. The only sign
+          // was the button at the foot of the page reading Confirm again, and
+          // closing the app lost the block and the tick together.
+          //
+          // It was found in real data: a daily habit ticked on the anytime list,
+          // with no record of it on five confirmed days in a row, was set aside
+          // by the rot sweep for having gone untouched.
+          //
+          // A tick says something happened, and that should not need a second
+          // press to be true. Saving gives the row its id, and the write below
+          // then records the tick the same way as for any other row, one-off
+          // handling included. If the save does not land, saveDay has already
+          // said why and the button still reads Confirm.
+          await saveDay();
+          if (!b.id) return;
         }
 
         let body;

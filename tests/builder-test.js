@@ -3791,6 +3791,42 @@ const CLOSED = 220; // past CLOSE_MS, so the day has closed over a removed block
       sent.entryId === null || sent.entryId === undefined, JSON.stringify(sent));
   }
 
+  console.log('\na tick on something added after the day was confirmed still lands');
+  {
+    // THE CASE FROM REAL DATA. A daily habit ticked on the anytime list had no
+    // record on five confirmed days in a row, and the rot sweep set it aside.
+    // An item only has an id once its day is confirmed, so one long-pressed in
+    // later was ticked on screen and written nowhere until Confirm was pressed
+    // again, which nothing prompted.
+    const { ctx, byId, posted } = boot({
+      plan: twoDays(), entries: utcEntries(), now: '11:00',
+      planReply: { date: 'x', blocks: 4, status: 'confirmed', ids: ['t1', 't2', 't3', 'n1'], notes: [] },
+    });
+    await ctx.load();
+    check('the day opens confirmed', byId.confirm.textContent === 'Confirmed', byId.confirm.textContent);
+
+    ctx.addAnytime({ title: 'Ice knee', entryId: 'e-read', note: null });
+    const row = anytimeRows(byId).find((r) => r.text().includes('Ice knee'));
+
+    posted.length = 0;
+    // The tick handler starts the work and does not hand back its promise, so
+    // the save and the write that follows it are given a moment to land.
+    tickOf(row).onclick();
+    await wait(50);
+
+    const day = posted.find((p) => p.url === '/plan');
+    check('ticking it saves the day', Boolean(day), posted.map((p) => p.url).join());
+    const knee = day && day.body.blocks.find((b) => b.title === 'Ice knee');
+    check('with the item in it, ticked', Boolean(knee) && knee.done === true, JSON.stringify(knee));
+    check('and still linked to the thing it came from', knee && knee.entryId === 'e-read',
+      JSON.stringify(knee));
+    check('then records the tick against its new id',
+      posted.some((p) => p.url === '/plan/block/n1/done' && p.body.done === true),
+      posted.map((p) => p.url).join());
+    check('and nothing is left waiting on a second press',
+      byId.confirm.textContent === 'Confirmed', byId.confirm.textContent);
+  }
+
   console.log('\nthe add dialog: nothing typed adds nothing');
   {
     // IT WAS AN INLINE FIELD for a while — a rule and a caret at the foot of
