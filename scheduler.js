@@ -113,8 +113,8 @@ async function allProfiles() {
 // The already-sent guard. A row's existence proves this went out for this user
 // on this date, so it survives restarts and redeploys.
 //
-// Keyed (user_id, job, date). Blocks do not use it — they carry their own
-// message_sent_at — so the only job behind it now is the nudge.
+// Keyed (user_id, job, date). Block headers do not use it — they carry their
+// own message_sent_at. A block's note does, under `note:<block id>`.
 async function alreadySent(user_id, job, date) {
   const { data, error } = await supabase
     .from('sent_log')
@@ -186,13 +186,13 @@ async function deliver(user_id, text) {
 // ---------------------------------------------------------------------------
 
 /**
- * Blocks of today's confirmed plan that have started and not been sent.
+ * The id of today's confirmed plan, or null.
  *
  * Only a confirmed plan delivers. A day left pending was built and never
  * agreed to, and messaging someone about it would be the system deciding.
  */
-async function dueBlocks(user_id, date) {
-  const { data: plan, error: planErr } = await supabase
+async function confirmedPlanId(user_id, date) {
+  const { data: plan, error } = await supabase
     .from('plans')
     .select('id')
     .eq('user_id', user_id)
@@ -200,13 +200,19 @@ async function dueBlocks(user_id, date) {
     .eq('status', 'confirmed')
     .maybeSingle();
 
-  if (planErr) throw new Error(`could not read plan: ${planErr.message}`);
-  if (!plan) return [];
+  if (error) throw new Error(`could not read plan: ${error.message}`);
+  return plan ? plan.id : null;
+}
+
+/** Blocks of today's confirmed plan whose heads-up has not been sent. */
+async function dueBlocks(user_id, date) {
+  const planId = await confirmedPlanId(user_id, date);
+  if (!planId) return [];
 
   const { data, error } = await supabase
     .from('blocks')
     .select('id, title, start_time, duration_minutes, note, created_at')
-    .eq('plan_id', plan.id)
+    .eq('plan_id', planId)
     .is('message_sent_at', null)
     // AN UNTIMED ITEM IS NOT IN THIS QUEUE AT ALL. It has no hour to fire at,
     // so there is nothing for the loop below to be early or late for — and it
@@ -217,6 +223,27 @@ async function dueBlocks(user_id, date) {
     .order('start_time');
 
   if (error) throw new Error(`could not read blocks: ${error.message}`);
+  return data || [];
+}
+
+/**
+ * Blocks of today's confirmed plan that carry a note and whose heads-up has
+ * gone out. Whether the note itself has gone is in sent_log, per block.
+ */
+async function notedBlocks(user_id, date) {
+  const planId = await confirmedPlanId(user_id, date);
+  if (!planId) return [];
+
+  const { data, error } = await supabase
+    .from('blocks')
+    .select('id, title, start_time, duration_minutes, note')
+    .eq('plan_id', planId)
+    .not('message_sent_at', 'is', null)
+    .not('note', 'is', null)
+    .not('start_time', 'is', null)
+    .order('start_time');
+
+  if (error) throw new Error(`could not read noted blocks: ${error.message}`);
   return data || [];
 }
 
@@ -333,35 +360,12 @@ async function deliverDue(profile, now) {
     // everyone else moves on without one.
     if (!(await claimBlock(block.id))) continue;
 
-    const [header, note] = composeMessages(block);
+    // The header only. The note is not part of the heads-up: it goes out on
+    // its own when the block actually starts. See deliverNotes.
+    const [header] = composeMessages(block);
     const result = await deliver(profile.user_id, header);
 
     if (result.sent) {
-      // THE NOTE FOLLOWS, on its own, and cannot be retried on its own.
-      //
-      // The claim is over the block, not over each message — one row, taken
-      // once, by whoever owns the delivery. So there is no state in which the
-      // header has gone and the note has not, other than this one, and the
-      // choice here is between two bad outcomes: release the block and the
-      // next tick sends the header a SECOND time to get the note out, or keep
-      // it and the note is lost.
-      //
-      // The duplicate is worse. A repeated notification at the top of the hour
-      // reads as the system malfunctioning, and it would land during the block
-      // the person is already in. A missing note is a message that says less
-      // than it should have, which is what it said before this change on every
-      // block that had one.
-      //
-      // Logged under its own tag for the same reason [EXPIRED] is: from the
-      // phone end a note that never arrives looks like a note nobody wrote.
-      if (note) {
-        const second = await deliver(profile.user_id, note);
-        if (!second.sent) {
-          console.error(
-            `[NOTE] "${block.title}": the header was delivered and the note was not. It will not be retried, because retrying would send the header again. ${JSON.stringify(second)}`
-          );
-        }
-      }
       console.log(`[SEND] ${block.title}`);
     } else if (result.skipped) {
       // NOT A FAILURE, and this is the third outcome rather than a flavour of
@@ -381,6 +385,56 @@ async function deliverDue(profile, now) {
       // Back in the queue, so the next tick retries while it is still in grace.
       await releaseBlock(block.id);
       console.error(`[SEND] ${block.title}: ${JSON.stringify(result)}`);
+    }
+  }
+
+  // After the headers, so a block that started before this tick ever saw it
+  // still gets its heads-up first and its note under it.
+  await deliverNotes(profile, now);
+}
+
+/**
+ * The notes, on the dot.
+ *
+ * The heads-up goes LEAD_MINUTES early; the note waits for the block itself to
+ * start. It is the first step of the work, and fifteen minutes early it is a
+ * thing to remember rather than a thing to do.
+ *
+ * ITS OWN CLAIM, in sent_log under `note:<block id>`. The block's claim is
+ * spent on the header a quarter of an hour before, so it cannot also guard the
+ * note — and because the note has a claim of its own, a failed send is
+ * released and retried like a header, instead of being lost because retrying
+ * would have sent the header twice.
+ *
+ * Only once the header has gone (notedBlocks asks for message_sent_at), so a
+ * note never arrives above the block it belongs to. And only inside the same
+ * grace window as a header: a note half an hour into the session is too late
+ * to be its first step.
+ */
+async function deliverNotes(profile, now) {
+  const nowMinutes = minutesOf(now.hour, now.minute);
+  const blocks = await notedBlocks(profile.user_id, now.date);
+
+  for (const block of blocks) {
+    const late = nowMinutes - toMinutes(block.start_time);
+    if (late < 0 || late > GRACE_MINUTES) continue;
+
+    // A note of spaces is not a note; composeMessages drops it.
+    const [, note] = composeMessages(block);
+    if (!note) continue;
+
+    const job = `note:${block.id}`;
+    if (!(await claimSlot(profile.user_id, job, now.date))) continue;
+
+    const result = await deliver(profile.user_id, note);
+
+    if (result.sent) {
+      console.log(`[NOTE] ${block.title}`);
+    } else if (!result.skipped) {
+      // Skipped is no Telegram linked, which a retry does not improve, so that
+      // claim stays. Anything else goes back for the next tick.
+      await releaseSlot(profile.user_id, job, now.date);
+      console.error(`[NOTE] ${block.title}: ${JSON.stringify(result)}`);
     }
   }
 }
@@ -691,11 +745,12 @@ async function finishOneOffs(profile, now) {
  * the words. See the history at routes/plan.js. That version asked whether a
  * block had been MADE. This one asks whether the day it was in is OVER.
  *
- * HABITS ARE EXCLUDED. A habit's note is standing, read every time it is
- * scheduled, so clearing it would destroy it rather than spend it. The filter is
- * on the type rather than on the frequency column, because a one-off task
- * carries a value there too and filtering on it would take habits and one-offs
- * as the same kind of row.
+ * HABITS ARE SWEPT TOO. They used to be excluded, on the reasoning that a
+ * habit's note is standing and read every time it is scheduled. In use it was
+ * the other way: a note on Reading is about the next session, and once the day
+ * was over it came back to the list with the habit and turned up again on the
+ * next one, describing a session already had. So every type that can be
+ * scheduled is spent the same way.
  *
  * THE BLOCK KEEPS ITS OWN COPY. Nothing here touches blocks.note. That copy is
  * the record of what the session was for, and it stays with the day it belongs
@@ -718,14 +773,13 @@ async function finishOneOffs(profile, now) {
  * for this afternoon has not happened because the sweep ran this morning.
  */
 async function clearSpentNotes(profile, now) {
-  // Only rows that still hold words, and only the two types whose notes are a
-  // next step rather than a standing one.
+  // Only rows that still hold words, and only the types that are scheduled.
   const { data: entries, error: entryErr } = await supabase
     .from('entries')
     .select('id')
     .eq('user_id', profile.user_id)
     .eq('status', 'active')
-    .in('type', ['task', 'project'])
+    .in('type', ['habit', 'task', 'project'])
     .not('note', 'is', null);
 
   if (entryErr) throw new Error(`could not read notes: ${entryErr.message}`);

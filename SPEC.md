@@ -902,10 +902,9 @@ what to remember **whenever you schedule this**.
 
 **Scheduling copies it.** Tapping a thing into the day puts the note on the block
 immediately, and confirming fills any new block that has none. `entries.note` is
-**left alone** — the row keeps its words until the thing itself leaves the list,
-which for a task or a project is when it is finished and for a habit is never,
-because a habit has no end to reach (§2.3). A standing note on a habit is exactly
-what a habit's note is.
+**left alone** at confirm. The row keeps its words until the day it was
+scheduled into is over, and then they are spent — habits included (§4.6, the
+`clearSpentNotes` sweep).
 
 It used to be **spent**: the confirm moved it onto the block and set
 `entries.note` to null, so that a sentence about one morning could not become a
@@ -2018,45 +2017,38 @@ time**.
 It is not carried forward by hand. The rows are never recreated, so there is
 nothing to carry: the column is simply not in the update.
 
-#### A delivered block cannot be retimed or resized
+#### A block that has begun cannot be retimed or resized
 
-Once `message_sent_at` is set, that block **cannot be moved or resized**. The
-message named a start time and a length, and both were true when it went out.
-Both attempts are refused server-side, naming the block and the time it was sent
-at. Its title and its note can still be edited.
+Once a block's start has passed, in the person's own timezone, it **cannot be
+moved or resized**. Both attempts are refused server-side, naming the block and
+the hour it began at. Its title and its note can still be edited.
+
+**Begun, not sent.** The lock used to be on `message_sent_at`, and the heads-up
+goes out `LEAD_MINUTES` early (§4.1). So for fifteen minutes before every block
+the server refused to move it while the screen still called it upcoming, and the
+screen was changed to match: a sent block was held in place by `reflow`, could
+not be dragged, and lost its duration chip. The effect was that rearranging the
+day at all was refused for a quarter of an hour before each block.
+
+A heads-up is a warning, not a commitment. A block whose heads-up has gone out
+and which is then moved or resized has `message_sent_at` cleared by the confirm,
+and the next tick sends a heads-up for its new hour. A retitle or a new note is
+not a move and leaves it alone.
 
 **It can be removed.** That refusal existed too, on the grounds that the day
 that happened is not editable — which held while a removed block and a missed
-block meant different things. They no longer do (§2.5), and the rule was drawing
-the line at whichever half hour the delivery job last ran: the same block was
-removable at 08:59 and not at 09:01.
+block meant different things. They no longer do (§2.5).
 
-`GET /plan/:date` returns a `sent` flag per block, and **the screen reads it**.
+The screen states the server's rule:
 
-It stopped reading it once, on the reasoning that the clock answers the same
-question more strictly — a block that has begun keeps its hour and its length
-whether or not the delivery job has run — and that "delivery happens at the
-start time". **It does not.** The scheduler sends up to `LEAD_MINUTES` early
-(§4.1), so for fifteen minutes the server calls a block delivered, and refuses
-to move or resize it, while `hasBegun` still calls it upcoming.
-
-Everything the screen offered on an upcoming block was therefore offered on one
-the server had already locked, and `reflow` re-timed it like any other. The
-symptom was not the block itself: **deleting something else in the day was
-enough**, because the blocks below close up and this one moved with them, and
-the confirm came back refused naming a block nobody had knowingly touched.
-
-So the screen states the server's rule instead of approximating it:
-
-    blockFixed(b) = b.sent || blockBegun(b)
+    blockFixed(b) = blockBegun(b)
 
 which is what `reflow` holds in place, what the drag refuses to pick up, and
-what the note swipe clamps against. A block whose message has gone out also
-loses its duration chip — the chip is a resize, and a resize is refused — and
-shows its length as a figure rather than a control.
+what the note swipe clamps against. `GET /plan/:date` still returns a `sent`
+flag per block; the screen no longer reads it.
 
 The gesture decision is still made on the raw movement, not the clamped one —
-a finger dragging left on a delivered block has moved, and reading that as
+a finger dragging left on a block under way has moved, and reading that as
 stillness would leave the hold timer running and turn a refused swipe into a
 pick-up.
 
@@ -2412,11 +2404,12 @@ pulled out of the day survives untouched, ready for the next attempt. The same
 two rules are what `staleness.js` reads to decide when something was last done,
 and what `finishOneOffs` reads to decide when a one-off is over.
 
-**Habits are never swept.** A habit's note is standing: it is read every time the
-habit is scheduled, so clearing it would destroy it rather than spend it. The
-filter is on the type, `task` and `project`, and deliberately **not** on the
-frequency column, because a one-off task carries a value there too and a filter
-on that column would read one as a habit and leave its note behind for ever.
+**Habits are swept too.** They used to be excluded, on the reasoning that a
+habit's note is standing and read every time it is scheduled. In use it was the
+other way round: a note on a habit is about the next session, and once the day was
+over it came back to the list with the habit and turned up again on the next
+one, describing a session already had. So the filter is every type that can be
+scheduled — `habit`, `task` and `project`.
 
 **The block keeps its own copy.** Nothing here touches `blocks.note`. That copy
 is the record of what the session was for, and it belongs to the day rather than

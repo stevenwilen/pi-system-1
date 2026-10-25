@@ -1606,7 +1606,9 @@ console.log('\n14. a block is worked by gesture, and the gestures are arbitrated
   check('a fixed block clamps the note swipe',
     /isFixed\(\) \? Math\.min\(0, raw\) : raw/.test(code));
   check('and shows no backing when it does', /if \(!dx\) \{/.test(code));
-  check('the screen keeps the sent flag', /sent: Boolean\(b\.sent\)/.test(code));
+  // The server locks a block on its start, not on its heads-up, so the screen
+  // has nothing to read the flag for.
+  check('the screen does not lock on the sent flag', !/b\.sent/.test(code));
 
   // The buffer insert is gone. Buffer is a title you type into + Block.
   check('nothing inserts a buffer on a swipe', !/insertBuffer/.test(code));
@@ -2014,14 +2016,10 @@ console.log('\n17. today and tomorrow');
   check('the Starts control is hidden', /\$\('starts'\)\.classList\.toggle\('hidden', onToday\(\)\)/.test(code));
 
   console.log('   the past does not flow');
+  // Begun, and only begun. A block whose heads-up has gone out but which has
+  // not started still flows: the server takes the move and sends a new one.
   check('a block that has begun keeps its hour',
-    /hasBegun\(b, now\) || b\.sent/.test(code));
-  // AND ONE WHOSE MESSAGE HAS ONLY GONE OUT. The scheduler delivers up to
-  // fifteen minutes early, so the server locks a block before the clock says
-  // it has begun — and reflow moving it produced a day the confirm refused
-  // whole, over a block nobody had knowingly touched.
-  check('and one whose message has gone out keeps it too',
-    /const fixed = live && \(hasBegun\(b, now\) || b\.sent\)/.test(code));
+    /const fixed = live && hasBegun\(b, now\);/.test(code));
   check('what is left starts at the next half hour', /Math\.max\(cursor, floor\)/.test(code));
   check('which is the boundary after now', /Math\.ceil\(nowMinutes\(\) \/ STEP\) \* STEP/.test(code));
   check('and a drifted day is not called confirmed', /if \(saved && drifted\(\)\) saved = false/.test(code));

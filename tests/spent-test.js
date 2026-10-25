@@ -104,19 +104,20 @@ const noteOf = async (id) => {
     await clear();
   }
 
-  console.log('\na habit keeps its note, however many days have passed');
+  console.log('\na habit is spent like a task');
   {
-    // A habit's note is standing: it is read every time the habit is scheduled,
-    // so clearing it would destroy it rather than spend it.
+    // Habits used to keep their notes, as standing ones. In use the note was
+    // about the next session, and it came back to the list with the habit once
+    // the day was over and turned up again on the one after.
     const habit = await thing('habit', 'Reading', 'ten pages, no phone');
     const task = await thing('task', 'Rewire the study', 'start with the pricing page');
     await dayWith(YESTERDAY, 'confirmed', [habit, task]);
 
     await scheduler.clearSpentNotes(profile(), now());
 
-    check('the habit keeps its words', (await noteOf(habit)) === 'ten pages, no phone',
+    check('the habit is spent', (await noteOf(habit)) === null,
       JSON.stringify(await noteOf(habit)));
-    check('while the task beside it is spent', (await noteOf(task)) === null,
+    check('and so is the task beside it', (await noteOf(task)) === null,
       JSON.stringify(await noteOf(task)));
 
     await clear();

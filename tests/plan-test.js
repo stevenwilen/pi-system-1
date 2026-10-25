@@ -393,20 +393,75 @@ const DATE = '2031-03-09';
     // Undelivered, so it is the block the "can still be edited" cases use.
     const delta = { id: added.data.ids[2], title: 'Delta', start_minutes: 570, duration_minutes: 30 };
 
-    console.log('  a delivered block cannot be retimed');
-    const moved = await call('/plan', payload([{ ...same[0], start_minutes: 600 }, same[1], delta]));
-    check('retiming it is refused', moved.status === 400, `${moved.status}`);
-    check('and the message says why',
-      /already sent.*cannot be moved or resized/.test(moved.data.error || ''), moved.data.error);
+    // A fresh one-block day, delivered, on the date given. Cleared first so an
+    // aborted run cannot leave a row the next run reads as its own.
+    const oneSent = async (d) => {
+      const { data: old } = await supabase
+        .from('plans').select('id').eq('user_id', U).eq('date', d).maybeSingle();
+      if (old) await supabase.from('plans').delete().eq('user_id', U).eq('id', old.id);
+      const made = await call('/plan', {
+        date: d, wake_minutes: WAKE,
+        blocks: [{ title: 'Heads-up gone', start_minutes: 480, duration_minutes: 30 }],
+      });
+      const id = made.data.ids[0];
+      await supabase.from('blocks').update({ message_sent_at: SENT }).eq('user_id', U).eq('id', id);
+      const row = async () => (await supabase.from('blocks')
+        .select('start_time, duration_minutes, message_sent_at').eq('id', id).single()).data;
+      const drop = async () => {
+        const { data: p } = await supabase
+          .from('plans').select('id').eq('user_id', U).eq('date', d).single();
+        await supabase.from('plans').delete().eq('user_id', U).eq('id', p.id);
+      };
+      return { id, row, drop };
+    };
 
-    const resized = await call('/plan', payload([{ ...same[0], duration_minutes: 60 }, same[1], delta]));
-    check('resizing it is refused too', resized.status === 400, `${resized.status}`);
+    console.log('  a block that has begun cannot be retimed');
+    {
+      // A day in the past: every block in it has begun.
+      const PAST = '2020-03-02';
+      const b = await oneSent(PAST);
+      const as = (over) => ({ date: PAST, wake_minutes: WAKE,
+        blocks: [{ id: b.id, title: 'Heads-up gone', start_minutes: 480, duration_minutes: 30, ...over }] });
 
-    const stillThere = await read();
-    check('and the refusal wrote nothing at all',
-      stillThere.length === 3 &&
-        stillThere.find((b) => b.id === alpha.id).start_time.startsWith('08:00'),
-      `${stillThere.length} rows`);
+      const moved = await call('/plan', as({ start_minutes: 600 }));
+      check('retiming it is refused', moved.status === 400, `${moved.status}`);
+      check('and the message says why',
+        /began.*cannot be moved or resized/.test(moved.data.error || ''), moved.data.error);
+
+      const resized = await call('/plan', as({ duration_minutes: 60 }));
+      check('resizing it is refused too', resized.status === 400, `${resized.status}`);
+
+      const still = await b.row();
+      check('and the refusal wrote nothing at all',
+        still.start_time.startsWith('08:00') && still.duration_minutes === 30 && still.message_sent_at !== null,
+        JSON.stringify(still));
+      await b.drop();
+    }
+
+    console.log('  a block whose heads-up has gone, and has not begun, moves');
+    {
+      // The heads-up goes LEAD_MINUTES early. This used to be locked from then,
+      // which refused every rearrangement of the day for that quarter hour.
+      const AHEAD = '2031-04-04';
+      const b = await oneSent(AHEAD);
+      const moved = await call('/plan', { date: AHEAD, wake_minutes: WAKE,
+        blocks: [{ id: b.id, title: 'Heads-up gone', start_minutes: 600, duration_minutes: 60 }] });
+      check('moving it is accepted', moved.status === 200, JSON.stringify(moved.data));
+
+      const after = await b.row();
+      check('it took the new hour', after.start_time.startsWith('10:00'), after.start_time);
+      check('and the new length', after.duration_minutes === 60, String(after.duration_minutes));
+      check('and it is back in the queue, for a heads-up at that hour',
+        after.message_sent_at === null, String(after.message_sent_at));
+
+      // Retitling is not a move: the heads-up it already had still stands.
+      await supabase.from('blocks').update({ message_sent_at: SENT }).eq('user_id', U).eq('id', b.id);
+      const renamed = await call('/plan', { date: AHEAD, wake_minutes: WAKE,
+        blocks: [{ id: b.id, title: 'Renamed', start_minutes: 600, duration_minutes: 60 }] });
+      check('a retitle is accepted', renamed.status === 200, JSON.stringify(renamed.data));
+      check('and does not queue it again', (await b.row()).message_sent_at !== null);
+      await b.drop();
+    }
 
     const undeliveredMove = await call('/plan', payload([
       same[0], same[1], { ...delta, start_minutes: 660 },

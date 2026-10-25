@@ -3113,19 +3113,14 @@
       /**
        * Is this block fixed where it is?
        *
-       * BEGUN OR SENT, which is the server's rule stated once on this side of
-       * the wire. A delivered block cannot be moved or resized — routes/plan.js
-       * refuses the whole day for it — and the message goes out up to fifteen
-       * minutes BEFORE the start, so "delivered" and "begun" are not the same
-       * question for that quarter of an hour.
-       *
-       * Reading the clock alone was the bug: the screen offered a drag, a
-       * resize and a reflow on a block the server had already locked, and the
-       * confirm was refused with an error about a block the person had not
-       * knowingly touched. Deleting something else in the day was enough to do
-       * it, because reflow re-times whatever is left.
+       * BEGUN, which is the server's rule stated once on this side of the wire.
+       * It used to be begun OR sent, because the server locked a block once its
+       * heads-up had gone — fifteen minutes before it starts — and that locked
+       * the whole day for a quarter of an hour before every block. The server
+       * locks on the start now, and a block moved after its heads-up is sent a
+       * new one for its new hour.
        */
-      const blockFixed = (b) => Boolean(b && b.sent) || blockBegun(b);
+      const blockFixed = (b) => blockBegun(b);
 
       function renderThings() {
         const box = $('things');
@@ -4047,19 +4042,6 @@
           // Only meaningful on an untimed item. A timed block comes back true
           // and nothing on the screen reads it.
           done: Boolean(b.done),
-          sent: Boolean(b.sent),
-          // WHETHER ITS MESSAGE HAS GONE OUT, and it has to be kept.
-          //
-          // This was dropped, on the reasoning that the clock answers the same
-          // question more strictly: a block that has BEGUN keeps its hour and
-          // its length whether or not the delivery job has run. That is wrong
-          // for exactly fifteen minutes, and the fifteen minutes matter.
-          //
-          // The scheduler sends a block up to LEAD_MINUTES before it starts, so
-          // between the send and the start the server considers it delivered —
-          // and refuses to move or resize it — while the clock still calls it
-          // upcoming. Everything the screen does on an upcoming block, reflow
-          // included, then produces a day the confirm turns down whole.
           // Where the day says this block is. Only today reads it: a block
           // that has already begun keeps the hour it began at, whatever the
           // blocks above it do afterwards.
@@ -4118,11 +4100,9 @@
             b.start = null;
             continue;
           }
-          // Held where it is if the server will not take it anywhere else.
-          // A block on tomorrow is never delivered, so this asks the
-          // clock exactly as it always did and adds the one case the clock
-          // cannot see.
-          const fixed = live && (hasBegun(b, now) || b.sent);
+          // Held where it is once it has begun: the server will not take it
+          // anywhere else. See blockFixed.
+          const fixed = live && hasBegun(b, now);
           b.start = fixed ? b.storedStart : live ? Math.max(cursor, floor) : cursor;
           cursor = b.start + b.duration;
         }
@@ -5420,12 +5400,6 @@
           row.append(idx, left, doneLabel());
         } else if (begun) {
           row.append(idx, left, activeLabel());
-        } else if (b.sent) {
-          // SENT, AND NOT YET STARTED. The chip is a resize and the server has
-          // already refused to take one — so what stands in the status column
-          // is the length as a fact rather than as a control. Offering the chip
-          // here was an invitation to a refusal fifteen minutes wide.
-          row.append(idx, left, spanLabel(b.duration));
         } else {
           const dur = document.createElement('button');
           dur.type = 'button';
@@ -5508,20 +5482,6 @@
         return tag;
       }
 
-      /**
-       * The length, said rather than offered.
-       *
-       * A block whose message has gone out cannot be resized, so the chip that
-       * would resize it has no business being there. This is the same figure in
-       * the same column, with nothing to press.
-       */
-      function spanLabel(duration) {
-        const tag = document.createElement('div');
-        tag.className = 'st';
-        tag.textContent = span(duration).toUpperCase();
-        return tag;
-      }
-
       function doneLabel() {
         const tag = document.createElement('div');
         tag.className = 'st';
@@ -5569,10 +5529,8 @@
         // Rendering can go stale; it is a picture of a moment. What must not go
         // stale is what a press is allowed to do, so that question is asked of
         // the clock every time rather than remembered.
-        // Renamed from isBegun, because "begun" is no longer the question. What
-        // a press is allowed to do is decided by whether the SERVER will take
-        // the change, and it refuses a delivered block fifteen minutes before
-        // that block begins. See blockFixed.
+        // What a press is allowed to do is decided by whether the SERVER will
+        // take the change. See blockFixed.
         const isFixed = () => blockFixed(blocks[index]);
 
         const lift = (on) => {

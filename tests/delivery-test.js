@@ -338,6 +338,35 @@ const statusOf = async (planId) => {
       JSON.stringify(after.map((b) => [b.title, Boolean(b.message_sent_at)])));
   }
 
+  console.log('\nthe heads-up goes early, the note on the dot');
+  {
+    // The header goes fifteen minutes ahead; the note is the first step of the
+    // work and waits for the work to start. Three ticks: the early one, the one
+    // at the start, and one after, which must send nothing.
+    const DATE = '2031-06-14';
+    await makePlan(DATE, 'confirmed', [
+      { title: 'Noted, due in 15', start_time: at(15), duration_minutes: 30,
+        note: 'open the draft first', created_at: old },
+    ]);
+
+    sent.length = 0;
+    await scheduler.deliverDue(profile, { ...now, date: DATE });
+    check('fifteen minutes out: the heads-up goes',
+      sent.some((s) => /Noted, due in 15/.test(s.text)), JSON.stringify(sent.map((s) => s.text)));
+    check('and the note does not',
+      !sent.some((s) => s.text === 'open the draft first'), JSON.stringify(sent.map((s) => s.text)));
+
+    const atStart = { ...now, date: DATE, minute: 15 };
+    sent.length = 0;
+    await scheduler.deliverDue(profile, atStart);
+    check('at the start: the note goes, on its own',
+      sent.length === 1 && sent[0].text === 'open the draft first', JSON.stringify(sent.map((s) => s.text)));
+
+    sent.length = 0;
+    await scheduler.deliverDue(profile, { ...atStart, minute: 30 });
+    check('and a later tick sends nothing again', sent.length === 0, JSON.stringify(sent.map((s) => s.text)));
+  }
+
   console.log('\ntwo ticks at once send one message, not two');
   {
     // THE DUPLICATE. The queue is "message_sent_at IS NULL" and the mark is

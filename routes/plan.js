@@ -14,7 +14,7 @@
 
 const express = require('express');
 
-const { minutesOfDay, toMinutes, hhmmss, DEFAULT_ZONE } = require('../clock');
+const { minutesOfDay, toMinutes, hhmmss, todayIn, DEFAULT_ZONE } = require('../clock');
 const { readCalendar } = require('../tools');
 const { ONE_OFF } = require('../entry-shape');
 // The same ceiling the Things list applies, and deliberately the same number:
@@ -356,8 +356,22 @@ router.post('/plan', async (req, res) => {
 
     // --- everything that can be refused, refused before anything is written --
 
+    // Where this person's day is now, for asking whether a block has begun.
+    const { data: profile } = await db
+      .from('profile')
+      .select('timezone')
+      .eq('user_id', userId)
+      .maybeSingle();
+    const timeZone = (profile && profile.timezone) || DEFAULT_ZONE;
+    const today = todayIn(timeZone);
+    const nowMinutes = minutesOfDay(new Date().toISOString(), timeZone);
+    const hasBegun = (was) =>
+      date < today || (date === today && toMinutes(was.start_time) <= nowMinutes);
+
     const known = new Map(stored.map((b) => [b.id, b]));
     const claimed = new Set();
+    // Blocks whose heads-up went out for an hour they no longer have. See below.
+    const requeue = new Set();
 
     for (const b of blocks) {
       if (!b.id) continue;
@@ -372,30 +386,36 @@ router.post('/plan', async (req, res) => {
       }
       claimed.add(b.id);
 
-      // A block that has already gone out is history. The message named a
-      // start time and a length, and both were true when it was sent, so
-      // neither can be edited afterwards. The title and the note still can.
+      // A block that has BEGUN is history: it keeps its hour and its length.
+      // The title and the note can still change, and removing it is allowed
+      // and handled below.
       //
-      // Retiming and resizing only. Removing a delivered block is allowed, and
-      // is handled below.
+      // BEGUN, NOT SENT. The lock used to be on the heads-up having gone out,
+      // and the heads-up goes LEAD_MINUTES early — so for a quarter of an hour
+      // before every block, rearranging the day was refused over a block that
+      // had not started. A heads-up is a warning, not a commitment: a block
+      // whose heads-up has gone and which is then moved is put back in the
+      // queue, and the next tick tells the person its new hour.
       const was = known.get(b.id);
 
-      // A block with no hour was never in the delivery queue, so there is no
-      // message to have contradicted. Skipped by name rather than left to the
+      // A row with no stored hour has nothing to have begun at, and was never
+      // in the delivery queue. Skipped by name rather than left to the
       // arithmetic below, which would compare `toMinutes(null)` — NaN — against
-      // a number, find them unequal, and refuse every untimed item on the
-      // grounds that it had been moved.
-      if (was.start_time === null && isUntimed(b)) continue;
+      // a number and find every untimed item moved.
+      if (was.start_time === null) continue;
 
-      if (
-        was.message_sent_at &&
-        (toMinutes(was.start_time) !== Number(b.start_minutes) ||
-          was.duration_minutes !== Number(b.duration_minutes))
-      ) {
+      const changed =
+        toMinutes(was.start_time) !== Number(b.start_minutes) ||
+        was.duration_minutes !== Number(b.duration_minutes);
+      if (!changed) continue;
+
+      if (hasBegun(was)) {
         return res.status(400).json({
-          error: `"${was.title}" was already sent at ${String(was.start_time).slice(0, 5)} and cannot be moved or resized. Its title and note can still be changed.`,
+          error: `"${was.title}" began at ${String(was.start_time).slice(0, 5)} and cannot be moved or resized. Its title and note can still be changed.`,
         });
       }
+
+      if (was.message_sent_at) requeue.add(b.id);
     }
 
     // --- the messages waiting on the things being scheduled ----------------
@@ -505,9 +525,13 @@ router.post('/plan', async (req, res) => {
 
     for (const [i, b] of blocks.entries()) {
       if (!b.id) continue;
+      const fields = blockFields(b, i);
+      // Its heads-up named an hour it no longer has. Back in the queue, so the
+      // scheduler sends one for the new hour.
+      if (requeue.has(b.id)) fields.message_sent_at = null;
       const { error } = await db
         .from('blocks')
-        .update(blockFields(b, i))
+        .update(fields)
         .eq('user_id', userId)
         .eq('id', b.id);
       if (error) throw new Error(error.message);
@@ -547,10 +571,8 @@ router.post('/plan', async (req, res) => {
     // round. What it cost was the thing the note was for: you write on a thing
     // in advance so the words are there when you come to schedule it, and a
     // note that is spent the first time is a note you have to write again every
-    // time. The note now stays on the row until the thing itself leaves the
-    // list — which for a task or a project is when it is finished, and for a
-    // habit is never, because a habit has no end to reach (§2.3). A standing
-    // note on a habit is exactly what a habit's note is.
+    // time. The note now stays on the row until the day it was scheduled into
+    // is over, when clearSpentNotes in scheduler.js spends it — habits too.
     //
     // Copying rather than moving, so both ends hold the words: the block has
     // its own copy from the moment it is made and can be edited freely, and
