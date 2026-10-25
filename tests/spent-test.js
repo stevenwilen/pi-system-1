@@ -123,6 +123,31 @@ const noteOf = async (id) => {
     await clear();
   }
 
+  console.log('\non the checkbox list, only what was ticked is spent');
+  {
+    // An untimed item has no hour to have passed, so staying in the day is
+    // not proof it happened. The tick is.
+    const ticked = await thing('task', 'Ring the bank', 'ask for the March statement');
+    const left = await thing('habit', 'Stretch', 'hamstrings first');
+    const planId = await dayWith(YESTERDAY, 'confirmed', []);
+    for (const [id, done] of [[ticked, true], [left, false]]) {
+      const { error } = await supabase.from('blocks').insert({
+        user_id: U, plan_id: planId, entry_id: id, title: 'loose',
+        start_time: null, duration_minutes: null, completed: done, sort_order: done ? 0 : 1,
+      });
+      if (error) throw new Error(`could not make an untimed item: ${error.message}`);
+    }
+
+    await scheduler.clearSpentNotes(profile(), now());
+
+    check('the ticked one is spent', (await noteOf(ticked)) === null,
+      JSON.stringify(await noteOf(ticked)));
+    check('the one left unticked keeps its words', (await noteOf(left)) === 'hamstrings first',
+      JSON.stringify(await noteOf(left)));
+
+    await clear();
+  }
+
   console.log('\nand a one-off task is spent like any other task');
   {
     // THE REASON THE FILTER IS ON THE TYPE. A one-off stores its flag in the

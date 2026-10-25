@@ -803,7 +803,13 @@ async function clearSpentNotes(profile, now) {
     .select('entry_id')
     .eq('user_id', profile.user_id)
     .in('plan_id', plans.map((p) => p.id))
-    .in('entry_id', entries.map((e) => e.id));
+    .in('entry_id', entries.map((e) => e.id))
+    // HAPPENED, which is not the same test for both kinds of row. A timed
+    // block happened by staying in a day that is over, and is always written
+    // completed. An item on the checkbox list happened only if it was ticked:
+    // one left unticked when the day ended was not done, and its note is still
+    // the first step for the next attempt.
+    .eq('completed', true);
 
   if (blockErr) throw new Error(`could not read past blocks: ${blockErr.message}`);
 
